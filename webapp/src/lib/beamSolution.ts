@@ -143,7 +143,7 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     title: 'Bar layout — spacing check & layers (§407.7)',
     lines: [
       txt(`Minimum clear spacing between parallel bars in a layer is max(d_b, 25 mm) = ${sn0(r.sMinClear)} mm (§407.7.1). ${r.jointGoverns
-        ? `The beam frames into a column no wider than itself, so its bars pass INSIDE the column's verticals: the width available to a layer is 2·(bar room) + d_b = ${sn0(bw)} mm, narrower than the clear web b − 2(cover + dₛ) = ${sn0(i.b - 2 * (i.cover + i.stirrupDia))} mm.`
+        ? `The beam frames into a column no wider than itself, so its bars are cranked INSIDE the column's verticals to pass the joint (§410.7.4.1, 1 in 6). They run at the beam's own cover line along the span, but the layer has to fit through the joint, and there the width is 2·(bar room) + d_b = ${sn0(bw)} mm against the clear web b − 2(cover + dₛ) = ${sn0(i.b - 2 * (i.cover + i.stirrupDia))} mm.`
         : `The clear web width is b − 2(cover + dₛ) = ${sn0(bw)} mm.`} At most ${r.maxPerLayer} bar${r.maxPerLayer === 1 ? '' : 's'} fit${r.maxPerLayer === 1 ? 's' : ''} per layer.`),
       ...(r.jointFit ? [] : [
         txt(`⚠ That leaves room for ${r.maxPerLayer} bar per layer. A stirrup needs a bar in each bottom corner, so this face cannot be detailed. Widening the BEAM does not help — the room is set by the column, not by the web — so widen the column or use a smaller bar.`),

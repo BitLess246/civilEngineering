@@ -430,3 +430,89 @@ describe('hoops through an SMF lap — §418.6.3.3, the smaller of d/4 and 100',
     expect(minGap(grav)).toBeLessThanOrEqual(0.1 + 1e-6)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE OFFSET BEND INTO THE JOINT
+//
+// A beam bar has to pass inside the column's own verticals, and it used to be
+// held on that line for its whole length — so the span gave up spacing it did
+// not have to, and a midspan section showed the bars pulled off the cover line
+// with nothing in the picture to explain it. It only has to be inside where it
+// PASSES them: it runs at the beam's own cover line and is cranked into the
+// core before each support face, §410.7.4.1's offset bend laid on its side.
+// ─────────────────────────────────────────────────────────────────────────
+describe('buildBeamCage — cranked into the joint', () => {
+  // 300 web, ⌀20 mains, ⌀12 stirrups → the beam's own line is at
+  // 150 − (40 + 12 + 10) = 88; a 300 column with ⌀20 verticals leaves 70.
+  const tight: BeamCageInput = { ...beam, maxBarOffset: 70 }
+  const c = buildBeamCage(tight)
+  const mains = c.runs.filter((r) => r.role === 'top' || r.role === 'bottom')
+  const vAt = (path: readonly (readonly [number, number, number])[], x: number) => {
+    for (let k = 1; k < path.length; k++) {
+      const a = path[k - 1]!, b = path[k]!
+      if ((a[0] - x) * (b[0] - x) <= 0 && Math.abs(b[0] - a[0]) > 1e-9) {
+        return a[2] + (b[2] - a[2]) * ((x - a[0]) / (b[0] - a[0]))
+      }
+    }
+    return null
+  }
+  const widest = (x: number) => Math.max(...mains
+    .map((r) => vAt(r.path, x)).filter((v): v is number => v != null).map(Math.abs))
+
+  it('runs at the beam\'s own cover line along the span', () => {
+    expect(widest(3)).toBeCloseTo(0.088, 9)
+  })
+
+  it('…and inside the column\'s verticals where it passes them', () => {
+    expect(widest(0)).toBeCloseTo(0.07, 9)          // the joint at the i end
+    expect(widest(6)).toBeCloseTo(0.07, 9)          // and at the j end
+    expect(widest(0.2)).toBeCloseTo(0.07, 9)        // still, up to the face
+  })
+
+  it('bends no steeper than 1 in 6 — §410.7.4.1 on its side', () => {
+    for (const r of mains) {
+      for (let k = 1; k < r.path.length; k++) {
+        const a = r.path[k - 1]!, b = r.path[k]!
+        const along = Math.abs(b[0] - a[0]), across = Math.abs(b[2] - a[2])
+        if (across < 1e-9) continue
+        expect(across / Math.max(along, 1e-12)).toBeLessThanOrEqual(1 / 6 + 1e-9)
+      }
+    }
+  })
+
+  it('is the only thing that moved — u and y are untouched', () => {
+    // The bar's stations, hooks and anchorage are settled by curtailment; the
+    // crank is a step SIDEWAYS and must not shift any of them.
+    const plain = buildBeamCage(beam)
+    const key = (r: { mark: string }) => r.mark
+    const stationsOf = (cg: typeof plain) => new Map(cg.runs.filter((r) => r.role === 'top' || r.role === 'bottom')
+      .map((r) => [key(r), r.path.map((p) => `${p[0].toFixed(6)}|${p[1].toFixed(6)}`)]))
+    const before = stationsOf(plain), after = stationsOf(c)
+    expect([...after.keys()].sort()).toEqual([...before.keys()].sort())
+    for (const [k, xs] of before) {
+      // every station of the plain bar still appears, in order, among the
+      // cranked one's — the crank only ADDS vertices
+      const got = after.get(k)!
+      let j = 0
+      for (const s of xs) { const at = got.indexOf(s, j); expect(at, `${k} ${s}`).toBeGreaterThanOrEqual(0); j = at + 1 }
+    }
+  })
+
+  it('leaves the bar on the joint line when there is no room to bend', () => {
+    // A stub too short for two bends and a straight between them: buildable,
+    // just tighter than it needs to be.
+    const stub = buildBeamCage({ ...tight, L: 0.6, axis: { x0: 0, z0: 0, x1: 0.6, z1: 0 } })
+    const st = stub.runs.filter((r) => r.role === 'top' || r.role === 'bottom')
+    for (const r of st) for (const p of r.path) expect(Math.abs(p[2])).toBeLessThanOrEqual(0.07 + 1e-9)
+  })
+
+  it('does not crank a beam that frames into something wider than itself', () => {
+    const free = buildBeamCage({ ...beam, maxBarOffset: 200 })
+    const fm = free.runs.filter((r) => r.role === 'top' || r.role === 'bottom')
+    const w = (x: number) => Math.max(...fm.map((r) => vAt(r.path, x))
+      .filter((v): v is number => v != null).map(Math.abs))
+    for (const x of [0, 0.2, 3, 6]) expect(w(x)).toBeCloseTo(0.088, 9)
+    // and no bend across the bar anywhere in it
+    for (const r of fm) expect(new Set(r.path.map((p) => p[2].toFixed(9))).size).toBe(1)
+  })
+})

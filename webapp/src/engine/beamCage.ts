@@ -31,7 +31,7 @@ import { hookClearToFace, hookFit } from './devLength'
 import { jointHookLdh } from './beamColumnJoint'
 import { rotateLoop } from './columnCage'
 import { endAnchors, type AnchorBar, type JointRoom } from './beamAnchorage'
-import { runSpliceCentres, pointAt, type SpliceOptions } from './barSplice'
+import { runSpliceCentres, pointAt, OFFSET_SLOPE, type SpliceOptions } from './barSplice'
 export { jointBarRoom, barLayoutWidth } from './barLayers'
 import { momentRatioLimits } from './beamMomentRatios'
 
@@ -345,18 +345,45 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   const inset = (i.cover + i.stirrupDia + i.barDia / 2) / 1000
   const yBot = i.ySoffit + inset
   const yTop = i.ySoffit + i.h / 1000 - inset
+  // ── WHERE THE FACE SITS, ALONG THE SPAN AND THROUGH THE JOINT ───────────
+  //
   // Corner bars sit at the web faces — unless the column they run into stands
-  // its own verticals inside that line, in which case they move in to clear
-  // them. Two bars cannot occupy one position, and the beam's are the ones
-  // with somewhere to go.
-  const half = Math.max(0, Math.min(
-    i.b / 2000 - inset,
-    i.maxBarOffset != null ? i.maxBarOffset / 1000 : Infinity,
-  ))
+  // its own verticals inside that line. Two bars cannot occupy one position,
+  // and the beam's are the ones with somewhere to go.
+  //
+  // They used to go there for the WHOLE LENGTH: laid out at the joint's line
+  // and held at it from end to end, so a midspan section showed the bars
+  // pulled off the cover line with nothing in the picture to explain it, and
+  // the span gave up spacing it did not have to. A bar only has to be inside
+  // the column's verticals where it passes them, so it runs at the beam's own
+  // cover line and is CRANKED into the core before each support face —
+  // §410.7.4.1's offset bend, laid on its side: no steeper than 1 in 6.
+  const halfSpan = Math.max(0, i.b / 2000 - inset)
+  const halfJoint = Math.min(halfSpan, i.maxBarOffset != null ? i.maxBarOffset / 1000 : Infinity)
+  // The face is spread over the SPAN line and squeezed to the joint line, so
+  // the bars stay evenly spaced in both — the joint's own spacing is what the
+  // design lays the layers out in (`barLayoutWidth`), and it is unchanged by
+  // cranking: the crank buys the SPAN its width back, not the joint.
+  const jointScale = halfSpan > 1e-9 ? halfJoint / halfSpan : 1
+  const jointOffset = halfSpan - halfJoint
+  const crankRunU = OFFSET_SLOPE * jointOffset
+  const uFaceL = (i.colBLeft ?? 0) / 2000
+  const uFaceR = i.L - (i.colBRight ?? 0) / 2000
+  // No room for two bends and a straight between them: keep the old behaviour
+  // and hold the bars on the joint's line for the whole length, which is
+  // buildable, just tighter than it needs to be.
+  const cranked = jointOffset > 1e-9 && uFaceL + crankRunU < uFaceR - crankRunU - 1e-9
+  const half = cranked ? halfSpan : halfJoint
 
   /** A point at `u` along the span, `v` across it, at height `y`. */
   const at = (u: number, v: number, y: number): Vec3 =>
     [x0 + ux * u + px * v, y, z0 + uz * u + pz * v]
+  /** …and back: a placed point read as (along, across, height). */
+  const uvy = (p: Vec3): { u: number; v: number; y: number } => ({
+    u: (p[0] - x0) * ux + (p[2] - z0) * uz,
+    v: (p[0] - x0) * px + (p[2] - z0) * pz,
+    y: p[1],
+  })
 
   // §418.6.3.2 / §418.4.2.2 in bar counts — see `BeamCageInput.system`.
   //   · at a joint face:  bottom ≥ atFace · top
@@ -598,6 +625,56 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
       count: 1,
     })
   })
+
+  // ── the offset bend into each joint ─────────────────────────────────────
+  //
+  // Applied to the finished longitudinal runs rather than woven into each
+  // path: a bar's u and y are settled by curtailment, hooks and anchorage, and
+  // none of that changes because it steps sideways. Only v does, and only over
+  // the two bend lengths — so the transform reads the run it is given, inserts
+  // the four vertices the bends need, and scales v by how far along the bend
+  // each vertex sits. A stirrup is left alone: it wraps the WEB, and the bars
+  // move inside it.
+  if (cranked) {
+    const D = Math.max(6 * i.barDia, 1)              // §425.3.1 minimum bend
+    /** How much of the span's width a bar keeps, at `u` along the member. */
+    const scaleAt = (u: number): number => {
+      if (u <= uFaceL || u >= uFaceR) return jointScale
+      if (u >= uFaceL + crankRunU && u <= uFaceR - crankRunU) return 1
+      const t = u < uFaceL + crankRunU
+        ? (u - uFaceL) / crankRunU
+        : (uFaceR - u) / crankRunU
+      return jointScale + (1 - jointScale) * t
+    }
+    const stations = [uFaceL, uFaceL + crankRunU, uFaceR - crankRunU, uFaceR]
+    for (let k = 0; k < runs.length; k++) {
+      const r = runs[k]!
+      if (r.role !== 'top' && r.role !== 'bottom') continue
+      const uv = r.path.map((p) => uvy(p))
+      const path: Vec3[] = []
+      const bends: number[] = []
+      for (let j = 0; j < uv.length; j++) {
+        if (j > 0) {
+          const a = uv[j - 1]!, b = uv[j]!
+          // Every bend station the segment passes gets its own vertex, in the
+          // order the bar meets it — so a bar running the other way bends in
+          // the same places.
+          const hit = stations
+            .filter((st) => (st - a.u) * (st - b.u) < 0)
+            .sort((p, q) => (b.u > a.u ? p - q : q - p))
+          for (const st of hit) {
+            const t = (st - a.u) / (b.u - a.u)
+            path.push(at(st, (a.v + (b.v - a.v) * t) * scaleAt(st), a.y + (b.y - a.y) * t))
+            bends.push(D)
+          }
+        }
+        const q = uv[j]!
+        path.push(at(q.u, q.v * scaleAt(q.u), q.y))
+        if (j > 0 && j < uv.length - 1) bends.push(r.bendDia[j - 1] ?? 0)
+      }
+      runs[k] = { ...r, path, bendDia: bends.slice(0, Math.max(0, path.length - 2)) }
+    }
+  }
 
   return { member: i.mark, runs, ...(notes.length ? { notes } : {}) }
 }

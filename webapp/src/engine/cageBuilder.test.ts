@@ -389,6 +389,11 @@ describe('joints and column laps, on the placed frame', () => {
     // column bars", and no cage enforced it. Measured on this frame before the
     // fix: the 300-wide beam put its outer top bar at |z| = 90.0 and the 300
     // column put its outer vertical at |z| = 90.0 — two ⌀20 bars on one line.
+    //
+    // Measured AT THE JOINT, not at whichever vertex a run happens to start
+    // on. The bar is only held on the column's line where it passes it: it
+    // cranks out to the beam's own cover line beyond the support face, and a
+    // lap piece can begin anywhere, including partway down that bend.
     const zAt = (path: readonly (readonly [number, number, number])[], y: number) => {
       for (let k = 1; k < path.length; k++) {
         const a = path[k - 1]!, b = path[k]!
@@ -406,7 +411,20 @@ describe('joints and column laps, on the placed frame', () => {
       const beam = cages.find((c) => c.member === b.id)!
       const mains = beam.runs.filter((r) => r.role === 'top' || r.role === 'bottom')
       if (!mains.length) continue
-      const beamZ = Math.max(...mains.map((r) => Math.abs(r.path[0]![2])))
+      // z where each run crosses the column's centreline — the joint itself
+      const zAtX = (path: readonly (readonly [number, number, number])[], x: number) => {
+        for (let k = 1; k < path.length; k++) {
+          const a = path[k - 1]!, b = path[k]!
+          if ((a[0] - x) * (b[0] - x) <= 0 && Math.abs(b[0] - a[0]) > 1e-9) {
+            const t = (x - a[0]) / (b[0] - a[0])
+            return a[2] + (b[2] - a[2]) * t
+          }
+        }
+        return null
+      }
+      const atJoint = mains.map((r) => zAtX(r.path, ni.x)).filter((z): z is number => z != null)
+      if (!atJoint.length) continue
+      const beamZ = Math.max(...atJoint.map(Math.abs))
       // the column under this beam's end, cut where the beam frames in
       const col = cages.find((c) => {
         const m = model.members.find((x) => x.id === c.member)
