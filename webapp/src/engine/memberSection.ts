@@ -80,6 +80,15 @@ export function sectionOutline(g: MemberGeometry): SectionOutline {
  * Only the member's OWN cage is cut. A beam sectioned at a support passes
  * through the column's steel too, and drawing it would be truthful and
  * unreadable — the schedule row is about this beam.
+ *
+ * THE CUT IS HELD ONE SECTION DEPTH IN FROM EACH END. A beam's `End i` and
+ * `End j` rows are stationed at x = 0 and x = L, which is the member's NODE —
+ * the middle of the joint. A bar there is in its end hook, not its running
+ * position, so the cut caught the top steel partway down its bend and put a
+ * bottom-bar dot 28 mm BELOW the soffit, outside the concrete it was drawn
+ * against. One depth in is clear of the hooks and of the support face, and is
+ * still inside the end zone the row is about — the stirrup pitch it draws is
+ * the end pitch.
  */
 export function memberSectionDetail(
   model: StructuralModel, cages: RebarCage[], memberId: string, t: number,
@@ -89,7 +98,10 @@ export function memberSectionDetail(
   if (!g) return null
   const cage = cages.find((c) => c.member === memberId)
   if (!cage) return null
-  const cut: CageCut = memberCut(g.i, g.j, Math.max(0, Math.min(1, t)),
+  const L = memberLength(g)
+  const margin = L > 0 ? Math.min(g.section.h / 1000, L / 4) / L : 0
+  const at = Math.max(margin, Math.min(1 - margin, t))
+  const cut: CageCut = memberCut(g.i, g.j, at,
     opts.reach != null ? { reach: opts.reach } : {})
   return buildSectionDetail({
     title: opts.title ?? memberId,

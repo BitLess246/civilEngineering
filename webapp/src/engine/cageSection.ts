@@ -157,6 +157,7 @@ export function cutCage(cage: RebarCage, cut: CageCut): CageCutResult {
     }
     // Otherwise it is a bar going somewhere: take every crossing.
     for (const poly of polys) {
+      let crossings = 0
       for (let k = 1; k < poly.length; k++) {
         const a = poly[k - 1]!, b = poly[k]!
         const sa = s(a), sb = s(b)
@@ -168,7 +169,34 @@ export function cutCage(cage: RebarCage, cut: CageCut): CageCutResult {
         const p: Vec3 = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
         const [u, v] = projectPoint(p, cut.plane)
         bars.push({ u, v, dia: run.dia, role: run.role, mark: run.mark })
+        crossings++
       }
+      // A BAR THAT ENDS ON THE PLANE crosses no segment: the plane is its
+      // boundary, not its interior. It is still there at that station, and a
+      // section drawn at a member's own end is exactly where every bar of it
+      // is in that state — so the half-open rule above, which is right for a
+      // shared vertex in the middle of a run, takes the whole face away.
+      //
+      // Measured on a designed frame, that is what emptied the report's END
+      // sections: at a column where two spans meet, one span's bars stop at
+      // the node (max s = -8.9e-16, a rounding error short of the plane, so no
+      // sign change) and the next span's begin there (s = 0 on the first
+      // vertex, so t = 0 and the half-open test drops it). One beam's `End j`
+      // and the next beam's `End i` therefore drew a stirrup and no steel.
+      //
+      // So: a run that REACHES the plane and does not cross it is drawn where
+      // it comes closest. `touch` is a picometre — small enough that a bar
+      // which genuinely bends away before the cut is still absent, and large
+      // enough to swallow double rounding on metre-scale coordinates.
+      if (crossings) continue
+      const touch = 1e-12
+      const ds = poly.map(s)
+      const lo = Math.min(...ds), hi = Math.max(...ds)
+      if (lo > touch || hi < -touch) continue
+      let best = 0
+      for (let k = 1; k < ds.length; k++) if (Math.abs(ds[k]!) < Math.abs(ds[best]!)) best = k
+      const [u, v] = projectPoint(poly[best]!, cut.plane)
+      bars.push({ u, v, dia: run.dia, role: run.role, mark: run.mark })
     }
   }
 
