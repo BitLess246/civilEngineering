@@ -18,6 +18,7 @@ import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRow
 import { connectionRowSolution } from './connectionSolution'
 import { buildPrestressedSolution } from './prestressedSolution'
 import type { SolutionStep, SolutionLine } from './solution'
+import { estimateTakeoff, barKgPerM, type TakeoffResult } from '../engine/takeoff'
 import { columnStackByMember } from './planDetails'
 import {
   beamSectionDrawing, columnElevationDrawing, columnSectionDrawing, columnStoreyOf,
@@ -283,10 +284,15 @@ export function buildModelReport(
     ? `All checks pass · envelope of ${design.cases.length} load cases${govCheck ? ` · peak utilization ${f2(govCheck.ratio!)} (${govCheck.name})` : ''}`
     : `${checks.filter((c) => !c.ok).map((c) => c.name).join(', ')} — see design summary`
 
+  const takeoff = ((): TakeoffResult | null => {
+    try { return estimateTakeoff(model, design) } catch { return null }
+  })()
+
   const stats: ReportStat[] = [
     { label: 'Load cases', value: String(design.cases.length) },
     { label: 'Members checked', value: String(design.beams.length + design.columns.length + design.steelBeams.length + design.steelColumns.length + design.woodBeams.length + design.woodColumns.length) },
     { label: 'Concrete', value: f1(design.totals.concrete), unit: 'm³' },
+    ...(takeoff ? [{ label: 'Reinforcement', value: f0(takeoff.totalSteelNetKg), unit: 'kg' }] : []),
     ...(design.totals.steelKg > 0 ? [{ label: 'Steel', value: f2(design.totals.steelKg / 1000), unit: 't' }] : []),
     ...(design.totals.woodVolume > 0 ? [{ label: 'Timber', value: f2(design.totals.woodVolume), unit: 'm³' }] : []),
     { label: 'Footings', value: String(design.footings.length + design.combined.length) },
@@ -482,6 +488,38 @@ export function buildModelReport(
       f2(f.ratio), f2(f.limit), f.verdict === 'extreme' ? 'Extreme' : 'Irregular',
     ]),
   })
+
+  // ── MATERIAL QUANTITIES — what the design actually costs to build ──────
+  //
+  // The report carried a single "Concrete m³" stat and nothing at all about
+  // reinforcement, which is the quantity every reviewer asks for first and the
+  // one that decides whether a section is economical. The take-off is the
+  // engine that already answers it: it places every cage and measures it, so
+  // the bar lengths here are the drawings' own — laps, hooks and bends
+  // included — not a rho × volume estimate.
+  //
+  // FABRICATED vs PURCHASED. `netLengthM` is what goes into the structure;
+  // `weightKg` is what has to be bought once laps and 6 m off-cuts are paid
+  // for. Both are printed, because comparing designs needs the first and
+  // ordering steel needs the second.
+  if (takeoff) {
+    const rows: string[][] = [
+      ['Concrete', 'm³', f2(takeoff.totalConcreteM3)],
+      ['Formwork (contact area)', 'm²', f1(takeoff.formwork.areaM2)],
+    ]
+    for (const s of [...takeoff.steelByDia].sort((a, b) => a.dia - b.dia))
+      rows.push([`Reinforcement ⌀${s.dia}`, 'kg', `${f0(s.netLengthM * barKgPerM(s.dia))} (${f0(s.netLengthM)} m)`])
+    rows.push(['Reinforcement — total fabricated', 'kg', f0(takeoff.totalSteelNetKg)])
+    rows.push(['Reinforcement — total purchased (laps + off-cuts)', 'kg', f0(takeoff.totalSteelPurchasedKg)])
+    if (takeoff.totalConcreteM3 > 1e-9)
+      rows.push(['Reinforcement intensity', 'kg/m³', f1(takeoff.totalSteelNetKg / takeoff.totalConcreteM3)])
+    if (takeoff.structuralSteelKg > 0) rows.push(['Structural steel (W-shapes)', 'kg', f0(takeoff.structuralSteelKg)])
+    if (takeoff.timberM3 > 0) rows.push(['Timber', 'm³', f2(takeoff.timberM3)])
+    tables.push({
+      title: 'Material quantities — from the placed cages (ρ = 7850 kg/m³, 6 m commercial bars)',
+      head: ['Item', 'Unit', 'Quantity'], right: [2], rows,
+    })
+  }
 
   // ── Worked solutions — every member (user-selected depth) ──
   //

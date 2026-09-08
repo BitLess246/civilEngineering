@@ -18,7 +18,8 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection, ModelLoad } from '../engine/model'
 import type { StructureDesign, LateralCase, OptimizeResult } from '../engine/pipeline'
-import { designOK } from '../engine/pipeline'
+import { designOK, peakUtilisation } from '../engine/pipeline'
+import { estimateTakeoff, barKgPerM, type TakeoffResult } from '../engine/takeoff'
 import { appliedResultant, type F3Analysis, type F3Result } from '../engine/frame3d'
 import { GRAVITY, type ModalResult } from '../engine/modal'
 import type { ResponseSpectrumResult } from '../engine/responseSpectrum'
@@ -710,18 +711,62 @@ export const OPTIMIZER_OBJECTIVE =
   + 'Reinforcement is chosen per member by ranking every feasible layout on compliance (a hard gate), then crack control, constructability and economy — not on least steel alone. '
   + 'Safety is the pipeline\'s own checks on the re-analysed structure at every iteration; efficiency is the size and steel that survive the shrink phase.'
 
+/**
+ * THE OBJECTIVE, WRITTEN DOWN.
+ *
+ * The section used to say "economy" and leave it there, which is the one word
+ * an optimizer report may not use without an objective behind it. There IS an
+ * objective and it is not cost: the loop minimises SECTION SIZE subject to
+ * every code check passing, and the bar search minimises nothing at all — it
+ * ranks feasible layouts. Concrete volume, steel weight and money are
+ * OUTCOMES of that, not terms in it, which is why the volume can rise.
+ */
+export const OPTIMIZER_TERMS: { role: string; term: string; measure: string }[] = [
+  { role: 'Objective', term: 'Smallest RC section that still passes — depth first, then width, then slab and wall thickness', measure: 'each shrink trial is kept only while every check still passes on the re-analysed structure' },
+  { role: 'Objective', term: 'Lightest catalogue W-shape that still passes', measure: 'position in the AISC catalogue, ordered by mass per metre' },
+  { role: 'Ranking (not minimised)', term: 'Bar diameter and count per RC member', measure: 'feasible layouts ranked on compliance (hard gate), then crack control, constructability, economy' },
+  { role: 'Constraint', term: 'Every NSCP/ACI/AISC check passes on the RE-ANALYSED structure', measure: 'failing-check count driven to 0; the frame is re-solved after every size change' },
+  { role: 'Constraint', term: 'Self-weight follows the sections', measure: 'self-weight loads regenerated from the new geometry each iteration' },
+  { role: 'Constraint', term: 'Size hierarchy — a girder is not smaller than the beam it carries, a column not smaller than its girder', measure: 'enforced on every trial model before it is designed' },
+  { role: 'Constraint', term: 'Cast-in-place size caps and catalogue limits', measure: 'growth clamps at the limit; a member still failing there stops the loop with a stated reason' },
+  { role: 'Not in the objective', term: 'Concrete volume, reinforcement weight, formwork area, cost', measure: 'reported as outcomes — see the quantities table' },
+]
+
+/** Fabricated reinforcement weight by bar Ø, kg — `steelByDia.weightKg` is the
+ *  PURCHASED weight (laps and off-cuts included), which is the right number to
+ *  buy and the wrong one to compare two designs with. */
+const rebarNetByDia = (t: TakeoffResult): Map<number, number> =>
+  new Map(t.steelByDia.map((s) => [s.dia, s.netLengthM * barKgPerM(s.dia)]))
+
 function optimizationSection(i: AppendixInput): AppendixSection {
   const o = i.optimization
   if (!o) return { key: 'optimization', letter: LETTERS.optimization, title: APPENDIX_TITLES.optimization, available: false, unavailable: 'The optimizer has not been run; the design is as modelled.', tables: [] }
   const r = o.result
+  const u0 = r.initialDesign ? peakUtilisation(r.initialDesign) : null
   const stats: AppendixStat[] = [
     { label: 'Outcome', value: r.converged ? 'converged — all checks pass' : 'stopped short' },
     { label: 'Iterations', value: String(r.steps.length) },
     { label: 'Sections grown', value: String(r.steps.reduce((s, x) => s + x.grown, 0)) },
     { label: 'Failing at start', value: String(r.steps[0]?.fails ?? 0) },
     { label: 'Failing at end', value: String(r.steps[r.steps.length - 1]?.fails ?? 0) },
+    // Pass/fail says whether the loop finished; the peak ratio says how far it
+    // travelled. A design can start and end "FAIL"-free by member type and
+    // still move from 2.4 to 0.87 — that is the number an engineer reads.
+    { label: 'Peak utilisation', value: u0 != null ? `${f2(u0)} → ${f2(peakUtilisation(r.design))}` : f2(peakUtilisation(r.design)) },
     { label: 'Final design', value: designOK(r.design) ? 'SAFE' : 'CHECK FAILED' },
   ]
+  const tables: AppendixTable[] = []
+  const gn = () => `G.${tables.length + 1}`
+
+  // The objective FIRST — every number after it is only meaningful against
+  // what the loop was actually trying to do.
+  tables.push({
+    title: `${gn()} Objective function and constraints`,
+    head: ['Role', 'Term', 'How it is measured'],
+    rows: OPTIMIZER_TERMS.map((t) => [t.role, t.term, t.measure]),
+    note: 'The objective is minimum SECTION SIZE subject to full code compliance. Cost, concrete volume and reinforcement weight are outcomes of that objective, not terms in it.',
+  })
+
   // TWO COUNTS, TWO COLUMNS. `grown` is how many sections the grow step ACTED
   // on; `changes` is how many came out with different geometry once the size
   // hierarchy was enforced and the design re-run — and the economy pass changes
@@ -729,8 +774,8 @@ function optimizationSection(i: AppendixInput): AppendixSection {
   // changed" the first was taken for the second, and a step reading `6` sat
   // beside a trail listing 12.
   const anyChanges = r.steps.some((s) => s.changes?.length)
-  const tables: AppendixTable[] = [{
-    title: 'G.1 Iteration history',
+  tables.push({
+    title: `${gn()} Iteration history`,
     head: ['Iteration', 'Sections grown', ...(anyChanges ? ['Geometry changes'] : []), 'Failing checks', 'Status'],
     right: anyChanges ? [1, 2, 3] : [1, 2],
     rows: r.steps.map((s, k) => [
@@ -740,10 +785,10 @@ function optimizationSection(i: AppendixInput): AppendixSection {
       String(s.fails), s.ok ? 'PASS' : 'grow failing',
     ]),
     note: [
-      'Sections grown counts what the grow step acted on; geometry changes counts what came out different once the size hierarchy was enforced and the design re-run — the economy pass changes geometry without growing anything. G.3 lists them.',
+      'Sections grown counts what the grow step acted on; geometry changes counts what came out different once the size hierarchy was enforced and the design re-run — the economy pass changes geometry without growing anything. The trail table lists them.',
       r.stopReason,
     ].filter(Boolean).join(' ') || undefined,
-  }]
+  })
   // The engine carries the pre-optimization state on the result itself
   // (initialModel, captured by the pipeline before the grow loop) — that is
   // the single source of truth for the initial-vs-final table. The
@@ -767,7 +812,7 @@ function optimizationSection(i: AppendixInput): AppendixSection {
     }
     const desc = (s: RectSection) => s.material === 'steel' ? (s.shape ?? s.name) : `${s.b}×${s.h}${s.material === 'wood' ? '' : ` · ⌀${s.barDia}${s.barCount ? ` × ${s.barCount}` : ''}`}`
     tables.push({
-      title: 'G.2 Initial vs final design',
+      title: `${gn()} Initial vs final design`,
       head: ['Section', 'Initial', 'Final', 'Change', 'Final utilisation'], right: [4],
       rows: changed.length
         ? changed.map((s) => {
@@ -787,24 +832,78 @@ function optimizationSection(i: AppendixInput): AppendixSection {
   ]))
   if (trail.length)
     tables.push({
-      title: `G.${tables.length + 1} What each iteration changed`,
+      title: `${gn()} What each iteration changed`,
       head: ['Iteration', 'Kind', 'Element', 'From', 'To'],
       rows: trail,
       note: 'Recorded on the optimizer\'s own steps — grow moves and the economy pass — so the trail is what the loop accepted, not a before/after guess.',
     })
-  // Quantities, initial vs final — from the two designs the pipeline kept. Only
-  // printed when the engine carried the initial design (older saved runs did not).
+  // ── Quantities, initial vs final ──────────────────────────────────────
+  //
+  // WHY THE CONCRETE GOES UP. The first report to carry this table showed
+  // 34.14 → 42.52 m³ under a heading that promised optimisation, with nothing
+  // to say why the number rose. It rose because the initial sections FAILED:
+  // the "initial" column is the take-off of a structure that is not a design,
+  // and growing it into compliance costs concrete. The honest comparison
+  // therefore prints the failing-check count beside the volume, and the
+  // reinforcement INTENSITY — which is where the optimisation actually shows,
+  // because deeper sections carry the same moment on less steel.
   const t0 = r.initialDesign?.totals
   if (t0) {
     const qty: string[][] = []
-    if (t0.concrete > 0 || r.design.totals.concrete > 0)
-      qty.push(['Concrete', `${f2(t0.concrete)} m³`, `${f2(r.design.totals.concrete)} m³`])
-    if (t0.steelKg > 0 || r.design.totals.steelKg > 0)
-      qty.push(['Structural steel', `${f2(t0.steelKg / 1000)} t`, `${f2(r.design.totals.steelKg / 1000)} t`])
-    if (t0.woodVolume > 0 || r.design.totals.woodVolume > 0)
-      qty.push(['Timber', `${f2(t0.woodVolume)} m³`, `${f2(r.design.totals.woodVolume)} m³`])
-    if (qty.length)
-      tables.push({ title: `G.${tables.length + 1} Quantities, initial vs final`, head: ['Material', 'Initial', 'Final'], rows: qty })
+    // A percentage needs a denominator: an item the initial design did not use
+    // at all (a bar Ø the optimizer introduced) is 'new', not an em-dash.
+    const delta = (a: number, b: number) =>
+      a > 1e-9 ? `${b > a ? '+' : ''}${(((b / a) - 1) * 100).toFixed(0)}%`
+        : b > 1e-9 ? 'new' : '—'
+    const row = (label: string, a: number, b: number, unit: string, dp = 2) =>
+      qty.push([label, `${a.toFixed(dp)} ${unit}`, `${b.toFixed(dp)} ${unit}`, delta(a, b)])
+    // The take-off is the quantity engine — it places every cage and measures
+    // it, so reinforcement and formwork come from the same geometry the
+    // drawings do. Both ends are re-measured here rather than carried on the
+    // result, so a run saved before this table existed still prints it.
+    // A model the cage builder cannot place degrades to the design's own
+    // concrete/steel totals rather than failing the export.
+    const tk = r.initialModel
+      ? (() => {
+        try { return { a: estimateTakeoff(r.initialModel!, r.initialDesign!), b: estimateTakeoff(r.model, r.design) } }
+        catch { return null }
+      })()
+      : null
+    if (tk) {
+      row('Concrete', tk.a.totalConcreteM3, tk.b.totalConcreteM3, 'm³')
+      row('Formwork', tk.a.formwork.areaM2, tk.b.formwork.areaM2, 'm²', 1)
+      const na = rebarNetByDia(tk.a), nb = rebarNetByDia(tk.b)
+      for (const dia of [...new Set([...na.keys(), ...nb.keys()])].sort((x, y) => x - y))
+        row(`Reinforcement ⌀${dia}`, na.get(dia) ?? 0, nb.get(dia) ?? 0, 'kg', 0)
+      row('Reinforcement — total fabricated', tk.a.totalSteelNetKg, tk.b.totalSteelNetKg, 'kg', 0)
+      row('Reinforcement — total purchased (laps + off-cuts)', tk.a.totalSteelPurchasedKg, tk.b.totalSteelPurchasedKg, 'kg', 0)
+      const iA = tk.a.totalConcreteM3 > 1e-9 ? tk.a.totalSteelNetKg / tk.a.totalConcreteM3 : 0
+      const iB = tk.b.totalConcreteM3 > 1e-9 ? tk.b.totalSteelNetKg / tk.b.totalConcreteM3 : 0
+      row('Reinforcement intensity', iA, iB, 'kg/m³', 1)
+      if (tk.a.structuralSteelKg > 0 || tk.b.structuralSteelKg > 0)
+        row('Structural steel', tk.a.structuralSteelKg / 1000, tk.b.structuralSteelKg / 1000, 't')
+      if (tk.a.timberM3 > 0 || tk.b.timberM3 > 0) row('Timber', tk.a.timberM3, tk.b.timberM3, 'm³')
+    } else {
+      if (t0.concrete > 0 || r.design.totals.concrete > 0) row('Concrete', t0.concrete, r.design.totals.concrete, 'm³')
+      if (t0.steelKg > 0 || r.design.totals.steelKg > 0) row('Structural steel', t0.steelKg / 1000, r.design.totals.steelKg / 1000, 't')
+      if (t0.woodVolume > 0 || r.design.totals.woodVolume > 0) row('Timber', t0.woodVolume, r.design.totals.woodVolume, 'm³')
+    }
+    if (qty.length) {
+      const f0n = r.steps[0]?.fails ?? 0
+      const f1n = r.steps[r.steps.length - 1]?.fails ?? 0
+      const grew = tk ? tk.b.totalConcreteM3 > tk.a.totalConcreteM3 : r.design.totals.concrete > t0.concrete
+      const why = grew
+        ? `Concrete rises because the initial sections were not a design: ${f0n} check${f0n === 1 ? '' : 's'} failed at iteration 0 and ${f1n} at the end. `
+          + 'The grow phase buys compliance with section size; the shrink phase then takes back whatever is comfortably under capacity. '
+          + 'The optimisation shows in the intensity, not the volume — a deeper section carries the same moment on less steel.'
+        : 'The shrink phase took back more than the grow phase spent, so the final structure is both smaller and compliant.'
+      tables.push({
+        title: `${gn()} Material quantities, initial vs final`,
+        head: ['Item', 'Initial', 'Final', 'Change'], right: [1, 2, 3],
+        rows: qty,
+        note: `${why} Quantities are the take-off's own — every cage placed and measured, laps and hooks included. Initial = the design at iteration 0, failing ${f0n} check${f0n === 1 ? '' : 's'}; final = the design reported here.`,
+      })
+    }
   }
   return {
     key: 'optimization', letter: LETTERS.optimization, title: APPENDIX_TITLES.optimization, available: true,

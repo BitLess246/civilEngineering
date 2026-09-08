@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections, barContinuityGroups } from './modelBuilder'
-import { designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings, governingCombos, pedestalDrops } from './pipeline'
+import { designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings, governingCombos, pedestalDrops, peakUtilisation, failingChecks } from './pipeline'
 import { nextHeavierW } from './aiscSections'
 import { computeSeismic } from './seismic'
 import { nscpCombos } from './beamAnalysis'
@@ -1630,5 +1630,54 @@ describe('governingCombos — sound to reject with, never to accept with', () =>
     const screened = designStructure(m, soil, {}, {}, undefined, gov)
     expect(screened).not.toBeNull()
     expect(screened!.beams.length).toBe(full.beams.length)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// HOW FAR, NOT ONLY WHETHER.
+//
+// `designOK` is a boolean, and a report that only carries booleans cannot say
+// what the optimizer achieved: a frame can start and end with the same set of
+// element types passing while its worst member travels from 2.4 to 0.9. These
+// two put a number on it — the peak demand/capacity over every member the
+// pipeline rates, and the count of checks failed.
+// ─────────────────────────────────────────────────────────────────────────
+describe('peakUtilisation & failingChecks', () => {
+  const sec = { id: 's1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const s2 = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 }
+
+  it('agrees with designOK at the pass/fail boundary, and is finite', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: sec, slabThickness: 200 })
+    m.loads = buildGravityLoads(m, 4.8, 2.4)
+    const d = designStructure(m, s2)!
+    const u = peakUtilisation(d)
+    expect(Number.isFinite(u)).toBe(true)
+    expect(u).toBeGreaterThan(0)
+    // A PASSING DESIGN NEVER RATES ABOVE 1. This is the whole point of the
+    // ratio choice: rating RC beams on Mu/φMnMax put 1.38 beside a design the
+    // report called SAFE, because a section past the singly-reinforced ceiling
+    // is not failing — it goes doubly reinforced.
+    if (designOK(d)) expect(u).toBeLessThanOrEqual(1 + 1e-6)
+    // designOK ⇒ nothing failing. (Not the converse: designOK also gates on
+    // timber, stairs and prestressed rows that countFails does not tally.)
+    if (designOK(d)) expect(failingChecks(d)).toBe(0)
+  })
+
+  it('an undersized frame rates above 1 and reports failing checks; the optimizer drives both down', () => {
+    const m = generateGridModel({ baysX: [7], baysZ: [6], storeyH: [3], section: { ...sec, b: 200, h: 300 }, slabThickness: 150 })
+    m.loads = buildGravityLoads(m, 6, 4)
+    const r = optimizeStructure(m, s2, {}, 6)!
+    const u0 = peakUtilisation(r.initialDesign!)
+    expect(u0).toBeGreaterThan(1)
+    expect(failingChecks(r.initialDesign!)).toBeGreaterThan(0)
+    expect(peakUtilisation(r.design)).toBeLessThan(u0)
+    // and the count it reports is the one the optimizer's own steps recorded
+    expect(failingChecks(r.initialDesign!)).toBe(r.steps[0].fails)
+    expect(failingChecks(r.design)).toBe(r.steps[r.steps.length - 1].fails)
+    // …and the converged design rates at or under 1 even though the optimizer
+    // left doubly-reinforced sections in it
+    expect(designOK(r.design)).toBe(true)
+    expect(r.design.beams.flatMap((b) => b.sections).some((x) => x.design.mode === 'DRRB')).toBe(true)
+    expect(peakUtilisation(r.design)).toBeLessThanOrEqual(1 + 1e-6)
   })
 })

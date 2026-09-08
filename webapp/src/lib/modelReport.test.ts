@@ -382,3 +382,50 @@ describe('traceability — the twelve governing members', () => {
     expect(rpt.trace!.rows.map((r) => r[0])).toContain(`Column ${worst.id}`)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE QUANTITY EVERY REVIEWER ASKS FOR FIRST.
+//
+// The report carried "Concrete m³" and said nothing at all about steel, so a
+// reader could not tell whether a section was economical or whether the bars
+// would even fit in a truck. The take-off already places every cage and
+// measures it; this just prints what it measured — per bar Ø, fabricated and
+// purchased, with the intensity that makes two designs comparable.
+// ─────────────────────────────────────────────────────────────────────────
+describe('material quantities', () => {
+  const model = makeModel()
+  const design = designStructure(model, soil)!
+  const rpt = buildModelReport(model, design, [], soil)
+  const qty = rpt.tables.find((t) => t.title.startsWith('Material quantities'))!
+
+  it('weighs the reinforcement per bar diameter and totals it', () => {
+    expect(qty).toBeTruthy()
+    expect(qty.head).toEqual(['Item', 'Unit', 'Quantity'])
+    const items = qty.rows.map((r) => r[0])
+    const perDia = qty.rows.filter((r) => /^Reinforcement ⌀\d+$/.test(r[0]))
+    expect(perDia.length).toBeGreaterThan(0)
+    expect(items).toContain('Reinforcement — total fabricated')
+    expect(items).toContain('Reinforcement — total purchased (laps + off-cuts)')
+    expect(items).toContain('Reinforcement intensity')
+    expect(items).toContain('Formwork (contact area)')
+    // the per-Ø weights sum to the fabricated total (each row rounded to 1 kg)
+    const total = Number(qty.rows.find((r) => r[0] === 'Reinforcement — total fabricated')![2])
+    const summed = perDia.reduce((n, r) => n + parseFloat(r[2]), 0)
+    expect(Math.abs(summed - total)).toBeLessThanOrEqual(perDia.length)
+    // purchased ≥ fabricated — laps and off-cuts are bought, not built in
+    const bought = Number(qty.rows.find((r) => r[0] === 'Reinforcement — total purchased (laps + off-cuts)')![2])
+    expect(bought).toBeGreaterThanOrEqual(total)
+  })
+
+  it('puts the reinforcement beside the concrete in the summary stats', () => {
+    const s = rpt.stats.find((x) => x.label === 'Reinforcement')!
+    expect(s.unit).toBe('kg')
+    expect(Number(s.value)).toBeGreaterThan(0)
+    const intensity = Number(qty.rows.find((r) => r[0] === 'Reinforcement intensity')![2])
+    // a building frame lands in the tens-to-low-hundreds kg/m³ band; the point
+    // of the check is that the two numbers are of the same structure, not that
+    // the band is a code limit
+    expect(intensity).toBeGreaterThan(10)
+    expect(intensity).toBeLessThan(500)
+  })
+})
