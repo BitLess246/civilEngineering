@@ -22,7 +22,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection } from './model'
 import type { StructureDesign } from './pipeline'
-import { buildBeamCage, effectiveDepth, HOOP_ZONE_DEPTHS } from './beamCage'
+import { buildBeamCage, effectiveDepth, jointBarRoom, HOOP_ZONE_DEPTHS } from './beamCage'
 import { buildColumnCage, perimeterBars } from './columnCage'
 import { calcDevLength } from './devLength'
 import { buildFootingCage } from './footingCage'
@@ -136,8 +136,7 @@ export function buildStructureCages(
     // column's b, and one running along z by its h. Taking the narrow face
     // either way pulled a z-running beam's bars 100 mm too far in.
     const face = alongX ? cs.b : (cs.h ?? cs.b)
-    const colBarOffset = face / 2 - ((cs.cover ?? 40) + (cs.tieDia ?? 10) + (cs.barDia ?? 20) / 2)
-    return Math.max(0, colBarOffset - ((cs.barDia ?? 20) + beamBarDia) / 2)
+    return jointBarRoom(face, cs.cover ?? 40, cs.tieDia ?? 10, cs.barDia ?? 20, beamBarDia)
   }
   /** Depth of the deepest beam framing into a node, m — the joint band. */
   const beamDepthAt = (node: string): number => {

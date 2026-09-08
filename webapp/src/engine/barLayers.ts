@@ -57,3 +57,45 @@ export function centroidRise(layers: number[], pitch: number): number {
   const sum = layers.reduce((s, k, i) => s + k * i * pitch, 0)
   return n > 0 ? sum / n : 0
 }
+
+/**
+ * How far off the beam's centreline a longitudinal bar may sit, mm, if it is
+ * to pass the supporting column's own verticals — `BeamCageInput.maxBarOffset`.
+ *
+ * The column's outer bar stands `cover + tie + Ø/2` in from its face and runs
+ * the full height, so in plan it is a POINT the beam's bar line would run
+ * straight through. The beam's bar therefore steps inside it, by half of each
+ * diameter — the two just touching, which is the geometric minimum.
+ *
+ * `face` is the column dimension ACROSS the beam: `columnCage` reads h across
+ * world x and b across world z, so a beam running along x is bounded by the
+ * column's b and one running along z by its h. Taking the narrow face either
+ * way pulled a z-running beam's bars 100 mm too far in.
+ *
+ * Shared, because two layers need the same number and used to derive it once
+ * each: the CAGE places the bars at it, and the DESIGN has to lay them out in
+ * the width it leaves — otherwise the schedule checks §407.7.1 across a web
+ * the bars are not allowed to use, and passes a spacing the cage cannot build.
+ */
+export function jointBarRoom(
+  face: number, colCover: number, colTieDia: number, colBarDia: number, beamBarDia: number,
+): number {
+  const colBarOffset = face / 2 - (colCover + colTieDia + colBarDia / 2)
+  return Math.max(0, colBarOffset - (colBarDia + beamBarDia) / 2)
+}
+
+/**
+ * The clear width a layer of bars may actually occupy, mm.
+ *
+ * Nominally `b − 2(cover + ds)`, the gap between the stirrup legs. Where the
+ * joint is tighter than the beam, `room` (`jointBarRoom`) is the binding
+ * constraint instead and the band is `2·room + db`, measured the same way —
+ * outside face of one extreme bar to the outside face of the other — so the
+ * two are directly comparable and the smaller governs.
+ */
+export function barLayoutWidth(
+  b: number, cover: number, stirrupDia: number, barDia: number, room?: number,
+): number {
+  const nominal = b - 2 * (cover + stirrupDia)
+  return room == null ? nominal : Math.min(nominal, 2 * room + barDia)
+}

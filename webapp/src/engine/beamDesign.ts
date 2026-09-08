@@ -15,7 +15,7 @@ import { rhoMin } from './flexure'
 import { beta1 } from './loads'
 import { Ec as concreteEc } from './slabDeflection'
 import { crackedInertia, deflCoeff, longTermMultiplier, minBeamThickness, type BeamSupport } from './beamDeflection'
-import { splitLayers, centroidRise } from './barLayers'
+import { splitLayers, centroidRise, barLayoutWidth } from './barLayers'
 import { oneWayVc } from './shear'
 
 export interface BeamDesignInput {
@@ -35,6 +35,20 @@ export interface BeamDesignInput {
    * clause, which is the safe direction, but the number belongs here.
    */
   aggregate?: number
+  /**
+   * How far off the beam's centreline an outer bar may sit, mm — the room the
+   * supporting column's own verticals leave it (`jointBarRoom`).
+   *
+   * Omitted, the layout uses the full clear web, which is right for a beam
+   * that frames into nothing, or into something wider than itself. Supplied,
+   * it NARROWS the width a layer may occupy, because the bars have to thread
+   * the joint and a straight bar holds that offset for its whole length.
+   *
+   * The design has to know it or the schedule checks §407.7.1 across a web the
+   * bars are not allowed to use: a 250 beam framing a 250 column with ⌀32 bars
+   * was reported at 86 mm clear and drawn at 22.
+   */
+  barRoom?: number
   /**
    * Effective depth d, mm — given rather than derived.
    *
@@ -153,6 +167,23 @@ export interface BeamDesignResult {
   bars: number
   // Bar layout (§407.7)
   sMinClear: number    // required clear spacing = max(db, 25, 4/3·d_agg), mm
+  /** The width a layer was laid out in, mm — the clear web, or the narrower
+   *  band the joint leaves (`barRoom`). What `sClear` is measured across. */
+  bClear: number
+  /** True when the JOINT set `bClear` rather than the beam's own web: the bars
+   *  are inside the column's verticals, so the section has less room than its
+   *  dimensions suggest and the schedule should say so. */
+  jointGoverns: boolean
+  /**
+   * False when that room will not take two bars side by side at §407.7.1
+   * spacing — `maxPerLayer < 2`.
+   *
+   * Not a spacing to round off: a stirrup needs a bar in each bottom corner,
+   * so a face that can hold one bar cannot be detailed at all. Widening the
+   * BEAM does not help — `barRoom` is set by the column — so the answer is a
+   * wider column or a smaller bar.
+   */
+  jointFit: boolean
   maxPerLayer: number  // bars that fit one layer at s_min
   layers: number[]     // bars per layer, bottom (extreme) first
   sClear: number       // actual clear spacing in the fullest layer, mm
@@ -239,12 +270,24 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   // on both faces. The aggregate term is what keeps a poker-vibrated mix able
   // to pass between the bars, and it governs whenever db < 4/3·d_agg.
   const dAgg = i.aggregate ?? 20
-  const bw = i.b - 2 * (i.cover + i.stirrupDia)
+  // The width a layer may actually occupy. Nominally the gap between the
+  // stirrup legs; narrower where the JOINT is tighter than the beam and the
+  // bars have to step inside the column's own verticals to get through it.
+  // Checked across the nominal web, §407.7.1 passed a spacing the cage could
+  // not build: a 250 beam into a 250 column with ⌀32 bars was reported at
+  // 86 mm clear and drawn at 22.
+  const bw = barLayoutWidth(i.b, i.cover, i.stirrupDia, i.barDia, i.barRoom)
   const sMinClear = Math.max(i.barDia, 25, (4 / 3) * dAgg)
   const maxPerLayer = Math.max(1, Math.floor((bw + sMinClear) / (i.barDia + sMinClear)))
+  // A face that will not take two bars cannot be detailed: the stirrup wants a
+  // bar in each bottom corner. Reported rather than laid out — `splitLayers`
+  // would stack single bars, which is arithmetic, not a beam.
+  const jointFit = maxPerLayer >= 2
   const pitch = i.barDia + LAYER_CLEAR     // layer-to-layer centroid distance
   const comprSMinClear = Math.max(dbC, 25, (4 / 3) * dAgg)
-  const comprMaxPerLayer = Math.max(1, Math.floor((bw + comprSMinClear) / (dbC + comprSMinClear)))
+  const jointGoverns = bw < i.b - 2 * (i.cover + i.stirrupDia) - 1e-9
+  const bwC = barLayoutWidth(i.b, i.cover, i.stirrupDia, dbC, i.barRoom)
+  const comprMaxPerLayer = Math.max(1, Math.floor((bwC + comprSMinClear) / (dbC + comprSMinClear)))
   const pitchC = dbC + LAYER_CLEAR
 
   // ── Iterate BOTH faces: layout → Varignon d & d' → redesign, until the
@@ -384,7 +427,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const nBot = layers[0]
   const sClear = nBot > 1 ? (bw - nBot * i.barDia) / (nBot - 1) : bw
   const nTop = comprLayers[0] ?? 0
-  const comprSClear = nTop > 1 ? (bw - nTop * dbC) / (nTop - 1) : bw
+  const comprSClear = nTop > 1 ? (bwC - nTop * dbC) / (nTop - 1) : bwC
 
   // NA check (legacy): the DEEPEST compression layer must stay above the
   // neutral axis c — a bar at or below c is not in compression at all.
@@ -488,7 +531,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     AsMax, aMax, MnMax, phiMnMax,
     mode, As, rho, usedMin, asFloorGoverns, bars,
     flangeAction, bFlex, Asf, Muf,
-    sMinClear, maxPerLayer, layers, sClear, yBar, layerIters,
+    sMinClear, bClear: bw, jointGoverns, jointFit, maxPerLayer, layers, sClear, yBar, layerIters,
     As1, As2, MnResid, cNA, fsPrime, fsYields, AsPrime, comprBars, comprEffective, flexOK,
     comprSMinClear, comprMaxPerLayer, comprLayers, comprSClear, comprYBar,
     dPrimeExtreme, comprNAOK,
