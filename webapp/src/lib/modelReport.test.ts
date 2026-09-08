@@ -330,6 +330,26 @@ describe('buildModelReport — worked-solution figures from the cages', () => {
     }
   })
 
+  it('puts the whole design on one page, keyed by the member that governs it', () => {
+    // The report named the governing member of every element type a sentence
+    // at a time, inside the check list, mixed with counts. Built from the same
+    // checks, so the summary cannot disagree with the list it summarises.
+    const g = rpt.governingTable!
+    expect(g).toBeDefined()
+    expect(g.head).toEqual(['Element', 'Governing member', 'Location', 'Basis', 'D/C', 'Status'])
+    const withRatio = rpt.checks.filter((c) => c.ratio != null || c.member)
+    expect(g.rows).toHaveLength(withRatio.length)
+    for (const c of withRatio) {
+      const row = g.rows.find((r) => r[0] === c.name)!
+      expect(row[4]).toBe(c.ratio != null ? c.ratio.toFixed(2) : '—')
+      expect(row[5]).toBe(c.ok ? 'PASS' : 'FAIL')
+    }
+    // the governing member is named, and it is a member of the model
+    const cols = g.rows.find((r) => r[0] === 'RC columns')!
+    expect(m.members.some((x) => x.id === cols[1])).toBe(true)
+    expect(cols[2]).not.toBe('—')                     // …and where it stands
+  })
+
   it('footings, which have no cage figure yet, carry none rather than a stale one', () => {
     for (const it of items('Isolated footings')) expect(it.figures ?? []).toEqual([])
   })

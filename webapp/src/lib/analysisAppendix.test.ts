@@ -11,8 +11,10 @@ import { makeGroundMotion } from '../engine/timeHistoryModel'
 import { buildStructureCages } from '../engine/cageBuilder'
 import {
   buildAnalysisAppendix, analysisStatus, appendixAvailability, equilibriumRows, comboExpression,
-  capacityCurveDrawing, type AppendixInput,
+  capacityCurveDrawing, finalModelConsistency, type AppendixInput,
 } from './analysisAppendix'
+import { computeSeismic } from '../engine/seismic'
+import { storeyWeightBreakdown } from '../engine/seismic'
 
 // ─────────────────────────────────────────────────────────────────────────
 // The appendix reports ONLY what the engine produced. These build every
@@ -266,4 +268,88 @@ describe('G · the optimizer trail the pipeline records', () => {
     expect(diff.rows.length).toBeGreaterThan(0)
     expect(s.tables.find((x) => x.title.startsWith('G.4'))).toBeUndefined()
   }, 60000)
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// TRACEABILITY — the joins between the stages, and the chain that leads to
+// the seismic forces. The appendix reported a lumped mass and a base shear
+// and nothing in between, so "where did the mass come from" and "which base
+// shear was the design made for" each took three pages to answer.
+// ─────────────────────────────────────────────────────────────────────────
+describe('B.6 · mass source', () => {
+  const tbl = () => buildAnalysisAppendix(full).sections.find((s) => s.key === 'loading')!
+    .tables.find((t) => t.title.startsWith('B.6'))
+
+  it('itemises the seismic weight and totals to W = M·g', () => {
+    const t = tbl()!
+    expect(t).toBeDefined()
+    const last = t.rows[t.rows.length - 1]!
+    expect(last[0]).toBe('Total')
+    const wb = storeyWeightBreakdown(model)
+    const W = wb.reduce((s, r) => s + r.w, 0)
+    expect(Number(last[5])).toBeCloseTo(W, 0)
+    expect(Number(last[6])).toBeCloseTo(W / 9.81, 1)
+    // a row per level, and each row's items add up to its own weight
+    expect(t.rows).toHaveLength(wb.length + 1)
+    for (let k = 0; k < wb.length; k++) {
+      const r = t.rows[k]!
+      expect(Number(r[1]) + Number(r[2]) + Number(r[3]) + Number(r[4])).toBeCloseTo(Number(r[5]), 0)
+    }
+  })
+
+  it('is the same W the static seismic force is built on', () => {
+    const s = computeSeismic(model, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!
+    const W = storeyWeightBreakdown(model).reduce((a, r) => a + r.w, 0)
+    expect(s.W).toBeCloseTo(W, 6)
+  })
+})
+
+describe('D.2b · seismic force reconciliation', () => {
+  const seismic = {
+    x: computeSeismic(model, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!,
+    z: computeSeismic(model, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'z' })!,
+  }
+  const t = () => buildAnalysisAppendix({ ...full, seismic }).sections.find((s) => s.key === 'modal')!
+    .tables.find((x) => x.title.startsWith('D.2b'))!
+
+  it('puts the static and the modal base shears in one table, with the ratio', () => {
+    const tbl = t()
+    const label = (n: string) => tbl.rows.find((r) => r[0] === n)!
+    expect(Number(label('Seismic weight W (kN)')[1])).toBeCloseTo(seismic.x.W, 0)
+    expect(Number(label('Static base shear V (kN)')[1])).toBeCloseTo(seismic.x.V, 0)
+    expect(label('Modal CQC (kN)')).toBeDefined()
+    expect(label('V_CQC / V_static')).toBeDefined()
+    // and it says which forces the design was actually run for
+    expect(Number(label('Design base shear used (kN)')[1])).toBeCloseTo(seismic.x.V, 0)
+    expect(tbl.note).toMatch(/STATIC/)
+  })
+
+  it('says whether §208.6.4.2 scaling would be needed, and by how much', () => {
+    expect(t().note).toMatch(/§208\.6\.4\.2/)
+  })
+})
+
+describe('the final-model consistency check', () => {
+  it('proves the structure that was detailed is the one that was analysed', () => {
+    const rows = finalModelConsistency(full)
+    expect(rows.length).toBeGreaterThanOrEqual(3)
+    expect(rows.every((r) => r.verdict === 'PASS')).toBe(true)
+    const names = rows.map((r) => r.check)
+    expect(names).toContain('Design sections = analysis model')
+    expect(names).toContain('Schedule = placed cages')
+    // every PASS states the count it compared — not just an assurance
+    for (const r of rows) expect(r.detail).toMatch(/\d/)
+  })
+
+  it('FAILS when a scheduled member has no cage', () => {
+    const short = { ...full, cages: cages.filter((c) => c.member !== design.columns[0].id) }
+    const row = finalModelConsistency(short).find((r) => r.check === 'Schedule = placed cages')!
+    expect(row.verdict).toBe('FAIL')
+    expect(row.detail).toContain(design.columns[0].id)
+  })
+
+  it('is carried in the status table, so the report cannot omit it', () => {
+    const checks = analysisStatus(full).map((r) => r.check)
+    expect(checks).toContain('Design sections = analysis model')
+  })
 })

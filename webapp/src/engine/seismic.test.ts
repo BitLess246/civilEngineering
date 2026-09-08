@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { computeSeismic, storeyWeights, driftCheck, accidentalTorsionLoads, buildECases } from './seismic'
+import { computeSeismic, storeyWeights, storeyWeightBreakdown, driftCheck, accidentalTorsionLoads, buildECases } from './seismic'
 import { buildSeismicMass } from './modal'
-import { generateGridModel } from './modelBuilder'
+import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { solveFrame3D, applyF3Combo } from './frame3d'
 import type { RectSection } from './model'
@@ -282,5 +282,73 @@ describe('buildECases — §208.8.1 orthogonal 100%+30% composition', () => {
     expect(c.loads).toHaveLength(baseX.length)
     expect(sumOf(c.loads, 'Fx')).toBeCloseTo(V, 9)
     expect(sumOf(c.loads, 'Fz')).toBe(0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// WHERE THE SEISMIC WEIGHT COMES FROM
+//
+// Itemising W to answer "where did the 98.2 tonnes come from?" found that it
+// was short: only slab area dead loads and member self-weight from the
+// sections were in it, so a dead load applied as a LINE load on a beam or as a
+// NODE load was in the gravity design and in no earthquake force at all. A
+// wall's weight is exactly that.
+// ─────────────────────────────────────────────────────────────────────────
+describe('storeyWeightBreakdown', () => {
+  const frame = () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
+    m.loads = m.plates.map((p) => ({ kind: 'area' as const, plate: p.id, q: 5, cat: 'D' as const }))
+    return m
+  }
+
+  it('itemises the level, and the items sum to the level weight', () => {
+    const rows = storeyWeightBreakdown(frame())
+    expect(rows.length).toBeGreaterThan(0)
+    for (const r of rows) {
+      expect(r.w).toBeCloseTo(r.slab + r.selfWeight + r.lineDead + r.pointDead, 9)
+      expect(r.slab).toBeGreaterThan(0)
+      expect(r.selfWeight).toBeGreaterThan(0)
+    }
+    // and it is the same total `storeyWeights` gives, which is what W is built from
+    const plain = storeyWeights(frame())
+    expect(rows.map((r) => r.w.toFixed(6))).toEqual(plain.map((r) => r.w.toFixed(6)))
+  })
+
+  it('counts a dead LINE load — a wall on a beam is weight the frame carries', () => {
+    const m = frame()
+    const beam = m.members.find((x) => x.role === 'beam' || x.role === 'girder')!
+    const before = storeyWeights(m).reduce((s, r) => s + r.w, 0)
+    m.loads = [...m.loads, { kind: 'member-udl', member: beam.id, w: 8, cat: 'D' }]
+    const after = storeyWeightBreakdown(m)
+    const total = after.reduce((s, r) => s + r.w, 0)
+    const len = (() => {
+      const a = m.nodes.find((n) => n.id === beam.i)!, b = m.nodes.find((n) => n.id === beam.j)!
+      return Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
+    })()
+    expect(total - before).toBeCloseTo(8 * len, 6)
+    expect(after.reduce((s, r) => s + r.lineDead, 0)).toBeCloseTo(8 * len, 6)
+  })
+
+  it('does NOT count generated self-weight twice', () => {
+    // `buildGravityLoads` writes member self-weight as a `sw` line load, and
+    // this function computes the same weight from the sections. Counting both
+    // would double every member in the building.
+    const m = frame()
+    const bare = storeyWeights(m).reduce((s, r) => s + r.w, 0)
+    m.loads = buildGravityLoads(m, 0, 0)
+    const withSW = storeyWeightBreakdown(m)
+    expect(withSW.reduce((s, r) => s + r.lineDead, 0)).toBe(0)
+    // the slab dead loads changed with the rebuild, so compare self-weight alone
+    expect(withSW.reduce((s, r) => s + r.selfWeight, 0))
+      .toBeCloseTo(storeyWeightBreakdown(frame()).reduce((s, r) => s + r.selfWeight, 0), 6)
+    expect(bare).toBeGreaterThan(0)
+  })
+
+  it('counts a dead NODE load by its magnitude, whichever way it points', () => {
+    const m = frame()
+    const top = m.nodes.filter((n) => n.y > 0)[0]!
+    const before = storeyWeights(m).reduce((s, r) => s + r.w, 0)
+    m.loads = [...m.loads, { kind: 'node', node: top.id, Fy: -40, cat: 'D' }]
+    expect(storeyWeightBreakdown(m).reduce((s, r) => s + r.w, 0) - before).toBeCloseTo(40, 6)
   })
 })

@@ -28,7 +28,9 @@ describe('the documents', () => {
     const all = await buildModelPdf({ lh, report, modelImg: null, badges, status: analysisStatus(ai), sections: ALL_REPORT_SECTIONS })
     const some = await buildModelPdf({ lh, report, modelImg: null, badges, status: analysisStatus(ai), sections: ['summary', 'status'] })
     expect(all.doc.getNumberOfPages()).toBeGreaterThan(some.doc.getNumberOfPages())
-    expect(some.doc.getNumberOfPages()).toBe(1)
+    // A couple of pages, not the whole report: summary now carries the
+    // governing-results table as well as the check list, so the floor is two.
+    expect(some.doc.getNumberOfPages()).toBeLessThanOrEqual(2)
   }, 60000)
 
   it('builds the appendix on its own, and the combined document as the two end to end', async () => {

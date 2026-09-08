@@ -128,6 +128,23 @@ export async function buildModelPdfInto(
       columnStyles: { 0: { fontStyle: 'bold', cellWidth: 44 }, 2: { halign: 'right', font: 'mono', cellWidth: 14 }, 3: { halign: 'right', cellWidth: 16 } },
     })
     sh.y = (lastY() ?? sh.y) + 4
+    // The same verdicts again, keyed by MEMBER — the whole design on one page,
+    // which is the first thing a reviewer wants and the last thing the check
+    // list gives them.
+    if (report.governingTable) {
+      ensure(24)
+      setF('sans', 'bold', 7.4, INK)
+      doc.text(report.governingTable.title, M, sh.y); sh.y += 3.6
+      autoTable(doc, {
+        ...tableTheme(report.governingTable.right ?? []),
+        startY: sh.y,
+        head: [report.governingTable.head],
+        body: report.governingTable.rows,
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 }, 1: { font: 'mono', cellWidth: 22 }, 4: { halign: 'right', font: 'mono', cellWidth: 14 }, 5: { halign: 'right', cellWidth: 16 } },
+        rowPageBreak: 'avoid',
+      })
+      sh.y = (lastY() ?? sh.y) + 4
+    }
   }
 
   // ── Analysis & design status ──

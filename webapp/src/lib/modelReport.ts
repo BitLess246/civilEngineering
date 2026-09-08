@@ -24,7 +24,13 @@ import {
 } from './scheduleFigures'
 
 export interface ReportStat { label: string; value: string; unit?: string }
-export interface ReportCheck { name: string; detail: string; ratio: number | null; ok: boolean }
+export interface ReportCheck {
+  name: string; detail: string; ratio: number | null; ok: boolean
+  /** The member the ratio belongs to, and where it stands — so the governing
+   *  summary can name it without re-deriving which member governed. */
+  member?: string
+  loc?: string
+}
 export interface ReportTable { title: string; head: string[]; rows: string[][]; right?: number[] }
 /**
  * A drawing that goes with a worked solution — the SAME `Drawing` the
@@ -55,6 +61,9 @@ export interface ModelReport {
   /** The twelve governing members — governing case → demand → required steel →
    *  the bars the schedule and cage carry. Left out when nothing was designed. */
   trace?: ReportTable
+  /** One row per element type: which member governs it, where it stands, and
+   *  how close it came. The whole design on one page, ahead of the detail. */
+  governingTable?: ReportTable
 }
 
 const f0 = (v: number) => v.toFixed(0)
@@ -184,16 +193,16 @@ export function buildModelReport(
       name: 'RC beam serviceability (§424.2)',
       detail: `${withDefl.length} members · governing ${w.row.id} at δtotal/(L/240) = ${f2(w.r)}`
         + `${failing.length ? ` · ${failing.length} exceeding` : ''}`,
-      ratio: w.r, ok: failing.length === 0,
+      ratio: w.r, ok: failing.length === 0, member: w.row.id, loc: memberLoc(w.row.id),
     })
   }
   if (design.columns.length) {
     const w = worst(design.columns, (c) => c.util)!
-    checks.push({ name: 'RC columns', detail: `${design.columns.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.columns.every((c) => c.ok) })
+    checks.push({ name: 'RC columns', detail: `${design.columns.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.columns.every((c) => c.ok), member: w.row.id, loc: memberLoc(w.row.id) })
   }
   if (design.scwb.length) {
     const w = design.scwb.reduce((a, b) => (b.ratio < a.ratio ? b : a))
-    checks.push({ name: 'Strong column / weak beam', detail: `${design.scwb.length} joints · min ΣMnc/ΣMnb = ${f2(w.ratio)} at ${w.node} (≥ 1.20)`, ratio: null, ok: design.scwb.every((j) => j.ok) })
+    checks.push({ name: 'Strong column / weak beam', detail: `${design.scwb.length} joints · min ΣMnc/ΣMnb = ${f2(w.ratio)} at ${w.node} (≥ 1.20)`, ratio: null, ok: design.scwb.every((j) => j.ok), member: w.node })
   }
   if (ratios && ratios.length) {
     // The tightest of every check on every beam — the one bar count that came
@@ -218,27 +227,27 @@ export function buildModelReport(
   }
   if (design.walls.length) {
     const w = worst(design.walls, (x) => (x.design.phiVn > 0 ? x.Vu / x.design.phiVn : 99))!
-    checks.push({ name: 'Shear walls', detail: `${design.walls.length} walls · governing ${w.row.id}`, ratio: w.r, ok: design.walls.every((x) => x.ok) })
+    checks.push({ name: 'Shear walls', detail: `${design.walls.length} walls · governing ${w.row.id}`, ratio: w.r, ok: design.walls.every((x) => x.ok), member: w.row.id })
   }
   if (design.steelBeams.length) {
     const w = worst(design.steelBeams, (b) => Math.max(b.utilM, b.utilV))!
-    checks.push({ name: 'Steel beams & girders', detail: `${design.steelBeams.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.steelBeams.every((b) => b.ok) })
+    checks.push({ name: 'Steel beams & girders', detail: `${design.steelBeams.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.steelBeams.every((b) => b.ok), member: w.row.id, loc: memberLoc(w.row.id) })
   }
   if (design.steelColumns.length) {
     const w = worst(design.steelColumns, (c) => c.ratio)!
-    checks.push({ name: 'Steel columns (§H1-1)', detail: `${design.steelColumns.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.steelColumns.every((c) => c.ok) })
+    checks.push({ name: 'Steel columns (§H1-1)', detail: `${design.steelColumns.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.steelColumns.every((c) => c.ok), member: w.row.id, loc: memberLoc(w.row.id) })
   }
   if (design.woodBeams.length) {
     const w = worst(design.woodBeams, (b) => Math.max(b.utilM, b.utilV))!
-    checks.push({ name: 'Timber beams & girders (NDS §3)', detail: `${design.woodBeams.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.woodBeams.every((b) => b.ok) })
+    checks.push({ name: 'Timber beams & girders (NDS §3)', detail: `${design.woodBeams.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.woodBeams.every((b) => b.ok), member: w.row.id, loc: memberLoc(w.row.id) })
   }
   if (design.woodColumns.length) {
     const w = worst(design.woodColumns, (c) => c.ratio)!
-    checks.push({ name: 'Timber columns (NDS §3.9)', detail: `${design.woodColumns.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.woodColumns.every((c) => c.ok) })
+    checks.push({ name: 'Timber columns (NDS §3.9)', detail: `${design.woodColumns.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.woodColumns.every((c) => c.ok), member: w.row.id, loc: memberLoc(w.row.id) })
   }
   if (design.basePlates.length) {
     const w = worst(design.basePlates, (p) => p.design.bearingUtil)!
-    checks.push({ name: 'Base plates', detail: `${design.basePlates.length} plates · governing ${w.row.node}`, ratio: w.r, ok: design.basePlates.every((p) => p.ok) })
+    checks.push({ name: 'Base plates', detail: `${design.basePlates.length} plates · governing ${w.row.node}`, ratio: w.r, ok: design.basePlates.every((p) => p.ok), member: w.row.node })
   }
   const nConn = design.joints.reduce((s, j) => s + j.connections.length, 0)
     + design.beamJoints.reduce((s, j) => s + j.connections.length, 0)
@@ -246,7 +255,7 @@ export function buildModelReport(
     checks.push({ name: 'Steel connections', detail: `${nConn} connections at ${design.joints.length + design.beamJoints.length} joints`, ratio: null, ok: design.joints.every((j) => j.ok) && design.beamJoints.every((j) => j.ok) })
   if (design.prestressed.length) {
     const w = worst(design.prestressed, (p) => p.design.Mu / Math.max(p.design.phiMn, 1e-9))!
-    checks.push({ name: 'Prestressed members', detail: `${design.prestressed.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.prestressed.every((p) => p.ok) })
+    checks.push({ name: 'Prestressed members', detail: `${design.prestressed.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.prestressed.every((p) => p.ok), member: w.row.id, loc: memberLoc(w.row.id) })
   }
   if (design.footings.length)
     checks.push({ name: 'Isolated footings', detail: `${design.footings.length} footings`, ratio: null, ok: design.footings.every((f) => f.ok) })
@@ -646,5 +655,33 @@ export function buildModelReport(
     }
     : undefined
 
-  return { ok, governing, stats, checks, props, tables, groups, trace }
+  // ── GOVERNING DESIGN RESULTS — the whole design on one page ─────────────
+  //
+  // The report already names the governing member of every element type, but
+  // it says it a sentence at a time, inside the check list, mixed with counts.
+  // A reviewer opening the report wants the answer first: which member of each
+  // kind is worst, where it stands, how close it is, and whether it passed.
+  //
+  // Built from `checks`, not beside them, so the summary cannot disagree with
+  // the list it summarises.
+  const govRows = checks
+    .filter((c) => c.ratio != null || c.member)
+    .map((c) => [
+      c.name,
+      c.member ?? '—',
+      c.loc ?? '—',
+      c.detail,
+      c.ratio != null ? f2(c.ratio) : '—',
+      c.ok ? 'PASS' : 'FAIL',
+    ])
+  const governingTable: ReportTable | undefined = govRows.length
+    ? {
+      title: 'Governing design results — the worst member of each kind',
+      head: ['Element', 'Governing member', 'Location', 'Basis', 'D/C', 'Status'],
+      right: [4],
+      rows: govRows,
+    }
+    : undefined
+
+  return { ok, governing, stats, checks, props, tables, groups, trace, governingTable }
 }

@@ -20,9 +20,9 @@ import type { StructuralModel, RectSection, ModelLoad } from '../engine/model'
 import type { StructureDesign, LateralCase, OptimizeResult } from '../engine/pipeline'
 import { designOK } from '../engine/pipeline'
 import { appliedResultant, type F3Analysis, type F3Result } from '../engine/frame3d'
-import type { ModalResult } from '../engine/modal'
+import { GRAVITY, type ModalResult } from '../engine/modal'
 import type { ResponseSpectrumResult } from '../engine/responseSpectrum'
-import type { DriftRow, SeismicResult } from '../engine/seismic'
+import { storeyWeightBreakdown, type DriftRow, type SeismicResult } from '../engine/seismic'
 import type { WindResult } from '../engine/wind'
 import type { IrregularityFlag } from '../engine/irregularity'
 import type { PushoverModelResult } from '../engine/pushoverModel'
@@ -274,6 +274,31 @@ function loadingSection(i: AppendixInput): AppendixSection {
       rows: i.design.cases.map((c) => [c]),
     })
   }
+  // ── B.6 mass source ──
+  //
+  // "Where did the 98.2 tonnes come from?" The appendix reported a total
+  // lumped mass and a seismic weight and nothing in between, so the chain
+  // loads → mass → modal analysis → seismic forces had a gap in it exactly
+  // where a reviewer looks. Itemised, and reconciled to M = W/g.
+  const wb = storeyWeightBreakdown(m)
+  if (wb.length) {
+    const tot = wb.reduce((a, r) => ({
+      slab: a.slab + r.slab, selfWeight: a.selfWeight + r.selfWeight,
+      lineDead: a.lineDead + r.lineDead, pointDead: a.pointDead + r.pointDead, w: a.w + r.w,
+    }), { slab: 0, selfWeight: 0, lineDead: 0, pointDead: 0, w: 0 })
+    tables.push({
+      title: 'B.6 Mass source — NSCP §208.5.1.1 seismic weight W',
+      head: ['Level (m)', 'Slab dead (kN)', 'Member self-wt (kN)', 'Line dead (kN)', 'Point dead (kN)', 'W (kN)', 'Mass (t)'],
+      right: [0, 1, 2, 3, 4, 5, 6],
+      rows: [
+        ...wb.map((r) => [f2(r.elevation), f1(r.slab), f1(r.selfWeight), f1(r.lineDead), f1(r.pointDead), f1(r.w), f2(r.w / GRAVITY)]),
+        ['Total', f1(tot.slab), f1(tot.selfWeight), f1(tot.lineDead), f1(tot.pointDead), f1(tot.w), f2(tot.w / GRAVITY)],
+      ],
+      note: `W = ${f1(tot.w)} kN → M = W/g = ${f2(tot.w / GRAVITY)} t at g = ${f2(GRAVITY)} m/s².`
+        + ' W is the total DEAD load: slab area dead loads, member self-weight from each section, and any dead line or point load — a wall\'s weight reaches the frame as a line load on the member it sits on.'
+        + ' Live load is excluded (§208.5.1.1; storage occupancies would add 25%).',
+    })
+  }
   return { key: 'loading', letter: LETTERS.loading, title: APPENDIX_TITLES.loading, available: true, tables }
 }
 
@@ -439,6 +464,48 @@ function modalSection(i: AppendixInput): AppendixSection {
       head: ['Mode', 'Period (s)', 'Sa (m/s²)', 'Sa/g', 'V X (kN)', 'V Y (kN)', 'V Z (kN)'], right: [1, 2, 3, 4, 5, 6],
       rows: r.modalForces.map((mf) => [String(mf.modeIdx + 1), f3(mf.period), f2(mf.Sa), f3(mf.SaG), f1(mf.baseShear[0]), f1(mf.baseShear[1]), f1(mf.baseShear[2])]),
       note: `Ca ${r.params.Ca} · Cv ${r.params.Cv} · I ${r.params.I} · R ${r.params.R} · Ts ${f3(r.params.Ts)} s. SRSS: X ${f1(r.srss[0])} · Z ${f1(r.srss[2])} kN. CQC: X ${f1(r.cqc[0])} · Z ${f1(r.cqc[2])} kN${r.cqcRatio[0] != null ? ` · V_CQC/V_static X ${f2(r.cqcRatio[0])}` : ''}${r.cqcRatio[2] != null ? ` · Z ${f2(r.cqcRatio[2])}` : ''}.`,
+    })
+  }
+  // ── D.2b seismic force reconciliation ──
+  //
+  // The static base shear and the modal ones were reported in two different
+  // tables, in two different sections, one of them buried in a note — so the
+  // question a reviewer asks first, "which base shear was the design actually
+  // made for", took three pages to answer. One table, and it answers it.
+  if (i.seismic) {
+    const dirs = [
+      { name: 'X', s: i.seismic.x, k: 0 as const },
+      { name: 'Z', s: i.seismic.z, k: 2 as const },
+    ]
+    const r = i.rsa
+    tables.push({
+      title: 'D.2b Seismic force reconciliation — static vs modal',
+      head: ['Quantity', ...dirs.map((d) => d.name), 'Basis'],
+      right: [1, 2],
+      rows: [
+        ['Seismic weight W (kN)', ...dirs.map((d) => f1(d.s.W)), '§208.5.1.1 — see B.6'],
+        ['Period T (s)', ...dirs.map((d) => `${f3(d.s.T)} (${d.s.Tmethod})`), '§208.5.2'],
+        ['V raw (kN)', ...dirs.map((d) => f1(d.s.Vraw)), '§208.5.2.1'],
+        ['V min (kN)', ...dirs.map((d) => f1(d.s.Vmin)), '§208.5.2.1 floor'],
+        ['V max (kN)', ...dirs.map((d) => f1(d.s.Vmax)), '§208.5.2.1 cap'],
+        ['Static base shear V (kN)', ...dirs.map((d) => f1(d.s.V)), 'adopted static'],
+        ...(r ? [
+          ['Modal SRSS (kN)', ...dirs.map((d) => f1(r.srss[d.k])), '§208.6.4'],
+          ['Modal CQC (kN)', ...dirs.map((d) => f1(r.cqc[d.k])), '§208.6.4'],
+          ['V_CQC / V_static', ...dirs.map((d) => (r.cqcRatio[d.k] != null ? f2(r.cqcRatio[d.k]!) : '—')), '§208.6.4.2'],
+        ] : []),
+        ['Design base shear used (kN)', ...dirs.map((d) => f1(d.s.V)), 'the E cases the design ran'],
+      ],
+      note: r
+        ? 'The E load cases the design was run for are the STATIC ones (§208.5): the response-spectrum run is reported for comparison and for the §208.6.4.2 scaling check, not substituted for them. '
+          + dirs.map((d) => {
+            const ratio = r.cqcRatio[d.k]
+            return ratio == null ? `${d.name}: no static shear to compare.`
+              : ratio < 1
+                ? `${d.name}: V_CQC is ${pct(ratio)} of V_static, so a design made on the modal results alone would have to be scaled up by ${f2(1 / ratio)} (§208.6.4.2 requires ≥ 100% for an irregular structure, ≥ 90% for a regular one).`
+                : `${d.name}: V_CQC exceeds V_static (${pct(ratio)}), so no §208.6.4.2 scaling is required.`
+          }).join(' ')
+        : 'No response-spectrum run — the static forces of §208.5 are the design forces.',
     })
   }
   if (i.drift && i.drift.length) {
@@ -742,6 +809,118 @@ function optimizationSection(i: AppendixInput): AppendixSection {
   }
 }
 
+/**
+ * THE STRUCTURE THAT WAS DETAILED IS THE STRUCTURE THAT WAS ANALYSED.
+ *
+ * The pipeline is analysis → design → optimisation → detailing, and every
+ * stage hands its answer to the next. A report that shows all four proves
+ * nothing about whether they agree: the optimizer resizes sections and re-runs
+ * the design, the cages are built from the design, and the drawings are built
+ * from the cages — so a stale link anywhere leaves a schedule describing one
+ * building and a drawing another.
+ *
+ * These are the joins that can actually be tested from what the report is
+ * given. Each one names the count it compared, so a PASS is a number and not
+ * an assurance.
+ */
+export function finalModelConsistency(i: AppendixInput): StatusRow[] {
+  const rows: StatusRow[] = []
+  const d = i.design
+  if (!d) return rows
+  const secOf = new Map(i.model.sections.map((s) => [s.id, s]))
+  const memSec = new Map(i.model.members.map((m) => [m.id, m.section]))
+
+  // 1 — every designed member's section is one the analysed model carries.
+  const designed = [...d.beams.map((b) => b.id), ...d.columns.map((c) => c.id),
+    ...d.steelBeams.map((b) => b.id), ...d.steelColumns.map((c) => c.id)]
+  const orphan = designed.filter((id) => {
+    const sid = memSec.get(id)
+    return sid == null || !secOf.has(sid)
+  })
+  rows.push({
+    check: 'Design sections = analysis model',
+    verdict: orphan.length ? 'FAIL' : 'PASS',
+    detail: orphan.length
+      ? `${orphan.length} designed member${orphan.length === 1 ? '' : 's'} reference a section the model does not carry: ${orphan.slice(0, 4).join(', ')}`
+      : `${designed.length} designed members, every one on a section of the analysed model`,
+  })
+
+  // 2 — the optimizer's final model is the one that was reported on.
+  if (i.optimization) {
+    const fin = i.optimization.result.model.sections
+    const same = fin.length === i.model.sections.length
+      && fin.every((s) => {
+        const cur = secOf.get(s.id)
+        return cur && cur.b === s.b && cur.h === s.h && cur.barDia === s.barDia
+      })
+    rows.push({
+      check: 'Optimizer output = reported model',
+      verdict: same ? 'PASS' : 'FAIL',
+      detail: same
+        ? `${fin.length} sections, identical to the model this report describes`
+        : 'the model in this report is NOT the optimizer\'s final model — re-run the report on the optimized model',
+    })
+  }
+
+  // 3 — every RC member the schedule carries has a placed cage, and the cage
+  //     carries the bars the schedule says it does.
+  if (i.cages) {
+    const cageOf = new Map(i.cages.map((c) => [c.member, c]))
+    const baseMarks = (c: { runs: { role: string; mark: string }[] }, role: string) =>
+      new Set(c.runs.filter((r) => r.role === role)
+        .map((r) => (/[a-z]$/.test(r.mark) ? r.mark.slice(0, -1) : r.mark))).size
+    const missing = [...d.beams.map((b) => b.id), ...d.columns.map((c) => c.id)]
+      .filter((id) => !cageOf.has(id))
+    const colMismatch = d.columns.filter((c) => {
+      const cg = cageOf.get(c.id)
+      return cg && baseMarks(cg, 'vertical') !== Math.max(4, c.bars)
+    })
+    const ok = missing.length === 0 && colMismatch.length === 0
+    rows.push({
+      check: 'Schedule = placed cages',
+      verdict: ok ? 'PASS' : 'FAIL',
+      detail: ok
+        ? `${d.beams.length} beams and ${d.columns.length} columns scheduled, each with a cage carrying the bar count its row states`
+        : [
+          missing.length ? `${missing.length} scheduled member${missing.length === 1 ? '' : 's'} without a cage (${missing.slice(0, 3).join(', ')})` : '',
+          colMismatch.length ? `${colMismatch.length} column${colMismatch.length === 1 ? '' : 's'} whose cage bar count differs from the schedule (${colMismatch.slice(0, 3).map((c) => c.id).join(', ')})` : '',
+        ].filter(Boolean).join(' · '),
+    })
+
+    // 4 — every designed footing has the cage the foundation drawings are cut from.
+    if (d.footings.length) {
+      const noCage = d.footings.filter((f) => !cageOf.has(`F-${f.node}`))
+      rows.push({
+        check: 'Footing schedule = foundation drawings',
+        verdict: noCage.length ? 'FAIL' : 'PASS',
+        detail: noCage.length
+          ? `${noCage.length} designed footing${noCage.length === 1 ? '' : 's'} without a placed cage (${noCage.slice(0, 3).map((f) => f.node).join(', ')})`
+          : `${d.footings.length} footings, each with the cage its detail sheet is cut from`,
+      })
+    }
+  }
+
+  // 5 — the slab thicknesses the design checked are the plates' own.
+  if (d.slabs.length) {
+    // Both in MILLIMETRES — `Plate.thickness` and `SlabDesignResult.h` agree on
+    // that, and the first draft of this check did not, which is the sort of
+    // thing a consistency check exists to catch (it caught itself).
+    const plateT = new Map(i.model.plates.map((p) => [p.id, p.thickness]))
+    const off = d.slabs.filter((sl) => {
+      const t = plateT.get(sl.plate)
+      return t == null || Math.abs(t - sl.design.h) > 1
+    })
+    rows.push({
+      check: 'Slab design = model thickness',
+      verdict: off.length ? 'FAIL' : 'PASS',
+      detail: off.length
+        ? `${off.length} panel${off.length === 1 ? '' : 's'} designed at a thickness the model does not have (${off.slice(0, 3).map((x) => x.plate).join(', ')})`
+        : `${d.slabs.length} panels, each designed at the thickness its plate carries`,
+    })
+  }
+  return rows
+}
+
 // ── the status table — actual results only ───────────────────────────────
 export function analysisStatus(i: AppendixInput): StatusRow[] {
   const rows: StatusRow[] = []
@@ -801,6 +980,9 @@ export function analysisStatus(i: AppendixInput): StatusRow[] {
     const notes = i.cages.flatMap((c) => c.notes ?? [])
     rows.push({ check: 'Final detailing', verdict: notes.length ? 'ADVISORY' : 'PASS', detail: notes.length ? `${i.cages.length} cages placed · ${notes.length} detailing note${notes.length === 1 ? '' : 's'} (see the drawings)` : `${i.cages.length} cages placed · no detailing notes` })
   } else if (d) notRun('Final detailing', 'cages not built')
+  // The joins between the four stages — see `finalModelConsistency`. Last,
+  // because they are about the whole chain rather than about one stage of it.
+  rows.push(...finalModelConsistency(i))
   return rows
 }
 

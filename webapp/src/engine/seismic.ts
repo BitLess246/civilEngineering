@@ -53,8 +53,49 @@ export interface SeismicResult {
 
 const GAMMA_C = 24 // kN/m³, default concrete unit weight
 
-/** Seismic weight per elevated level: slab dead loads + member self-weight. */
+/**
+ * Where the seismic weight comes from, level by level and component by
+ * component — §208.5.1.1's "total dead load", itemised.
+ *
+ * Reported, because a reviewer asked the question the report could not answer:
+ * the appendix printed a lumped mass of 98.2 t and nothing said what was in it.
+ *
+ * ITEMISING IT FOUND THAT IT WAS SHORT. W was slab area dead loads plus member
+ * self-weight computed from the sections, and nothing else — so a dead load
+ * applied as a LINE load on a beam or as a NODE load was not in the seismic
+ * weight at all. Wall self-weight is exactly that: `buildGravityLoads` puts it
+ * on the supporting member as a `member-udl`, so a modelled wall added mass to
+ * the gravity design and none to the earthquake. Generated member self-weight
+ * (`sw: true`) is still skipped, because this function computes it from the
+ * sections itself and counting the load as well would double it.
+ */
+export interface WeightComponent {
+  /** Slab dead area loads on the plates at this level. */
+  slab: number
+  /** Member self-weight, from each member's own section. */
+  selfWeight: number
+  /** Dead line loads a user (or a wall) put on a member — NOT the generated
+   *  self-weight, which `selfWeight` already carries. */
+  lineDead: number
+  /** Dead point loads: node forces and member point loads. */
+  pointDead: number
+}
+export interface StoreyWeight extends WeightComponent { elevation: number; w: number }
+
+const zeroComponents = (): WeightComponent => ({ slab: 0, selfWeight: 0, lineDead: 0, pointDead: 0 })
+
+/** Seismic weight per elevated level, itemised — see `WeightComponent`. */
+export function storeyWeightBreakdown(model: StructuralModel, gammaC = GAMMA_C): StoreyWeight[] {
+  const rows = storeyWeightsFull(model, gammaC)
+  return rows
+}
+
+/** Seismic weight per elevated level — the sum of `storeyWeightBreakdown`. */
 export function storeyWeights(model: StructuralModel, gammaC = GAMMA_C): { elevation: number; w: number }[] {
+  return storeyWeightsFull(model, gammaC).map(({ elevation, w }) => ({ elevation, w }))
+}
+
+function storeyWeightsFull(model: StructuralModel, gammaC = GAMMA_C): StoreyWeight[] {
   const nm = new Map(model.nodes.map((n) => [n.id, n]))
   const secMap = new Map(model.sections.map((s) => [s.id, s]))
   const aSecOf = (mSection: string) => {
@@ -62,8 +103,23 @@ export function storeyWeights(model: StructuralModel, gammaC = GAMMA_C): { eleva
     return s ? (s.b / 1000) * (s.h / 1000) : 0
   }
   const levels = [...new Set(model.storeys.map((s) => s.elevation))].sort((a, b) => a - b)
-  const w = new Map<number, number>(levels.map((e) => [e, 0]))
+  const parts = new Map<number, WeightComponent>(levels.map((e) => [e, zeroComponents()]))
   const closest = (y: number) => levels.reduce((best, e) => (Math.abs(e - y) < Math.abs(best - y) ? e : best), levels[0])
+  const add = (lvl: number, key: keyof WeightComponent, v: number) => {
+    const c = parts.get(lvl); if (c) c[key] += v
+  }
+  const memberLen = (id: string) => {
+    const m = model.members.find((x) => x.id === id)
+    const a = m && nm.get(m.i), b = m && nm.get(m.j)
+    return a && b ? Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) : 0
+  }
+  /** The level a member's load belongs to — a beam's own, a column's top. */
+  const memberLevel = (id: string) => {
+    const m = model.members.find((x) => x.id === id)
+    const a = m && nm.get(m.i), b = m && nm.get(m.j)
+    if (!a || !b) return levels[0]
+    return closest(m!.role === 'column' ? Math.max(a.y, b.y) : a.y)
+  }
 
   // slabs: dead area loads × panel area
   for (const p of model.plates) {
@@ -76,7 +132,7 @@ export function storeyWeights(model: StructuralModel, gammaC = GAMMA_C): { eleva
     const qD = model.loads
       .filter((l) => l.kind === 'area' && l.plate === p.id && l.cat === 'D')
       .reduce((s, l) => s + (l as { q: number }).q, 0)
-    w.set(lvl, (w.get(lvl) ?? 0) + qD * lx * lz)
+    add(lvl, 'slab', qD * lx * lz)
   }
   // members: beams/girders at their level; columns half up, half down
   for (const m of model.members) {
@@ -87,15 +143,36 @@ export function storeyWeights(model: StructuralModel, gammaC = GAMMA_C): { eleva
     if (m.role === 'column') {
       const top = Math.max(a.y, b.y), bot = Math.min(a.y, b.y)
       const topLvl = levels.includes(top) ? top : closest(top)
-      w.set(topLvl, (w.get(topLvl) ?? 0) + wSelf / 2)
-      if (levels.includes(bot)) w.set(bot, (w.get(bot) ?? 0) + wSelf / 2)
+      add(topLvl, 'selfWeight', wSelf / 2)
+      if (levels.includes(bot)) add(bot, 'selfWeight', wSelf / 2)
       // lower half of ground-storey columns goes to the foundation, not W
     } else {
-      const lvl = closest(a.y)
-      w.set(lvl, (w.get(lvl) ?? 0) + wSelf)
+      add(closest(a.y), 'selfWeight', wSelf)
     }
   }
-  return levels.map((e) => ({ elevation: e, w: w.get(e) ?? 0 }))
+  // DEAD LOADS THAT ARE NOT SELF-WEIGHT AND NOT ON A SLAB. A wall's weight is
+  // one of these — `buildGravityLoads` puts it on its supporting member — and
+  // so is any façade, partition or plant a user hangs off a beam or a node.
+  // Left out, they were carried by the gravity design and by nothing else.
+  for (const l of model.loads) {
+    if (l.cat !== 'D') continue
+    if (l.kind === 'member-udl') {
+      // `sw` is the GENERATED member self-weight, already counted above from
+      // the sections; counting the load too would double every member.
+      if (l.sw) continue
+      add(memberLevel(l.member), 'lineDead', l.w * memberLen(l.member))
+    } else if (l.kind === 'member-point') {
+      add(memberLevel(l.member), 'pointDead', l.P)
+    } else if (l.kind === 'node') {
+      const n = nm.get(l.node)
+      // A downward gravity load is −Fy; mass is its magnitude.
+      if (n) add(closest(n.y), 'pointDead', Math.abs(l.Fy ?? 0))
+    }
+  }
+  return levels.map((e) => {
+    const c = parts.get(e) ?? zeroComponents()
+    return { elevation: e, ...c, w: c.slab + c.selfWeight + c.lineDead + c.pointDead }
+  })
 }
 
 export function computeSeismic(model: StructuralModel, p: SeismicParams): SeismicResult | null {
