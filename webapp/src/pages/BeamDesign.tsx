@@ -434,7 +434,15 @@ export default function BeamDesign() {
               <Row label="Effective depth d" value={`${f1(r.d)} mm`}
                 sub={r.layers.length > 1 ? `dt=${f1(r.dt)} · ȳ=${f1(r.yBar)} mm` : undefined} />
               <Row label="Flexure mode" value={r.mode}
-                sub={`φMn,max=${f1(r.phiMnMax)} kN·m`} />
+                sub={r.mode === 'SRRB'
+                  // THE SECTION DRAWING SHOWS BARS THIS NUMBER DOES NOT USE.
+                  // Singly reinforced means φMn came from the tension face
+                  // alone; anything drawn on the other face is the continuity
+                  // steel §409.7.3.8 asks for and the hangers the stirrups
+                  // need. The schedule and the report say the same sentence
+                  // under their own cuts — see `barsNotCounted`.
+                  ? `φMn,max=${f1(r.phiMnMax)} kN·m · from the ${hogging ? 'top' : 'bottom'} steel alone — bars drawn on the other face are continuity/detailing (§409.7.3.8) and are not counted`
+                  : `φMn,max=${f1(r.phiMnMax)} kN·m · compression steel ${r.comprEffective ? 'counted' : "not counted: f's ≤ 0.85f'c"}`} />
               <Row label="Tension steel" value={`${r.bars} ⌀${f.barDia} mm`}
                 sub={`As=${f0(r.As)} mm² · ${r.usedMin ? 'ρ_min' : `ρ=${r.rho.toFixed(4)}`}`} />
               <Row label="ρ limits"

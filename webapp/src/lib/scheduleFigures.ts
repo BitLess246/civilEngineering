@@ -33,6 +33,21 @@ export interface SectionRowDesign {
   bars: number; sAdopt: number; legs: number; layers: number[]
   comprBars: number; comprLayers: number[]
   flangeAction?: string
+  /**
+   * Which flexure check sized the section, and whether the compression steel
+   * earned anything — so the callout can say which of the bars in the cut the
+   * DESIGN counted.
+   *
+   * A cut is drawn from the cage, so it shows every bar that is there: on a
+   * singly-reinforced beam that includes top bars the flexural capacity does
+   * not include. Two bars in a picture beside a φMn that ignores them is a
+   * drawing inviting a reader to assume otherwise. Optional, because a caller
+   * that has not got the mode gets the old wording rather than a claim.
+   */
+  mode?: 'SRRB' | 'DRRB'
+  /** §410 — false when f's ≤ 0.85f'c, so the compression steel is present and
+   *  deliberately not counted even under a doubly-reinforced check. */
+  comprEffective?: boolean
 }
 export interface BeamRowSection {
   x: number; label: string; hogging: boolean
@@ -45,13 +60,54 @@ export interface ColumnRow {
   seismicSConf?: number; seismicSOut?: number
 }
 
+/**
+ * Whether the compression bars in the cut are part of the strength, in the
+ * fewest words that are still true.
+ *
+ * Blank when the mode was not supplied — silence is the old behaviour, and
+ * better than a claim the caller did not make.
+ */
+function comprCounts(d: SectionRowDesign): string {
+  if (d.mode === 'SRRB') return ' — NOT COUNTED IN φMn (SINGLY REINFORCED)'
+  if (d.mode === 'DRRB') return d.comprEffective === false
+    ? ' — NOT COUNTED: f\'s ≤ 0.85f\'c (§410)'
+    : ' — COUNTED (DOUBLY REINFORCED)'
+  return ''
+}
+
+/**
+ * WHICH BARS IN THE CUT THE CHECK DID NOT USE — one line, or none.
+ *
+ * A cut is drawn from the cage, so it shows every bar that is there, including
+ * the far face's. On a singly-reinforced check those earned nothing: they are
+ * the continuous share §409.7.3.8 requires through the span, and the hangers
+ * the stirrups need. Reading `2-⌀20 T, 2-⌀20 B` beside a φMn computed from two
+ * of those four bars, nothing on the sheet said which two.
+ *
+ * Exported because the standalone calculator shows the same picture and owes
+ * the reader the same sentence.
+ */
+export function barsNotCounted(d: SectionRowDesign, hogging: boolean): string[] | null {
+  if (d.mode !== 'SRRB') return null
+  return [`φMn FROM THE ${hogging ? 'TOP' : 'BOTTOM'} STEEL ALONE — BARS ON THE OTHER FACE ARE CONTINUITY/DETAILING (§409.7.3.8), NOT COUNTED`]
+}
+
 /** What a beam section's callout says, line by line — the schedule's own
  *  words for the row, printed under the cut that shows them. */
 export function beamSectionNotes(sec: BeamRowSection, rect: SectionRect): string[] {
   const d = sec.design
   return [
     `${d.bars}-⌀${rect.barDia}${sec.hogging ? ' TOP' : ' BOT'}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}`,
-    ...(d.comprBars > 0 ? [`${d.comprBars}-⌀${rect.barDia} COMPR.`] : []),
+    ...(d.comprBars > 0 ? [`${d.comprBars}-⌀${rect.barDia} COMPR.${comprCounts(d)}`] : []),
+    // WHICH BARS IN THE CUT THE CHECK DID NOT USE.
+    //
+    // A cut is drawn from the cage, so it shows every bar that is there —
+    // including the far face's, which on a singly-reinforced check earned
+    // nothing: they are the continuous share §409.7.3.8 requires through the
+    // span, and the hangers the stirrups need. Reading "2-⌀20 T, 2-⌀20 B"
+    // beside a φMn computed from two of those four bars, nothing on the sheet
+    // said which two.
+    ...(barsNotCounted(d, sec.hogging) ?? []),
     d.sAdopt > 0
       ? `STIRRUPS ${d.legs}L-⌀${rect.tieDia} @ ${Math.round(d.sAdopt)}`
       : `STIRRUPS ⌀${rect.tieDia} @ MIN. (§409.6.3.1)`,
