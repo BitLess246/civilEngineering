@@ -139,9 +139,8 @@ export function cutCage(cage: RebarCage, cut: CageCut): CageCutResult {
 
   const bars: CutBar[] = []
   // `s` is the SIGNED distance of the run's own plane from the cut; `offset`
-  // is how far away it is. Both are needed: the offset ranks the sets, the
-  // sign keeps a set on one side of the cut from being merged with the set on
-  // the other side when the cut lands exactly between them.
+  // is how far away it is. Both are needed: the sign groups the runs into
+  // sets, and the offset then says which set is nearest.
   const flats: { run: RebarRun; polys: Vec3[][]; s: number; offset: number }[] = []
 
   for (const run of cage.runs) {
@@ -183,27 +182,37 @@ export function cutCage(cage: RebarCage, cut: CageCut): CageCutResult {
   // closest and drops the rest, which is how a 12-bar column comes out drawn
   // with a cross tie and no hoop around it.
   //
-  // So the set is grown by CHAINING: start at the nearest, and take in any run
-  // within a diameter or so of one already taken. That is the stacking rule
-  // itself — members of a set are a diameter apart, the next set is a whole
-  // spacing away — so it needs to be told neither the set size nor the
-  // spacing.
+  // So the sets are found FIRST, by their own stacking rule — sort the flats
+  // by their SIGNED level and start a new set wherever the step is more than a
+  // diameter or so, because members of a set are a diameter apart and the next
+  // set is a whole spacing away — and then the nearest set is drawn whole. It
+  // needs to be told neither the set size nor the spacing.
+  //
+  // Growing one chain outward from the nearest RUN instead is what this used
+  // to do, and it fails on the cut that lands between two sets, which is the
+  // ordinary case: a column cut at mid-storey sat 145 mm from the cross tie
+  // BELOW and 145 mm from the hoop ABOVE, so ranked by distance alone the two
+  // sets interleaved, the chain broke on the first step across the cut, and
+  // the section drew a cross tie with no hoop around it. Measured on a
+  // designed frame, that was 3 of every 4 column sections.
   let station: number | null = null
   let keep: typeof flats = []
   if (flats.length) {
-    const sorted = [...flats].sort((a, b) => a.offset - b.offset)
-    station = sorted[0]!.offset
+    station = Math.min(...flats.map((f) => f.offset))
     if (cut.reach != null) {
       keep = flats.filter((f) => f.offset <= cut.reach! + 1e-9)
     } else {
-      keep = [sorted[0]!]
-      let last = sorted[0]!.s
-      for (const f of sorted.slice(1)) {
-        const tol = Math.max(1.5 * f.run.dia / 1000, 1e-4)
-        if (Math.abs(f.s - last) > tol) break
-        keep.push(f)
-        last = f.s
+      const byLevel = [...flats].sort((a, b) => a.s - b.s)
+      const sets: (typeof flats)[] = [[byLevel[0]!]]
+      for (const f of byLevel.slice(1)) {
+        const set = sets[sets.length - 1]!
+        const prev = set[set.length - 1]!
+        const tol = Math.max(1.5 * Math.max(f.run.dia, prev.run.dia) / 1000, 1e-4)
+        if (f.s - prev.s <= tol) set.push(f)
+        else sets.push([f])
       }
+      const near = (g: typeof flats) => Math.min(...g.map((f) => f.offset))
+      keep = sets.reduce((best, g) => (near(g) < near(best) ? g : best))
     }
   }
 
