@@ -127,10 +127,42 @@ describe('buildBeamCage — longitudinal steel', () => {
   })
 
   it('spreads the bars of a face across the web, corner to corner', () => {
-    const zs = marked('XTL').map((r) => r.path[0][2]).sort((a, b) => a - b)
+    // The FACE reaches the corners; the CONTINUOUS bars are what hold them,
+    // because a corner bar is the one that runs through. This used to assert
+    // the corners off the CURTAILED bars, which is how the two sets came to
+    // share a range — and to land on one another.
+    const face = (mark: string) => marked(mark).map((r) => r.path[0][2])
+    const zs = [...face('T'), ...face('XTL')].sort((a, b) => a - b)
     // ±(b/2 − cover − stirrup − db/2) = ±(150 − 40 − 12 − 10) = ±88 mm
     expect(zs[0]).toBeCloseTo(-0.088, 9)
     expect(zs[zs.length - 1]).toBeCloseTo(0.088, 9)
+    // and the corners belong to the through bars
+    const thru = face('T').sort((a, b) => a - b)
+    expect(thru[0]).toBeCloseTo(-0.088, 9)
+    expect(thru[thru.length - 1]).toBeCloseTo(0.088, 9)
+  })
+
+  it('never puts two bars of a face in the same place', () => {
+    // Through and curtailed bars were laid out separately over the same
+    // −half…+half, so they landed on one another whenever the counts lined up:
+    // a 4-bar face with 2 continuous and 2 curtailed drew two dots under a
+    // callout that said four. Swept 2…10 a side, 18 of 5562 pairs collided.
+    for (let top = 2; top <= 10; top++) for (let bot = 2; bot <= 10; bot++) {
+      const cage = buildBeamCage({ ...beam, topBars: top, botBars: bot })
+      for (const role of ['top', 'bottom'] as const) {
+        const rs = cage.runs.filter((r) => r.role === role)
+        for (let a = 0; a < rs.length; a++) for (let b = a + 1; b < rs.length; b++) {
+          const A = rs[a], B = rs[b]
+          const sameLine = Math.abs(A.path[0][2] - B.path[0][2]) < 1e-4
+            && Math.abs(A.path[0][1] - B.path[0][1]) < 1e-4
+          if (!sameLine) continue
+          const xs = (r: typeof A) => r.path.map((p) => p[0])
+          const overlap = Math.min(Math.max(...xs(A)), Math.max(...xs(B)))
+            - Math.max(Math.min(...xs(A)), Math.min(...xs(B)))
+          expect(overlap, `${top}/${bot} ${role}: ${A.mark} + ${B.mark}`).toBeLessThanOrEqual(0.05)
+        }
+      }
+    }
   })
 })
 

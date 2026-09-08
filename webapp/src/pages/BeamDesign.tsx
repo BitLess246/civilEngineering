@@ -7,7 +7,9 @@ import { initialLetterhead } from '../lib/letterhead'
 import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import type { BeamSupport } from '../engine/beamDeflection'
 import type { CriticalSection } from '../engine/beamSections'
-import { BeamSchematic } from '../components/BeamSchematic'
+import { SheetFigure } from '../components/modelSpace/figures'
+import { calcBeamSection } from '../lib/calcFigures'
+import { beamSectionNotes } from '../lib/scheduleFigures'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { buildBeamSolution, beamProvidedCapacities } from '../lib/beamSolution'
 import { optimizeBeamRebar, optimizeBeamMember } from '../engine/beamRebarOptimize'
@@ -152,6 +154,33 @@ export default function BeamDesign() {
   const demand = multi
     ? { Mu: Math.abs(active?.Mu ?? 0), Vu: Math.abs(active?.Vu ?? 0) }
     : { Mu: Math.abs(f.Mu), Vu: f.Vu }
+
+  // THE SAME CUT THE DRAWING SET MAKES, from the cage this page has designed.
+  // The old figure was a picture of a cage — a rounded rectangle for the
+  // stirrup, dots spread from the bar count — and could show neither the 135°
+  // returns, a second layer, nor the arrangement the sheets draw for the same
+  // beam. The callout is composed by the schedule's own `beamSectionNotes`, so
+  // the calculator and the schedule cannot word the same section differently.
+  const sectionFigure = useMemo(() => {
+    if (!r || !sectionGeomOK) return null
+    const rect = { b: fd.b, h: fd.h, cover: fd.cover, barDia: fd.barDia, tieDia: fd.stirrupDia }
+    return calcBeamSection({
+      ...rect, stirrupDia: fd.stirrupDia,
+      bars: r.bars, comprBars: r.comprBars, hogging, spacing: r.sAdopt, d: r.d,
+      title: `SECTION — ${f0(fd.b)}×${f0(fd.h)}`,
+      notes: [
+        ...beamSectionNotes(
+          { x: 0, label: '', hogging, design: {
+            bars: r.bars, sAdopt: r.sAdopt, legs: fd.legs, layers: r.layers,
+            comprBars: r.comprBars, comprLayers: r.comprLayers,
+            mode: r.mode, comprEffective: r.comprEffective,
+          } },
+          rect,
+        ),
+        ...(r.flexOK ? [] : ['THE SECTION CANNOT FIT THIS STEEL — ENLARGE IT']),
+      ],
+    })
+  }, [r, fd, hogging, sectionGeomOK])
   // The selection is appended, not prepended: it justifies the bar chosen for
   // the steel the flexure steps above derived, so it reads after them.
   const solution = useMemo(
@@ -256,10 +285,7 @@ export default function BeamDesign() {
       {!(reportData) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
         {reportData && (
           <PrintReport {...reportData}
-            drawing={<BeamSchematic b={fd.b} h={fd.h} cover={fd.cover} barDia={fd.barDia} stirrupDia={fd.stirrupDia}
-              bars={r!.bars} d={r!.d} dPrime={r!.comprLayers.length > 0 ? r!.dPrime : undefined}
-              layers={r!.layers} comprLayers={r!.comprLayers} comprBars={r!.comprBars} comprBarDia={f.comprBarDia}
-              naDepth={r!.cNA} flexOK={r!.flexOK} hogging={hogging} />}
+            drawing={sectionFigure ? <SheetFigure drawing={sectionFigure} width={420} /> : null}
           />
         )}
       {/* The saved-project card sits in the SAME container as the letterhead
@@ -413,12 +439,8 @@ export default function BeamDesign() {
           )}
 
           <DrawingCard pdfDrawing title={`Section${multi && active ? ` — ${active.label}` : ''}`} meta={`${f0(f.b)} × ${f0(f.h)} · to scale`}>
-            {r ? (
-              <BeamSchematic b={fd.b} h={fd.h} cover={fd.cover} barDia={fd.barDia} stirrupDia={fd.stirrupDia}
-                bars={r.bars} d={r.d} dPrime={r.comprLayers.length > 0 ? r.dPrime : undefined}
-                layers={r.layers} comprLayers={r.comprLayers}
-                comprBars={r.comprBars} comprBarDia={fd.comprBarDia}
-                naDepth={r.cNA} flexOK={r.flexOK} hogging={hogging} />
+            {r && sectionFigure ? (
+              <SheetFigure drawing={sectionFigure} width={420} />
             ) : (
               <p className="py-8 text-center text-sm text-[#a39d8d]">Enter a valid section (d must be positive).</p>
             )}
