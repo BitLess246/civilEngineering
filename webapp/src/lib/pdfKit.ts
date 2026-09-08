@@ -143,7 +143,9 @@ export interface Sheet {
   /** Footer (and continuation-page header strip) on every page. Call last.
    *  `noStripOn` names pages that carry their own document header — the
    *  first page of a document bound after another — and get no strip. */
-  pageFooters(docLabel: string, sheet: string, today: string, project: string, noStripOn?: ReadonlySet<number>): void
+  /** `stamp` is the design-snapshot line — centred on every footer, so a
+   *  loose page can be traced back to the run that printed it. */
+  pageFooters(docLabel: string, sheet: string, today: string, project: string, noStripOn?: ReadonlySet<number>, stamp?: string): void
 }
 
 export interface BrandHeader {
@@ -422,7 +424,7 @@ export function createSheet(): Sheet {
       doc.text(doc.splitTextToSize(text, CONTENT_W), M, s.y)
     },
 
-    pageFooters(docLabel, sheet, today, project, noStripOn) {
+    pageFooters(docLabel, sheet, today, project, noStripOn, stamp) {
       const pages = doc.getNumberOfPages()
       for (let p = 1; p <= pages; p++) {
         doc.setPage(p)
@@ -437,6 +439,11 @@ export function createSheet(): Sheet {
         doc.line(M, FOOT_Y + 3, M + CONTENT_W, FOOT_Y + 3)
         s.setF('mono', 'normal', 5.6, FAINT)
         doc.text(`${sheet} · ${project || BRAND_NAME}`, M, FOOT_Y + 6.5)
+        if (stamp) {
+          s.setF('mono', 'normal', 5, FAINT)
+          doc.text(stamp, M + CONTENT_W / 2, FOOT_Y + 6.5, { align: 'center' })
+          s.setF('mono', 'normal', 5.6, FAINT)
+        }
         doc.text(`page ${p} / ${pages}`, M + CONTENT_W, FOOT_Y + 6.5, { align: 'right' })
       }
     },
