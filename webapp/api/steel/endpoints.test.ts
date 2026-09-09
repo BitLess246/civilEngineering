@@ -211,13 +211,21 @@ describe('the guest trial gate', () => {
   })
 
   it('never meters a signed-in member', async () => {
-    // `identify` returns a member for any token that is not the anon key, and
-    // the gate must not even ask the database about them.
+    // `identify` returns a member for any token that PASSES THE STRUCTURAL
+    // SCREEN and that Supabase then confirms, and the gate must not even ask
+    // the database about them. The fixture is a real-shaped JWT: the bare
+    // string 'member-token' it used to be is a shape no Supabase session
+    // produces, and is now refused before the round trip.
+    const memberJwt = (() => {
+      const b64u = (o: unknown) =>
+        btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+      return `${b64u({ alg: 'HS256', typ: 'JWT' })}.${b64u({ sub: 'user-1', exp: Math.floor(Date.now() / 1000) + 3600 })}.c2ln`
+    })()
     const sb = supabase({ allowed: false, charged: false, used: 99, reason: 'exhausted' })
     try {
       const res = await beam(new Request('https://example.test/api/steel/beam', {
         method: 'POST',
-        headers: { authorization: 'Bearer member-token', 'content-type': 'application/json', ...GUEST },
+        headers: { authorization: `Bearer ${memberJwt}`, 'content-type': 'application/json', ...GUEST },
         body: JSON.stringify(BEAM_INPUT),
       }))
       expect(res.status).toBe(200)
