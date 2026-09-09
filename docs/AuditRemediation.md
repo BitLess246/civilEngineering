@@ -34,7 +34,7 @@ mechanism was established by reading, not observed.
 | E4 | ValidationMap row C003 is an algebraic tautology | medium | verified | ☐ |
 | S5 | No rate limiting; members never metered | low-med | verified | ☐ |
 | R9 | `update()` is not a functional update | low | latent | ✅ #728 |
-| S6 | `guest-quota` CORS lets any site burn a visitor's trial | low | read | ☐ |
+| S6 | `guest-quota` CORS lets any site burn a visitor's trial | low | read | ✅ #735 |
 | E5 | `Cv1` uses the superseded AISC 360-10 form (conservative) | low | read | ☐ |
 
 **Found while deploying, not in the audit — R10, the double-charged arrival.**
@@ -508,10 +508,36 @@ JWT locally against JWKS) so garbage tokens are not amplified 1:1 into your own
 auth endpoint, and add a per-subject/per-user token bucket in front of
 `solve()`. Vercel's firewall rules are the zero-code option.
 
-**S6** — `guest-quota` sets `access-control-allow-origin: '*'`, so a
-third-party page can drive `consume` against the visitor's own subject.
-Restrict `consume` to an origin allowlist, or retire it now that
-`claim_guest_run` supersedes it.
+**S6 — ✅ SHIPPED (#735).** `guest-quota` set `access-control-allow-origin: '*'`
+for both actions, so a third-party page could drive `consume` against the
+visitor's own subject — spending their whole free trial on a site they never
+opened, while they read something else.
+
+What made the wildcard wrong HERE and right in `_shared/cors.ts`: that file
+argues `*` is safe for the billing endpoints because each needs a bearer token
+only the signed-in tab holds, so a hostile page gains nothing — and it says to
+revisit the moment an endpoint accepts ambient authority. `guest-quota` is that
+endpoint and always was: its subject is a salted digest of the CLIENT IP, which
+the browser supplies automatically, exactly like a cookie.
+
+`peek` stays open (read-only, and it tells the caller only what the caller
+already is). `consume` now requires an allowlisted `Origin`, from
+`GUEST_QUOTA_ORIGINS` — exact origins or one wildcard label
+(`https://*.vercel.app`), which is what keeps preview deployments working and
+was the reason the endpoint reached for `*` in the first place. Unset ⇒
+`consume` is refused and the client falls back to its local count, the same
+fail-closed stance the missing-salt branch already takes.
+
+**Honest limit: CORS is a browser mechanism.** This stops the drive-by case —
+a hostile page burning its own visitors' trials — and not a determined script,
+which sends any `Origin` it likes or none. That is the threat the audit
+described, and the counter has never claimed to be a security boundary.
+
+The matcher is a tested pure module (`_shared/originAllow.ts`, 10 cases)
+because a hand-rolled origin check is where this class of fix usually goes
+wrong: `https://a.b.vercel.app`, `https://evil-vercel.app`, the bare apex,
+`http://` against an `https://` entry, `https://vercel.app.evil.com`, and the
+literal `null` a sandboxed iframe sends are each asserted to be REFUSED.
 
 ---
 

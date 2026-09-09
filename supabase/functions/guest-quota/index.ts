@@ -18,6 +18,12 @@
 // Secrets (supabase secrets set …):
 //   GUEST_TRIAL_SALT   ≥24 chars of random. `openssl rand -hex 32`.
 //   GUEST_TRIAL_LIMIT  optional; runs per calculator. Defaults to 5.
+//   GUEST_QUOTA_ORIGINS  origins allowed to CONSUME, comma-separated. Exact
+//                      (`https://app.example.com`) or one wildcard label
+//                      (`https://*.vercel.app`, which is what keeps preview
+//                      deployments working). Unset ⇒ `consume` is refused and
+//                      the client falls back to its local count — the same
+//                      fail-closed stance as a missing salt.
 //   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY   (injected by the platform)
 //
 // THIS IS NOT A SECURITY BOUNDARY, and the app says so in three other places
@@ -29,27 +35,54 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 import {
   clientIp, normalizeRoute, subjectHash, saltUsable, ROUTE_CAP_PER_SUBJECT,
 } from '../_shared/guestSubject.ts'
+import { parseOrigins, originAllowed, corsOrigin } from '../_shared/originAllow.ts'
 
 const env = (k: string) => Deno.env.get(k)
 
 const DEFAULT_LIMIT = 5
 
-// Allowed from any origin: the endpoint reveals nothing about anyone (you must
-// already be the visitor to get their own count) and pinning an origin here
-// would break every preview deployment.
-const CORS = {
-  'access-control-allow-origin': '*',
-  'access-control-allow-headers': 'authorization, content-type, apikey, x-client-info',
-  'access-control-allow-methods': 'POST, OPTIONS',
-}
+// PEEK is open from any origin: it reveals nothing about anyone — you must
+// already BE the visitor to get their own count — and pinning an origin would
+// break every preview deployment.
+//
+// CONSUME is not, and the reason is that this endpoint carries AMBIENT
+// AUTHORITY. `_shared/cors.ts` argues, correctly, that `*` is right for the
+// billing endpoints because each needs a bearer token only the signed-in tab
+// holds, so a hostile page gains nothing; it also says to revisit that the
+// moment an endpoint accepts ambient authority. This is that endpoint, and it
+// always was: the subject is a salted digest of the CLIENT IP, which the
+// browser supplies automatically, exactly like a cookie. A third-party page
+// could therefore spend a visitor's whole free trial on a site the visitor has
+// never opened, just by fetching this URL while they read something else.
+//
+// CORS is a BROWSER mechanism, so this stops the drive-by case and not a
+// determined script — curl sends any Origin it likes. That is the threat that
+// was described, and the header above says in full why the counter is not a
+// security boundary in the first place.
+const CORS_HEADERS = 'authorization, content-type, apikey, x-client-info'
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'content-type': 'application/json' },
-  })
+const corsFor = (origin: string | null, allow: string[]) => ({
+  // Reflect an allowlisted origin so `consume` works from it; otherwise the
+  // wildcard, which is all `peek` needs and which no credentialed request can
+  // use even if one is added later.
+  'access-control-allow-origin': corsOrigin(origin, allow),
+  'access-control-allow-headers': CORS_HEADERS,
+  'access-control-allow-methods': 'POST, OPTIONS',
+  // Tell caches the answer varies by Origin, or a proxy will serve one
+  // visitor's reflected origin to the next.
+  'vary': 'Origin',
+})
 
 Deno.serve(async (req: Request): Promise<Response> => {
+  const origin = req.headers.get('origin')
+  const allow = parseOrigins(env('GUEST_QUOTA_ORIGINS'))
+  const CORS = corsFor(origin, allow)
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...CORS, 'content-type': 'application/json' },
+    })
+
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'method' }, 405)
 
@@ -69,6 +102,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try { body = await req.json() } catch { return json({ error: 'body' }, 400) }
 
   const action = body.action === 'consume' ? 'consume' : 'peek'
+
+  // The write needs a caller we recognise. `peek` does not: it is read-only and
+  // tells the caller only what the caller already is.
+  if (action === 'consume' && !originAllowed(origin, allow)) {
+    if (allow.length === 0) console.error('GUEST_QUOTA_ORIGINS is not set; refusing to consume')
+    // 403, not 429: the client's `unavailable` path falls back to the LOCAL
+    // count, which is the pre-server behaviour and the right degradation.
+    return json({ error: 'origin' }, 403)
+  }
 
   // The token naming this ARRIVAL, minted by `calcRun.startRun()` on the client
   // and sent by BOTH halves of the counter so one visit is charged once. Bounds
