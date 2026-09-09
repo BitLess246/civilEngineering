@@ -1,3 +1,4 @@
+import { compact, positive, nonNegative, effectiveDepth } from './inputGuards'
 // ─────────────────────────────────────────────────────────────────────────
 // Circular RC water tank — wall design (permissible-stress / working-stress).
 // Liquid-retaining crack-control philosophy of IS 3370 / ACI 350.
@@ -33,6 +34,16 @@ export interface CircularTankResult {
   fct: number          // concrete tensile stress under hoop tension, MPa
   thicknessOK: boolean
   freeboardOK: boolean
+  /**
+   * Why this is not a tank wall — empty when it is one.
+   *
+   * Both verdicts are ANDed with this being empty, and `thicknessOK` in
+   * particular needed it. That check is `fct ≤ sigmaCt` with
+   * fct = T/(1000·t + (n−1)·As): a NEGATIVE t flips the denominator, so fct
+   * comes out negative and sails under the limit. A wall of t = −250 mm
+   * therefore reported `thicknessOK: true` at an effective depth of −125 mm.
+   */
+  inputNotes: string[]
 }
 
 /**
@@ -40,11 +51,45 @@ export interface CircularTankResult {
  * permissible steel tensile stress (crack control); `sigmaCt` the permissible
  * concrete direct tension; `fc` sets the modular ratio.
  */
-export function designCircularTank(p: {
-  H: number; D: number; t: number; freeboard?: number;
-  fc: number; sigmaSt?: number; sigmaCt?: number;
-  cover: number; barDia: number; gammaW?: number;
-}): CircularTankResult {
+/** The fields `tankInputNotes` reads. Geometry m, section mm, stress MPa. */
+export type TankInputs = {
+  H: number; D: number; t: number; freeboard?: number
+  fc: number; sigmaSt?: number; sigmaCt?: number
+  cover: number; barDia: number; gammaW?: number
+}
+
+/**
+ * Geometry and permissible stresses that must be physical before the hoop and
+ * cantilever algebra means anything.
+ *
+ * Measured on a 4 m × ⌀10 m tank, t 250, f'c 28, cover 40, ⌀16 — every one of
+ * these reported BOTH `thicknessOK` and `freeboardOK` true:
+ *
+ *   t = −250      d = −125 mm; fct's denominator flips sign and "passes"
+ *   H = −4        hoopAs = −1509 mm² — negative steel
+ *   sigmaSt = 0   hoopAs = Infinity
+ *   cover = −40   d 202 → 282 mm
+ *   f'c = 0, H = 0, D = 0
+ */
+export function tankInputNotes(p: TankInputs): string[] {
+  return compact([
+    positive(p.H, 'water depth H'),
+    positive(p.D, 'tank diameter D'),
+    positive(p.t, 'wall thickness t'),
+    positive(p.fc, "concrete strength f'c"),
+    p.sigmaSt != null ? positive(p.sigmaSt, 'permissible steel stress σst') : null,
+    p.sigmaCt != null ? positive(p.sigmaCt, 'permissible concrete tension σct') : null,
+    p.gammaW != null ? positive(p.gammaW, 'water unit weight γw') : null,
+    positive(p.barDia, 'bar Ø'),
+    nonNegative(p.cover, 'clear cover'),
+    p.freeboard != null ? nonNegative(p.freeboard, 'freeboard') : null,
+    effectiveDepth(p.t, p.cover, 0, p.barDia, 'cover and half a bar'),
+  ])
+}
+
+export function designCircularTank(p: TankInputs): CircularTankResult {
+  const inputNotes = tankInputNotes(p)
+  const real = inputNotes.length === 0
   const gammaW = p.gammaW ?? GAMMA_W
   const sigmaSt = p.sigmaSt ?? 130
   const sigmaCt = p.sigmaCt ?? 1.3
@@ -67,7 +112,8 @@ export function designCircularTank(p: {
     T, M, d,
     hoopAs, hoopSpacing: spacing(hoopAs),
     vertAs, vertSpacing: spacing(vertAs),
-    fct, thicknessOK: fct <= sigmaCt,
-    freeboardOK: (p.freeboard ?? 0.3) >= 0.3,
+    fct, thicknessOK: real && fct <= sigmaCt,
+    freeboardOK: real && (p.freeboard ?? 0.3) >= 0.3,
+    inputNotes,
   }
 }

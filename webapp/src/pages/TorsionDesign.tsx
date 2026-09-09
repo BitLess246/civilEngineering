@@ -91,28 +91,28 @@ export default function TorsionDesign() {
         {/* ── INPUTS ── */}
         <div className="flex flex-col gap-6">
           <Card title="Section">
-            <Num label="Width b" unit="mm"    value={f.b}    onChange={set('b')} />
-            <Num label="Height h" unit="mm"   value={f.h}    onChange={set('h')} />
-            <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} />
-            <Num label="Stirrup ⌀ dₛ" unit="mm" value={f.stirrupDia} onChange={set('stirrupDia')} />
-            <Num label="Main bar ⌀ db" unit="mm" value={f.barDia}    onChange={set('barDia')} />
+            <Num label="Width b" unit="mm"    value={f.b}    onChange={set('b')} min={1} />
+            <Num label="Height h" unit="mm"   value={f.h}    onChange={set('h')} min={1} />
+            <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} min={0} />
+            <Num label="Stirrup ⌀ dₛ" unit="mm" value={f.stirrupDia} onChange={set('stirrupDia')} min={1} />
+            <Num label="Main bar ⌀ db" unit="mm" value={f.barDia}    onChange={set('barDia')} min={1} />
             <Pick label="Stirrup legs" value={String(f.legs) as '2'|'4'}
               onChange={(v) => set('legs')(Number(v) as 2 | 4)}
               options={[['2', '2 legs'], ['4', '4 legs']]} />
           </Card>
 
           <Card title="Materials">
-            <Num label="f'c" unit="MPa" value={f.fc}  onChange={set('fc')} />
-            <Num label="fy (main)"  unit="MPa" value={f.fy}  onChange={set('fy')} />
-            <Num label="fyt (stirrup)" unit="MPa" value={f.fyt} onChange={set('fyt')} />
+            <Num label="f'c" unit="MPa" value={f.fc}  onChange={set('fc')} min={1} />
+            <Num label="fy (main)"  unit="MPa" value={f.fy}  onChange={set('fy')} min={1} />
+            <Num label="fyt (stirrup)" unit="MPa" value={f.fyt} onChange={set('fyt')} min={1} />
             <Pick label="λ (lightweight)" value={String(f.lambda) as '1'|'0.75'}
               onChange={(v) => set('lambda')(Number(v) as 1 | 0.75)}
               options={[['1', '1.0 (normal weight)'], ['0.75', '0.75 (lightweight)']]} />
           </Card>
 
           <Card title="Demands">
-            <Num label="Tu (factored torsion)" unit="kN·m" value={f.Tu} onChange={set('Tu')} />
-            <Num label="Vu (factored shear)"  unit="kN"   value={f.Vu}  onChange={set('Vu')} />
+            <Num label="Tu (factored torsion)" unit="kN·m" value={f.Tu} onChange={set('Tu')} min={0} />
+            <Num label="Vu (factored shear)"  unit="kN"   value={f.Vu}  onChange={set('Vu')} min={0} />
           </Card>
         </div>
 

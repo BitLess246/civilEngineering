@@ -5,6 +5,10 @@ import { designAxialColumn, type AxialColumnInput } from './columnDesign'
 import { designRetainingWall, type RetainingWallInput } from './retainingWall'
 import { designPileCap, type PileCapInput } from './pileCap'
 import { designSlabDDM, type SlabInput } from './slabDDM'
+import { designCircularTank, type TankInputs } from './waterTank'
+import { designStair, type StairInputs } from './stair'
+import { designTorsion, type TorsionInput } from './torsionDesign'
+import { designShearWall, type ShearWallInput } from './shearWallDesign'
 
 describe('the guard predicates', () => {
   it('positive accepts only finite values above zero', () => {
@@ -52,28 +56,36 @@ describe('the guard predicates', () => {
 // ─────────────────────────────────────────────────────────────────────────
 // THE REGISTRY — one row per guarded engine.
 //
+// What each engine did BEFORE its guard, measured, so a reader can see this
+// is not a hypothetical contract:
+//
+//   designBeam          cover −40 mm deepened d 440 → 520 and cut required
+//                       steel 976 → 809 mm² (−17%) at flexOK: true
+//   designAxialColumn   f'c = 0 passed axialOK AND rhoOK by buying 30 bars;
+//                       cover −40 lifted the balanced point of a 400×400
+//                       8-⌀20 from (1596 kN, 328 kN·m) to (1979, 413)
+//   designRetainingWall fy = 0 gave NaN steel and φ = 90° gave FS_OT =
+//                       FS_SL = ∞, both with all five verdicts true
+//   designPileCap       cover −75 solved a 525 mm cap against a claimed
+//                       590 mm effective depth — bars outside the concrete
+//   designSlabDDM       a negative LIVE load cut wu 6.8 → 0.4 kPa, reported
+//                       applicable AND tension-controlled
+//   designCircularTank  t = −250 reported thicknessOK TRUE at d = −125 mm:
+//                       fct = T/(1000·t + (n−1)·As) flips sign with t, so the
+//                       crack check sails under its limit
+//   designStair         span = 0 makes tMin = span/denominator zero, so every
+//                       waist clears it — the only input in its sweep passing
+//   designTorsion       cover −40 lifted d 440 → 520 mm with interactionOK true
+//   designShearWall     hw = 0 (aspect 0, the most generous αc), fy = 0, ⌀0
+//                       bar and a negative Vu all kept both verdicts true
+//
 // This defect was found independently in the beam, the column, three footings
 // and the retaining wall, and each was fixed on its own. This table is what
 // stops the seventh engine repeating it: adding a row is the last step of
 // guarding an engine, and the sweep below then holds it to the same contract.
 //
-// Engines NOT yet in this table, measured to have the same defect (each its
-// own change). Add the row when the guard lands.
-//
-//   waterTank  t = −250 reports `thicknessOK` TRUE with d = −125 mm: the crack
-//              check is fct = T/(1000·t + (n−1)·As), and a negative t flips the
-//              denominator, so fct comes out negative and "passes". H = −4
-//              gives hoopAs = −1509 mm² (negative steel) and sigmaSt = 0 gives
-//              Infinity, both with `thicknessOK` and `freeboardOK` true.
-//   stair      span = 0 is the ONLY input in the sweep that reports ok = true
-//              AND tMinOK = true; fy = 0 gives AsMain = Infinity; cover = −20
-//              lifts d from 124 to 164 mm.
-//   torsion    cover = −40 lifts d 440 → 520 mm, and ⌀0 bar, ⌀0 stirrup,
-//              fyt = 0, legs = 0 and a negative Tu all keep `interactionOK`
-//              true. b = 0, h = 0 and f'c = 0 are already caught.
-//   shearWall  hw = 0, fy = 0, ⌀0 bar and a negative Vu all keep `shearOK` and
-//              `capOK` true. A zero or negative thickness or length is already
-//              caught (Acv goes to zero or negative, and the ratios with it).
+// Every standalone RC design engine that publishes a verdict is now in this
+// table. When the next one ships, its row belongs here in the same PR.
 // ─────────────────────────────────────────────────────────────────────────
 interface Guarded<I> {
   name: string
@@ -177,8 +189,68 @@ const slab: Guarded<SlabInput> = {
   },
 }
 
+const tank: Guarded<TankInputs> = {
+  name: 'designCircularTank',
+  base: { H: 4, D: 10, t: 250, fc: 28, cover: 40, barDia: 16 },
+  verdicts: (i) => { const r = designCircularTank(i); return [r.thicknessOK, r.freeboardOK] },
+  notes: (i) => designCircularTank(i).inputNotes,
+  bad: {
+    'zero bar Ø': { barDia: 0 },
+    'negative cover': { cover: -40 },
+    'zero strength': { fc: 0 },
+    'a wall of negative thickness': { t: -250 },
+  },
+}
+
+const stair: Guarded<StairInputs> = {
+  name: 'designStair',
+  base: {
+    span: 4, t: 200, R: 175, G: 280, fc: 28, fy: 415,
+    barDia: 12, cover: 20, finishes: 1.5, live: 3,
+  },
+  verdicts: (i) => { const r = designStair(i); return [r.ok, r.tMinOK] },
+  notes: (i) => designStair(i).inputNotes,
+  bad: {
+    'zero bar Ø': { barDia: 0 },
+    'negative cover': { cover: -20 },
+    'zero-yield steel': { fy: 0 },
+    'a flight of no span': { span: 0 },
+  },
+}
+
+const torsion: Guarded<TorsionInput> = {
+  name: 'designTorsion',
+  base: {
+    b: 300, h: 500, cover: 40, stirrupDia: 10, barDia: 20,
+    fc: 28, fy: 415, fyt: 415, Tu: 25, Vu: 90,
+  },
+  verdicts: (i) => [designTorsion(i).interactionOK],
+  notes: (i) => designTorsion(i).inputNotes,
+  bad: {
+    'zero bar Ø': { barDia: 0 },
+    'negative cover': { cover: -40 },
+    'zero-yield stirrups': { fyt: 0 },
+    'a negative torsion demand': { Tu: -25 },
+  },
+}
+
+const shearWall: Guarded<ShearWallInput> = {
+  name: 'designShearWall',
+  base: { lw: 4, hw: 3, thickness: 250, fc: 28, fy: 415, Vu: 800 },
+  verdicts: (i) => { const r = designShearWall(i); return [r.shearOK, r.capOK] },
+  notes: (i) => designShearWall(i).inputNotes,
+  bad: {
+    'zero bar Ø': { barDia: 0 },
+    'zero-yield steel': { fy: 0 },
+    'a wall of no height': { hw: 0 },
+    'a negative shear demand': { Vu: -800 },
+  },
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const REGISTRY: Guarded<any>[] = [beam, column, wall, pileCap, slab]
+const REGISTRY: Guarded<any>[] = [
+  beam, column, wall, pileCap, slab, tank, stair, torsion, shearWall,
+]
 
 describe.each(REGISTRY)('$name honours the guard contract', (e) => {
   it('passes its own reference input with no notes', () => {

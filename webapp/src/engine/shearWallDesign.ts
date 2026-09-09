@@ -1,3 +1,4 @@
+import { compact, positive, nonNegative, finite } from './inputGuards'
 // ─────────────────────────────────────────────────────────────────────────
 // Shear-wall reinforcement — in-plane (web) shear design.
 // NSCP 2015 §418.10 / ACI 318-14 §11 & §18.10 (structural walls).
@@ -41,8 +42,18 @@ export interface ShearWallResult {
   Vn: number          // nominal shear with adopted ρt, kN
   phiVn: number       // design shear, kN
   VnCap: number       // 0.83·Acv·√fc, kN
-  shearOK: boolean    // φVn ≥ Vu and within the cap
+  shearOK: boolean    // φVn ≥ Vu and within the cap (false if `inputNotes`)
   capOK: boolean      // Vu ≤ φ·VnCap (web crushing limit)
+  /**
+   * Why this is not a wall — empty when it is one.
+   *
+   * Both verdicts are ANDed with this being empty. They are ratios against
+   * Acv = ℓw·t, so a zero or negative length or thickness already collapsed
+   * them; what went through was everything Acv does not touch — hw = 0 (an
+   * aspect ratio of zero, which picks the most generous αc), fy = 0, a ⌀0
+   * bar, and a negative Vu, all of which kept BOTH true.
+   */
+  inputNotes: string[]
   twoCurtains: boolean
   horiz: WallCurtainSteel   // ρt — horizontal (transverse) bars resist shear
   vert: WallCurtainSteel    // ρℓ — vertical (longitudinal) distributed bars
@@ -51,7 +62,29 @@ export interface ShearWallResult {
   notes: string[]
 }
 
+/**
+ * Geometry and materials that must be physical before the §418.10 algebra
+ * means anything.
+ */
+export function wallInputNotes(i: ShearWallInput): string[] {
+  return compact([
+    positive(i.lw, 'wall length ℓw'),
+    positive(i.hw, 'wall height hw'),
+    positive(i.thickness, 'web thickness t'),
+    positive(i.fc, "concrete strength f'c"),
+    positive(i.fy, 'bar yield fy'),
+    i.barDia != null ? positive(i.barDia, 'distributed bar Ø') : null,
+    i.lambda != null ? positive(i.lambda, 'lightweight factor λ') : null,
+    // Vu is a magnitude here (the wall is checked for the demand's size);
+    // Pu and Mu are signed and only have to be numbers.
+    nonNegative(i.Vu, 'factored shear Vu'),
+    i.Pu != null ? finite(i.Pu, 'the factored axial Pu') : null,
+    i.Mu != null ? finite(i.Mu, 'the factored moment Mu') : null,
+  ])
+}
+
 export function designShearWall(i: ShearWallInput): ShearWallResult {
+  const inputNotes = wallInputNotes(i)
   const lambda = i.lambda ?? 1
   const db = i.barDia ?? 12
   const Ab = (Math.PI / 4) * db * db
@@ -66,7 +99,7 @@ export function designShearWall(i: ShearWallInput): ShearWallResult {
 
   const Vc = (alphaC * lambda * rootFc * Acv) / 1000     // kN (concrete term)
   const VnCap = (0.83 * rootFc * Acv) / 1000             // kN — web crushing cap
-  const capOK = i.Vu <= PHI_SHEAR * VnCap
+  const capOK = inputNotes.length === 0 && i.Vu <= PHI_SHEAR * VnCap
 
   // required horizontal ratio ρt from φ·Acv·(αc·λ√fc + ρt·fy) ≥ Vu
   const rhoTreq = Math.max(0, (i.Vu * 1000 / (PHI_SHEAR * Acv) - alphaC * lambda * rootFc) / i.fy)
@@ -109,7 +142,7 @@ export function designShearWall(i: ShearWallInput): ShearWallResult {
   notes.push('Distributed web steel governs in-plane shear; flexural boundary reinforcement is designed separately.')
 
   return {
-    Acv, aspect, alphaC, Vc, Vn, phiVn, VnCap, shearOK, capOK, twoCurtains,
+    Acv, aspect, alphaC, Vc, Vn, phiVn, VnCap, shearOK, capOK, inputNotes, twoCurtains,
     horiz: { rhoReq: rhoTreq, rho: rhoT, spacing: spacingFrom(rhoT), usedMin: rhoTreq <= RHO_MIN + 1e-12 },
     vert: { rhoReq: rhoLreq, rho: rhoL, spacing: spacingFrom(rhoL), usedMin: rhoLreq <= RHO_MIN + 1e-12 },
     sMax, boundaryElement, notes,

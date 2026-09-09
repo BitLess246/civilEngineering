@@ -11,6 +11,7 @@
 // Units: spans m; t/R/G/cover/db mm; loads kPa; moments kN·m/m; As mm²/m.
 // ─────────────────────────────────────────────────────────────────────────
 import { flexuralSteel, rhoMin } from './flexure'
+import { compact, positive, nonNegative, effectiveDepth } from './inputGuards'
 
 const GAMMA_C = 24            // kN/m³, reinforced concrete
 
@@ -76,17 +77,65 @@ export interface StairDesign {
   distSpacing: number
   tMin: number; tMinOK: boolean   // min waist thickness, mm
   ok: boolean
+  /**
+   * Why this is not a flight — empty when it is one.
+   *
+   * `ok` and `tMinOK` are both ANDed with this being empty. `tMin` is
+   * span/denominator, so a span of ZERO makes the thickness minimum zero and
+   * every waist clears it: span = 0 was the ONLY input in the sweep that
+   * reported both true.
+   */
+  inputNotes: string[]
 }
 
 /**
  * Design a waist-slab stair flight per metre width. `span` is the clear flight
  * span (m) along the slope's horizontal projection.
  */
-export function designStair(p: {
-  span: number; t: number; R: number; G: number;
-  fc: number; fy: number; barDia: number; distBarDia?: number; cover: number;
-  finishes: number; live: number; support?: StairSupport; gammaC?: number;
-}): StairDesign {
+/** The fields `stairInputNotes` reads. Span m, section mm, loads kPa. */
+export type StairInputs = {
+  span: number; t: number; R: number; G: number
+  fc: number; fy: number; barDia: number; distBarDia?: number; cover: number
+  finishes: number; live: number; support?: StairSupport; gammaC?: number
+}
+
+/**
+ * Geometry and materials that must be physical before the flight algebra
+ * means anything.
+ *
+ * Measured on a 4 m flight, waist 150, R 175, G 280, f'c 28, fy 415, ⌀12,
+ * cover 20, finishes 1.5 kPa, live 3 kPa:
+ *
+ *   span = 0     tMin = span/denominator = 0, so every waist clears it —
+ *                the ONLY input in the sweep reporting ok AND tMinOK true
+ *   fy = 0       AsMain = Infinity
+ *   cover = −20  d 124 → 164 mm
+ *   R = 0 / G = 0  a riser or going of zero is not a stair; G = 0 alone put
+ *                AsMain at 7111 mm²/m
+ */
+export function stairInputNotes(p: StairInputs): string[] {
+  return compact([
+    positive(p.span, 'flight span'),
+    positive(p.t, 'waist thickness t'),
+    positive(p.R, 'riser R'),
+    positive(p.G, 'going G'),
+    positive(p.fc, "concrete strength f'c"),
+    positive(p.fy, 'bar yield fy'),
+    positive(p.barDia, 'main bar Ø'),
+    p.distBarDia != null ? positive(p.distBarDia, 'distribution bar Ø') : null,
+    p.gammaC != null ? positive(p.gammaC, 'concrete unit weight γc') : null,
+    nonNegative(p.cover, 'clear cover'),
+    // Finishes and live load are legitimately zero (a bare flight, an
+    // unloaded check); only the negative is impossible.
+    nonNegative(p.finishes, 'finishes load'),
+    nonNegative(p.live, 'live load'),
+    effectiveDepth(p.t, p.cover, 0, p.barDia, 'cover and half a bar'),
+  ])
+}
+
+export function designStair(p: StairInputs): StairDesign {
+  const inputNotes = stairInputNotes(p)
+  const real = inputNotes.length === 0
   const support = p.support ?? 'simple'
   const geom = stairGeometry(p.R, p.G)
   const loads = stairLoads({ t: p.t, R: p.R, G: p.G, finishes: p.finishes, live: p.live, gammaC: p.gammaC })
@@ -112,13 +161,14 @@ export function designStair(p: {
     loads, Mu, d,
     AsMain, mainSpacing: spacing(p.barDia, AsMain),
     AsDist, distSpacing: spacing(distDia, AsDist),
-    tMin, tMinOK: p.t >= tMin - 1e-9,
+    tMin, tMinOK: real && p.t >= tMin - 1e-9,
     // The span/depth minimum is part of the verdict, not a note beside it.
     // `ok` used to mean only "a design came out" — steel and a depth — so a
     // waist below Table 407.3.1.1's ℓ/20…ℓ/28 came back OK with `tMinOK: false`
     // right next to it. The page printed both and a reader could see the
     // contradiction; nothing reading `ok` programmatically could. The RC beam
     // path already folds its own `thickOK` into the row's verdict this way.
-    ok: flex.As > 0 && d > 0 && p.t >= tMin - 1e-9,
+    ok: real && flex.As > 0 && d > 0 && p.t >= tMin - 1e-9,
+    inputNotes,
   }
 }

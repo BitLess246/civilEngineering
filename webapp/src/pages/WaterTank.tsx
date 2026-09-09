@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { clampTo } from '../lib/clamp'
 import { designCircularTank } from '../engine/waterTank'
 import { ReportControls } from '../components/ReportControls'
 import { buildWaterTankSolution } from '../lib/waterTankSolution'
@@ -10,13 +11,19 @@ function num(v: string, d = 0): number { const n = parseFloat(v); return Number.
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
 const f0 = (n: number) => (Number.isFinite(n) ? Math.round(n).toString() : '—')
 
-function Field({ label, value, onChange, unit, step = 'any' }: {
+function Field({ label, value, onChange, unit, step = 'any', min, max }: {
   label: string; value: number; onChange: (v: number) => void; unit?: string; step?: string
+  /** Bounds enforced on the VALUE, not only the spinner — the attributes
+   *  alone are advisory and a typed or pasted number goes straight through
+   *  them. Same `clampTo` the shared `Num` uses; this page carries its own
+   *  field, which predates it. */
+  min?: number; max?: number
 }) {
   return (
     <label className="flex flex-col text-sm">
       <span className="mb-1 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
-      <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
+      <input type="number" step={step} min={min} max={max} value={value}
+        onChange={(e) => onChange(clampTo(num(e.target.value), min, max))}
         className="rounded-md border border-slate-300 px-2.5 py-1.5" />
     </label>
   )
@@ -92,18 +99,18 @@ export default function WaterTank() {
       <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Geometry</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Water depth H" unit="m" value={H} onChange={setH} />
-          <Field label="Diameter D" unit="m" value={D} onChange={setD} />
-          <Field label="Wall thickness t" unit="mm" value={t} onChange={setT} />
-          <Field label="Freeboard" unit="m" value={freeboard} onChange={setFreeboard} step="0.05" />
+          <Field label="Water depth H" unit="m" value={H} onChange={setH} min={0.1} />
+          <Field label="Diameter D" unit="m" value={D} onChange={setD} min={0.1} />
+          <Field label="Wall thickness t" unit="mm" value={t} onChange={setT} min={1} />
+          <Field label="Freeboard" unit="m" value={freeboard} onChange={setFreeboard} step="0.05" min={0} />
         </div>
         <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Materials &amp; permissible stresses</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="f′c" unit="MPa" value={fc} onChange={setFc} />
-          <Field label="σst (steel)" unit="MPa" value={sigmaSt} onChange={setSigmaSt} />
-          <Field label="σct (concrete)" unit="MPa" value={sigmaCt} onChange={setSigmaCt} step="0.1" />
-          <Field label="Bar Ø" unit="mm" value={barDia} onChange={setBarDia} />
-          <Field label="Cover" unit="mm" value={cover} onChange={setCover} />
+          <Field label="f′c" unit="MPa" value={fc} onChange={setFc} min={1} />
+          <Field label="σst (steel)" unit="MPa" value={sigmaSt} onChange={setSigmaSt} min={1} />
+          <Field label="σct (concrete)" unit="MPa" value={sigmaCt} onChange={setSigmaCt} step="0.1" min={0.1} />
+          <Field label="Bar Ø" unit="mm" value={barDia} onChange={setBarDia} min={1} />
+          <Field label="Cover" unit="mm" value={cover} onChange={setCover} min={0} />
         </div>
       </section>
 
