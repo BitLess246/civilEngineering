@@ -5,6 +5,7 @@
 // φ = 0.75 for shear and torsion (§21.2.1).
 // ─────────────────────────────────────────────────────────────────────────
 import { oneWayVc } from './shear'
+import { compact, positive, nonNegative, atLeast, effectiveDepth } from './inputGuards'
 
 const PHI = 0.75
 
@@ -43,6 +44,16 @@ export interface TorsionResult {
   lhs: number                   // √[(Vu/bwd)² + (Tu·ph/1.7Aoh²)²], MPa
   rhs: number                   // φ·(Vc/bwd + (2/3)√f'c), MPa
   interactionOK: boolean
+  /**
+   * Why this is not a torsion section — empty when it is one.
+   *
+   * `interactionOK` is ANDed with this being empty. It is the §422.7.7.1
+   * combined-stress ellipse, so it only ever looked at Tu, Vu and the section
+   * PROPERTIES: b = 0, h = 0 and f'c = 0 tripped it because Acp or the
+   * capacity went to zero, but a negative cover (d 440 → 520 mm), a ⌀0 bar or
+   * stirrup, fyt = 0, legs = 0 and a negative Tu all left it true.
+   */
+  inputNotes: string[]
 
   // Transverse torsional steel per leg §22.7.6.1
   AtPerS: number                // At/s from Tu, mm²/mm
@@ -64,7 +75,32 @@ export interface TorsionResult {
   sAdopt: number                // min(sReq, sMax), mm
 }
 
+/**
+ * Geometry and materials that must be physical before the §422.7 algebra
+ * means anything.
+ */
+export function torsionInputNotes(i: TorsionInput): string[] {
+  return compact([
+    positive(i.b, 'width b'),
+    positive(i.h, 'depth h'),
+    positive(i.fc, "concrete strength f'c"),
+    positive(i.fy, 'bar yield fy'),
+    positive(i.fyt, 'stirrup yield fyt'),
+    positive(i.barDia, 'bar Ø'),
+    positive(i.stirrupDia, 'stirrup Ø'),
+    nonNegative(i.cover, 'clear cover'),
+    i.legs != null ? atLeast(i.legs, 2, 'closed-stirrup legs') : null,
+    i.lambda != null ? positive(i.lambda, 'lightweight factor λ') : null,
+    // Torsion and shear are magnitudes here — the section is designed for the
+    // demand's size, and a negative one silently shrank it.
+    nonNegative(i.Tu, 'factored torsion Tu'),
+    nonNegative(i.Vu, 'factored shear Vu'),
+    effectiveDepth(i.h, i.cover, i.stirrupDia, i.barDia, 'cover, stirrup and half a bar'),
+  ])
+}
+
 export function designTorsion(i: TorsionInput): TorsionResult {
+  const inputNotes = torsionInputNotes(i)
   const lambda = i.lambda ?? 1
   const legs = i.legs ?? 2
   const { b, h, cover, fc, fy, fyt } = i
@@ -103,7 +139,7 @@ export function designTorsion(i: TorsionInput): TorsionResult {
   const tu    = (i.Tu * 1e6 * ph) / (1.7 * Aoh * Aoh) // Tu·ph/(1.7·Aoh²), MPa
   const lhs   = Math.sqrt(vu * vu + tu * tu)
   const rhs   = PHI * (Vc * 1000 / (b * d) + (2 / 3) * sqrtFc)
-  const interactionOK = lhs <= rhs + 1e-9
+  const interactionOK = inputNotes.length === 0 && lhs <= rhs + 1e-9
 
   // Transverse torsional steel per leg §22.7.6.1(a)
   const Tu_Nmm    = i.Tu * 1e6
@@ -140,7 +176,7 @@ export function designTorsion(i: TorsionInput): TorsionResult {
     d, Acp, pcp, cSt, x1, y1, Aoh, ph, Ao,
     Tu_th, Tcr, torsionNeeded,
     Vc, phiVc,
-    lhs, rhs, interactionOK,
+    lhs, rhs, interactionOK, inputNotes,
     AtPerS, AtPerS_min, AtPerS_design,
     Al, Al_min, Al_design,
     Vs, AvPerS, AvPlus2At, AvPlus2At_min,
