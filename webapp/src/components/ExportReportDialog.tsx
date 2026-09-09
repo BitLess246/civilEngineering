@@ -41,6 +41,10 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
   const [report, setReport] = useState<ReadonlySet<ReportSectionKey>>(() => new Set(REPORT_KEYS))
   const [appendix, setAppendix] = useState<ReadonlySet<AppendixKey>>(() => new Set(APPENDIX_KEYS.filter((k) => available[k])))
   const [outputs, setOutputs] = useState({ report: true, appendix: true, combined: false })
+  // The report/appendix picks the user actually made, held while Combined
+  // forces both on — unticking Combined hands the pair back exactly as it
+  // was, instead of leaving two boxes ticked that only the binding ticked.
+  const [freePicks, setFreePicks] = useState({ report: true, appendix: true })
 
   const close = useCallback(() => { if (!busy) onClose() }, [busy, onClose])
   useEffect(() => {
@@ -53,6 +57,19 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
     const next = new Set(set)
     if (!next.delete(k)) next.add(k)
     return next
+  }
+  const toggleOutput = (k: 'report' | 'appendix') => setOutputs((o) => ({ ...o, [k]: !o[k] }))
+  // Combined binds the two documents into ONE file, so while it is ticked the
+  // pair is implied: both forced on and locked — an unticked report under a
+  // ticked Combined is a contradiction, not a choice. Unticking restores the
+  // picks the user had before the binding, whatever they were.
+  const toggleCombined = () => {
+    if (outputs.combined) {
+      setOutputs({ ...freePicks, combined: false })
+    } else {
+      setFreePicks({ report: outputs.report, appendix: outputs.appendix })
+      setOutputs({ report: true, appendix: true, combined: true })
+    }
   }
   const nothing = !outputs.report && !outputs.appendix && !outputs.combined
   const noAppendix = APPENDIX_KEYS.every((k) => !appendix.has(k))
@@ -102,9 +119,11 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
         <div className="border-t border-slate-100 px-5 py-3">
           <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">PDFs to generate</p>
           <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
-            {box('report', outputs.report, () => setOutputs((o) => ({ ...o, report: !o.report })), 'Structure Design Report', 'summary, schedules, worked solutions, drawings')}
-            {box('appendix', outputs.appendix, () => setOutputs((o) => ({ ...o, appendix: !o.appendix })), 'Analysis Appendix', 'model, loads, results, modes, hinges, optimizer')}
-            {box('combined', outputs.combined, () => setOutputs((o) => ({ ...o, combined: !o.combined })), 'Combined PDF', 'both, bound as one document')}
+            {box('report', outputs.report, () => toggleOutput('report'), 'Structure Design Report',
+              outputs.combined ? 'bound into the Combined PDF' : 'summary, schedules, worked solutions, drawings', outputs.combined)}
+            {box('appendix', outputs.appendix, () => toggleOutput('appendix'), 'Analysis Appendix',
+              outputs.combined ? 'bound into the Combined PDF' : 'model, loads, results, modes, hinges, optimizer', outputs.combined)}
+            {box('combined', outputs.combined, toggleCombined, 'Combined PDF', 'both, bound as one document — no separate files')}
           </div>
         </div>
 
