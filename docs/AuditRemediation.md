@@ -31,11 +31,11 @@ mechanism was established by reading, not observed.
 | R6 | Every Model Space solver failure is invisible | medium | verified | ✅ #728 |
 | R8 | Calculation fetch has no timeout | medium | read | ✅ #728 |
 | R7 | Unknown URLs render an empty shell; `/about` missing | medium | verified | ✅ #728 |
-| E4 | ValidationMap row C003 is an algebraic tautology | medium | verified | ☐ |
+| E4 | ValidationMap row C003 is an algebraic tautology | medium | verified | ✅ #737 |
 | S5 | No rate limiting; members never metered | low-med | verified | ☐ |
 | R9 | `update()` is not a functional update | low | latent | ✅ #728 |
 | S6 | `guest-quota` CORS lets any site burn a visitor's trial | low | read | ✅ #735 |
-| E5 | `Cv1` uses the superseded AISC 360-10 form (conservative) | low | read | ☐ |
+| E5 | `Cv1` uses the superseded AISC 360-10 form (conservative) | low | read | ✅ #737 |
 
 **Found while deploying, not in the audit — R10, the double-charged arrival.**
 ✅ SHIPPED (#588). `guest-quota` called `consume_guest_trial` while the
@@ -569,8 +569,34 @@ UI fix be proven instead of reasoned about.
 
 ## Phase 8 — validation integrity (E4) and the unaudited remainder
 
-**E4** — `columnDesign.test.ts:140` asserts `breslerReciprocal` against its own
-algebra, so both sides evaluate the identical expression and the test's
+**E4 — ✅ SHIPPED (#737).** `columnDesign.test.ts` asserted `breslerReciprocal`
+against its own algebra retyped, so it could catch a transcription slip and
+nothing else. The closed form IS the definition of Bresler's method, so there
+is no independent algebra to check it against; six PROPERTIES replace it —
+symmetry, both uniaxial degenerate cases, Pn < min(Pnx, Pny), monotonicity in
+each argument, and the Po → ∞ harmonic limit approached from above. The set was
+CHECKED against three plausible wrong formulas rather than assumed to
+discriminate: the `+1/Po` sign error, the `1/x − 1/y + 1/Po` swap and the
+dropped axial term are each caught, and no single property catches all three.
+The row stays 🔶 — this makes its internal evidence real, it is not the
+independent reference; PCA/spColumn remains open.
+
+**E5 — ✅ SHIPPED (#737).** `steelDesign.ts` declares AISC 360-16 in its header
+and `Cv1` carried the 360-10 THREE-branch Cv, whose third term
+1.51·kv·E/(Fy·(h/tw)²) 360-16 dropped for Cv1 (Eq. G2-3/G2-4) and kept only for
+Cv2 under tension-field action (§G2.2), which this function does not compute.
+So the module contradicted its own stated edition.
+
+It moved NO shipped number, and that is measured rather than argued: across all
+249 catalogue shapes at Fy = 248, 345 and 415 MPa the largest h/tw is 59.6
+(W410x38.8), while the third branch does not begin until 1.37√(kv·E/Fy) = 89.9,
+76.2 and 69.5. No shape could reach it at any yield strength the app offers.
+`steelDesign.test.ts` now pins that reachability, so a catalogue addition that
+DID reach it would surface rather than silently inherit a superseded formula.
+
+**Superseded note (E4, original wording).** `columnDesign.test.ts:140` asserts
+`breslerReciprocal` against its own algebra, so both sides evaluate the
+identical expression and the test's
 discriminating power is exactly zero. It validates a function with no non-test
 caller, and `ValidationMap.md:44` records it as biaxial coverage the codebase
 does not have.

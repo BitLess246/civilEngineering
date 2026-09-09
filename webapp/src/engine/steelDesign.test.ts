@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shapeByName } from './aiscSections'
+import { shapeByName, AISC_SHAPES } from './aiscSections'
 import {
   deriveWSection, beamFlexure, beamFlexureScope, beamShear,
   columnAxial, weakAxisFlexure, combinedLoading,
@@ -548,5 +548,66 @@ describe('a free-form bolt pattern is the same solver as the grid', () => {
     const r = eccentricBoltGroup(tri, 100, 0, 150, 0, 73, 20, 10)
     expect(r.bolts).toHaveLength(3)
     expect(Number.isFinite(r.Rmax)).toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// E5 — Cv1 FOLLOWED A DIFFERENT EDITION FROM THE ONE THE FILE DECLARES.
+//
+// The module header says AISC 360-16. Cv1 carried the 360-10 THREE-branch Cv,
+// whose third term 1.51·kv·E/(Fy·(h/tw)²) is the elastic-buckling branch that
+// 360-16 dropped for Cv1 (Eq. G2-3/G2-4) and kept only for Cv2 under tension
+// field action, §G2.2 — which this function does not compute.
+//
+// It moved no shipped number, and these tests are what says so rather than
+// asserting it: no shape in the catalogue can reach the branch that changed.
+// ─────────────────────────────────────────────────────────────────────────
+describe('§G2.1 Cv1 — the 360-16 two-branch form', () => {
+  const E = 200000, kv = 5.34
+  const lim1 = (Fy: number) => 1.10 * Math.sqrt((kv * E) / Fy)
+  const lim2 = (Fy: number) => 1.37 * Math.sqrt((kv * E) / Fy)
+  /** What the code used to compute — 360-10's three branches. */
+  const cv360_10 = (hwTw: number, Fy: number) =>
+    hwTw <= lim1(Fy) ? 1.0
+      : hwTw <= lim2(Fy) ? lim1(Fy) / hwTw
+        : (1.51 * kv * E) / (Fy * hwTw * hwTw)
+  /** 360-16 Eq. G2-3 / G2-4. */
+  const cv360_16 = (hwTw: number, Fy: number) =>
+    hwTw <= lim1(Fy) ? 1.0 : lim1(Fy) / hwTw
+
+  it('the two editions agree up to 1.37√(kv·E/Fy) and diverge above it', () => {
+    const Fy = 345
+    for (const h of [40, 55, lim1(Fy), 65, 70, lim2(Fy)]) {
+      expect(cv360_16(h, Fy)).toBeCloseTo(cv360_10(h, Fy), 9)
+    }
+    // Above lim2 the old form falls as 1/h² and the new one as 1/h, so the old
+    // is the more conservative — which is why this was never a wrong answer.
+    const past = lim2(Fy) + 20
+    expect(cv360_10(past, Fy)).toBeLessThan(cv360_16(past, Fy))
+  })
+
+  it('no catalogue shape reaches the branch that changed, at any Fy offered', () => {
+    // THIS is the claim that makes the edition fix a no-op on shipped numbers.
+    // If a deeper shape or a plate girder is ever added, this fails and the
+    // change stops being invisible — which is the point of pinning it.
+    for (const Fy of [248, 345, 415]) {
+      for (const s of AISC_SHAPES) {
+        if (!s.d || !s.tw || !s.tf) continue
+        const hwTw = (s.d - 2 * s.tf) / s.tw
+        expect(hwTw).toBeLessThan(lim2(Fy))
+      }
+    }
+  })
+
+  it('the engine agrees with 360-16 across the reachable range', () => {
+    for (const Fy of [248, 345, 415]) {
+      for (const s of AISC_SHAPES.filter((x) => x.family === 'W')) {
+        if (!s.d || !s.tw || !s.tf) continue
+        const r = beamShear(s, deriveWSection(s), Fy)
+        const hwTw = r.hwTw
+        const expected = hwTw <= 2.24 * Math.sqrt(E / Fy) ? 1.0 : cv360_16(hwTw, Fy)
+        expect(r.Cv1).toBeCloseTo(expected, 9)
+      }
+    }
   })
 })
