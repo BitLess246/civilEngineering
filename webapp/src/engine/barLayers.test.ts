@@ -4,7 +4,7 @@
 // tie to on either side. These tests belong to the rule, not to either engine.
 
 import { describe, it, expect } from 'vitest'
-import { splitLayers, centroidRise, jointBarRoom, barLayoutWidth } from './barLayers'
+import { splitLayers, centroidRise, jointBarRoom, barLayoutWidth, type BarLayers } from './barLayers'
 
 const total = (l: number[]) => l.reduce((s, k) => s + k, 0)
 
@@ -146,5 +146,55 @@ describe('barLayoutWidth', () => {
       const free = b / 2 - (40 + 10 + db / 2)
       expect(barLayoutWidth(b, 40, 10, db, free)).toBeCloseTo(b - 2 * (40 + 10), 9)
     }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE LOOP HAS TO TERMINATE ON ANY INPUT.
+//
+// `left -= Math.min(left, maxPerLayer)` subtracts nothing when maxPerLayer is
+// 0, and never reaches zero from an infinite count — so the while loop pushed
+// until the array hit its engine limit: 12.8 s of allocation, then
+// `RangeError: Invalid array length`. In a browser that is a frozen tab.
+//
+// Both inputs are one keystroke away. `n` is As/Ab, so a bar diameter of 0
+// makes it Infinity; `maxPerLayer` is a floor() of the room across the web,
+// which goes to 0 on a section too narrow for a bar.
+// ─────────────────────────────────────────────────────────────────────────
+describe('splitLayers terminates on any input', () => {
+  const fast = (f: () => BarLayers) => {
+    const t0 = Date.now()
+    const r = f()
+    // the old loop took ~13 s before throwing; anything sane is sub-millisecond
+    expect(Date.now() - t0).toBeLessThan(500)
+    return r
+  }
+
+  it('an infinite bar count (barDia = 0 ⇒ As/Ab = ∞) returns nothing, instead of allocating until it throws', () => {
+    expect(fast(() => splitLayers(Infinity, 3))).toEqual({ bars: 0, layers: [] })
+    expect(fast(() => splitLayers(-Infinity, 3))).toEqual({ bars: 0, layers: [] })
+  })
+
+  it('NaN is not a bar count — it used to come back as `bars: NaN` and reach the schedule', () => {
+    expect(fast(() => splitLayers(NaN, 3))).toEqual({ bars: 0, layers: [] })
+  })
+
+  it('a web too narrow for a bar is detailed ONE per layer, not looped forever', () => {
+    expect(fast(() => splitLayers(5, 0))).toEqual({ bars: 5, layers: [1, 1, 1, 1, 1] })
+    expect(fast(() => splitLayers(3, -4))).toEqual({ bars: 3, layers: [1, 1, 1] })
+    // …and with one bar per layer there is no pairing bump: a lone bar in the
+    // top layer is the honest answer when the web holds only one.
+    expect(fast(() => splitLayers(2, 1)).bars).toBe(2)
+  })
+
+  it('a fractional maxPerLayer floors rather than producing fractional layers', () => {
+    expect(splitLayers(5, 2.9)).toEqual(splitLayers(5, 2))
+  })
+
+  it('leaves every well-formed case exactly as it was', () => {
+    expect(splitLayers(7, 3)).toEqual({ bars: 8, layers: [3, 3, 2] })
+    expect(splitLayers(6, 3)).toEqual({ bars: 6, layers: [3, 3] })
+    expect(splitLayers(2, 5)).toEqual({ bars: 2, layers: [2] })
+    expect(splitLayers(0, 3)).toEqual({ bars: 0, layers: [] })
   })
 })

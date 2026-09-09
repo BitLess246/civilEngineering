@@ -30,15 +30,38 @@ export interface BarLayers {
  * another bar.
  */
 export function splitLayers(n: number, maxPerLayer: number): BarLayers {
+  // THE LOOP HAS TO TERMINATE ON ANY INPUT, and it did not.
+  //
+  // `left -= Math.min(left, maxPerLayer)` subtracts NOTHING when maxPerLayer
+  // is 0 (and grows `left` when it is negative), and subtracting a finite
+  // step from an infinite count never reaches zero — so the while loop pushed
+  // until the array hit its engine limit: measured at 12.8 s of allocation
+  // followed by `RangeError: Invalid array length`. In a browser that is a
+  // frozen tab, not an exception.
+  //
+  // Both inputs are reachable from an ordinary typo. `n` is As/Ab, so a bar
+  // diameter of 0 — one keystroke in the bar-Ø field — makes it Infinity;
+  // `maxPerLayer` is a floor() of the room left across the web, which goes to
+  // 0 on a section too narrow for a bar, the very case this function's own
+  // docstring describes.
+  //
+  // Neither is clamped into a pretend answer: a non-finite count has no
+  // layout and returns an empty one, and a web that cannot hold a bar is
+  // detailed one bar per layer, which is what `maxPerLayer < 2` already means
+  // to every caller. The caller's own `maxPerLayer`/`jointFit` reporting is
+  // what tells the user the section is too narrow — that is not this
+  // function's job, and inventing a layout here would hide it.
+  if (!Number.isFinite(n)) return { bars: 0, layers: [] }
   let total = Math.max(0, Math.ceil(n))
+  const perLayer = Number.isFinite(maxPerLayer) ? Math.max(1, Math.floor(maxPerLayer)) : total
   const build = (m: number): number[] => {
     const out: number[] = []
     let left = m
-    while (left > 0) { const take = Math.min(left, maxPerLayer); out.push(take); left -= take }
+    while (left > 0) { const take = Math.min(left, perLayer); out.push(take); left -= take }
     return out
   }
   let layers = build(total)
-  if (maxPerLayer >= 2 && layers.length > 1 && layers[layers.length - 1] === 1) {
+  if (perLayer >= 2 && layers.length > 1 && layers[layers.length - 1] === 1) {
     total += 1
     layers = build(total)
   }
