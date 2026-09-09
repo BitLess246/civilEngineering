@@ -12,6 +12,17 @@ export const ALPHA_S: Record<ColumnPosition, number> = { interior: 40, edge: 30,
 const PHI_SHEAR = 0.75;
 
 /**
+ * Depth ceiling the two solvers search to, mm.
+ *
+ * Both return this value when NO depth in the range satisfies the check — a
+ * saturation, not an answer. Exported so a caller can tell the two apart:
+ * `designSquareFooting` used to take the returned 3000 as a required depth,
+ * size a slab to it and report the shear checks as PASS, which is how a
+ * footing with an impossible bearing pressure came back adequate.
+ */
+export const MAX_SHEAR_DEPTH = 3000;
+
+/**
  * Two-way (punching) shear strength Vc, kN — the minimum of the three
  * ACI 318-14 §22.6.5.2 expressions.
  * @param fc       f′c, MPa
@@ -91,7 +102,7 @@ export function punchingDepth(params: {
   const phi = params.phi ?? PHI_SHEAR;
   const cx = params.c, cy = params.cy ?? params.c;
   const betaC = Math.max(cx, cy) / Math.min(cx, cy);
-  for (let d = 50; d <= 3000; d += 1) {
+  for (let d = 50; d <= MAX_SHEAR_DEPTH; d += 1) {
     const cs = criticalSection(cx, cy, d, params.position);
     const Vu = params.Pu - params.qu * cs.Ao * 1e-6;   // kN (Ao mm² → m²)
     const cap = phi * twoWayVc({
@@ -100,7 +111,7 @@ export function punchingDepth(params: {
     });
     if (cap >= Vu) return d;
   }
-  return 3000;
+  return MAX_SHEAR_DEPTH;
 }
 
 /** One-way (beam) shear strength Vc = 0.17λ√fc·b·d, kN (b, d in mm) — §422.5.5.1. */
@@ -121,11 +132,11 @@ export function oneWayShearDepth(params: {
   qu: number; B: number; c: number; fc: number; lambda?: number; phi?: number;
 }): number {
   const phi = params.phi ?? PHI_SHEAR;
-  for (let d = 50; d <= 3000; d += 1) {
+  for (let d = 50; d <= MAX_SHEAR_DEPTH; d += 1) {
     const arm = (params.B - params.c) / 2 - d / 1000;     // m
     const Vu = params.qu * params.B * Math.max(0, arm);   // kN
     const cap = phi * oneWayVc({ fc: params.fc, b: params.B * 1000, d, lambda: params.lambda });
     if (cap >= Vu) return d;
   }
-  return 3000;
+  return MAX_SHEAR_DEPTH;
 }
