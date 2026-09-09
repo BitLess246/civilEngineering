@@ -265,11 +265,13 @@ support.
 # Not engine work, but on the same board
 
 `docs/AuditRemediation.md` is the live status board for the August 2026 audits —
-14 of 18 findings shipped. The whole UX-dead-end phase closed in #728 — **R6**
-solver failures now surface, **R7** unknown URLs get a 404 with suggestions,
-**R8** the calculation fetch times out at 15 s, **R9** `update()` reads a ref
-instead of its render closure. Four rows are still open: the security pair **S5**
-(no rate limiting, members never metered) and **S6** (`guest-quota`'s CORS lets
-any site burn a visitor's trial), plus the two validation-map corrections **E4**
-and **E5** carried as P5 above. Read that file before picking any of them up —
-each row carries how far it was actually verified.
+15 of 18 findings shipped. The UX-dead-end phase closed in #728 (**R6** solver
+failures surface, **R7** unknown URLs get a 404 with suggestions, **R8** the
+calculation fetch times out at 15 s, **R9** `update()` reads a ref instead of
+its render closure), and **S6** closed in #735 — `guest-quota`'s `consume` now
+needs an allowlisted Origin, because that endpoint's subject is a digest of the
+client IP and so carries the ambient authority `_shared/cors.ts` says to
+revisit the wildcard for. Three rows are still open: **S5** (no rate limiting,
+members never metered) and the two validation-map corrections **E4** and **E5**
+carried as P5 above. Read that file before picking any of them up — each row
+carries how far it was actually verified.

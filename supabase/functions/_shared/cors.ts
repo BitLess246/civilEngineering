@@ -25,6 +25,13 @@
 // could not already do, while an allowlist would have to be kept in step with
 // every preview deployment Vercel mints. Should any of these ever start
 // accepting cookie auth, this decision has to be revisited in the same commit.
+//
+// ONE ENDPOINT ALREADY FAILS THAT TEST, and does not use this file:
+// `guest-quota` derives its subject from the CLIENT IP, which the browser
+// supplies automatically — ambient authority by any other name. A hostile page
+// could therefore spend a visitor's trial without them opening the app. Its
+// `consume` is gated on an origin allowlist (`_shared/originAllow.ts`); its
+// read-only `peek` keeps the wildcard, on the reasoning above.
 // ─────────────────────────────────────────────────────────────────────────
 
 /** Attached to every response, preflight or not. */
