@@ -6,6 +6,7 @@
 // SI units throughout: geometry mm, forces kN/m, moments kN·m/m, σ kPa.
 // ─────────────────────────────────────────────────────────────────────────
 import { oneWayVc } from './shear'
+import { compact, positive, nonNegative, inRange, effectiveDepth } from './inputGuards'
 //
 // Wall cross-section (per unit length):
 //
@@ -139,6 +140,17 @@ export interface RetainingWallResult {
   bearingOK: boolean
   tensionOK: boolean  // q_min ≥ 0
 
+  /**
+   * Why this is not a wall — empty when it is one.
+   *
+   * Every verdict in this result is ANDed with `inputNotes.length === 0`.
+   * They had to be: each boolean was wired to its own ratio and none to
+   * whether the inputs describe a wall, so zero-yield steel reported NaN
+   * reinforcement under five green ticks, and a 90° friction angle reported
+   * FS = ∞ on both stability checks.
+   */
+  inputNotes: string[]
+
   // Stem design — per m width at base of stem (kN/m, kN·m/m, mm²/m)
   d_stem: number
   Pa_stem: number; Pq_stem: number
@@ -200,7 +212,61 @@ export function barSpacing(As: number, db: number, sMax: number):
   return { spacing, As_prov: (Ab * 1000) / spacing }
 }
 
+/**
+ * Geometry, soil and material that must be physical before any of the wall
+ * algebra means anything.
+ *
+ * The wall carried the same defect as the beam and the column: five booleans
+ * (overturning, sliding, bearing, tension, stem shear) all wired to their own
+ * ratio and none to whether the inputs describe a wall. Measured on a
+ * 3.5 m stem, 400 base, 350 stem, 900 toe, 1800 heel, γ 18, φ 32°, q 10 kPa,
+ * μ 0.5, qa 200, f'c 21, fy 415, cover 50, ⌀16:
+ *
+ *   fy = 0        → As = NaN, ALL FIVE true
+ *   phi_deg = 90  → Ka = 0, so FS_OT = ∞ and FS_SL = ∞, ALL FIVE true
+ *   cover = −50   → d_stem 292 → 392 mm, inflating φVc by a third, ALL FIVE true
+ *   ts = 0        → d_stem = −58 mm, and overturning/bearing/tension still true
+ *
+ * φ = 0 is deliberately ALLOWED: the undrained (φ = 0) analysis is a real
+ * one, Ka = 1 is its honest answer, and the probe confirmed the verdicts then
+ * fail on their own (FS_OT 1.41, FS_SL 0.54). The guard rejects what cannot
+ * exist, not what a conservative designer may assume — the same reason μ = 0
+ * and a zero toe stay legal.
+ */
+export function wallDetailingNotes(i: RetainingWallInput): string[] {
+  const dbBase = i.barDiaBase ?? i.barDia
+  return compact([
+    positive(i.Hs, 'stem height Hs'),
+    positive(i.tb, 'base thickness tb'),
+    positive(i.ts, 'stem width ts'),
+    nonNegative(i.bt, 'toe projection bt'),
+    nonNegative(i.bh, 'heel projection bh'),
+    positive(i.gamma_s, 'soil unit weight γs'),
+    i.gamma_c != null ? positive(i.gamma_c, 'concrete unit weight γc') : null,
+    // Ka = tan²(45 − φ/2): at φ → 90° it goes to zero and every factor of
+    // safety goes to infinity. Above 90° the tangent changes sign.
+    inRange(i.phi_deg, 0, 90, 'friction angle φ (degrees)'),
+    nonNegative(i.q_sur, 'surcharge q'),
+    nonNegative(i.mu, 'base friction coefficient μ'),
+    positive(i.qa, 'allowable bearing qa'),
+    positive(i.fc, "concrete strength f'c"),
+    positive(i.fy, 'bar yield fy'),
+    nonNegative(i.cover, 'stem clear cover'),
+    i.coverBase != null ? nonNegative(i.coverBase, 'base clear cover') : null,
+    positive(i.barDia, 'stem bar Ø'),
+    positive(dbBase, 'base bar Ø'),
+    // The stem has no tie, so the deduction is cover + half a bar.
+    effectiveDepth(i.ts, i.cover, 0, i.barDia, 'stem cover and half a bar'),
+    effectiveDepth(i.tb, i.coverBase ?? 75, 0, dbBase, 'base cover and half a bar'),
+  ])
+}
+
 export function designRetainingWall(i: RetainingWallInput): RetainingWallResult {
+  const inputNotes = wallDetailingNotes(i)
+  // Every verdict below is ANDed with this: a wall that is not a wall has no
+  // factor of safety, and five booleans reading `true` is exactly how the
+  // NaN-steel and infinite-FS cases used to present.
+  const real = inputNotes.length === 0
   const gamma_c = i.gamma_c ?? 23.6
 
   // Dimensions in metres
@@ -367,7 +433,7 @@ export function designRetainingWall(i: RetainingWallInput): RetainingWallResult 
     const bars = barSpacing(As_design_c, dbBase, s_base_max)
     const phiVc = phiVcOf(d_base)
     return {
-      L, d: d_base, Mu, Vu, xv, phiVc, shearOK: Vu <= phiVc + 1e-9,
+      L, d: d_base, Mu, Vu, xv, phiVc, shearOK: real && Vu <= phiVc + 1e-9,
       As, As_min: As_min_c, As_design: As_design_c,
       spacing: bars.spacing, As_prov: bars.As_prov, spacingMax: s_base_max,
     }
@@ -399,13 +465,14 @@ export function designRetainingWall(i: RetainingWallInput): RetainingWallResult 
     W_stem, arm_stem, W_base, arm_base, W_soil, arm_soil, W_sur, arm_sur,
     sumV, MR, MO,
     FS_OT, FS_SL,
-    stableOT: FS_OT >= 2.0 - 1e-9,
-    stableSL: FS_SL >= 1.5 - 1e-9,
+    stableOT: real && FS_OT >= 2.0 - 1e-9,
+    stableSL: real && FS_SL >= 1.5 - 1e-9,
     xbar, e, q_max, q_min,
-    bearingOK: q_max <= i.qa + 1e-9,
-    tensionOK: q_min >= -1e-9,
+    bearingOK: real && q_max <= i.qa + 1e-9,
+    tensionOK: real && q_min >= -1e-9,
     d_stem, Pa_stem, Pq_stem, Vu_stem, Mu_stem, Vc_stem,
-    shearOK: Vu_stem <= Vc_stem + 1e-9,
+    shearOK: real && Vu_stem <= Vc_stem + 1e-9,
+    inputNotes,
     As_stem, As_min, As_design,
     s_stem: stemBars.spacing, As_stem_prov: stemBars.As_prov, s_stem_max,
     As_horiz, s_horiz, As_stem_front,

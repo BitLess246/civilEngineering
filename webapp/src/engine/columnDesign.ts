@@ -18,6 +18,7 @@
 // Units: mm, MPa, kN, kN·m.
 // ─────────────────────────────────────────────────────────────────────────
 import { beta1 } from './loads'
+import { compact, positive, nonNegative, atLeast, finite } from './inputGuards'
 import { placedBarCount } from './rebarModel'
 
 export type ColumnShape  = 'tied' | 'spiral'
@@ -109,28 +110,30 @@ export type ColumnDetailingInputs = Pick<AxialColumnInput,
  * than the column has, with no verdict of any kind attached to it.
  */
 export function columnDetailingNotes(i: ColumnDetailingInputs): string[] {
-  const n: string[] = []
-  const pos = (v: number | undefined, what: string) => {
-    if (!(v != null && Number.isFinite(v) && v > 0)) n.push(`${what} must be greater than zero (got ${v})`)
-  }
-  if (i.shape === 'tied') { pos(i.b, 'width b'); pos(i.h, 'depth h') }
-  else pos(i.D, 'diameter D')
-  pos(i.fc, "concrete strength f'c"); pos(i.fy, 'bar yield fy')
-  if (i.fyt != null) pos(i.fyt, 'tie yield fyt')
-  pos(i.barDia, 'bar Ø'); pos(i.tieDia, 'tie/spiral Ø')
-  if (!(Number.isFinite(i.cover) && i.cover >= 0)) n.push(`clear cover cannot be negative (got ${i.cover})`)
+  const tied = i.shape === 'tied'
   // `numBars` is the ANALYSE path — a supplied count the cage has to be able
   // to hold. Omitted, the engine designs it and cannot get it wrong.
-  const minBars = i.shape === 'tied' ? 4 : 6
-  if (i.numBars != null && !(Number.isFinite(i.numBars) && i.numBars >= minBars))
-    n.push(`a ${i.shape} column needs at least ${minBars} bars (got ${i.numBars})`)
-  // The cage has to fit between the covers on the axis it bends about.
-  const least = i.shape === 'tied' ? Math.min(i.b ?? NaN, i.h ?? NaN) : (i.D ?? NaN)
+  const minBars = tied ? 4 : 6
+  // The cage has to fit between the covers on the axis it bends about, which
+  // eats cover + tie + half a bar from BOTH faces.
+  const least = tied ? Math.min(i.b ?? NaN, i.h ?? NaN) : (i.D ?? NaN)
   const dPrime = i.cover + i.tieDia + i.barDia / 2
-  if (Number.isFinite(least) && Number.isFinite(dPrime) && least - 2 * dPrime <= 0)
-    n.push(`cover, tie and half a bar leave no room for a cage in a ${least} mm dimension`)
-  if (i.Pu != null && !Number.isFinite(i.Pu)) n.push('the factored axial load Pu is not a number')
-  return n
+  return compact([
+    ...(tied ? [positive(i.b, 'width b'), positive(i.h, 'depth h')]
+             : [positive(i.D, 'diameter D')]),
+    positive(i.fc, "concrete strength f'c"),
+    positive(i.fy, 'bar yield fy'),
+    i.fyt != null ? positive(i.fyt, 'tie yield fyt') : null,
+    positive(i.barDia, 'bar Ø'),
+    positive(i.tieDia, 'tie/spiral Ø'),
+    nonNegative(i.cover, 'clear cover'),
+    i.numBars != null
+      ? atLeast(i.numBars, minBars, `bars in a ${i.shape} column`) : null,
+    Number.isFinite(least) && Number.isFinite(dPrime) && least - 2 * dPrime <= 0
+      ? `cover, tie and half a bar leave no room for a cage in a ${least} mm dimension`
+      : null,
+    i.Pu != null ? finite(i.Pu, 'the factored axial load Pu') : null,
+  ])
 }
 
 export function designAxialColumn(i: AxialColumnInput): AxialColumnResult {

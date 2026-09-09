@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { designRetainingWall, barSpacing, LF } from './retainingWall'
+import { designRetainingWall, barSpacing, LF, type RetainingWallInput } from './retainingWall'
 
 // Reference: 3 m stem, 500 mm base, 300 mm stem, 500 toe, 1500 heel
 // Soil γ=18 kN/m³, φ=30°, q_sur=0, μ=0.5, qa=200 kPa
@@ -409,5 +409,83 @@ describe('the two load levels stay separate', () => {
 
   it('LF exposes the clause factors so they can be cited, not guessed', () => {
     expect(LF).toEqual({ H: 1.6, D: 1.2, L: 1.6 })
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// A VERDICT THAT CANNOT FAIL — the wall's five booleans.
+//
+// Overturning, sliding, bearing, tension and stem shear were each wired to
+// their own ratio and none of them to whether the inputs describe a wall.
+// Measured on the reference wall below, every one of these came back with ALL
+// FIVE true:
+//
+//   fy = 0        As = NaN
+//   phi_deg = 90  Ka = 0, so FS_OT = ∞ and FS_SL = ∞
+//   cover = −50   d_stem 292 → 392 mm, inflating φVc by a third
+//   barDia = 0    d_stem 292 → 300 mm
+//
+// and ts = 0 gave d_stem = −58 mm with overturning, bearing and tension still
+// reading true.
+// ─────────────────────────────────────────────────────────────────────────
+describe('non-physical retaining walls', () => {
+  const base: RetainingWallInput = {
+    Hs: 3500, tb: 400, ts: 350, bt: 900, bh: 1800,
+    gamma_s: 18, phi_deg: 32, q_sur: 10, mu: 0.5, qa: 200,
+    fc: 21, fy: 415, cover: 50, barDia: 16,
+  }
+  const verdicts = (o: Partial<RetainingWallInput> = {}) => {
+    const r = designRetainingWall({ ...base, ...o })
+    return [r.stableOT, r.stableSL, r.bearingOK, r.tensionOK, r.shearOK]
+  }
+
+  it('the reference wall stands, and says so on all five checks', () => {
+    expect(designRetainingWall(base).inputNotes).toEqual([])
+    expect(verdicts()).toEqual([true, true, true, true, true])
+  })
+
+  it('zero-yield steel no longer passes every check with NaN reinforcement', () => {
+    const r = designRetainingWall({ ...base, fy: 0 })
+    expect(Number.isNaN(r.As_design) || r.As_design === 0).toBe(true)
+    expect(verdicts({ fy: 0 })).toEqual([false, false, false, false, false])
+  })
+
+  it('a 90° friction angle no longer reports infinite safety', () => {
+    // Ka = tan²(45 − φ/2) → 0, so MO → 0 and FS_OT → ∞.
+    expect(verdicts({ phi_deg: 90 })).toEqual([false, false, false, false, false])
+    expect(verdicts({ phi_deg: 120 })[0]).toBe(false)
+  })
+
+  it('φ = 0 is still allowed — the undrained analysis is a real one', () => {
+    // Ka = 1 is its honest answer, and the wall then FAILS on its own merits:
+    // the guard must reject what cannot exist, not what a designer may assume.
+    const r = designRetainingWall({ ...base, phi_deg: 0 })
+    expect(r.inputNotes).toEqual([])
+    expect(r.stableOT).toBe(false)   // FS_OT 1.41 < 2.0
+    expect(r.stableSL).toBe(false)   // FS_SL 0.54 < 1.5
+  })
+
+  it('negative cover no longer buys stem depth the wall does not have', () => {
+    expect(verdicts({ cover: -50 })).toEqual([false, false, false, false, false])
+  })
+
+  it('a stem with no width is refused rather than given a negative depth', () => {
+    expect(verdicts({ ts: 0 })).toEqual([false, false, false, false, false])
+  })
+
+  it('a zero bar Ø or a negative surcharge is refused', () => {
+    expect(verdicts({ barDia: 0 })[0]).toBe(false)
+    // A negative surcharge is suction, and it RAISED FS_OT from 4.58 to 8.95.
+    expect(verdicts({ q_sur: -10 })[0]).toBe(false)
+  })
+
+  it('a zero toe, a zero surcharge and a frictionless base stay legal', () => {
+    // All three are things a designer legitimately assumes; μ = 0 then fails
+    // sliding on its own, which is the honest outcome.
+    expect(designRetainingWall({ ...base, bt: 0 }).inputNotes).toEqual([])
+    expect(designRetainingWall({ ...base, q_sur: 0 }).inputNotes).toEqual([])
+    const noFriction = designRetainingWall({ ...base, mu: 0 })
+    expect(noFriction.inputNotes).toEqual([])
+    expect(noFriction.stableSL).toBe(false)
   })
 })
