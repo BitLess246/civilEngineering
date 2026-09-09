@@ -61,7 +61,11 @@ export const GATED_PREFIXES: readonly string[] = [
 
 /** Freely readable by anyone, signed in or not — no counter, no gate. */
 export const PUBLIC_ROUTES: readonly string[] = [
-  '/', '/docs', '/validation', '/about', '/pricing',
+  // '/about' was here for a page that does not exist and is linked from
+  // nowhere — a phantom entry, so a visitor who guessed the address got the
+  // blank shell AND was told the route was freely readable. It now 404s like
+  // any other wrong address; add it back the day the page ships.
+  '/', '/docs', '/validation', '/pricing',
   // A REDIRECT STUB, not a calculator: /bolted-connection now bounces to
   // /steel, which is where the run gets charged. Leaving it unclassified made
   // it members-only by default, so a guest following an old link hit a wall

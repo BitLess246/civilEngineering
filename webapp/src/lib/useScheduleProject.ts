@@ -109,6 +109,27 @@ export function useScheduleProject(): ScheduleProjectApi {
     else backend.removeItem(ACTIVE_KEY)
   }, [activeId, backend])
 
+  /**
+   * THE ONLY WAY THIS HOOK SETS ITS PROJECT, and the reason is `update`.
+   *
+   * `update` cloned the project out of the RENDER CLOSURE, so two calls before
+   * the next render both started from the same snapshot and the second
+   * silently overwrote the first — an edit lost with no error, on a document
+   * this hook otherwise works hard to protect (see the watermark and the
+   * save-error handling below).
+   *
+   * React state is not readable synchronously after setting it, so the live
+   * value is kept in a ref alongside. Every `setProject` goes through here
+   * rather than the ref being updated at each call site: there were SIX of
+   * them, including two remote-sync paths, and one forgotten site
+   * reintroduces the staleness silently.
+   */
+  const live = useRef<ScheduleProject | null>(project)
+  const setLive = useCallback((next: ScheduleProject | null) => {
+    live.current = next
+    setProject(next)
+  }, [])
+
   const persist = useCallback((id: string, next: ScheduleProject) => {
     // ── HAS ANOTHER TAB WRITTEN SINCE WE LAST READ? ────────────────────────
     // Two tabs on one schedule used to end with whichever typed last winning,
@@ -124,7 +145,7 @@ export function useScheduleProject(): ScheduleProjectApi {
     if (disk && watermark.current && disk > watermark.current) {
       // The edit is KEPT and NOT written — same rule as a full disk. Refusing
       // and dropping the edit would lose the work we are trying to protect.
-      setProject(next)
+      setLive(next)
       setConflict({ id, theirSavedAt: disk, theirName: store.load(id)?.meta.name ?? 'their version' })
       refreshList()
       return
@@ -137,14 +158,14 @@ export function useScheduleProject(): ScheduleProjectApi {
     // disappear with no message — then retyped it and watched it disappear
     // again. The in-memory copy is the only one they can still export or copy
     // out, so it survives; what changes is that we say it is not saved.
-    setProject(next)
+    setLive(next)
     setSaveError(outcome.ok ? null : outcome.message)
     // Only a write that landed moves the watermark. Moving it after a failed
     // save would make this tab believe it is up to date with a version that was
     // never stored, and the next conflict would go undetected.
     if (outcome.ok) watermark.current = outcome.stored.savedAt
     refreshList()
-  }, [store, refreshList])
+  }, [store, refreshList, setLive])
 
   // Returns the id it activated. A caller that CREATED a project needs to be
   // able to undo that later — the walkthroughs seed a sample when there is
@@ -157,11 +178,12 @@ export function useScheduleProject(): ScheduleProjectApi {
   }, [persist])
 
   const update = useCallback((mutate: (draft: ScheduleProject) => void) => {
-    if (!project || !activeId) return
-    const draft = structuredClone(project)
+    const current = live.current
+    if (!current || !activeId) return
+    const draft = structuredClone(current)
     mutate(draft)
     persist(activeId, draft)
-  }, [project, activeId, persist])
+  }, [activeId, persist])
 
   const replace = useCallback((next: ScheduleProject) => {
     const id = activeId ?? newId()
@@ -175,11 +197,11 @@ export function useScheduleProject(): ScheduleProjectApi {
     const p = store.load(id)
     if (p) {
       setActiveId(id)
-      setProject(p)
+      setLive(p)
       watermark.current = store.stampOf(id)
       setConflict(null)
     }
-  }, [store])
+  }, [store, setLive])
 
   const remove = useCallback((id: string) => {
     store.remove(id)
@@ -187,9 +209,9 @@ export function useScheduleProject(): ScheduleProjectApi {
     if (id === activeId) {
       const next = store.list()[0]
       if (next) open(next.id)
-      else { setActiveId(null); setProject(null) }
+      else { setActiveId(null); setLive(null) }
     }
-  }, [store, activeId, refreshList, open])
+  }, [store, activeId, refreshList, open, setLive])
 
   const rename = useCallback((name: string) => update((d) => { d.meta.name = name }), [update])
 
@@ -206,12 +228,12 @@ export function useScheduleProject(): ScheduleProjectApi {
     if (!conflict) return
     const theirs = store.load(conflict.id)
     if (theirs) {
-      setProject(theirs)
+      setLive(theirs)
       watermark.current = store.stampOf(conflict.id)
     }
     setConflict(null)
     refreshList()
-  }, [conflict, store, refreshList])
+  }, [conflict, store, refreshList, setLive])
 
   const overwriteWithMine = useCallback(() => {
     if (!conflict || !project) return
@@ -242,13 +264,13 @@ export function useScheduleProject(): ScheduleProjectApi {
       if (conflict || saveError) return   // unsaved work here — leave it alone
       const theirs = store.load(activeId)
       if (!theirs) return
-      setProject(theirs)
+      setLive(theirs)
       watermark.current = store.stampOf(activeId)
       refreshList()
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
-  }, [activeId, store, conflict, saveError, refreshList])
+  }, [activeId, store, conflict, saveError, refreshList, setLive])
 
   // Seed the watermark for the project restored at mount. Without this the
   // FIRST edit in a freshly-opened tab has nothing to compare against and

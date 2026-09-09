@@ -28,12 +28,12 @@ mechanism was established by reading, not observed.
 | S2 | Guest subject derived from a caller-chosen header | medium | reproduced | ✅ #587 |
 | S3 | `claim_guest_run` takes its own caps from the caller | medium | reproduced | ✅ #587 |
 | S4 | Stale webhook retry can restore a cancelled plan | medium | traced | ✅ #593 |
-| R6 | Every Model Space solver failure is invisible | medium | verified | ☐ |
-| R8 | Calculation fetch has no timeout | medium | read | ☐ |
-| R7 | Unknown URLs render an empty shell; `/about` missing | medium | verified | ☐ |
+| R6 | Every Model Space solver failure is invisible | medium | verified | ✅ #728 |
+| R8 | Calculation fetch has no timeout | medium | read | ✅ #728 |
+| R7 | Unknown URLs render an empty shell; `/about` missing | medium | verified | ✅ #728 |
 | E4 | ValidationMap row C003 is an algebraic tautology | medium | verified | ☐ |
 | S5 | No rate limiting; members never metered | low-med | verified | ☐ |
-| R9 | `update()` is not a functional update | low | latent | ☐ |
+| R9 | `update()` is not a functional update | low | latent | ✅ #728 |
 | S6 | `guest-quota` CORS lets any site burn a visitor's trial | low | read | ☐ |
 | E5 | `Cv1` uses the superseded AISC 360-10 form (conservative) | low | read | ☐ |
 
@@ -515,17 +515,29 @@ Restrict `consume` to an origin allowlist, or retire it now that
 
 ---
 
-## Phase 7 — UX dead ends (R6, R8, R7, R9)
+## Phase 7 — UX dead ends (R6, R8, R7, R9) — ✔ shipped (#728)
 
 - **R6** — eight `.catch(e => console.error(...))` in `ModelSpace.tsx` with no
-  error state. One `solveErr` state, set in each catch, cleared at the top of
-  each run, rendered beside the existing mesh-error strips.
-- **R8** — `calcApi.ts:94` has no timeout. `AbortSignal.timeout(15_000)` turns a
-  hang into the same safe degradation as a network error, no other change.
-- **R7** — add `path="*"`, and either build `/about` or drop it from
-  `PUBLIC_ROUTES`.
-- **R9** — `update()` clones the project from this render's closure; make it
-  functional before the next feature trips over it.
+  error state. `useSolver` now carries `error`, set from both the worker's
+  reject path and its `onerror`, cleared at the top of each `run`; `SolveError`
+  renders it beside each existing `SolverProgress` strip.
+- **R8** — `calcApi.ts` had no timeout. `AbortSignal.timeout(CALC_TIMEOUT_MS)`
+  (15 s) turns a hang into the same degradation the code already handles for a
+  network error, no other change.
+- **R7** — the INNER route table now ends in `path="*"` → `NotFound`, which
+  names the address and offers the nearest catalogue entries
+  (`lib/routeSuggest.ts`, ranked by shared path prefix). `/about` was a phantom
+  — never routed, linked from nowhere — so it is dropped from `PUBLIC_ROUTES`
+  rather than built.
+- **R9** — `useInvestigation` and `useScheduleProject` keep the live value in a
+  ref and write it through one `setLive` wrapper, so `update()` no longer reads
+  this render's closure and two updates in a tick no longer lose the first.
+
+**Honest limit:** R6 and R9 are verified by reading and by the production
+build. This suite runs `environment: 'node'` with no testing-library, so a hook
+or a rendered strip cannot be asserted; only the pure parts (`routeSuggest`,
+`PUBLIC_ROUTES`) carry tests. Adding a React test renderer would let the next
+UI fix be proven instead of reasoned about.
 
 ---
 

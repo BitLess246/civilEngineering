@@ -18,6 +18,7 @@ import ColumnDesign from './pages/ColumnDesign'
 import FrameAnalysis from './pages/FrameAnalysis'
 import LoadPath from './pages/LoadPath'
 import Documentation from './pages/Documentation'
+import NotFound from './pages/NotFound'
 import Validation from './pages/Validation'
 import Terms from './pages/legal/Terms'
 import Privacy from './pages/legal/Privacy'
@@ -238,6 +239,11 @@ export default function App() {
         <Route path="/schedule/resources" element={<RequireAuth><ScheduleResources /></RequireAuth>} />
         <Route path="/schedule/reports" element={<RequireAuth><ScheduleReports /></RequireAuth>} />
         <Route path="/schedule/daily" element={<RequireAuth><ScheduleDaily /></RequireAuth>} />
+        {/* THE INNER TABLE NEEDS ITS OWN CATCH-ALL. The outer one mounts the
+            shell for every address; without this, an address matching no tool
+            rendered the sidebar and header over an EMPTY content area, which
+            reads as a broken app rather than a wrong URL. */}
+        <Route path="*" element={<NotFound />} />
             </Routes>
           </AppShell>
         } />
