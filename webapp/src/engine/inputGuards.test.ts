@@ -55,11 +55,18 @@ describe('the guard predicates', () => {
 // stops the seventh engine repeating it: adding a row is the last step of
 // guarding an engine, and the sweep below then holds it to the same contract.
 //
-// Engines NOT yet in this table (measured to have the same defect, each its
-// own change): pileCap — fy 0, pileDia 0, spacing 0 and colX 0 all leave every
-// one of its six verdicts true; slabDDM — has no panel verdict at all, and
-// reports every section tension-controlled for fy 0 and for a negative dead
-// load. Add the row when the guard lands.
+// Engines NOT yet in this table, measured to have the same defect (each its
+// own change). Add the row when the guard lands.
+//
+//   pileCap   fy = 0 reports INFINITE steel, and cover = −75 makes the solved
+//             cap 525 mm thick against a claimed effective depth of 590 mm —
+//             bars 65 mm outside the concrete. Both with ALL SIX verdicts true.
+//   slabDDM   narrower than the others: its `applicable` flag ALREADY catches
+//             h ≤ 0, f'c = 0, a zero or negative span, and a negative DEAD
+//             load. What still slips through is a negative cover (d = 149 mm
+//             in a 135 mm slab), a zero or negative bar Ø, fy = 0, and a
+//             negative LIVE load, which cuts wu from 6.8 to 0.4 kPa and is
+//             reported applicable and tension-controlled.
 // ─────────────────────────────────────────────────────────────────────────
 interface Guarded<I> {
   name: string
