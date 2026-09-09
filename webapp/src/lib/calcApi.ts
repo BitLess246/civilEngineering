@@ -30,6 +30,16 @@ export interface AvailableBolt { shear: number; bearing: number; governing: numb
 // (a separate host, or `vercel dev` on another port while Vite serves the SPA).
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
+/**
+ * How long a calculation request may take before the browser gives up, ms.
+ *
+ * The endpoints solve small frames and answer in well under a second; 15 s is
+ * long enough that a slow cold start is not mistaken for a hang, and short
+ * enough that a real hang degrades to the local solver while the user is still
+ * watching. Exported so the test states the contract rather than the number.
+ */
+export const CALC_TIMEOUT_MS = 15_000
+
 let warnedLocal = false
 
 /**
@@ -91,9 +101,18 @@ async function post<T>(path: string, body: unknown, route: string): Promise<T> {
 
   let res: Response
   try {
-    res = await fetch(`${BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(body) })
+    // A HANG IS NOT A NETWORK ERROR, and without a deadline it was neither.
+    // A refused connection rejects immediately and falls back; a server that
+    // accepts and then never answers left this await pending forever, so the
+    // page sat on its spinner with no error and no result and no way back.
+    // `AbortSignal.timeout` turns that into the same rejection a refused
+    // connection gives, which the existing fallback already handles safely.
+    res = await fetch(`${BASE}${path}`, {
+      method: 'POST', headers, body: JSON.stringify(body),
+      signal: AbortSignal.timeout(CALC_TIMEOUT_MS),
+    })
   } catch {
-    return localFallback<T>(path, body)          // network error — API not running
+    return localFallback<T>(path, body)          // network error, or the deadline
   }
   // 404 IS THE SAFE DEGRADATION, AND IT IS DELIBERATE. If the functions are not
   // deployed — wrong Vercel root directory, a build that dropped them — every

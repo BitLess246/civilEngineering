@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Investigation } from '../engine/soils/model'
 import { emptyInvestigation } from '../engine/soils/model'
 import {
@@ -53,11 +53,31 @@ export function useInvestigation(): InvestigationApi {
     else backend.removeItem(ACTIVE_KEY)
   }, [activeId, backend])
 
+  /**
+   * THE ONLY WAY THIS HOOK SETS ITS STATE, and the reason is `update`.
+   *
+   * `update` cloned the investigation out of the RENDER CLOSURE, so two calls
+   * before the next render both started from the same snapshot and the second
+   * silently overwrote the first — an edit lost with no error. React state is
+   * not readable synchronously after setting it, so the live value is kept in
+   * a ref alongside.
+   *
+   * Every `setInvestigation` goes through here rather than the ref being
+   * updated at each call site: a site that set state without the ref would
+   * reintroduce the staleness, and there were three of them to remember.
+   * Now there are none to remember.
+   */
+  const live = useRef<Investigation | null>(investigation)
+  const setLive = useCallback((next: Investigation | null) => {
+    live.current = next
+    setInvestigation(next)
+  }, [])
+
   const persist = useCallback((id: string, next: Investigation) => {
     store.save(id, next)
-    setInvestigation(next)
+    setLive(next)
     refreshList()
-  }, [store, refreshList])
+  }, [store, refreshList, setLive])
 
   const activate = useCallback((id: string, next: Investigation) => {
     setActiveId(id)
@@ -65,11 +85,12 @@ export function useInvestigation(): InvestigationApi {
   }, [persist])
 
   const update = useCallback((mutate: (draft: Investigation) => void) => {
-    if (!investigation || !activeId) return
-    const draft = structuredClone(investigation)
+    const current = live.current
+    if (!current || !activeId) return
+    const draft = structuredClone(current)
     mutate(draft)
     persist(activeId, draft)
-  }, [investigation, activeId, persist])
+  }, [activeId, persist])
 
   const replace = useCallback((next: Investigation) => {
     activate(activeId ?? newId(), next)
@@ -82,8 +103,8 @@ export function useInvestigation(): InvestigationApi {
 
   const open = useCallback((id: string) => {
     const found = store.load(id)
-    if (found) { setActiveId(id); setInvestigation(found) }
-  }, [store])
+    if (found) { setActiveId(id); setLive(found) }
+  }, [store, setLive])
 
   const remove = useCallback((id: string) => {
     store.remove(id)
@@ -91,9 +112,9 @@ export function useInvestigation(): InvestigationApi {
     if (id === activeId) {
       const next = store.list()[0]
       if (next) open(next.id)
-      else { setActiveId(null); setInvestigation(null) }
+      else { setActiveId(null); setLive(null) }
     }
-  }, [store, activeId, refreshList, open])
+  }, [store, activeId, refreshList, open, setLive])
 
   const importJSON = useCallback((json: string) => {
     // Throws on malformed JSON or an integrity error; the caller surfaces it

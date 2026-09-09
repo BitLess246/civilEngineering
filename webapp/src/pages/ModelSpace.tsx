@@ -65,6 +65,7 @@ import { ReactionsPanel } from '../components/ReactionsPanel'
 import { DisplacementTable } from '../components/DisplacementTable'
 import { PlansPanel } from '../components/PlansPanel'
 import { ValidationPanel } from '../components/ValidationPanel'
+import { SolveError } from '../components/SolveError'
 import { ModalPanel } from '../components/ModalPanel'
 import { ResponseSpectrumPanel } from '../components/ResponseSpectrumPanel'
 import { PushoverPanel } from '../components/PushoverPanel'
@@ -447,7 +448,7 @@ export default function ModelSpace() {
   // twice.
   const [stLandLo, setStLandLo] = useState(0); const [stLandHi, setStLandHi] = useState(0)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
-  const { busy, run: runSolver, progress } = useSolver()   // off-thread FEM/design/optimise
+  const { busy, run: runSolver, progress, error: solveErr } = useSolver()   // off-thread FEM/design/optimise
   const gate = usePlanGate()
   const [planBlock, setPlanBlock] = useState<string | null>(null)
 
@@ -3400,6 +3401,7 @@ export default function ModelSpace() {
                   {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors below to enable analysis.</p>}
                 </div>
                 {busy === 'analyze' && <SolverProgress p={progress} />}
+                {solveErr && !busy && <SolveError message={solveErr} />}
               </Sec>
 
               {model && <ValidationPanel issues={meshIssues} />}
@@ -3621,6 +3623,7 @@ export default function ModelSpace() {
                   {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable modal analysis.</p>}
                 </div>
                 {busy === 'modal' && <SolverProgress p={progress} />}
+                {solveErr && !busy && <SolveError message={solveErr} />}
               </Sec>
 
               {model && <ValidationPanel issues={meshIssues} />}
@@ -3734,6 +3737,7 @@ export default function ModelSpace() {
                   </p>
                 )}
                 {busy === 'timeHistory' && <SolverProgress p={progress} />}
+                {solveErr && !busy && <SolveError message={solveErr} />}
               </Sec>
               {th && <TimeHistoryPanel res={th} dirLabel={thDir === 'x' ? '+X' : '+Z'} />}
               {recSpec && <RecordedSpectrumPanel spec={recSpec.spec} design={recSpec.design} recordName={recSpec.name} />}
@@ -3820,6 +3824,7 @@ export default function ModelSpace() {
                   {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable pushover.</p>}
                 </div>
                 {busy === 'pushover' && <SolverProgress p={progress} />}
+                {solveErr && !busy && <SolveError message={solveErr} />}
               </Sec>
 
               {model && <ValidationPanel issues={meshIssues} />}
@@ -3868,6 +3873,7 @@ export default function ModelSpace() {
                   {!nonlinearGate.allowed && <UpgradeNotice compact message={nonlinearGate.message} />}
                 </div>
                 {busy === 'biaxialPushover' && <SolverProgress p={progress} />}
+                {solveErr && !busy && <SolveError message={solveErr} />}
               </Sec>
 
               {bx && bx.curve.length > 0 && <BiaxialPushoverPanel res={bx} />}
@@ -3937,6 +3943,7 @@ export default function ModelSpace() {
                   {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable this run.</p>}
                 </div>
                 {busy === 'nonlinearTH' && <SolverProgress p={progress} />}
+                {solveErr && !busy && <SolveError message={solveErr} />}
               </Sec>
 
               {model && <ValidationPanel issues={meshIssues} />}
@@ -4112,6 +4119,7 @@ export default function ModelSpace() {
                   </p>
                 )}
                 {busy && <SolverProgress p={progress} />}
+                {solveErr && !busy && <SolveError message={solveErr} />}
                 {busy && (
                   <p className="col-span-full text-[11px] font-medium text-[#0f4c92]">
                     Running in the background — the page stays responsive; results appear when ready.
