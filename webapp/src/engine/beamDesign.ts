@@ -12,6 +12,7 @@
 // Convention: lengths mm, stresses MPa, Mu kN·m, Vu/V_* kN, Es = 200 GPa.
 // ─────────────────────────────────────────────────────────────────────────
 import { rhoMin } from './flexure'
+import { compact, positive, nonNegative, atLeast, finite, effectiveDepth } from './inputGuards'
 import { beta1 } from './loads'
 import { Ec as concreteEc } from './slabDeflection'
 import { crackedInertia, deflCoeff, longTermMultiplier, minBeamThickness, type BeamSupport } from './beamDeflection'
@@ -292,26 +293,31 @@ export type DetailingInputs = Pick<BeamDesignInput,
  * has and asks for less steel than the moment needs.
  */
 export function detailingNotes(i: DetailingInputs): string[] {
-  const n: string[] = []
   const dbC = i.comprBarDia ?? i.barDia
-  const pos = (v: number, what: string) => { if (!(Number.isFinite(v) && v > 0)) n.push(`${what} must be greater than zero (got ${v})`) }
-  pos(i.b, 'web width b'); pos(i.h, 'total depth h')
-  pos(i.fc, "concrete strength f'c"); pos(i.fy, 'bar yield fy')
-  pos(i.barDia, 'tension bar Ø'); pos(dbC, 'compression bar Ø')
-  pos(i.stirrupDia, 'stirrup Ø')
-  if (!(Number.isFinite(i.cover) && i.cover >= 0)) n.push(`clear cover cannot be negative (got ${i.cover})`)
-  // `legs` is an OVERRIDE — omitted, the engine derives it from the width and
-  // the shear, so only a supplied value can be wrong.
-  if (i.legs != null && !(Number.isFinite(i.legs) && i.legs >= 2))
-    n.push(`a stirrup has at least two legs (got ${i.legs})`)
-  // The depth the bars actually sit at has to be inside the section, whether
-  // it was derived from the cover or handed over as `dGiven`.
+  // The depth the bars actually sit at, however it was arrived at.
   const dt = i.dGiven && i.dGiven > 0 ? i.dGiven : i.h - i.cover - i.stirrupDia - i.barDia / 2
-  if (!(Number.isFinite(dt) && dt > 0)) n.push('cover, stirrup and half a bar leave no effective depth')
-  else if (Number.isFinite(i.h) && dt > i.h) n.push(`effective depth ${dt.toFixed(0)} mm is deeper than the ${i.h} mm section`)
-  if (i.Mu != null && !Number.isFinite(i.Mu)) n.push('the factored moment Mu is not a number')
-  if (i.Vu != null && !Number.isFinite(i.Vu)) n.push('the factored shear Vu is not a number')
-  return n
+  return compact([
+    positive(i.b, 'web width b'),
+    positive(i.h, 'total depth h'),
+    positive(i.fc, "concrete strength f'c"),
+    positive(i.fy, 'bar yield fy'),
+    positive(i.barDia, 'tension bar Ø'),
+    positive(dbC, 'compression bar Ø'),
+    positive(i.stirrupDia, 'stirrup Ø'),
+    nonNegative(i.cover, 'clear cover'),
+    // `legs` is an OVERRIDE — omitted, the engine derives it from the width
+    // and the shear, so only a supplied value can be wrong.
+    i.legs != null ? atLeast(i.legs, 2, 'stirrup legs') : null,
+    i.dGiven && i.dGiven > 0
+      ? null
+      : effectiveDepth(i.h, i.cover, i.stirrupDia, i.barDia, 'cover, stirrup and half a bar'),
+    // A given d has to be inside the section it is given for.
+    Number.isFinite(dt) && Number.isFinite(i.h) && dt > i.h
+      ? `effective depth ${dt.toFixed(0)} mm is deeper than the ${i.h} mm section`
+      : null,
+    i.Mu != null ? finite(i.Mu, 'the factored moment Mu') : null,
+    i.Vu != null ? finite(i.Vu, 'the factored shear Vu') : null,
+  ])
 }
 
 export function designBeam(i: BeamDesignInput): BeamDesignResult {

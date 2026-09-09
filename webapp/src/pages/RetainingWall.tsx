@@ -104,27 +104,27 @@ export default function RetainingWall() {
         {/* ── INPUTS ── */}
         <div className="flex flex-col gap-6">
           <Card title="Geometry (mm)">
-            <Num label="Stem height Hs"    unit="mm" value={f.Hs}  onChange={set('Hs')} />
-            <Num label="Base thickness tb" unit="mm" value={f.tb}  onChange={set('tb')} />
-            <Num label="Stem width ts"     unit="mm" value={f.ts}  onChange={set('ts')} />
-            <Num label="Toe projection bt" unit="mm" value={f.bt}  onChange={set('bt')} />
-            <Num label="Heel projection bh" unit="mm" value={f.bh} onChange={set('bh')} />
+            <Num label="Stem height Hs"    unit="mm" value={f.Hs}  onChange={set('Hs')} min={1} />
+            <Num label="Base thickness tb" unit="mm" value={f.tb}  onChange={set('tb')} min={1} />
+            <Num label="Stem width ts"     unit="mm" value={f.ts}  onChange={set('ts')} min={1} />
+            <Num label="Toe projection bt" unit="mm" value={f.bt}  onChange={set('bt')} min={0} />
+            <Num label="Heel projection bh" unit="mm" value={f.bh} onChange={set('bh')} min={0} />
           </Card>
 
           <Card title="Soil Parameters">
-            <Num label="γs — soil unit weight" unit="kN/m³" value={f.gamma_s} onChange={set('gamma_s')} />
-            <Num label="φ — friction angle"    unit="°"     value={f.phi_deg} onChange={set('phi_deg')} />
-            <Num label="Surcharge q"           unit="kPa"   value={f.q_sur}   onChange={set('q_sur')} />
-            <Num label="μ — base friction"     value={f.mu}                   onChange={set('mu')} />
-            <Num label="qa — allowable bearing" unit="kPa"  value={f.qa}      onChange={set('qa')} />
+            <Num label="γs — soil unit weight" unit="kN/m³" value={f.gamma_s} onChange={set('gamma_s')} min={1} />
+            <Num label="φ — friction angle"    unit="°"     value={f.phi_deg} onChange={set('phi_deg')} min={0} max={89.9} />
+            <Num label="Surcharge q"           unit="kPa"   value={f.q_sur}   onChange={set('q_sur')} min={0} />
+            <Num label="μ — base friction"     value={f.mu}                   onChange={set('mu')} min={0} />
+            <Num label="qa — allowable bearing" unit="kPa"  value={f.qa}      onChange={set('qa')} min={1} />
           </Card>
 
           <Card title="Concrete &amp; Steel">
-            <Num label="f'c"              unit="MPa" value={f.fc}      onChange={set('fc')} />
-            <Num label="fy"               unit="MPa" value={f.fy}      onChange={set('fy')} />
-            <Num label="Cover (stem)"     unit="mm"  value={f.cover}   onChange={set('cover')} />
-            <Num label="Main bar ⌀"       unit="mm"  value={f.barDia}  onChange={set('barDia')} />
-            <Num label="γc — concrete unit weight" unit="kN/m³" value={f.gamma_c} onChange={set('gamma_c')} />
+            <Num label="f'c"              unit="MPa" value={f.fc}      onChange={set('fc')} min={1} />
+            <Num label="fy"               unit="MPa" value={f.fy}      onChange={set('fy')} min={1} />
+            <Num label="Cover (stem)"     unit="mm"  value={f.cover}   onChange={set('cover')} min={0} />
+            <Num label="Main bar ⌀"       unit="mm"  value={f.barDia}  onChange={set('barDia')} min={1} />
+            <Num label="γc — concrete unit weight" unit="kN/m³" value={f.gamma_c} onChange={set('gamma_c')} min={1} />
           </Card>
         </div>
 
@@ -161,6 +161,11 @@ export default function RetainingWall() {
             </ResultCard>
 
             <ResultCard title="Stability Checks">
+              {/* Every verdict below is forced false while these stand, so a
+                  page with no reason shown would just fail silently. */}
+              {r.inputNotes.map((n, k) => (
+                <Row key={k} alert label="⚠ Input" value={n} />
+              ))}
               <Row label="FS overturning (≥ 2.0)" value={f2(r.FS_OT)} alert={!r.stableOT} />
               <Row label="FS sliding (≥ 1.5)"     value={f2(r.FS_SL)} alert={!r.stableSL} />
             </ResultCard>
