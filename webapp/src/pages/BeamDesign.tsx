@@ -4,7 +4,7 @@ import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, typ
 import { ModelMemberResults } from '../components/ModelMemberResults'
 import type { MemberLoadRequest } from '../lib/modelMemberResults'
 import { initialLetterhead } from '../lib/letterhead'
-import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
+import { designBeam, detailingNotes, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import type { BeamSupport } from '../engine/beamDeflection'
 import type { CriticalSection } from '../engine/beamSections'
 import { SheetFigure } from '../components/modelSpace/figures'
@@ -177,7 +177,9 @@ export default function BeamDesign() {
           } },
           rect,
         ),
-        ...(r.flexOK ? [] : ['THE SECTION CANNOT FIT THIS STEEL — ENLARGE IT']),
+        // The reason comes from the engine: "enlarge it" is right for a
+        // diverging layout and wrong for a mistyped bar diameter.
+        ...r.flexNotes.map((n) => n.toUpperCase()),
       ],
     })
   }, [r, fd, hogging, sectionGeomOK])
@@ -307,17 +309,17 @@ export default function BeamDesign() {
                 Auto-select bar ⌀
               </label>
             }>
-            <Num label="Width b" unit="mm" value={f.b} onChange={set('b')} />
-            <Num label="Total depth h" unit="mm" value={f.h} onChange={set('h')} />
-            <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} />
-            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={fd.barDia} onChange={set('barDia')}
+            <Num label="Width b" unit="mm" value={f.b} onChange={set('b')} min={1} />
+            <Num label="Total depth h" unit="mm" value={f.h} onChange={set('h')} min={1} />
+            <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} min={0} />
+            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={fd.barDia} onChange={set('barDia')} min={1}
               disabled={autoBar}
               hint={autoBar ? (adoptedDb ? 'chosen by the optimiser' : 'no compliant ⌀ — see the ranking') : undefined} />
-            <Num label={<>Compr. bar <KTex tex="d_b'" /></>} unit="mm" value={fd.comprBarDia} onChange={set('comprBarDia')}
+            <Num label={<>Compr. bar <KTex tex="d_b'" /></>} unit="mm" value={fd.comprBarDia} onChange={set('comprBarDia')} min={1}
               disabled={autoBar}
               hint={autoBar ? 'follows the tension bar' : undefined} />
-            <Num label={<>Stirrup <KTex tex="d_s" /></>} unit="mm" value={f.stirrupDia} onChange={set('stirrupDia')} />
-            <Num label="Stirrup legs" value={f.legs} onChange={set('legs')} />
+            <Num label={<>Stirrup <KTex tex="d_s" /></>} unit="mm" value={f.stirrupDia} onChange={set('stirrupDia')} min={1} />
+            <Num label="Stirrup legs" value={f.legs} onChange={set('legs')} min={2} step="1" />
             {/* A textbook problem states d; a drawing states h and the cover.
                 0 keeps the derived value — see `BeamDesignInput.dGiven`. */}
             <Num label={<>Effective depth <KTex tex="d" /> (0 = derive)</>} unit="mm"
@@ -442,16 +444,20 @@ export default function BeamDesign() {
             {r && sectionFigure ? (
               <SheetFigure drawing={sectionFigure} width={420} />
             ) : (
-              <p className="py-8 text-center text-sm text-[#a39d8d]">Enter a valid section (d must be positive).</p>
+              /* Say WHICH input is wrong. "d must be positive" was the only
+                 reason ever printed, and it was the wrong one whenever f'c, fy
+                 or a bar diameter was what the form actually got. */
+              <p className="py-8 text-center text-sm text-[#a39d8d]">
+                {detailingNotes(f)[0] ?? 'Enter a valid section.'}
+              </p>
             )}
           </DrawingCard>
 
           {r && (
             <ResultCard title={`Results${multi && active ? ` — ${active.label}` : ''}`}>
-              {!r.flexOK && (
-                <Row alert label="⚠ Section" value={`${r.bars} bars cannot fit`}
-                  sub="layout diverges — enlarge b or h" />
-              )}
+              {r.flexNotes.map((n, k) => (
+                <Row key={k} alert label="⚠ Section" value={n} />
+              ))}
               {hogging && <Row label="Orientation" value="hogging (−Mu)" sub="tension steel at the top" />}
               <Row label="Effective depth d" value={`${f1(r.d)} mm`}
                 sub={r.layers.length > 1 ? `dt=${f1(r.dt)} · ȳ=${f1(r.yBar)} mm` : undefined} />

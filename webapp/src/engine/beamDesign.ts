@@ -208,9 +208,29 @@ export interface BeamDesignResult {
   // Stirrup detailing (§407.3.2 bend, §425.3.2 hook)
   stirrupBendDia: number   // inside bend diameter = 4·ds (⌀16 and smaller), mm
   stirrupHookExt: number   // 135° hook extension = max(6·ds, 75), mm
-  /** False when the bar layout diverges (d collapses toward d') — the section
-   *  cannot accommodate the required steel; enlarge it. */
+  /**
+   * False when the section does not yield a real, buildable design.
+   *
+   * Two ways that happens, and `flexNotes` says which:
+   *  - the bar layout diverges (d collapses toward d', or a stack keeps
+   *    growing) — the section cannot accommodate the steel it needs;
+   *  - a detailing input is not physical (see `flexNotes`), so the numbers
+   *    below describe no beam at all.
+   *
+   * It used to cover only the first, which made it a verdict that could not
+   * fail on the second: a ⌀0 bar reported 951 mm² of required steel over ZERO
+   * bars, and a negative cover DEEPENED d (440 → 520 mm) and cut the steel
+   * 17% below what the moment needs — both `flexOK: true`.
+   */
   flexOK: boolean
+  /**
+   * Why `flexOK` is false, ready to print — empty when it is true.
+   *
+   * Callers show these instead of a fixed "enlarge the section" line, which
+   * is the right advice for a diverging layout and the wrong advice for a
+   * mistyped bar diameter.
+   */
+  flexNotes: string[]
   // Shear
   Vc: number; phiVc: number
   region: ShearRegion
@@ -251,7 +271,51 @@ const roundDown = (v: number, step: number) => Math.floor(v / step) * step
  *  transverse leg-spacing limit hx (beam width). */
 export const S_MIN_STIRRUP = 75
 
+/**
+ * The fields `detailingNotes` reads — a subset of the design input, so a page
+ * can run the check over its own form state and say WHICH box is wrong before
+ * it has a design to show.
+ */
+export type DetailingInputs = Pick<BeamDesignInput,
+  'b' | 'h' | 'cover' | 'barDia' | 'stirrupDia' | 'fc' | 'fy'>
+  & Partial<Pick<BeamDesignInput, 'comprBarDia' | 'legs' | 'dGiven' | 'Mu' | 'Vu'>>
+
+/**
+ * Detailing inputs that must be physical before any of the algebra means
+ * anything, §407.7 / §420.6 — checked here rather than at each page, because
+ * `designBeam` is also driven by the optimiser, the lintel engine and the
+ * model-space pipeline, and a guard on one form protects none of those.
+ *
+ * Non-positive values are not merely wrong, they are wrong in the
+ * UNCONSERVATIVE direction: d = h − cover − d_s − d_b/2 grows as any of those
+ * three shrinks past zero, so the section reports more effective depth than it
+ * has and asks for less steel than the moment needs.
+ */
+export function detailingNotes(i: DetailingInputs): string[] {
+  const n: string[] = []
+  const dbC = i.comprBarDia ?? i.barDia
+  const pos = (v: number, what: string) => { if (!(Number.isFinite(v) && v > 0)) n.push(`${what} must be greater than zero (got ${v})`) }
+  pos(i.b, 'web width b'); pos(i.h, 'total depth h')
+  pos(i.fc, "concrete strength f'c"); pos(i.fy, 'bar yield fy')
+  pos(i.barDia, 'tension bar Ø'); pos(dbC, 'compression bar Ø')
+  pos(i.stirrupDia, 'stirrup Ø')
+  if (!(Number.isFinite(i.cover) && i.cover >= 0)) n.push(`clear cover cannot be negative (got ${i.cover})`)
+  // `legs` is an OVERRIDE — omitted, the engine derives it from the width and
+  // the shear, so only a supplied value can be wrong.
+  if (i.legs != null && !(Number.isFinite(i.legs) && i.legs >= 2))
+    n.push(`a stirrup has at least two legs (got ${i.legs})`)
+  // The depth the bars actually sit at has to be inside the section, whether
+  // it was derived from the cover or handed over as `dGiven`.
+  const dt = i.dGiven && i.dGiven > 0 ? i.dGiven : i.h - i.cover - i.stirrupDia - i.barDia / 2
+  if (!(Number.isFinite(dt) && dt > 0)) n.push('cover, stirrup and half a bar leave no effective depth')
+  else if (Number.isFinite(i.h) && dt > i.h) n.push(`effective depth ${dt.toFixed(0)} mm is deeper than the ${i.h} mm section`)
+  if (i.Mu != null && !Number.isFinite(i.Mu)) n.push('the factored moment Mu is not a number')
+  if (i.Vu != null && !Number.isFinite(i.Vu)) n.push('the factored shear Vu is not a number')
+  return n
+}
+
 export function designBeam(i: BeamDesignInput): BeamDesignResult {
+  const flexNotes = detailingNotes(i)
   const fyt = i.fyt ?? i.fy
   const lambda = i.lambda ?? 1
   const dbC = i.comprBarDia ?? i.barDia
@@ -302,7 +366,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   let As = 0, rho = 0, usedMin = false, asFloorGoverns = false, bars = 0, yBar = 0, comprYBar = 0
   let As1 = 0, As2 = 0, MnResid = 0, cNA = 0, fsPrime = i.fy, fsYields = true
   let AsPrime = 0, comprEffective = true, comprBars = 0
-  let flexOK = true
+  let flexOK = flexNotes.length === 0
   let flangeAction: 'none' | 'flange' | 'true-T' = 'none'
   let bFlex = i.b, Asf = 0, Muf = 0
 
@@ -407,6 +471,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     // on each other (or a stack keeps growing), the section can't take it.
     if (dNew <= dPrimeNew + i.barDia || newLayers.length > 6 || newComprLayers.length > 6) {
       flexOK = false
+      flexNotes.push('the section cannot accommodate the steel it needs — the bar layout diverges (d closes on d\u2032, or a stack keeps growing). Enlarge it.')
       layers = newLayers
       comprLayers = newComprLayers
       d = Math.max(dNew, dPrimeNew + i.barDia)
@@ -532,7 +597,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     mode, As, rho, usedMin, asFloorGoverns, bars,
     flangeAction, bFlex, Asf, Muf,
     sMinClear, bClear: bw, jointGoverns, jointFit, maxPerLayer, layers, sClear, yBar, layerIters,
-    As1, As2, MnResid, cNA, fsPrime, fsYields, AsPrime, comprBars, comprEffective, flexOK,
+    As1, As2, MnResid, cNA, fsPrime, fsYields, AsPrime, comprBars, comprEffective, flexOK, flexNotes,
     comprSMinClear, comprMaxPerLayer, comprLayers, comprSClear, comprYBar,
     dPrimeExtreme, comprNAOK,
     stirrupBendDia, stirrupHookExt,

@@ -22,6 +22,11 @@ export interface BeamSchematicProps {
   /** When false the section can't fit the steel: bars are clipped at the NA and
    *  an explicit warning is drawn. */
   flexOK?: boolean
+  /** Why `flexOK` is false, if the caller knows — printed instead of the
+   *  over-full line, which is the right reading only when the LAYOUT is what
+   *  failed. A ⌀0 bar also makes `flexOK` false, and "n bars cannot fit" is
+   *  not what went wrong there. */
+  flexReason?: string
   /** Hogging (−Mu): the whole arrangement mirrors — tension steel at the TOP,
    *  compression at the bottom, d measured from the bottom (compression) face. */
   hogging?: boolean
@@ -45,7 +50,7 @@ function CentroidMark({ cx, cy, toX }: { cx: number; cy: number; toX: number }) 
  *  d / d′ dimension lines. */
 export function BeamSchematic({
   b, h, cover, barDia, stirrupDia, bars, d, dPrime, layers, comprLayers,
-  comprBars = 0, comprBarDia, naDepth = 0, flexOK = true, hogging = false,
+  comprBars = 0, comprBarDia, naDepth = 0, flexOK = true, flexReason, hogging = false,
 }: BeamSchematicProps): JSX.Element {
   const W = 330, H = 322
   const padL = 90, padT = 18, availW = 150, availH = 220
@@ -160,7 +165,7 @@ export function BeamSchematic({
           <text x={x0 + bw - 4} y={yNA - 4} fontSize={8} fill={CENTROID} textAnchor="end">N.A.</text>
           <text x={x0 + bw / 2} y={y0 + hh / 2} fontSize={9.5} fontWeight={700} fill={CENTROID} textAnchor="middle"
             paintOrder="stroke" stroke="#fff" strokeWidth={3}>
-            ⚠ n = {bars} bars cannot fit in the section
+            ⚠ {flexReason ?? `n = ${bars} bars cannot fit in the section`}
           </text>
         </g>
       )}

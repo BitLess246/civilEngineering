@@ -32,6 +32,7 @@ pass.
 | B004 | Maximum Steel | Hand Calc | ✅ | `beamDesign.test.ts` "ρ_max,TC = (0.85f′c/fy·β1)(3/8)(dt/d)" + "ρ_b carries the dt/d factor" |
 | B005 | Multiple Layers | Hand Calc | ✅ | `beamDesign.test.ts` "adds a second layer when one layer cannot fit the bars, lowering d" (§407.7, Varignon) |
 | B006 | Large Bar Diameters | ETABS | 🔶 | bar-fit geometry proven in `beamDesign.test.ts` "maxPerLayer honours s_min = max(db, 25)"; ETABS cross-check open |
+| B007 | Non-physical detailing inputs are refused | Hand Calc | ✅ | `beamDesign.test.ts` "non-physical detailing inputs" — ⌀0/negative bar and stirrup, negative cover, <2 stirrup legs, d outside the section. Each measured UNCONSERVATIVE before the guard (cover −40 mm deepened d 440→520 mm and cut As 976→809 mm², reported `flexOK: true`); zero cover and a diverging layout are the controls |
 
 ---
 
