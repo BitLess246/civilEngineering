@@ -51,6 +51,54 @@ export function bearer(header: string | null): string | null {
 }
 
 /**
+ * COULD THIS STRING POSSIBLY BE A LIVE SUPABASE JWT?
+ *
+ * A structural screen, run BEFORE the network call. Audit S5's first half is
+ * that a caller can amplify garbage 1:1 into our own auth endpoint: every
+ * unrecognised token costs one request to `/auth/v1/user`, so a flood of junk
+ * is a flood against Supabase, paid for by us.
+ *
+ * This refuses locally what cannot be a token at all — the cheapest flood to
+ * mount, and the one that needs no effort from the attacker.
+ *
+ * WHAT IT CANNOT DO, said plainly: it does NOT verify the signature, so a
+ * well-formed, unexpired, entirely forged token still reaches the network. Only
+ * local signature verification closes that, and it is not attempted here — see
+ * `docs/AuditRemediation.md` S5.
+ *
+ * SAFETY DIRECTION. This may only ever REJECT what the network would also have
+ * rejected; it must never admit anything new, and must never reject something
+ * Supabase would accept. Two consequences:
+ *  - every check is on the shape and the `exp` claim, both of which Supabase
+ *    enforces itself, so anything failing here would have failed there too;
+ *  - `exp` is compared with a generous skew allowance, because an Edge clock
+ *    running fast must not reject a token that is still live at the server.
+ */
+const JWT_SKEW_SECONDS = 120
+
+export function couldBeJwt(token: string, now = Date.now()): boolean {
+  // Three dot-separated base64url segments, with a non-empty signature.
+  const parts = token.split('.')
+  if (parts.length !== 3) return false
+  if (parts.some((p) => p.length === 0)) return false
+  if (!/^[A-Za-z0-9_-]+$/.test(parts[0]) || !/^[A-Za-z0-9_-]+$/.test(parts[1])) return false
+  let payload: { exp?: unknown }
+  try {
+    // atob wants standard base64; JWT uses base64url and drops the padding.
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    payload = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)))
+  } catch {
+    return false
+  }
+  if (payload === null || typeof payload !== 'object') return false
+  // No `exp` is not our business to reject — Supabase decides that.
+  if (typeof payload.exp === 'number') {
+    if (payload.exp * 1000 + JWT_SKEW_SECONDS * 1000 < now) return false
+  }
+  return true
+}
+
+/**
  * Identify the caller.
  *
  * The anon key is compared FIRST and by exact match, because asking Supabase to
@@ -60,8 +108,11 @@ export function bearer(header: string | null): string | null {
 export async function identify(
   token: string, cfg: AuthConfig,
   fetchImpl: typeof fetch = fetch,
+  now = Date.now(),
 ): Promise<Caller | null> {
   if (token === cfg.anonKey) return { kind: 'guest' }
+  // Screened before the round trip — see `couldBeJwt`.
+  if (!couldBeJwt(token, now)) return null
   try {
     const res = await fetchImpl(`${cfg.supabaseUrl}/auth/v1/user`, {
       headers: { Authorization: `Bearer ${token}`, apikey: cfg.anonKey },

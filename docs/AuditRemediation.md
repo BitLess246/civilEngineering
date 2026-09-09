@@ -32,7 +32,7 @@ mechanism was established by reading, not observed.
 | R8 | Calculation fetch has no timeout | medium | read | ✅ #728 |
 | R7 | Unknown URLs render an empty shell; `/about` missing | medium | verified | ✅ #728 |
 | E4 | ValidationMap row C003 is an algebraic tautology | medium | verified | ✅ #737 |
-| S5 | No rate limiting; members never metered | low-med | verified | ☐ |
+| S5 | No rate limiting; members never metered | low-med | verified | ◐ #738 (partial) |
 | R9 | `update()` is not a functional update | low | latent | ✅ #728 |
 | S6 | `guest-quota` CORS lets any site burn a visitor's trial | low | read | ✅ #735 |
 | E5 | `Cv1` uses the superseded AISC 360-10 form (conservative) | low | read | ✅ #737 |
@@ -502,11 +502,37 @@ redeliver a webhook, which the sandbox does not do on demand. The parsers and
 the comparison are covered by tests, including one that removes the ordering
 block and watches the guards fail.
 
-**S5** — no rate limiting anywhere, and members are never metered (by design),
-while sign-up is self-service. Cache `identify()` by token hash (or verify the
-JWT locally against JWKS) so garbage tokens are not amplified 1:1 into your own
-auth endpoint, and add a per-subject/per-user token bucket in front of
-`solve()`. Vercel's firewall rules are the zero-code option.
+**S5 — ◐ PARTIAL (#738). Deliberately not closed.** The finding has two halves
+and only the first is addressed.
+
+**Amplification, first half — done.** `identify()` used to spend one request to
+`/auth/v1/user` on EVERY token that was not the anon key, so a flood of junk
+was a flood against Supabase that we paid for. `couldBeJwt` now screens
+structurally before the round trip: three base64url segments, a decodable JSON
+payload, and an `exp` that has not passed. Malformed garbage — the cheapest
+flood to mount and the one needing no effort — costs nothing now.
+
+The screen may only ever REJECT, never admit, and only on grounds Supabase
+enforces itself, so nothing that used to be accepted can now be refused. `exp`
+carries a 120 s skew allowance for the same reason: an Edge clock running fast
+must not refuse a token still live at the server. Both directions are tested.
+
+**Amplification, second half — NOT done.** A well-formed, unexpired, entirely
+FORGED token still reaches the network 1:1, because nothing here verifies the
+signature. `auth.test.ts` pins that ("refuses a well-formed token Supabase
+rejects — and DOES ask") so the gap is recorded rather than mistaken for
+closed. Note the audit's own suggestion — cache `identify()` by token hash —
+does not close it either: a flood of DISTINCT garbage tokens is all cache
+misses. Closing it means local HS256 verification against `SUPABASE_JWT_SECRET`,
+which removes the round trip entirely; that is real crypto in the auth path and
+wants a deliberate decision, not a drive-by.
+
+**Rate limiting — NOT done, and not doable in-repo.** A per-subject token
+bucket needs shared state: each Vercel Edge isolate has its own memory, so an
+in-process counter bounds nothing. That means Upstash/Redis or Vercel's
+firewall rules, both of which are provisioning rather than code.
+
+**Members are never metered** remains by design and unchanged.
 
 **S6 — ✅ SHIPPED (#735).** `guest-quota` set `access-control-allow-origin: '*'`
 for both actions, so a third-party page could drive `consume` against the

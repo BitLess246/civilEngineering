@@ -286,5 +286,9 @@ restatement of the implementation and is now six properties checked against
 three wrong formulas, and `Cv1` now follows the 360-16 edition its own file
 header declares (a no-op on shipped numbers: no catalogue shape reaches the
 branch that changed). **S5** (no rate limiting, members never metered) is the
-one row still open. Read that file before picking it up — each row carries how
+one row still open, now ◐ partial after #738: `identify()` screens a token
+structurally before spending a round trip on it, so malformed garbage is no
+longer amplified 1:1 into Supabase — but a well-formed FORGED token still is
+(that needs local signature verification), and a real rate limit needs shared
+state Edge isolates do not have. Read that file before picking it up — each row carries how
 far it was actually verified.
