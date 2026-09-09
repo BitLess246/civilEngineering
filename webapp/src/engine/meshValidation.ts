@@ -215,6 +215,69 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
         message: `Member ${mm.id} has L/d = ${slender.toFixed(0)} — check the section assignment or the node coordinates.` })
   }
 
+  // ── SECTION PROPERTIES MUST BE PHYSICAL (L1 rule for every material) ────
+  //
+  // Only timber sections were checked, so a CONCRETE or STEEL section could
+  // carry b = 0, h = 0, a negative dimension, f'c = 0 or fy = 0 and the model
+  // passed validation with no error at all. Measured on a 1-bay frame: with
+  // b = 0 the analysis "succeeded" and the pipeline reported a complete design
+  // for four beams and four columns; with a negative b it reported a DIFFERENT
+  // complete design (Mmax 93.7 against the sound model's 63.9). Nothing
+  // crashed and nothing was flagged — the app simply answered a question about
+  // a structure that cannot exist.
+  //
+  // A zero bar diameter is worse than wrong: the bar count is As/Ab, so Ab = 0
+  // makes it Infinity, and the layer stacker used to allocate until the array
+  // limit threw. That loop is fixed in `barLayers`, but the input is still not
+  // a section anyone can build, and the honest place to say so is here.
+  //
+  // `cover` is checked against the depth it consumes from BOTH faces plus the
+  // tie: a cover that leaves no room for a bar leaves no effective depth, and
+  // d ≤ 0 is a section the flexure engine cannot say anything true about.
+  for (const sec of model.sections) {
+    if (sec.material === 'wood') continue        // WOOD_DIMS covers those below
+    const isSteelShape = sec.material === 'steel' && !!sec.shape
+    if (!isSteelShape && (!(sec.b > 0) || !(sec.h > 0)))
+      issues.push({
+        severity: 'error', code: 'SECTION_DIMS', refs: [sec.id],
+        message: `section ${sec.id}: b and h must be positive (got ${sec.b} × ${sec.h} mm)`,
+      })
+    if (sec.material !== 'steel' && !(sec.fc > 0))
+      issues.push({
+        severity: 'error', code: 'SECTION_FC', refs: [sec.id],
+        message: `section ${sec.id}: f'c must be positive (got ${sec.fc} MPa) — E = 4700√f'c is zero, so the member carries no stiffness`,
+      })
+    if (sec.material !== 'steel' && !(sec.fy > 0))
+      issues.push({
+        severity: 'error', code: 'SECTION_FY', refs: [sec.id],
+        message: `section ${sec.id}: fy must be positive (got ${sec.fy} MPa)`,
+      })
+    if (sec.material !== 'steel' && !(sec.barDia > 0))
+      issues.push({
+        severity: 'error', code: 'SECTION_BAR_DIA', refs: [sec.id],
+        message: `section ${sec.id}: bar Ø must be positive (got ${sec.barDia} mm) — a zero bar has no area, so the required bar count is unbounded`,
+      })
+    if (sec.material !== 'steel' && !(sec.tieDia > 0))
+      issues.push({
+        severity: 'error', code: 'SECTION_TIE_DIA', refs: [sec.id],
+        message: `section ${sec.id}: tie/stirrup Ø must be positive (got ${sec.tieDia} mm)`,
+      })
+    // Cover eats from both faces; what is left has to hold the tie and a bar.
+    if (sec.material !== 'steel' && sec.h > 0 && sec.cover >= 0) {
+      const dAvail = sec.h - sec.cover - (sec.tieDia > 0 ? sec.tieDia : 0) - (sec.barDia > 0 ? sec.barDia / 2 : 0)
+      if (!(dAvail > 0))
+        issues.push({
+          severity: 'error', code: 'SECTION_COVER', refs: [sec.id],
+          message: `section ${sec.id}: ${sec.cover} mm cover plus the tie and half a bar leaves no effective depth in a ${sec.h} mm section`,
+        })
+    }
+    if (sec.cover < 0)
+      issues.push({
+        severity: 'error', code: 'SECTION_COVER', refs: [sec.id],
+        message: `section ${sec.id}: cover cannot be negative (got ${sec.cover} mm)`,
+      })
+  }
+
   // ── timber sanity (L1 rule for wood sections) ───────────────────────────
   for (const sec of model.sections) {
     if (sec.material !== 'wood') continue

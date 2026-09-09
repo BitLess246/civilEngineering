@@ -298,3 +298,69 @@ describe('references — everything points at something', () => {
     }
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// A SECTION THAT CANNOT EXIST USED TO PASS VALIDATION.
+//
+// Only timber sections were dimension-checked. A concrete or steel section
+// could carry b = 0, a negative dimension, f'c = 0, fy = 0 or a zero bar Ø and
+// the model came back clean — then the analysis "succeeded" and the pipeline
+// reported a complete design. Measured on a 1-bay frame before this rule:
+// b = 0 gave a full design for 4 beams and 4 columns, and a NEGATIVE b gave a
+// different full design (Mmax 93.7 against the sound model's 63.9). Nothing
+// crashed; the app simply answered a question about a structure that cannot be
+// built, which is the worst way for it to be wrong.
+// ─────────────────────────────────────────────────────────────────────────
+describe('section properties must be physical', () => {
+  const good: RectSection = { id: 's1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40, material: 'concrete' }
+  const withSection = (over: Partial<RectSection>) => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: good, slabThickness: 200 })
+    return { ...m, sections: m.sections.map((s) => ({ ...s, ...over })) }
+  }
+  const codes = (over: Partial<RectSection>) =>
+    validateMesh(withSection(over)).filter((i) => i.severity === 'error').map((i) => i.code)
+
+  it('passes a sound concrete section', () => {
+    expect(codes({})).toEqual([])
+  })
+
+  it('rejects a zero or negative dimension, and GATES the run', () => {
+    for (const over of [{ b: 0 }, { h: 0 }, { b: -300 }, { h: -500 }]) {
+      expect(codes(over)).toContain('SECTION_DIMS')
+      expect(hasMeshErrors(validateMesh(withSection(over)))).toBe(true)
+    }
+  })
+
+  it("rejects f'c = 0 — E = 4700√f'c is zero, so the member carries no stiffness", () => {
+    expect(codes({ fc: 0 })).toContain('SECTION_FC')
+    expect(codes({ fc: -28 })).toContain('SECTION_FC')
+  })
+
+  it('rejects fy = 0 and a zero bar Ø — both put NaN through the design', () => {
+    expect(codes({ fy: 0 })).toContain('SECTION_FY')
+    expect(codes({ barDia: 0 })).toContain('SECTION_BAR_DIA')
+    expect(codes({ tieDia: 0 })).toContain('SECTION_TIE_DIA')
+  })
+
+  it('rejects a cover that leaves no effective depth', () => {
+    // 500 mm section, 480 cover + 10 tie + 10 half-bar ⇒ d ≤ 0
+    expect(codes({ cover: 480 })).toContain('SECTION_COVER')
+    expect(codes({ cover: -10 })).toContain('SECTION_COVER')
+    // …and a generous but workable cover is still fine
+    expect(codes({ cover: 75 })).toEqual([])
+  })
+
+  it('does not second-guess a catalogue STEEL shape, whose b/h are nominal', () => {
+    // a W-shape carries its properties in the catalogue, not in b × h
+    const steel = codes({ material: 'steel', shape: 'W310X39', b: 0, h: 0, fc: 0, fy: 0, barDia: 0, tieDia: 0 })
+    expect(steel).not.toContain('SECTION_DIMS')
+    expect(steel).not.toContain('SECTION_FC')
+    expect(steel).not.toContain('SECTION_BAR_DIA')
+  })
+
+  it('leaves the timber rule to WOOD_DIMS rather than reporting both', () => {
+    const wood = codes({ material: 'wood', woodSpecies: 'apitong', b: 0, h: 0 })
+    expect(wood).toContain('WOOD_DIMS')
+    expect(wood).not.toContain('SECTION_DIMS')
+  })
+})
