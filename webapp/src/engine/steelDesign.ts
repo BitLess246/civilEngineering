@@ -195,6 +195,22 @@ export function beamFlexure(
 // ─── Beam shear §G2.1 ─────────────────────────────────────────────────────
 // Hot-rolled I-shapes: h/tw ≤ 2.24√(E/Fy) → φv = 1.0, Cv1 = 1.0 (§G2.1a).
 // Slender webs use §G2.1(b) with kv = 5.34 (unstiffened).
+//
+// EDITION. This module's header declares AISC 360-16, and Cv1 did not follow
+// it: it carried the 360-10 THREE-branch Cv, whose third term
+// 1.51·kv·E/(Fy·(h/tw)²) is the elastic-buckling branch. 360-16 dropped that
+// branch for Cv1 — Eq. G2-3/G2-4 are 1.0 up to 1.10√(kv·E/Fy) and
+// 1.10√(kv·E/Fy)/(h/tw) above it, all the way — and kept the three-branch form
+// only for Cv2 (§G2.2, Eq. G2-9…11), which is tension-field action and is not
+// what this function computes.
+//
+// It changed no shipped number. MEASURED over all 249 catalogue shapes at
+// Fy = 248, 345 and 415 MPa: the largest h/tw in the library is 59.6
+// (W410x38.8) and the third branch does not begin until 1.37√(kv·E/Fy) = 89.9,
+// 76.2 and 69.5 respectively — so no shape could reach it, at any yield
+// strength the app offers. `steelDesign.test.ts` pins that reachability, so a
+// catalogue addition that DID reach it would surface here rather than
+// silently pick up a superseded formula.
 
 export interface BeamShearResult {
   Aw: number; Cv1: number; phiV: number; phiVn: number; hwTw: number
@@ -215,8 +231,8 @@ export function beamShear(s: AiscShape, p: DerivedBeamProps, Fy: number): BeamSh
   } else {
     const kv = 5.34
     const lim1 = 1.10 * Math.sqrt(kv * E / Fy)
-    const lim2 = 1.37 * Math.sqrt(kv * E / Fy)
-    Cv1  = hwTw <= lim1 ? 1.0 : hwTw <= lim2 ? lim1 / hwTw : (1.51 * kv * E) / (Fy * hwTw * hwTw)
+    // §G2.1(b), Eq. G2-3 / G2-4 — two branches, no elastic term.
+    Cv1  = hwTw <= lim1 ? 1.0 : lim1 / hwTw
     phiV = 0.9
   }
   const Vn = (0.6 * Fy * Aw * Cv1) / 1000

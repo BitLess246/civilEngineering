@@ -145,11 +145,78 @@ describe('interaction — balanced condition (review Concrete 8, Problem 4 keys)
   })
 })
 
-describe('Bresler reciprocal', () => {
-  it('1/Pn = 1/Pnx + 1/Pny − 1/Po', () => {
-    expect(breslerReciprocal(2000, 1500, 4000)).toBeCloseTo(1 / (1 / 2000 + 1 / 1500 - 1 / 4000), 9)
-    // uniaxial degenerate: Pny = Po → Pn = Pnx
+// ─────────────────────────────────────────────────────────────────────────
+// E4 — THIS ROW USED TO VERIFY THE CODE AGAINST A COPY OF ITSELF.
+//
+// The assertion was
+//     breslerReciprocal(2000, 1500, 4000) ≈ 1 / (1/2000 + 1/1500 − 1/4000)
+// against an implementation that IS `1 / (1/Pnx + 1/Pny − 1/Po)`. The expected
+// value is the implementation retyped, so it can only catch a transcription
+// slip: if the formula itself were wrong, the test would have been written
+// wrong in the same way and agreed with it. The closed form IS the definition
+// of Bresler's reciprocal method, so there is no independent algebra to check
+// it against — which is exactly why the row needed something else.
+//
+// What replaces it are PROPERTIES a wrong implementation fails. The set was
+// checked against three plausible wrong formulas rather than assumed to
+// discriminate — every one is caught, and no single property catches all three:
+//
+//   formula                    sym   Pny=Po  Pnx=Po  bound  Po↑   Po→∞
+//   CORRECT                    pass  pass    pass    pass   pass  pass
+//   1/x + 1/y + 1/po  (sign)   pass  FAIL    FAIL    pass   FAIL  pass
+//   1/x − 1/y + 1/po  (swap)   FAIL  pass    FAIL    FAIL   pass  FAIL
+//   1/x + 1/y         (drop)   pass  FAIL    FAIL    pass   FAIL  pass
+//
+// Note the swap survives symmetry's companion — the Pny = Po degenerate — and
+// the Po-monotonicity check, which is why both degenerate cases and the
+// symmetry check all have to be here.
+//
+// The external PCA/spColumn cross-check (ValidationMap C003) is still open and
+// is what would close the row fully; this makes the row's INTERNAL evidence
+// real, it does not make it an independent reference.
+// ─────────────────────────────────────────────────────────────────────────
+describe('Bresler reciprocal — properties, not a restatement', () => {
+  it('is symmetric in the two axes', () => {
+    // Rules out `1/Pnx − 1/Pny + 1/Po`, which survives the Pny = Po degenerate
+    // case below and the Po-monotonicity check, but is not symmetric.
+    expect(breslerReciprocal(2000, 1500, 4000))
+      .toBeCloseTo(breslerReciprocal(1500, 2000, 4000), 9)
+  })
+
+  it('collapses to the uniaxial capacity when the other axis reaches Po', () => {
+    // 1/Pn = 1/Pnx + 1/Po − 1/Po = 1/Pnx. Rules out the sign error
+    // `+ 1/Po`, which gives 1000 here instead of 2000.
     expect(breslerReciprocal(2000, 4000, 4000)).toBeCloseTo(2000, 6)
+    expect(breslerReciprocal(4000, 1500, 4000)).toBeCloseTo(1500, 6)
+  })
+
+  it('is never stronger than the weaker of the two uniaxial capacities', () => {
+    // Biaxial bending cannot buy capacity: adding a second eccentricity can
+    // only take it away.
+    for (const [x, y, po] of [[2000, 1500, 4000], [3000, 900, 5000], [1200, 1200, 3000]]) {
+      expect(breslerReciprocal(x, y, po)).toBeLessThan(Math.min(x, y))
+    }
+  })
+
+  it('rises with either uniaxial capacity and falls as Po grows', () => {
+    // Monotonicity in each argument, with the Po direction being the one a
+    // dropped or misplaced term gets backwards.
+    expect(breslerReciprocal(2200, 1500, 4000)).toBeGreaterThan(breslerReciprocal(2000, 1500, 4000))
+    expect(breslerReciprocal(2000, 1700, 4000)).toBeGreaterThan(breslerReciprocal(2000, 1500, 4000))
+    expect(breslerReciprocal(2000, 1500, 9000)).toBeLessThan(breslerReciprocal(2000, 1500, 4000))
+  })
+
+  it('approaches the pure harmonic combination as Po → ∞', () => {
+    // With no axial term left, 1/Pn → 1/Pnx + 1/Pny. The limit is what pins
+    // the −1/Po term as a CORRECTION rather than a principal term.
+    const harmonic = 1 / (1 / 2000 + 1 / 1500)          // 857.142857…
+    expect(breslerReciprocal(2000, 1500, 1e15)).toBeCloseTo(harmonic, 6)
+    // and it approaches from ABOVE, monotonically — subtracting 1/Po makes the
+    // reciprocal smaller, so Pn larger, by less and less as Po grows.
+    const at = (po: number) => breslerReciprocal(2000, 1500, po)
+    expect(at(4000)).toBeGreaterThan(at(40_000))
+    expect(at(40_000)).toBeGreaterThan(at(400_000))
+    expect(at(400_000)).toBeGreaterThan(harmonic)
   })
 })
 
