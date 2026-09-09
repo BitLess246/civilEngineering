@@ -92,3 +92,31 @@ More importantly, export is GPU-bound. Under software rendering (SwiftShader) it
 manages roughly **0.5 fps**, which is hours for a few minutes of footage; on real
 hardware it is a short wait. Record wherever you like, but polish and export on a
 machine with a working GPU.
+
+### Doing it on Windows
+
+No source build is needed — Recordly publishes a prebuilt NSIS installer,
+`Recordly-windows-x64.exe`, at
+<https://github.com/webadderallorg/Recordly/releases>, and is on WinGet as
+`Webadderall.Recordly`. (Its README lists Visual Studio + CMake, but those are
+only for rebuilding the native helpers; the `win32-x64` binaries are committed.)
+
+Put the video and its sidecar in one folder, then either:
+
+- launch bar → **⋮** (More) → **"Open video file"**, which drops you straight
+  into the editor; or
+- in the editor, **Projects** → **Import**.
+
+Then **"Suggest Zooms from Cursor"** in the timeline, and **Export** → MP4 (the
+save dialog defaults to Downloads). Export uses the GPU ladder there — NVIDIA
+CUDA, else Direct3D 11, else ffmpeg.
+
+**The sidecar name is matched literally**, by appending `.cursor.json` to the
+video's path *including its extension*: `demo.mp4.cursor.json`, never
+`demo.cursor.json`. A missing sidecar is not an error — `get-cursor-telemetry`
+returns zero samples — so the only symptom of getting this wrong is that no zoom
+suggestions ever appear. Rename the video and you must rename the sidecar with it.
+
+Recording natively on Windows needs none of this: it captures its own cursor
+telemetry, uses Windows Graphics Capture and native WASAPI audio, and wants
+Windows 10 build 19041 or newer.
