@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { generateGridModel, removeElements, nodeId, buildGravityLoads, enforceSectionHierarchy, barContinuityGroups } from './modelBuilder'
+import {
+  generateGridModel, removeElements, nodeId, buildGravityLoads,
+  enforceSectionHierarchy, barContinuityGroups, refreshSelfWeight,
+  memberWeightPerLength, sectionArea, sectionGamma, GAMMA_C, GAMMA_S,
+} from './modelBuilder'
+import { storeyWeightBreakdown } from './seismic'
+import { memberMassPerLength, GRAVITY } from './modal'
+import { shapeByName } from './aiscSections'
+import { woodUnitWeight } from './woodDesign'
 import type { RectSection } from './model'
 
 const sec: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -152,5 +160,98 @@ describe('barContinuityGroups — one bar Ø per beam run / column stack', () =>
     const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section: rc('S', 300, 500) })
     m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const, shape: 'W310x79' }))
     expect(barContinuityGroups(m)).toHaveLength(0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// WHAT DOES A MEMBER WEIGH? There were FOUR answers.
+//
+// `buildGravityLoads`, `refreshSelfWeight`, `seismic.storeyWeightsFull` and
+// `modal.memberMassPerLength` each computed it independently, and each knew
+// about a different subset of the materials. Measured before the fix, on the
+// grid below:
+//
+//   path                   concrete  steel W310x52  wood DFL-2
+//   buildGravityLoads      ok        ×2.44          ok
+//   refreshSelfWeight      ok        ok             ok      ← the only whole one
+//   storeyWeightsFull      ok        ×2.44          ×4.89
+//   memberMassPerLength    ok        ok             ×4.89
+//
+// So the SAME model reported two different self-weights depending on whether
+// `refreshSelfWeight` had run, and a timber frame's seismic weight was the
+// concrete building's — `storeyWeightsFull` had no material branch at all.
+//
+// Nothing caught it because no test in the suite asserted the weight of a
+// steel or a timber member: the one self-weight assertion above this block is
+// 0.3 × 0.5 × 24, concrete. These are the missing tests.
+// ─────────────────────────────────────────────────────────────────────────
+describe('member self-weight — one answer, four call sites', () => {
+  const W310 = shapeByName('W310x52')!
+  const concrete: RectSection = { ...sec }
+  // The section's b×h is the shape's own bounding box, so the difference
+  // measured is the catalogue area rule and nothing else.
+  const steel: RectSection = { ...sec, b: W310.bf!, h: W310.d!, material: 'steel', shape: 'W310x52' }
+  const wood: RectSection = { ...sec, material: 'wood', woodSpecies: 'DFL-2' }
+
+  const trueW = {
+    concrete: 0.300 * 0.500 * GAMMA_C,              // 3.6000 kN/m
+    steel: (W310.A / 1e6) * GAMMA_S,                // 0.5205 kN/m
+    wood: 0.300 * 0.500 * woodUnitWeight(0.50),     // 0.7358 kN/m
+  }
+
+  it('a rolled shape weighs its catalogue area, not its bounding box', () => {
+    // The box is eight times the steel that is actually there.
+    expect(sectionArea(steel)).toBeCloseTo(W310.A / 1e6, 9)
+    expect((steel.b / 1000) * (steel.h / 1000) / sectionArea(steel)).toBeGreaterThan(7)
+    expect(sectionGamma(steel)).toBe(GAMMA_S)
+    expect(memberWeightPerLength(steel)).toBeCloseTo(trueW.steel, 6)
+  })
+
+  it('timber weighs G·9.81, not the concrete unit weight', () => {
+    expect(sectionGamma(wood)).toBeCloseTo(woodUnitWeight(0.50), 6)
+    expect(memberWeightPerLength(wood)).toBeCloseTo(trueW.wood, 6)
+    // The ratio that made a timber frame's modal mass ~5× its real one.
+    expect(GAMMA_C / sectionGamma(wood)).toBeCloseTo(4.89, 2)
+  })
+
+  it('concrete still honours the caller’s γc override', () => {
+    expect(memberWeightPerLength(concrete)).toBeCloseTo(trueW.concrete, 6)
+    expect(memberWeightPerLength(concrete, 25)).toBeCloseTo(0.3 * 0.5 * 25, 6)
+    // …and the override must NOT reach a material that has its own density.
+    expect(memberWeightPerLength(steel, 25)).toBeCloseTo(trueW.steel, 6)
+    expect(memberWeightPerLength(wood, 25)).toBeCloseTo(trueW.wood, 6)
+  })
+
+  describe.each([
+    ['concrete', concrete, trueW.concrete],
+    ['steel', steel, trueW.steel],
+    ['wood', wood, trueW.wood],
+  ])('a %s frame', (_name, section, w) => {
+    const build = () => {
+      const m = generateGridModel({ baysX: [5], baysZ: [4], storeyH: [3], section })
+      return { ...m, loads: buildGravityLoads(m, 0, 0) }
+    }
+    const swOf = (m: ReturnType<typeof build>) =>
+      (m.loads.find((l) => l.kind === 'member-udl' && l.sw) as { w: number } | undefined)?.w ?? 0
+
+    it('reports the same self-weight from every path, and it is the right one', () => {
+      const m = build()
+      // 1 — the load the model is created with
+      expect(swOf(m)).toBeCloseTo(w, 6)
+      // 2 — and after a section edit re-derives it. These two disagreed for
+      //     steel, so the number changed under the user without an edit to it.
+      expect(swOf(refreshSelfWeight(m))).toBeCloseTo(w, 6)
+      // 3 — the seismic storey weight built from the same members.
+      //     The grid's roof is a full perimeter (2×5 + 2×4 = 18 m of beam),
+      //     and each of the four 3 m columns gives half its weight to the
+      //     level above; the ground half goes to the foundation, not to W.
+      //     So 18 + 12/2 = 24 m of member length is counted.
+      const beamLen = 2 * 5 + 2 * 4
+      const colLen = 4 * 3
+      const swTotal = storeyWeightBreakdown(m).reduce((s, r) => s + r.selfWeight, 0)
+      expect(swTotal).toBeCloseTo(w * (beamLen + colLen / 2), 4)
+      // 4 — the modal mass, which is that weight over g
+      expect(memberMassPerLength(section)).toBeCloseTo(w / GRAVITY, 9)
+    })
   })
 })
