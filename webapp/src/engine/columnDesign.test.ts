@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   designAxialColumn, interaction, capacityAtEccentricity, breslerReciprocal,
-  momentMagnificationNonsway,
+  momentMagnificationNonsway, columnDetailingNotes,
+  type AxialColumnInput,
 } from './columnDesign'
 
 describe('axial — tied (review Concrete 7, Problem 2)', () => {
@@ -255,5 +256,91 @@ describe('interaction — all-around bar layout', () => {
     const p = capacityAtEccentricity({ ...base, numBars: 8, layout: 'all-around' }, r.balanced.eb)
     expect(p.Pn).toBeCloseTo(r.balanced.Pb, 0)
     expect(p.Mn).toBeCloseTo(r.balanced.Mb, 0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// A VERDICT THAT CANNOT FAIL — the column section.
+//
+// `axialOK` is φPn,max ≥ Pu, and in DESIGN mode the engine SIZES the steel to
+// meet Pu — so it passes almost by construction, and `rhoOK` was the only
+// thing standing between a nonsense section and a green page. That was not
+// enough: f'c = 0 simply bought thirty bars and reported BOTH verdicts true,
+// and a zero-width column (A_g = 0) reported φPn,max = 2045 kN against
+// Pu = 2000 kN.
+//
+// The errors run unconservative through d′ = cover + d_tie + d_b/2: a negative
+// cover pushes the outer bars OUTWARD and lengthens the lever arm, lifting the
+// balanced point of a 400×400 with 8-⌀20 from (Pb 1596 kN, Mb 328 kN·m) to
+// (1979, 413) — an envelope a quarter larger than the column has.
+// ─────────────────────────────────────────────────────────────────────────
+describe('non-physical column sections', () => {
+  const base: AxialColumnInput = {
+    shape: 'tied', b: 400, h: 400, cover: 40, barDia: 20, tieDia: 10,
+    fc: 28, fy: 415, Pu: 2000,
+  }
+
+  it('the reference column passes both verdicts', () => {
+    const r = designAxialColumn(base)
+    expect(r.inputNotes).toEqual([])
+    expect(r.axialOK).toBe(true)
+    expect(r.rhoOK).toBe(true)
+  })
+
+  it("zero-strength concrete no longer passes by buying bars", () => {
+    // MEASURED before the guard: axialOK true, rhoOK true, 30 bars, ρ = 5.9%.
+    const r = designAxialColumn({ ...base, fc: 0 })
+    expect(r.axialOK).toBe(false)
+    expect(r.rhoOK).toBe(false)
+    expect(r.inputNotes.join(' ')).toMatch(/f'c/)
+  })
+
+  it('a column with no cross-section cannot carry its load', () => {
+    // MEASURED: A_g = 0 reported φPn,max = 2045 kN ≥ Pu = 2000 kN.
+    const r = designAxialColumn({ ...base, b: 0 })
+    expect(r.axialOK).toBe(false)
+  })
+
+  it('negative cover is refused, not rewarded with lever arm', () => {
+    expect(designAxialColumn({ ...base, cover: -40 }).axialOK).toBe(false)
+    // The interaction curve is where it actually paid: d′ = cover + d_t + d_b/2.
+    const pm = { b: 400, h: 400, cover: 40, barDia: 20, tieDia: 10, fc: 28, fy: 415, numBars: 8 }
+    const good = interaction(pm)
+    const bad = interaction({ ...pm, cover: -40 })
+    expect(bad.balanced.Mb).toBeGreaterThan(good.balanced.Mb * 1.2)
+  })
+
+  it('a negative bar or tie Ø is refused — squaring hid the sign', () => {
+    // A_b = π(−20)²/4 is the area of a ⌀20 bar, so only d′ carried the sign,
+    // and tie spacing came out at −320 mm.
+    expect(designAxialColumn({ ...base, barDia: -20 }).axialOK).toBe(false)
+    expect(designAxialColumn({ ...base, tieDia: 0 }).axialOK).toBe(false)
+  })
+
+  it('a supplied bar count below the code minimum is refused, not rounded up', () => {
+    // numBars 0 and −4 both became 4 silently: the column CHECKED was not the
+    // column asked for.
+    expect(designAxialColumn({ ...base, numBars: 0 }).axialOK).toBe(false)
+    expect(designAxialColumn({ ...base, numBars: -4 }).axialOK).toBe(false)
+    expect(designAxialColumn({ ...base, numBars: 8 }).axialOK).toBe(true)
+  })
+
+  it('a spiral column needs its diameter', () => {
+    const { b: _b, h: _h, ...noRect } = base
+    expect(designAxialColumn({ ...noRect, shape: 'spiral' }).axialOK).toBe(false)
+    expect(designAxialColumn({ ...noRect, shape: 'spiral', D: 450 }).axialOK).toBe(true)
+  })
+
+  it('the covers must leave room for a cage', () => {
+    // 2·(190 + 10 + 10) = 420 > 400: the two faces have crossed.
+    expect(designAxialColumn({ ...base, cover: 190 }).inputNotes.join(' '))
+      .toMatch(/no room for a cage/)
+    expect(designAxialColumn({ ...base, cover: 40 }).inputNotes).toEqual([])
+  })
+
+  it('omitting the optional inputs is not an error', () => {
+    // The guard rejects what cannot exist, not what the caller left to the
+    // engine: numBars and fyt are both derived when absent.
+    expect(columnDetailingNotes(base)).toEqual([])
   })
 })

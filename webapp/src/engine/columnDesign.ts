@@ -58,7 +58,17 @@ export interface AxialColumnResult {
   bars: number
   Ast: number                  // provided, mm²
   rho: number
-  rhoOK: boolean               // RHO_MIN ≤ ρ ≤ RHO_MAX
+  rhoOK: boolean               // RHO_MIN ≤ ρ ≤ RHO_MAX (false if `inputNotes`)
+  /**
+   * Why this column is not a real section — empty when it is.
+   *
+   * Both verdicts are forced false while this is non-empty. They had to be:
+   * `axialOK` is φPn,max ≥ Pu, and in DESIGN mode the engine SIZES the steel
+   * to meet Pu, so it passes almost by construction — f'c = 0 simply bought
+   * thirty bars and reported `axialOK` AND `rhoOK` true. A zero-width column
+   * (A_g = 0) reported φPn,max = 2045 kN against Pu = 2000 kN the same way.
+   */
+  inputNotes: string[]
   minBars: number
   Po: number                   // kN
   PnMax: number                // kN
@@ -83,7 +93,48 @@ export interface AxialColumnResult {
 
 const ES = 600 // 0.003·Es with Es = 200 GPa → fs = 600(c−d)/c
 
+/** The fields `columnDetailingNotes` reads. */
+export type ColumnDetailingInputs = Pick<AxialColumnInput,
+  'shape' | 'cover' | 'barDia' | 'tieDia' | 'fc' | 'fy'>
+  & Partial<Pick<AxialColumnInput, 'b' | 'h' | 'D' | 'fyt' | 'numBars' | 'Pu'>>
+
+/**
+ * Geometry and material that must be physical before the column algebra means
+ * anything, §410 / §425.7.
+ *
+ * As with the beam, the errors run UNCONSERVATIVE. d′ = cover + d_tie + d_b/2,
+ * so a negative cover pushes the outer bars OUTWARD and lengthens the lever
+ * arm: on a 400×400 with 8-⌀20 it lifted the balanced point from
+ * (Pb 1596 kN, Mb 328 kN·m) to (1979, 413) — a P–M envelope a quarter larger
+ * than the column has, with no verdict of any kind attached to it.
+ */
+export function columnDetailingNotes(i: ColumnDetailingInputs): string[] {
+  const n: string[] = []
+  const pos = (v: number | undefined, what: string) => {
+    if (!(v != null && Number.isFinite(v) && v > 0)) n.push(`${what} must be greater than zero (got ${v})`)
+  }
+  if (i.shape === 'tied') { pos(i.b, 'width b'); pos(i.h, 'depth h') }
+  else pos(i.D, 'diameter D')
+  pos(i.fc, "concrete strength f'c"); pos(i.fy, 'bar yield fy')
+  if (i.fyt != null) pos(i.fyt, 'tie yield fyt')
+  pos(i.barDia, 'bar Ø'); pos(i.tieDia, 'tie/spiral Ø')
+  if (!(Number.isFinite(i.cover) && i.cover >= 0)) n.push(`clear cover cannot be negative (got ${i.cover})`)
+  // `numBars` is the ANALYSE path — a supplied count the cage has to be able
+  // to hold. Omitted, the engine designs it and cannot get it wrong.
+  const minBars = i.shape === 'tied' ? 4 : 6
+  if (i.numBars != null && !(Number.isFinite(i.numBars) && i.numBars >= minBars))
+    n.push(`a ${i.shape} column needs at least ${minBars} bars (got ${i.numBars})`)
+  // The cage has to fit between the covers on the axis it bends about.
+  const least = i.shape === 'tied' ? Math.min(i.b ?? NaN, i.h ?? NaN) : (i.D ?? NaN)
+  const dPrime = i.cover + i.tieDia + i.barDia / 2
+  if (Number.isFinite(least) && Number.isFinite(dPrime) && least - 2 * dPrime <= 0)
+    n.push(`cover, tie and half a bar leave no room for a cage in a ${least} mm dimension`)
+  if (i.Pu != null && !Number.isFinite(i.Pu)) n.push('the factored axial load Pu is not a number')
+  return n
+}
+
 export function designAxialColumn(i: AxialColumnInput): AxialColumnResult {
+  const inputNotes = columnDetailingNotes(i)
   const fyt = i.fyt ?? i.fy
   const tied = i.shape === 'tied'
   const Ag = tied ? (i.b ?? 0) * (i.h ?? 0) : (Math.PI / 4) * (i.D ?? 0) ** 2
@@ -113,7 +164,7 @@ export function designAxialColumn(i: AxialColumnInput): AxialColumnResult {
   const bars = tied ? placedBarCount(asked) : Math.max(minBars, Math.round(asked))
   const Ast = bars * Ab
   const rho = Ast / Ag
-  const rhoOK = rho >= RHO_MIN - 1e-9 && rho <= RHO_MAX + 1e-9
+  const rhoOK = inputNotes.length === 0 && rho >= RHO_MIN - 1e-9 && rho <= RHO_MAX + 1e-9
 
   const Po = (0.85 * i.fc * (Ag - Ast) + i.fy * Ast) / 1000
   const PnMax = alpha * Po
@@ -191,7 +242,8 @@ export function designAxialColumn(i: AxialColumnInput): AxialColumnResult {
   return {
     shape: i.shape, Ag, alpha, phi, AstReq, rhoReq,
     bars, Ast, rho, rhoOK, minBars,
-    Po, PnMax, phiPnMax, axialOK: phiPnMax >= i.Pu - 1e-9,
+    Po, PnMax, phiPnMax, axialOK: inputNotes.length === 0 && phiPnMax >= i.Pu - 1e-9,
+    inputNotes,
     tieDiaMin, tieSpacing, tieGovern,
     seismicLoZone, seismicSConf, seismicSOut,
     tieSpacingFinal, tieSpacingLabel,

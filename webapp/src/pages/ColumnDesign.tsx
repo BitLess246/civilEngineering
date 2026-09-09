@@ -291,20 +291,20 @@ export default function ColumnDesign() {
             <Pick label="Shape" value={eccentric ? 'tied' : shape} onChange={(v) => setShape(v as ColumnShape)}
               options={eccentric ? [['tied', 'Tied rectangular']] : [['tied', 'Tied rectangular'], ['spiral', 'Spiral circular']]} />
             {tied ? <>
-              <Num label="Width b" unit="mm" value={b} onChange={setB} />
-              <Num label="Depth h (bending dir.)" unit="mm" value={h} onChange={setH} />
+              <Num label="Width b" unit="mm" value={b} onChange={setB} min={1} />
+              <Num label="Depth h (bending dir.)" unit="mm" value={h} onChange={setH} min={1} />
             </> : (
-              <Num label="Diameter D" unit="mm" value={D} onChange={setD} />
+              <Num label="Diameter D" unit="mm" value={D} onChange={setD} min={1} />
             )}
-            <Num label="Clear cover" unit="mm" value={cover} onChange={setCover} />
-            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={dbEff} onChange={setBarDia}
+            <Num label="Clear cover" unit="mm" value={cover} onChange={setCover} min={0} />
+            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={dbEff} onChange={setBarDia} min={1}
               disabled={!!cageChoice}
               hint={cageChoice ? (cageChoice.db ? 'chosen by the optimiser' : 'no compliant cage — see the ranking') : undefined} />
-            <Num label={tied ? <>Tie <KTex tex="d_t" /></> : <>Spiral <KTex tex="d_s" /></>} unit="mm" value={tieDia} onChange={setTieDia} />
+            <Num label={tied ? <>Tie <KTex tex="d_t" /></> : <>Spiral <KTex tex="d_s" /></>} unit="mm" value={tieDia} onChange={setTieDia} min={1} />
             <Pick label="Bars" value={eccentric ? 'analyze' : barMode} onChange={(v) => setBarMode(v as BarMode)}
               options={eccentric ? [['analyze', 'Given count']] : [['design', 'Design automatically'], ['analyze', 'Given count']]} />
             {(barMode === 'analyze' || eccentric) && (
-              <Num label="No. of bars" value={numBars} onChange={setNumBars} />
+              <Num label="No. of bars" value={numBars} onChange={setNumBars} min={tied ? 4 : 6} step="1" />
             )}
             {eccentric && (
               <Pick label="Bar distribution" value={layout} onChange={(v) => setLayout(v as BarLayout)}
@@ -313,9 +313,9 @@ export default function ColumnDesign() {
           </Card>
 
           <Card title="Materials">
-            <Num label={<KTex tex="f'_c" />} unit="MPa" value={fc} onChange={setFc} />
-            <Num label={<KTex tex="f_y" />} unit="MPa" value={fy} onChange={setFy} />
-            <Num label={<KTex tex="f_{yt}" />} unit="MPa" value={fyt} onChange={setFyt} />
+            <Num label={<KTex tex="f'_c" />} unit="MPa" value={fc} onChange={setFc} min={1} />
+            <Num label={<KTex tex="f_y" />} unit="MPa" value={fy} onChange={setFy} min={1} />
+            <Num label={<KTex tex="f_{yt}" />} unit="MPa" value={fyt} onChange={setFyt} min={1} />
           </Card>
 
           <Card title="Lateral system / seismic">
@@ -407,8 +407,18 @@ export default function ColumnDesign() {
                 <Row alert={util > 1} label="Utilisation" value={`${(util * 100).toFixed(0)} %`}
                   sub={`φPn=${f1(cap.phi * cap.Pn)} kN @ e=${f0((MuEff / Pu) * 1000)} mm`} />
               )}
+              {/* The section itself, before any capacity means anything. Both
+                  verdicts are forced false while these stand, so they have to
+                  be visible or the page fails with no reason given. */}
+              {axial.inputNotes.map((n, k) => (
+                <Row key={k} alert label="⚠ Section" value={n} />
+              ))}
               <Row label="Bars" value={`${axial.bars} ⌀${dbEff} mm`}
-                sub={`ρ=${(axial.rho * 100).toFixed(2)}% ${axial.rhoOK ? '✓' : '✗ (1–8%)'}`} />
+                sub={`ρ=${(axial.rho * 100).toFixed(2)}%${
+                  // Only claim §410.6.1.1 when ρ is what actually failed — the
+                  // flag is also forced down by a non-physical section.
+                  axial.inputNotes.length > 0 ? ''
+                    : axial.rhoOK ? ' ✓' : ' ✗ (1–8%)'}`} />
               <Row alert={!axial.axialOK && !eccentric} label={<KTex tex="\phi P_{n,max}" />}
                 value={`${f1(axial.phiPnMax)} kN`}
                 sub={`Po=${f1(axial.Po)} · ${axial.alpha.toFixed(2)}Po cap`} />

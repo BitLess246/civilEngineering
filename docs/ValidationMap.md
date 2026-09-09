@@ -45,6 +45,7 @@ pass.
 | C003 | Biaxial Bending | PCA Column | 🔶 | Bresler reciprocal identity `columnDesign.test.ts` "1/Pn = 1/Pnx + 1/Pny − 1/Po"; PCA Column cross-check open |
 | C004 | Slender Column | PCA Column | 🔶 | `columnDesign.test.ts` "slenderness — nonsway moment magnification": 34+12(M1/M2) limit, Euler load, δ ≥ 1, M2,min = Pu(15+0.03h), instability flag; PCA cross-check open |
 | C005 | Spiral Column | Manual | ✅ | `columnDesign.test.ts` "axial — spiral (review Concrete 7, Problem 3 / key 2,423.70 kN)" + spiral ratio & pitch limits |
+| C006 | Non-physical sections are refused | Hand Calc | ✅ | `columnDesign.test.ts` "non-physical column sections" — f'c 0, A_g 0, negative cover, negative bar/tie Ø, a bar count below the §410.7.3.1 minimum, a spiral with no D, covers that cross. Each measured green before the guard (f'c = 0 passed BOTH `axialOK` and `rhoOK` by buying 30 bars; cover −40 mm lifted the balanced point of a 400×400 8-⌀20 from Pb 1596 kN / Mb 328 kN·m to 1979 / 413) |
 
 ---
 
