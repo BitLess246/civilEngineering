@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { designSlabDDM } from './slabDDM'
+import { designSlabDDM, type SlabInput } from './slabDDM'
 
 const base = { lx: 6, ly: 6, colWidth: 400, D: 5.0, L: 2.0, fc: 28, fy: 415, cover: 20, barDia: 12 }
 
@@ -118,5 +118,66 @@ describe('the minimum thickness is not always enough', () => {
     expect(easy.hGrownForSteel).toBe(false)
     expect(easy.tensionControlled).toBe(true)
     expect(easy.applicable).toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// `applicable` LOOKED like it already caught these. It did not — it CO-
+// INCIDED with some of them.
+//
+// `applicable` is a METHOD flag: §408.10.2's two-way, L ≤ 2D, and every strip
+// tension-controlled. A negative dead load only tripped it because `L ≤ 2·D`
+// reads `2 ≤ −6`; a zero span only because `long/short` went to infinity and
+// failed the two-way test. Nothing was looking at the inputs, so whatever the
+// coincidences did not happen to cover sailed through:
+//
+//   cover = −20   d = 149 mm in a 135 mm slab      applicable AND tc true
+//   barDia = 0    d 109 → 115 mm                    applicable AND tc true
+//   fy = 0        h shrank to its 100 mm floor      applicable AND tc true
+//   L = −2        wu 6.8 → 0.4 kPa                  applicable AND tc true
+//   colWidth −400 ln 5.40 m on a 5.0 m span, Mo +38%  applicable AND tc true
+// ─────────────────────────────────────────────────────────────────────────
+describe('non-physical slab panels', () => {
+  const base: SlabInput = { lx: 5, ly: 6, colWidth: 400, D: 3, L: 2, fc: 28, fy: 415 }
+  const both = (o: Partial<SlabInput> = {}) => {
+    const r = designSlabDDM({ ...base, ...o })
+    return [r.applicable, r.tensionControlled]
+  }
+
+  it('the reference panel is applicable and tension-controlled', () => {
+    expect(designSlabDDM(base).inputNotes).toEqual([])
+    expect(both()).toEqual([true, true])
+  })
+
+  it('a negative cover no longer puts d outside the slab', () => {
+    const r = designSlabDDM({ ...base, cover: -20 })
+    expect(r.inputNotes.length).toBeGreaterThan(0)
+    expect(both({ cover: -20 })).toEqual([false, false])
+  })
+
+  it('a negative LIVE load no longer cuts the demand', () => {
+    // The dead-load case was caught only by the L ≤ 2D coincidence; the live
+    // one had no coincidence to catch it and dropped wu from 6.8 to 0.4 kPa.
+    expect(both({ L: -2 })).toEqual([false, false])
+    expect(designSlabDDM({ ...base, L: -2 }).inputNotes.join(' ')).toMatch(/live load/)
+    // And the dead-load case now fails for the right reason.
+    expect(designSlabDDM({ ...base, D: -3 }).inputNotes.join(' ')).toMatch(/dead load/)
+  })
+
+  it('zero-yield steel and a ⌀0 bar are refused', () => {
+    expect(both({ fy: 0 })).toEqual([false, false])
+    expect(both({ barDia: 0 })).toEqual([false, false])
+  })
+
+  it('the support cannot be negative, nor wider than the panel', () => {
+    // −400 made the clear span 5.40 m on a 5.0 m panel and Mo 38% larger.
+    expect(both({ colWidth: -400 })).toEqual([false, false])
+    expect(designSlabDDM({ ...base, colWidth: 6000 }).inputNotes.join(' '))
+      .toMatch(/no clear span/)
+  })
+
+  it('a knife-edge support stays legal', () => {
+    // colWidth 0 is an idealisation, not an impossibility: ln = the full span.
+    expect(designSlabDDM({ ...base, colWidth: 0 }).inputNotes).toEqual([])
   })
 })

@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { twoWayVc, oneWayVc } from './shear';
+import { compact, positive, nonNegative, finite } from './inputGuards';
 import { flexuralSteel, matLayout } from './flexure';
 import { type SolutionStep, sn0, sn1, sn2 } from '../lib/solution';
 
@@ -66,6 +67,16 @@ export interface PileCapResult {
   steelY: SteelDetail;
 
   ldRequired: number; ldAvailable: number; ldOK: boolean;
+
+  /**
+   * Why this is not a pile cap — empty when it is one.
+   *
+   * All six verdicts above are ANDed with `inputNotes.length === 0`. They had
+   * to be: each was wired to its own capacity ratio and none to whether the
+   * inputs describe a cap, so zero-yield steel reported INFINITE reinforcement
+   * under six green ticks.
+   */
+  inputNotes: string[];
 }
 
 /** Returns pile centres in the cap coordinate system (cap centroid = pile group centroid = origin). */
@@ -125,7 +136,55 @@ function devLength(db: number, fc: number, fy: number, cover: number, lambda: nu
   return Math.ceil((3 * fy) / (40 * lambda * Math.sqrt(fc) * ratio) * db);
 }
 
+/**
+ * Geometry and materials that must be physical before any capacity ratio
+ * means anything.
+ *
+ * The cap solves its own thickness — `Dc` is rounded up from the depth the
+ * shear checks demand — and then reports `d = Dc − cover − d_b/2`. A negative
+ * cover therefore makes d LARGER than the cap it is measured in: at
+ * cover = −75 the reference cap below came out 525 mm thick with a claimed
+ * effective depth of 590 mm, putting the bars 65 mm outside the concrete,
+ * with all six verdicts true.
+ *
+ * Measured on the same cap (4 piles, ⌀400 at 1200 c/c, 400 edge, 400×400
+ * column, f'c 28, fy 415, cover 75, ⌀20, Pu 2800 kN):
+ *
+ *   fy = 0          As = Infinity, bars = Infinity        ALL SIX true
+ *   barDia = 0      bars = Infinity                        ALL SIX true
+ *   cover = −75     Dc 525 mm < d 590 mm                    ALL SIX true
+ *   spacing = 0     all four piles at one point             ALL SIX true
+ *   pileDia = 0     punching perimeter around nothing       ALL SIX true
+ *   colX = 0        Dc 675 → 1025 mm                        ALL SIX true
+ *   pileEmbed = −100                                        ALL SIX true
+ */
+export function pileCapNotes(inp: PileCapInput): string[] {
+  return compact([
+    positive(inp.pileDia, 'pile Ø'),
+    positive(inp.pileCapacity, 'allowable load per pile'),
+    positive(inp.spacing, 'pile spacing'),
+    positive(inp.edgeDist, 'edge distance'),
+    positive(inp.colX, 'column dimension in x'),
+    positive(inp.colY, 'column dimension in y'),
+    positive(inp.fc, "concrete strength f'c"),
+    positive(inp.fy, 'bar yield fy'),
+    positive(inp.barDia, 'bar Ø'),
+    nonNegative(inp.cover, 'clear cover'),
+    nonNegative(inp.pileEmbed, 'pile embedment into the cap'),
+    inp.lambda != null ? positive(inp.lambda, 'lightweight factor λ') : null,
+    finite(inp.serviceLoad, 'the service load'),
+    finite(inp.ultimateLoad, 'the factored load Pu'),
+    finite(inp.serviceMomX, 'the service moment Mx'),
+    finite(inp.serviceMomY, 'the service moment My'),
+    finite(inp.ultimateMomX, 'the factored moment Mux'),
+    finite(inp.ultimateMomY, 'the factored moment Muy'),
+  ]);
+}
+
 export function designPileCap(inp: PileCapInput): PileCapResult {
+  const inputNotes = pileCapNotes(inp);
+  // Every verdict is ANDed with this — see `inputNotes` on the result.
+  const real = inputNotes.length === 0;
   const lambda = inp.lambda ?? 1;
   const coords = pileCentres(inp.nPiles, inp.spacing);
   const N = coords.length;
@@ -141,7 +200,7 @@ export function designPileCap(inp: PileCapInput): PileCapResult {
   const factReactions = calcReactions(coords, inp.ultimateLoad, inp.ultimateMomX, inp.ultimateMomY);
   const maxReaction     = Math.max(...reactions);
   const maxFactReaction = Math.max(...factReactions);
-  const capacityOK = maxReaction <= inp.pileCapacity;
+  const capacityOK = real && maxReaction <= inp.pileCapacity;
 
   const betaC = Math.max(inp.colX, inp.colY) / Math.min(inp.colX, inp.colY);
 
@@ -263,14 +322,15 @@ export function designPileCap(inp: PileCapInput): PileCapResult {
   return {
     capBx, capBy, Dc, d,
     coords, reactions, factReactions, maxReaction, capacityOK,
-    VuPunchCol,  phiVcPunchCol,  punchColOK:  phiVcPunchCol  >= VuPunchCol,
-    VuPunchPile, phiVcPunchPile, punchPileOK: phiVcPunchPile >= VuPunchPile,
-    VuBeamX,     phiVcBeamX,     beamXOK:     phiVcBeamX     >= VuBeamX,
-    VuBeamY,     phiVcBeamY,     beamYOK:     phiVcBeamY     >= VuBeamY,
+    VuPunchCol,  phiVcPunchCol,  punchColOK:  real && phiVcPunchCol  >= VuPunchCol,
+    VuPunchPile, phiVcPunchPile, punchPileOK: real && phiVcPunchPile >= VuPunchPile,
+    VuBeamX,     phiVcBeamX,     beamXOK:     real && phiVcBeamX     >= VuBeamX,
+    VuBeamY,     phiVcBeamY,     beamYOK:     real && phiVcBeamY     >= VuBeamY,
     MuX, MuY,
     steelX: { As: flexX.As, rho: flexX.rho, bars: layoutX.n, spacing: layoutX.spacing, usedMin: flexX.usedMin },
     steelY: { As: flexY.As, rho: flexY.rho, bars: layoutY.n, spacing: layoutY.spacing, usedMin: flexY.usedMin },
-    ldRequired: ldReq, ldAvailable: ldAvail, ldOK: ldAvail >= ldReq,
+    ldRequired: ldReq, ldAvailable: ldAvail, ldOK: real && ldAvail >= ldReq,
+    inputNotes,
   };
 }
 

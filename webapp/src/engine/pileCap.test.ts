@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { designPileCap, pileCapSolution, pileCentres } from './pileCap';
+import { designPileCap, pileCapSolution, pileCentres, type PileCapInput } from './pileCap';
 
 // Shared base inputs — 4-pile square cap, concentric load
 const BASE = {
@@ -188,3 +188,75 @@ describe('pileCapSolution — the printed report', () => {
     expect(JSON.stringify(step.lines)).toMatch(/uplift/i);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// A VERDICT THAT CANNOT FAIL — the cap's six booleans.
+//
+// The cap SOLVES its own thickness: Dc is rounded up from the depth the shear
+// checks demand, and d is then reported as Dc − cover − d_b/2. So a negative
+// cover makes d LARGER than the cap it is measured in. At cover = −75 the
+// reference cap below came out 525 mm thick with a claimed effective depth of
+// 590 mm — the bars 65 mm OUTSIDE the concrete — and every one of capacityOK,
+// punchColOK, punchPileOK, beamXOK, beamYOK and ldOK read true.
+//
+// Measured on the same cap:
+//   fy = 0            As = Infinity, bars = Infinity     ALL SIX true
+//   barDia = 0        bars = Infinity                     ALL SIX true
+//   spacing = 0       four piles at one point             ALL SIX true
+//   pileDia = 0       punching perimeter around nothing   ALL SIX true
+//   colX = 0          Dc 675 → 1025 mm                    ALL SIX true
+//   pileEmbed = −100                                      ALL SIX true
+// ─────────────────────────────────────────────────────────────────────────
+describe('non-physical pile caps', () => {
+  const base: PileCapInput = {
+    serviceLoad: 2000, serviceMomX: 50, serviceMomY: 30,
+    ultimateLoad: 2800, ultimateMomX: 70, ultimateMomY: 42,
+    nPiles: 4, pileDia: 400, pileCapacity: 700, spacing: 1200, edgeDist: 400,
+    colX: 400, colY: 400, fc: 28, fy: 415, cover: 75, barDia: 20, pileEmbed: 100,
+  }
+  const verdicts = (o: Partial<PileCapInput> = {}) => {
+    const r = designPileCap({ ...base, ...o })
+    return [r.capacityOK, r.punchColOK, r.punchPileOK, r.beamXOK, r.beamYOK, r.ldOK]
+  }
+  const allFalse = [false, false, false, false, false, false]
+
+  it('the reference cap passes all six with no notes', () => {
+    expect(designPileCap(base).inputNotes).toEqual([])
+    expect(verdicts()).toEqual([true, true, true, true, true, true])
+  })
+
+  it('a negative cover no longer puts the bars outside the concrete', () => {
+    const r = designPileCap({ ...base, cover: -75 })
+    // The inversion itself, pinned: this is what "unconservative" looks like.
+    expect(r.d).toBeGreaterThan(r.Dc)
+    expect(verdicts({ cover: -75 })).toEqual(allFalse)
+  })
+
+  it('zero-yield steel no longer passes with infinite reinforcement', () => {
+    expect(designPileCap({ ...base, fy: 0 }).steelX.As).toBe(Infinity)
+    expect(verdicts({ fy: 0 })).toEqual(allFalse)
+  })
+
+  it('a ⌀0 bar no longer passes with an infinite bar count', () => {
+    expect(designPileCap({ ...base, barDia: 0 }).steelX.bars).toBe(Infinity)
+    expect(verdicts({ barDia: 0 })).toEqual(allFalse)
+  })
+
+  it('the pile group must be a group: a diameter and a spacing', () => {
+    // spacing 0 stacks all four piles on one point and shrank the cap to
+    // 800 mm square; pileDia 0 draws a punching perimeter around nothing.
+    expect(verdicts({ spacing: 0 })).toEqual(allFalse)
+    expect(verdicts({ pileDia: 0 })).toEqual(allFalse)
+  })
+
+  it('the column and the embedment must be real', () => {
+    expect(verdicts({ colX: 0 })).toEqual(allFalse)
+    expect(verdicts({ pileEmbed: -100 })).toEqual(allFalse)
+  })
+
+  it('a zero cover and a zero embedment stay legal', () => {
+    // Both are things a designer may specify; only the negative is impossible.
+    expect(designPileCap({ ...base, cover: 0 }).inputNotes).toEqual([])
+    expect(designPileCap({ ...base, pileEmbed: 0 }).inputNotes).toEqual([])
+  })
+})
