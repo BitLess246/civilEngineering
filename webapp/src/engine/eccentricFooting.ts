@@ -5,7 +5,7 @@
 // peak pressure (conservative), punching on the average pressure.
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing } from './bearing';
-import { punchingDepth, oneWayShearDepth, type ColumnPosition } from './shear';
+import { punchingDepth, oneWayShearDepth, depthSolved, type ColumnPosition } from './shear';
 import { flexuralSteel, matLayout, type AsMinBasis } from './flexure';
 
 export interface EccentricFootingInput {
@@ -102,7 +102,6 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
 
   let Dc = 0.25;
   let B = 0, qNet = 0, quMax = 0, dPunch = 0, dBeam = 0, qMaxService = 0;
-  let punchOK = true, beamOK = true, bearingOK = true;
   if (analysis === 'analyze') {
     B = i.givenB ?? 0;
     Dc = (i.givenDc ?? 250) / 1000;
@@ -110,10 +109,6 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
     qMaxService = (i.serviceLoad / (B * B)) * (1 + (6 * e) / B);
     quMax = (i.ultimateLoad / (B * B)) * (1 + (6 * eU) / B);
     ({ dPunch, dBeam } = shearDepths(B, quMax));
-    const dProv = Dc * 1000 - i.cover - i.barDia;
-    punchOK = dProv >= dPunch;
-    beamOK = dProv >= dBeam;
-    bearingOK = qMaxService <= qNet + 1e-9;
   } else if (method === 'approximate') {
     qNet = qNetAt(Dc);
     B = sizeB(qNet);
@@ -135,6 +130,28 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
   }
 
   const DcMm = Dc * 1000;
+  // ── THE THREE VERDICTS ARE CHECKS, NOT ASSERTIONS ──────────────────────
+  //
+  // The third copy of the defect fixed in `isolatedFooting` (#726) and
+  // `rectangularFooting` above: `punchOK`, `beamOK` and `bearingOK` assigned
+  // only in `analyze` mode, hardcoded true in both DESIGN paths.
+  //
+  // `bearingOK` is the one that matters most here. It is the primary
+  // geotechnical check — the peak service pressure under an eccentric pad
+  // against what the soil is allowed to carry — and in design mode it was
+  // never computed at all. Measured before this change, q_allow = 0, a
+  // negative column load and a 30 m overburden each came back
+  // `bearingOK: true` with B = NaN.
+  //
+  // Measured now against the section that will be BUILT, gated on the pad
+  // having a plan at all and on the depth solve not having saturated
+  // (`depthSolved`, shared with the other two footings).
+  const dProvided = DcMm - i.cover - i.barDia;
+  const geometryOK = [B, qNet, qMaxService, quMax, DcMm, dProvided].every(Number.isFinite) && B > 0;
+  const shearOK = (dReq: number) => geometryOK && depthSolved(dReq) && dProvided >= dReq;
+  const punchOK = shearOK(dPunch);
+  const beamOK = shearOK(dBeam);
+  const bearingOK = geometryOK && qMaxService <= qNet + 1e-9;
   const dFlex = DcMm - i.cover - i.barDia / 2;
   const arm = (B - cm) / 2;
   const Mu = quMax * B * (arm * arm) / 2;   // conservative: peak pressure across the width
@@ -152,6 +169,6 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
     dPunch, dBeam, dFlex, kernOK: e <= B / 6 + 1e-9,
     steelArea: flex.As, rho: flex.rho, usedMinSteel: flex.usedMin,
     minGoverning: flex.minGoverning, asMinBeam: flex.asMinBeam, asMinSlab: flex.asMinSlab, bars: layout.n, barSpacing: layout.spacing,
-    analysis, method, dProvided: DcMm - i.cover - i.barDia, punchOK, beamOK, bearingOK,
+    analysis, method, dProvided, punchOK, beamOK, bearingOK,
   };
 }

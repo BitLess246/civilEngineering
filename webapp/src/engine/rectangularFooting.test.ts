@@ -67,3 +67,53 @@ describe('analysis & solution methods', () => {
     expect(thin.punchOK && thin.beamOK).toBe(false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE THIRD COPY OF THE SAME DEFECT.
+//
+// `isolatedFooting` (#726), this engine and `eccentricFooting` each carried
+// `let punchOK = true` assigned ONLY in `analyze` mode, so both DESIGN paths
+// returned a hardcoded pass. Measured before the fix: q_allow = 0, a negative
+// column load, and a 30 m overburden all came back `punchOK: true,
+// beamOK: true` with Bx = NaN.
+//
+// The gate is not a NaN check on the depths — B goes NaN while d_punch and
+// d_beam stay finite, so a finiteness test on the requirement walks straight
+// past it. The pad has to HAVE a plan, and the depth solve must not have
+// saturated at MAX_SHEAR_DEPTH.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the shear verdicts are a check, not an assertion', () => {
+  const sq: RectFootingInput = { ...base, sizing: { mode: 'ratio', ratio: 1 } };
+
+  it('a sound pad still passes in every mode, and passes for a reason', () => {
+    for (const over of [{}, { solutionMethod: 'approximate' as const }]) {
+      const r = designRectangularFooting({ ...sq, ...over });
+      expect(r.punchOK).toBe(true);
+      expect(r.beamOK).toBe(true);
+      expect(r.dProvided).toBeGreaterThanOrEqual(r.dPunch);
+      expect(r.dProvided).toBeGreaterThanOrEqual(Math.max(r.dBeamLong, r.dBeamShort));
+    }
+  });
+
+  it('a pad with no plan fails both, however the pressure was destroyed', () => {
+    for (const over of [
+      { qAllow: 0 },
+      { serviceLoad: -1000, ultimateLoad: -1400 },
+      { H: 30 },                                     // overburden swallows q_allow
+    ]) {
+      const r = designRectangularFooting({ ...sq, ...over });
+      expect(Number.isFinite(r.Bx)).toBe(false);
+      expect(r.punchOK).toBe(false);
+      expect(r.beamOK).toBe(false);
+    }
+  });
+
+  it('analyze mode is unchanged: a thin given slab still fails, an ample one passes', () => {
+    const sound = designRectangularFooting(sq);
+    const thin = designRectangularFooting({ ...sq, analysis: 'analyze', givenBx: sound.Bx, givenBy: sound.By, givenDc: 150 });
+    expect(thin.punchOK).toBe(false);
+    const ample = designRectangularFooting({ ...sq, analysis: 'analyze', givenBx: sound.Bx, givenBy: sound.By, givenDc: sound.Dc });
+    expect(ample.punchOK).toBe(true);
+    expect(ample.beamOK).toBe(true);
+  });
+});

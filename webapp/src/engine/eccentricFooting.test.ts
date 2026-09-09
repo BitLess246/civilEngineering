@@ -57,3 +57,50 @@ describe('analysis & solution methods', () => {
     expect(small.bearingOK).toBe(false);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// bearingOK WAS NEVER COMPUTED IN DESIGN MODE.
+//
+// The same defect as `isolatedFooting` (#726) and `rectangularFooting`, and
+// here it reaches the PRIMARY GEOTECHNICAL CHECK: the peak service pressure
+// under an eccentric pad against what the soil may carry. `punchOK`, `beamOK`
+// and `bearingOK` were all assigned only in `analyze` mode and left hardcoded
+// true in both design paths — so q_allow = 0, a negative column load and a
+// 30 m overburden each reported `bearingOK: true` on a pad whose B was NaN.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the three verdicts are checks, not assertions', () => {
+  const E: EccentricFootingInput = { ...base, serviceMoment: 200, ultimateMoment: 280 };
+
+  it('a sound pad still passes all three, in every mode', () => {
+    for (const over of [{}, { solutionMethod: 'approximate' as const }]) {
+      const r = designEccentricSquareFooting({ ...E, ...over });
+      expect(r.punchOK).toBe(true);
+      expect(r.beamOK).toBe(true);
+      expect(r.bearingOK).toBe(true);
+      // and bearing passes because the pressure really is inside the allowable
+      expect(r.qMaxService).toBeLessThanOrEqual(r.qNet + 1e-9);
+    }
+  });
+
+  it('a pad with no plan fails all three — including the bearing check', () => {
+    for (const over of [
+      { qAllow: 0 },
+      { serviceLoad: -1000, ultimateLoad: -1400 },
+      { H: 30 },
+    ]) {
+      const r = designEccentricSquareFooting({ ...E, ...over });
+      expect(Number.isFinite(r.B)).toBe(false);
+      expect(r.punchOK).toBe(false);
+      expect(r.beamOK).toBe(false);
+      expect(r.bearingOK).toBe(false);
+    }
+  });
+
+  it('analyze mode is unchanged, and bearing still fails on an over-pressured pad', () => {
+    const sound = designEccentricSquareFooting(E);
+    const small = designEccentricSquareFooting({ ...E, analysis: 'analyze', givenB: sound.B * 0.5, givenDc: sound.Dc });
+    expect(small.bearingOK).toBe(false);
+    const ample = designEccentricSquareFooting({ ...E, analysis: 'analyze', givenB: sound.B, givenDc: sound.Dc });
+    expect(ample.bearingOK).toBe(true);
+  });
+});
