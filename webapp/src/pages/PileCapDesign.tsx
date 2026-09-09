@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { clampTo } from '../lib/clamp'
 import { designPileCap, pileCapSolution, type PileArrangement, type PileCapInput } from '../engine/pileCap'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { PileCapSchematic } from '../components/PileCapSchematic'
@@ -51,8 +52,13 @@ const DEFAULTS: FormState = {
   pileEmbed: 150,
 }
 
-function NumField({ label, unit, value, onChange, step = 'any' }: {
+function NumField({ label, unit, value, onChange, step = 'any', min, max }: {
   label: ReactNode; unit?: string; value: number; onChange: (v: number) => void; step?: string
+  /** Bounds enforced on the VALUE, not only the spinner — the `min`/`max`
+   *  attributes alone are advisory and a typed or pasted number goes straight
+   *  through them. Same contract as the shared `Num`, whose `clampTo` this
+   *  reuses; this page predates it and carries its own field. */
+  min?: number; max?: number
 }) {
   return (
     <label className="flex flex-col text-sm">
@@ -60,8 +66,9 @@ function NumField({ label, unit, value, onChange, step = 'any' }: {
         {label}{unit ? <span className="text-slate-500"> ({unit})</span> : null}
       </span>
       <input
-        type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
-        onChange={e => onChange(parseFloat(e.target.value))}
+        type="number" inputMode="decimal" step={step} min={min} max={max}
+        value={Number.isFinite(value) ? value : ''}
+        onChange={e => onChange(clampTo(parseFloat(e.target.value), min, max))}
         className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none focus:ring-1 focus:ring-[#0056b3]"
       />
     </label>
@@ -221,23 +228,23 @@ export default function PileCapDesign() {
                 [9, '9 piles (3 × 3)'],
               ]}
             />
-            <NumField label="Pile diameter" unit="mm" value={form.pileDia} onChange={set('pileDia')} step="50" />
-            <NumField label="Pile capacity (service)" unit="kN" value={form.pileCapacity} onChange={set('pileCapacity')} />
-            <NumField label="Pile spacing (c/c)" unit="mm" value={form.spacing} onChange={set('spacing')} step="50" />
-            <NumField label="Edge distance" unit="mm" value={form.edgeDist} onChange={set('edgeDist')} step="25" />
-            <NumField label="Pile embedment" unit="mm" value={form.pileEmbed} onChange={set('pileEmbed')} step="25" />
+            <NumField label="Pile diameter" unit="mm" value={form.pileDia} onChange={set('pileDia')} step="50" min={1} />
+            <NumField label="Pile capacity (service)" unit="kN" value={form.pileCapacity} onChange={set('pileCapacity')} min={1} />
+            <NumField label="Pile spacing (c/c)" unit="mm" value={form.spacing} onChange={set('spacing')} step="50" min={1} />
+            <NumField label="Edge distance" unit="mm" value={form.edgeDist} onChange={set('edgeDist')} step="25" min={1} />
+            <NumField label="Pile embedment" unit="mm" value={form.pileEmbed} onChange={set('pileEmbed')} step="25" min={0} />
           </Card>
 
           <Card title="Column">
-            <NumField label={<>Width <KTex tex="c_x" /></>} unit="mm" value={form.colX} onChange={set('colX')} step="25" />
-            <NumField label={<>Width <KTex tex="c_y" /></>} unit="mm" value={form.colY} onChange={set('colY')} step="25" />
+            <NumField label={<>Width <KTex tex="c_x" /></>} unit="mm" value={form.colX} onChange={set('colX')} step="25" min={1} />
+            <NumField label={<>Width <KTex tex="c_y" /></>} unit="mm" value={form.colY} onChange={set('colY')} step="25" min={1} />
           </Card>
 
           <Card title="Materials & Detailing">
-            <NumField label={<KTex tex="f'_c" />} unit="MPa" value={form.fc} onChange={set('fc')} />
-            <NumField label={<KTex tex="f_y" />} unit="MPa" value={form.fy} onChange={set('fy')} />
-            <NumField label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={form.barDia} onChange={set('barDia')} />
-            <NumField label="Clear cover" unit="mm" value={form.cover} onChange={set('cover')} />
+            <NumField label={<KTex tex="f'_c" />} unit="MPa" value={form.fc} onChange={set('fc')} min={1} />
+            <NumField label={<KTex tex="f_y" />} unit="MPa" value={form.fy} onChange={set('fy')} min={1} />
+            <NumField label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={form.barDia} onChange={set('barDia')} min={1} />
+            <NumField label="Clear cover" unit="mm" value={form.cover} onChange={set('cover')} min={0} />
           </Card>
         </div>
 

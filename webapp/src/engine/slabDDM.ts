@@ -10,6 +10,7 @@
 // Units: spans m; loads kPa; h/cover/db mm; moments kN·m; steel mm².
 // ─────────────────────────────────────────────────────────────────────────
 import { flexuralSteel, rhoTensionControlled } from './flexure'
+import { compact, positive, nonNegative, effectiveDepth } from './inputGuards'
 import { slabPanelDeflection, type SlabDeflectionResult } from './slabDeflection'
 
 export interface SlabInput {
@@ -75,6 +76,23 @@ export interface SlabDesignResult {
   ratio: number                   // long/short
   twoWay: boolean
   applicable: boolean
+  /**
+   * Why these inputs are not a panel — empty when they are one.
+   *
+   * `applicable` and `tensionControlled` are both ANDed with this being empty.
+   *
+   * They needed it even though `applicable` LOOKED like it already caught the
+   * degenerate cases, because every one of those catches is incidental rather
+   * than a check. `applicable` is a METHOD flag — §408.10.2's two-way, L ≤ 2D,
+   * tension-controlled — and a negative dead load only tripped it because
+   * `L ≤ 2·D` reads `2 ≤ −6`; a zero span only because `long/short` went to
+   * infinity and failed the two-way test. Nothing was looking at the inputs,
+   * so what the coincidences missed sailed through: a negative cover put
+   * d = 149 mm in a 135 mm slab, a negative LIVE load cut wu from 6.8 to
+   * 0.4 kPa, and fy = 0 shrank h to its 100 mm floor — all reported applicable
+   * AND tension-controlled.
+   */
+  inputNotes: string[]
   notes: string[]
   x: SlabDirResult
   y: SlabDirResult
@@ -129,7 +147,38 @@ function stripsTensionControlled(
   return true
 }
 
+/**
+ * Geometry, loads and materials that must be physical before the direct
+ * design method means anything. Units: spans m, everything else mm / MPa /
+ * kPa, per the module convention.
+ */
+export function slabInputNotes(i: SlabInput): string[] {
+  const cover = i.cover ?? 20, db = i.barDia ?? 12
+  const short = Math.min(i.lx, i.ly)
+  return compact([
+    positive(i.lx, 'span lx'),
+    positive(i.ly, 'span ly'),
+    // A knife-edge support (0) is a legitimate idealisation; a NEGATIVE one
+    // makes the clear span LONGER than the span (ln 5.40 m on a 5 m panel).
+    nonNegative(i.colWidth, 'support width'),
+    Number.isFinite(short) && Number.isFinite(i.colWidth) && i.colWidth / 1000 >= short
+      ? `support width ${i.colWidth} mm leaves no clear span in a ${short} m panel`
+      : null,
+    positive(i.fc, "concrete strength f'c"),
+    positive(i.fy, 'bar yield fy'),
+    nonNegative(i.D, 'dead load D'),
+    nonNegative(i.L, 'live load L'),
+    i.h != null ? positive(i.h, 'slab thickness h') : null,
+    i.cover != null ? nonNegative(i.cover, 'clear cover') : null,
+    i.barDia != null ? positive(i.barDia, 'bar Ø') : null,
+    // The bars have to sit inside the slab, which a negative cover undoes.
+    i.h != null ? effectiveDepth(i.h, cover, 0, db, 'cover and half a bar') : null,
+  ])
+}
+
 export function designSlabDDM(i: SlabInput): SlabDesignResult {
+  const inputNotes = slabInputNotes(i)
+  const real = inputNotes.length === 0
   const cover = i.cover ?? 20, db = i.barDia ?? 12, Ab = (Math.PI / 4) * db * db
   const short = Math.min(i.lx, i.ly), long = Math.max(i.lx, i.ly)
   const ratio = long / short
@@ -250,10 +299,11 @@ export function designSlabDDM(i: SlabInput): SlabDesignResult {
 
   return {
     h, hmin, wu, ratio, twoWay, rhoMax,
-    tensionControlled: allTC, hGrownForSteel,
+    tensionControlled: real && allTC, hGrownForSteel,
     // An over-reinforced panel is not a DDM applicability note — the φ the
-    // numbers were computed at is simply wrong, so it fails outright.
-    applicable: twoWay && i.L <= 2 * i.D && allTC,
-    notes, x, y, deflection,
+    // numbers were computed at is simply wrong, so it fails outright. Neither
+    // is a panel whose inputs are not physical: see `inputNotes`.
+    applicable: real && twoWay && i.L <= 2 * i.D && allTC,
+    inputNotes, notes, x, y, deflection,
   }
 }

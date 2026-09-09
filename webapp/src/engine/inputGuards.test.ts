@@ -3,6 +3,8 @@ import { compact, positive, nonNegative, atLeast, inRange, finite, effectiveDept
 import { designBeam, type BeamDesignInput } from './beamDesign'
 import { designAxialColumn, type AxialColumnInput } from './columnDesign'
 import { designRetainingWall, type RetainingWallInput } from './retainingWall'
+import { designPileCap, type PileCapInput } from './pileCap'
+import { designSlabDDM, type SlabInput } from './slabDDM'
 
 describe('the guard predicates', () => {
   it('positive accepts only finite values above zero', () => {
@@ -58,15 +60,20 @@ describe('the guard predicates', () => {
 // Engines NOT yet in this table, measured to have the same defect (each its
 // own change). Add the row when the guard lands.
 //
-//   pileCap   fy = 0 reports INFINITE steel, and cover = −75 makes the solved
-//             cap 525 mm thick against a claimed effective depth of 590 mm —
-//             bars 65 mm outside the concrete. Both with ALL SIX verdicts true.
-//   slabDDM   narrower than the others: its `applicable` flag ALREADY catches
-//             h ≤ 0, f'c = 0, a zero or negative span, and a negative DEAD
-//             load. What still slips through is a negative cover (d = 149 mm
-//             in a 135 mm slab), a zero or negative bar Ø, fy = 0, and a
-//             negative LIVE load, which cuts wu from 6.8 to 0.4 kPa and is
-//             reported applicable and tension-controlled.
+//   waterTank  t = −250 reports `thicknessOK` TRUE with d = −125 mm: the crack
+//              check is fct = T/(1000·t + (n−1)·As), and a negative t flips the
+//              denominator, so fct comes out negative and "passes". H = −4
+//              gives hoopAs = −1509 mm² (negative steel) and sigmaSt = 0 gives
+//              Infinity, both with `thicknessOK` and `freeboardOK` true.
+//   stair      span = 0 is the ONLY input in the sweep that reports ok = true
+//              AND tMinOK = true; fy = 0 gives AsMain = Infinity; cover = −20
+//              lifts d from 124 to 164 mm.
+//   torsion    cover = −40 lifts d 440 → 520 mm, and ⌀0 bar, ⌀0 stirrup,
+//              fyt = 0, legs = 0 and a negative Tu all keep `interactionOK`
+//              true. b = 0, h = 0 and f'c = 0 are already caught.
+//   shearWall  hw = 0, fy = 0, ⌀0 bar and a negative Vu all keep `shearOK` and
+//              `capOK` true. A zero or negative thickness or length is already
+//              caught (Acv goes to zero or negative, and the ratios with it).
 // ─────────────────────────────────────────────────────────────────────────
 interface Guarded<I> {
   name: string
@@ -133,8 +140,45 @@ const wall: Guarded<RetainingWallInput> = {
   },
 }
 
+const pileCap: Guarded<PileCapInput> = {
+  name: 'designPileCap',
+  base: {
+    serviceLoad: 2000, serviceMomX: 50, serviceMomY: 30,
+    ultimateLoad: 2800, ultimateMomX: 70, ultimateMomY: 42,
+    nPiles: 4, pileDia: 400, pileCapacity: 700, spacing: 1200, edgeDist: 400,
+    colX: 400, colY: 400, fc: 28, fy: 415, cover: 75, barDia: 20, pileEmbed: 100,
+  },
+  verdicts: (i) => {
+    const r = designPileCap(i)
+    return [r.capacityOK, r.punchColOK, r.punchPileOK, r.beamXOK, r.beamYOK, r.ldOK]
+  },
+  notes: (i) => designPileCap(i).inputNotes,
+  bad: {
+    'zero bar Ø': { barDia: 0 },
+    'negative cover': { cover: -75 },
+    'zero-yield steel': { fy: 0 },
+    'piles stacked on one point': { spacing: 0 },
+  },
+}
+
+const slab: Guarded<SlabInput> = {
+  name: 'designSlabDDM',
+  base: { lx: 5, ly: 6, colWidth: 400, D: 3, L: 2, fc: 28, fy: 415 },
+  verdicts: (i) => {
+    const r = designSlabDDM(i)
+    return [r.applicable, r.tensionControlled]
+  },
+  notes: (i) => designSlabDDM(i).inputNotes,
+  bad: {
+    'zero bar Ø': { barDia: 0 },
+    'negative cover': { cover: -20 },
+    'zero-yield steel': { fy: 0 },
+    'negative live load': { L: -2 },
+  },
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const REGISTRY: Guarded<any>[] = [beam, column, wall]
+const REGISTRY: Guarded<any>[] = [beam, column, wall, pileCap, slab]
 
 describe.each(REGISTRY)('$name honours the guard contract', (e) => {
   it('passes its own reference input with no notes', () => {

@@ -228,19 +228,19 @@ export default function SlabDesign() {
         {/* ── INPUTS ── */}
         <div className="space-y-5">
           <Card title="Panel geometry">
-            <Num label={<>Span <KTex tex="l_x" /> (short)</>} unit="m" value={f.lx} onChange={set('lx')} />
-            <Num label={<>Span <KTex tex="l_y" /> (long)</>} unit="m" value={f.ly} onChange={set('ly')} />
-            <Num label="Column width" unit="mm" value={f.colWidth} onChange={set('colWidth')} />
+            <Num label={<>Span <KTex tex="l_x" /> (short)</>} unit="m" value={f.lx} onChange={set('lx')} min={0.1} />
+            <Num label={<>Span <KTex tex="l_y" /> (long)</>} unit="m" value={f.ly} onChange={set('ly')} min={0.1} />
+            <Num label="Column width" unit="mm" value={f.colWidth} onChange={set('colWidth')} min={0} />
           </Card>
 
           <Card title="Service loads">
-            <Num label={<>Dead load <KTex tex="D" /></>} unit="kPa" value={f.D} onChange={set('D')} />
-            <Num label={<>Live load <KTex tex="L" /></>} unit="kPa" value={f.L} onChange={set('L')} />
+            <Num label={<>Dead load <KTex tex="D" /></>} unit="kPa" value={f.D} onChange={set('D')} min={0} />
+            <Num label={<>Live load <KTex tex="L" /></>} unit="kPa" value={f.L} onChange={set('L')} min={0} />
           </Card>
 
           <Card title="Materials">
-            <Num label={<KTex tex="f'_c" />} unit="MPa" value={f.fc} onChange={set('fc')} />
-            <Num label={<KTex tex="f_y" />} unit="MPa" value={f.fy} onChange={set('fy')} />
+            <Num label={<KTex tex="f'_c" />} unit="MPa" value={f.fc} onChange={set('fc')} min={1} />
+            <Num label={<KTex tex="f_y" />} unit="MPa" value={f.fy} onChange={set('fy')} min={1} />
           </Card>
 
           <Card title="Detailing"
@@ -251,9 +251,13 @@ export default function SlabDesign() {
                 Auto-select bar ⌀ and spacing
               </label>
             }>
-            <Num label="Thickness h (blank = auto)" unit="mm" value={f.h} onChange={set('h')} />
-            <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} />
-            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={dbEff} onChange={set('barDia')}
+            {/* min 1, not 0: a blank field is NaN and `clampTo` passes non-finite
+                straight through, so "blank = auto" survives the bound while a
+                typed 0 — which the engine would read as a 0 mm slab, not as
+                auto — cannot be entered. */}
+            <Num label="Thickness h (blank = auto)" unit="mm" value={f.h} onChange={set('h')} min={1} />
+            <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} min={0} />
+            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={dbEff} onChange={set('barDia')} min={1}
               disabled={autoBar}
               hint={autoBar ? (slabChoice?.db ? 'chosen by the optimiser' : 'no compliant mat — see the ranking') : undefined} />
           </Card>
