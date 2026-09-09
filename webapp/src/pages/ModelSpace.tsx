@@ -1148,8 +1148,9 @@ export default function ModelSpace() {
 
   /** Direct PDF export — grabs a fresh 3D snapshot, assembles the report
    *  payload and the appendix, and lazy-loads the jsPDF renderers (fonts
-   *  stay out of the main bundle). Writes whichever files the dialog asked
-   *  for: the design report, the analysis appendix, or the two bound as one. */
+   *  stay out of the main bundle). Writes what the dialog asked for: the
+   *  design report and/or the analysis appendix as separate files, or —
+   *  Combined ticked — the two bound as ONE file and nothing else. */
   const exportPdf = async (o: ExportOptions) => {
     if (!model || !design || exporting) return
     setExporting(true)
@@ -1197,9 +1198,16 @@ export default function ModelSpace() {
       const appendixInputPdf = {
         lh, badges, appendix: buildAnalysisAppendix(ai), include: o.appendixSections, snapshot,
       }
-      if (o.outputs.report) await generateModelPdf({ ...reportInput, fileName: `${stem}.pdf` })
-      if (o.outputs.appendix) appendixPdf.generateAnalysisAppendixPdf({ ...appendixInputPdf, fileName: `${stem}-analysis-appendix.pdf` })
-      if (o.outputs.combined) await appendixPdf.generateCombinedPdf(reportInput, appendixInputPdf, `${stem}-combined.pdf`)
+      // Combined supersedes the pair: ONE bound file comes out. The dialog
+      // locks report+appendix on while Combined is ticked, so writing the two
+      // standalones here as well would drop three overlapping PDFs on the
+      // user for one request.
+      if (o.outputs.combined) {
+        await appendixPdf.generateCombinedPdf(reportInput, appendixInputPdf, `${stem}-combined.pdf`)
+      } else {
+        if (o.outputs.report) await generateModelPdf({ ...reportInput, fileName: `${stem}.pdf` })
+        if (o.outputs.appendix) appendixPdf.generateAnalysisAppendixPdf({ ...appendixInputPdf, fileName: `${stem}-analysis-appendix.pdf` })
+      }
       setExportOpen(false)
     } catch (e) {
       console.error('PDF export failed', e)
