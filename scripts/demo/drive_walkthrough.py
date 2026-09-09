@@ -3,33 +3,84 @@
 optimise -> dynamics -> plans -> rebar cages -> BOQ/schedule -> PDF.
 
 Elements are located over CDP (exact DOM rects) and then clicked with a real
-xdotool pointer, so the recording shows genuine cursor motion and the emitted
-telemetry matches it. Cursor telemetry uses Recordly's CursorTelemetryPoint
-shape: { timeMs, cx, cy, interactionType, cursorType }, cx/cy normalised 0..1.
+pointer, so the recording shows genuine cursor motion.
+
+Two modes, chosen by platform:
+
+  Linux/X11  ffmpeg records the X display, input goes through xdotool, and the
+             cursor path is written as Recordly's CursorTelemetryPoint sidecar
+             ({timeMs, cx, cy, interactionType, cursorType}, cx/cy normalised
+             0..1) because Recordly cannot capture cursor telemetry on Linux.
+
+  Windows /  input goes through pyautogui (pip install pyautogui) and RECORDLY
+  macOS      ITSELF DOES THE RECORDING -- start it recording before running
+             this, stop it after. It captures its own cursor telemetry natively,
+             so no sidecar is written or needed.
 """
 import json
 import os
+import shutil
 import subprocess
+import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CDP = os.path.join(HERE, "cdp.mjs")
 OUT_DIR = os.environ.get("DEMO_OUT_DIR", HERE)
-# X display to record. Only meaningful on Linux/X11; see the note at the bottom
-# of docs/demo-recording.md for driving this on Windows or macOS.
-DISPLAY = os.environ.get("DISPLAY", ":0")
+DISPLAY = os.environ.get("DISPLAY", ":0")  # X display; Linux only
 W, H = 1920, 1080
 PREROLL = 2.0  # ffmpeg warm-up, trimmed off the front afterwards
 OUT = os.path.join(OUT_DIR, "raw.mp4")
 # Recordly reads auto-zoom/cursor telemetry from "<video path>.cursor.json".
 TELEMETRY = OUT + ".cursor.json"
 
+X11 = sys.platform.startswith("linux") and shutil.which("xdotool") is not None
+
 samples, t0, cur = [], None, (960, 540)
+
+if not X11:
+    try:
+        import pyautogui
+    except ImportError:
+        sys.exit("This platform needs pyautogui for input: pip install pyautogui")
+    pyautogui.FAILSAFE = False  # a corner-parked cursor is a legitimate beat
+    pyautogui.PAUSE = 0  # this script does its own pacing
 
 
 def xdo(*a):
-    subprocess.run(["xdotool", *[str(x) for x in a]],
-                   env={"DISPLAY": DISPLAY, "PATH": "/usr/bin:/bin"}, check=False)
+    """Send one input event.
+
+    Calls use xdotool's argument shape throughout; off X11 they are translated
+    to pyautogui so every call site stays identical on all three platforms.
+    """
+    if X11:
+        subprocess.run(["xdotool", *[str(x) for x in a]],
+                       env={"DISPLAY": DISPLAY, "PATH": "/usr/bin:/bin"}, check=False)
+        return
+
+    cmd, rest = a[0], [str(x) for x in a[1:]]
+    if cmd == "mousemove":
+        pyautogui.moveTo(int(rest[0]), int(rest[1]))
+    elif cmd == "mousedown":
+        pyautogui.mouseDown()
+    elif cmd == "mouseup":
+        pyautogui.mouseUp()
+    elif cmd == "click":
+        button = rest[-1]
+        if "--repeat" in rest:  # xdotool triple-click for select-all-in-field
+            pyautogui.tripleClick()
+        # pyautogui.scroll takes wheel CLICKS (Windows multiplies by 120
+        # internally), so one X11 button-4/5 press is scroll(1), not scroll(120).
+        elif button == "4":     # X11 wheel-up
+            pyautogui.scroll(1)
+        elif button == "5":     # X11 wheel-down
+            pyautogui.scroll(-1)
+        else:
+            pyautogui.click()
+    elif cmd == "type":
+        pyautogui.write(rest[-1])
+    elif cmd == "key":
+        pyautogui.press(rest[-1].lower())
 
 
 def cdp(expr, attempts=3):
@@ -197,10 +248,15 @@ def reveal(finder, dur=1.6):
     hold(dur)
 
 
-ff = subprocess.Popen(
-    ["ffmpeg", "-loglevel", "error", "-y", "-f", "x11grab", "-framerate", "30",
-     "-video_size", f"{W}x{H}", "-i", DISPLAY, "-c:v", "libx264", "-preset",
-     "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p", OUT], stdin=subprocess.PIPE)
+ff = None
+if X11:
+    ff = subprocess.Popen(
+        ["ffmpeg", "-loglevel", "error", "-y", "-f", "x11grab", "-framerate", "30",
+         "-video_size", f"{W}x{H}", "-i", DISPLAY, "-c:v", "libx264", "-preset",
+         "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p", OUT], stdin=subprocess.PIPE)
+else:
+    print("Recordly should already be recording; starting in 5s. Ctrl-C to abort.")
+    time.sleep(5)
 time.sleep(PREROLL)
 t0 = time.monotonic()
 xdo("mousemove", *cur)
@@ -324,7 +380,13 @@ set_checkbox(LABEL_INPUT("Combined PDF"), True, "combined pdf")
 click(TAB("Generate"), "generate report", settle=1.0)
 hold(45.0)  # jsPDF builds ~24 MB of report client-side
 
-ff.communicate(input=b"q", timeout=30)
-with open(TELEMETRY, "w") as fh:
-    json.dump(samples, fh)
-print(f"DONE samples={len(samples)} duration={samples[-1]['timeMs']/1000.0:.1f}s")
+if ff is not None:
+    ff.communicate(input=b"q", timeout=30)
+    # Only X11 needs this: Recordly records its own cursor telemetry elsewhere.
+    with open(TELEMETRY, "w") as fh:
+        json.dump(samples, fh)
+    print(f"DONE {OUT} samples={len(samples)} "
+          f"duration={samples[-1]['timeMs'] / 1000.0:.1f}s")
+else:
+    print(f"DONE walkthrough finished after "
+          f"{samples[-1]['timeMs'] / 1000.0:.1f}s -- stop the Recordly recording now.")

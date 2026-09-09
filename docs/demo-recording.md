@@ -50,6 +50,32 @@ chrome --remote-debugging-port=9222 --start-fullscreen \
 Then `python3 scripts/demo/drive_walkthrough.py`. It writes `raw.mp4` plus
 `raw.cursor.json`.
 
+### Running it on Windows (the better way)
+
+The driver is cross-platform. It picks its backend from the platform: on
+Linux/X11 it drives `xdotool` and records with ffmpeg; anywhere else it drives
+`pyautogui` (`pip install pyautogui`) and **lets Recordly do the recording**, so
+the ffmpeg capture and the synthesized sidecar are skipped entirely — Recordly
+captures its own cursor telemetry natively there.
+
+```powershell
+cd webapp
+npx vite build ; npx vite preview --port 8080 --host 127.0.0.1 --strictPort
+# separate terminal — any Chromium-based browser, Edge included
+chrome --remote-debugging-port=9222 --start-fullscreen `
+       --user-data-dir=$env:TEMP\demo-profile "http://127.0.0.1:8080/model"
+```
+
+Start Recordly recording the screen, run
+`python scripts/demo/drive_walkthrough.py`, and stop the recording when it
+prints `DONE`. The footage lands in Recordly's editor with real cursor data
+already attached; from there it is **Suggest Zooms from Cursor** → **Export**.
+
+Note the `VITE_SUPABASE_*` variables must be unset for this build too, or
+`/model` sits behind the login. In PowerShell that is
+`Remove-Item Env:VITE_SUPABASE_URL, Env:VITE_SUPABASE_ANON_KEY` (ignore errors
+if they were never set) before `npx vite build`.
+
 ### Known build snag
 
 `@tailwindcss/node` **4.3.0 crashes with SIGBUS** in some sandboxed/container
