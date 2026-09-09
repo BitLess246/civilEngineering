@@ -150,7 +150,7 @@ export default function LintelDesign() {
             <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">SECTION</p>
             <BeamSchematic b={b} h={h} cover={cover} barDia={barDia} stirrupDia={stirrupDia}
               bars={d.bars} d={d.d} layers={d.layers} comprLayers={d.comprLayers}
-              comprBars={d.comprBars} comprBarDia={16} naDepth={d.cNA} flexOK={d.flexOK} />
+              comprBars={d.comprBars} comprBarDia={16} naDepth={d.cNA} flexOK={d.flexOK} flexReason={d.flexNotes[0]} />
           </div>
         </section>
 

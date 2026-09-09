@@ -487,3 +487,83 @@ describe('flanged action — §406.3.2 / Table 406.3.2.1', () => {
     }
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// A VERDICT THAT CANNOT FAIL — the detailing inputs.
+//
+// `flexOK` covered exactly one failure mode (the layer iteration diverging),
+// so every non-physical detailing input came back `flexOK: true` with numbers
+// that looked like a design. Worse than "wrong": the errors run
+// UNCONSERVATIVE, because d = h − cover − d_s − d_b/2 GROWS as any of those
+// three goes negative, so the section claims depth it does not have and asks
+// for less steel than the moment needs.
+//
+// These pin the measured behaviour before and after.
+// ─────────────────────────────────────────────────────────────────────────
+describe('non-physical detailing inputs', () => {
+  const base: BeamDesignInput = {
+    b: 300, h: 500, cover: 40, barDia: 20, comprBarDia: 16, stirrupDia: 10,
+    legs: 2, fc: 28, fy: 415, fyt: 415, Mu: 150, Vu: 90,
+  }
+
+  it('the reference beam is a real design', () => {
+    const r = designBeam(base)
+    expect(r.flexOK).toBe(true)
+    expect(r.flexNotes).toEqual([])
+    expect(r.d).toBeCloseTo(440, 6)   // 500 − 40 − 10 − 10
+    expect(r.bars).toBe(4)
+  })
+
+  it('a ⌀0 bar is refused instead of designed with zero bars', () => {
+    // It used to report 951 mm² of required steel over ZERO bars, flexOK true:
+    // As/A_b is 951/0 = ∞, and the layout splitter answers ∞ with an empty cage.
+    const r = designBeam({ ...base, barDia: 0 })
+    expect(r.flexOK).toBe(false)
+    expect(r.flexNotes.join(' ')).toMatch(/tension bar/)
+  })
+
+  it('a negative cover is refused, not rewarded with depth it does not have', () => {
+    // MEASURED before the guard: d 440 → 520 mm, As 976 → 809 mm² — 17% LESS
+    // steel than the same moment needs, reported flexOK: true.
+    const r = designBeam({ ...base, cover: -40 })
+    expect(r.flexOK).toBe(false)
+    expect(r.flexNotes.join(' ')).toMatch(/cover cannot be negative/)
+  })
+
+  it('a negative bar or stirrup Ø is refused — squaring hid the sign', () => {
+    // A_b = π(−20)²/4 is the area of a ⌀20 bar, so the section "worked"; only
+    // d = h − cover − d_s − d_b/2 carried the sign, and it carried it the
+    // wrong way (440 → 460 mm).
+    for (const o of [{ barDia: -20 }, { stirrupDia: -10 }]) {
+      expect(designBeam({ ...base, ...o }).flexOK).toBe(false)
+    }
+  })
+
+  it('a stirrup cannot have fewer than two legs', () => {
+    // legs = −2 produced Av = −157 mm² at s = −22 790 mm: negative steel at
+    // negative spacing, flexOK true.
+    expect(designBeam({ ...base, legs: 0 }).flexOK).toBe(false)
+    expect(designBeam({ ...base, legs: -2 }).flexOK).toBe(false)
+    // Omitted is not "wrong" — the engine derives it from width and shear.
+    const { legs: _legs, ...noLegs } = base
+    expect(designBeam(noLegs).flexOK).toBe(true)
+  })
+
+  it('a given d must be inside the section', () => {
+    expect(designBeam({ ...base, dGiven: 600 }).flexOK).toBe(false)
+    expect(designBeam({ ...base, dGiven: 430 }).flexOK).toBe(true)
+  })
+
+  it('zero cover is allowed — unusual, but physical', () => {
+    // The guard rejects what cannot exist, not what a designer would not draw.
+    expect(designBeam({ ...base, cover: 0 }).flexOK).toBe(true)
+  })
+
+  it('a diverging layout still reads as a layout problem, not an input one', () => {
+    // The message is what the page prints, so the two failures must not be
+    // told apart only by the boolean.
+    const r = designBeam({ ...base, b: 200, h: 250, Mu: 400 })
+    expect(r.flexOK).toBe(false)
+    expect(r.flexNotes.join(' ')).toMatch(/cannot accommodate/)
+  })
+})
