@@ -15,6 +15,7 @@
 // or 0.020·hs otherwise.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, ModelLoad } from './model'
+import { memberWeightPerLength } from './modelBuilder'
 import type { LateralCase } from './pipeline'
 import { buildSeismicMass } from './modal'
 
@@ -98,9 +99,14 @@ export function storeyWeights(model: StructuralModel, gammaC = GAMMA_C): { eleva
 function storeyWeightsFull(model: StructuralModel, gammaC = GAMMA_C): StoreyWeight[] {
   const nm = new Map(model.nodes.map((n) => [n.id, n]))
   const secMap = new Map(model.sections.map((s) => [s.id, s]))
-  const aSecOf = (mSection: string) => {
+  // What a member weighs per metre — the shared answer, so a steel or timber
+  // frame's storey weight matches its gravity loads. This used to be
+  // `(b/1000)·(h/1000)` with NO material branch at all, so every member came
+  // out at the concrete number: a W310x52 frame was 2.44× its real member
+  // weight and a DFL-2 timber frame 4.89×.
+  const wPerM = (mSection: string, gc: number) => {
     const s = secMap.get(mSection) ?? model.sections[0]
-    return s ? (s.b / 1000) * (s.h / 1000) : 0
+    return s ? memberWeightPerLength(s, gc) : 0
   }
   const levels = [...new Set(model.storeys.map((s) => s.elevation))].sort((a, b) => a - b)
   const parts = new Map<number, WeightComponent>(levels.map((e) => [e, zeroComponents()]))
@@ -139,7 +145,7 @@ function storeyWeightsFull(model: StructuralModel, gammaC = GAMMA_C): StoreyWeig
     const a = nm.get(m.i), b = nm.get(m.j)
     if (!a || !b) continue
     const L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
-    const wSelf = aSecOf(m.section) * L * gammaC
+    const wSelf = wPerM(m.section, gammaC) * L
     if (m.role === 'column') {
       const top = Math.max(a.y, b.y), bot = Math.min(a.y, b.y)
       const topLvl = levels.includes(top) ? top : closest(top)

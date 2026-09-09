@@ -49,8 +49,7 @@ import type { StructuralModel } from './model'
 import { precomputeFrame } from './frame3d'
 import { modelToFrame3D } from './modelBridge'
 import { symSolve } from './fem'
-import { GAMMA_C, GAMMA_S } from './modelBuilder'
-import { shapeByName } from './aiscSections'
+import { GAMMA_C, memberWeightPerLength, type SectionLike } from './modelBuilder'
 import { sdlItemKPa } from './deadLoads'
 import { validateMesh, hasMeshErrors } from './meshValidation'
 
@@ -121,12 +120,12 @@ const triArea = (a: number[], b: number[], c: number[]): number => {
  * be read as a property of the mass MODEL, which is exactly the conclusion the
  * comparison exists to support and exactly the one it must not fake.
  */
-export function memberMassPerLength(sec: { b: number; h: number; material?: string; shape?: string }): number {
-  const areaM2 = sec.material === 'steel'
-    ? ((sec.shape ? shapeByName(sec.shape) : undefined)?.A ?? sec.b * sec.h) / 1e6
-    : (sec.b / 1000) * (sec.h / 1000)
-  const gamma = sec.material === 'steel' ? GAMMA_S : GAMMA_C
-  return (areaM2 * gamma) / GRAVITY
+export function memberMassPerLength(sec: SectionLike): number {
+  // This had the STEEL half of the answer and not the timber half — a DFL-2
+  // section came back at GAMMA_C (24 kN/m³) instead of G·9.81 ≈ 4.9, so a
+  // timber frame's modal mass, and every period and base shear off it, was
+  // 4.89× too heavy while its gravity loads were right.
+  return memberWeightPerLength(sec) / GRAVITY
 }
 
 /** Member self-mass lumped half to each end node, tonnes. Split out from

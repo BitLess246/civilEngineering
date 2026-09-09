@@ -12,6 +12,14 @@ import { shapeByName } from './aiscSections'
 import { woodRefOf, woodUnitWeight } from './woodDesign'
 import { allStairFrameLoads } from './stairPlacement'
 
+/** The fields the weight helpers read — looser than `RectSection` so the
+ *  modal and seismic call sites can pass what they already hold. */
+export type SectionLike = {
+  b: number; h: number
+  material?: string; shape?: string
+  woodSpecies?: string; woodRef?: unknown
+}
+
 /** Timber self-weight line load basis (kN/m³) from the section's material (γ ≈
  *  G·9.81); fallback G = 0.5 (~4.9 kN/m³) when the material is unset/unknown. */
 const woodGamma = (sec: RectSection): number =>
@@ -147,6 +155,53 @@ export const GAMMA_C = 24    // kN/m³, default concrete unit weight
 export const GAMMA_S = 78.5  // kN/m³, structural steel
 
 /**
+ * WHAT A MEMBER WEIGHS — the one answer, in one place.
+ *
+ * There used to be three, none of them agreeing for anything but concrete.
+ * Measured on a one-bay one-storey grid before this consolidation:
+ *
+ *   path                              concrete  steel W310x52   wood DFL-2
+ *   buildGravityLoads (this file)     ok        ×2.44           ok
+ *   seismic.storeyWeightsFull         ok        ×2.44           ×4.89
+ *   modal.memberMassPerLength         ok        ok              ×4.89
+ *
+ * Each knew about a different half of the problem. `buildGravityLoads` had
+ * the timber branch but weighed a rolled shape as its BOUNDING BOX at
+ * CONCRETE density (a W310x52 box is 0.05294 m² against the catalogue's
+ * 0.00663 — eight times the steel, at 24 kN/m³ instead of 78.5, so 2.44×
+ * heavy on balance). `memberMassPerLength` had the steel branch but weighed
+ * timber at GAMMA_C — 24 kN/m³ against G·9.81 ≈ 4.9 for DFL-2, so 4.89×.
+ * `storeyWeightsFull` had no material branch at all: every member, whatever
+ * it was made of, came out at the concrete number.
+ *
+ * So a timber frame's seismic mass was ~5× its real one while its gravity
+ * loads were right, and a steel frame's two disagreed with each other. All
+ * four call sites now come through here.
+ */
+
+/** The area a member ACTUALLY has, m² — a rolled shape is its catalogue area,
+ *  not the bounding box the section's b×h describes. */
+export function sectionArea(sec: SectionLike): number {
+  if (sec.material === 'steel' && sec.shape) {
+    const A = shapeByName(sec.shape)?.A
+    if (A) return A / 1e6
+  }
+  return (sec.b / 1000) * (sec.h / 1000)
+}
+
+/** Unit weight for the section's material, kN/m³. */
+export function sectionGamma(sec: SectionLike, gammaC = GAMMA_C): number {
+  if (sec.material === 'steel') return GAMMA_S
+  if (sec.material === 'wood') return woodGamma(sec as RectSection)
+  return gammaC
+}
+
+/** Member self-weight, kN/m. Divide by g for mass in tonnes per metre. */
+export function memberWeightPerLength(sec: SectionLike, gammaC = GAMMA_C): number {
+  return sectionArea(sec) * sectionGamma(sec, gammaC)
+}
+
+/**
  * Build the gravity load set: member SELF-WEIGHT (D, kN/m from the section),
  * WALL self-weight on its supporting member (D, kN/m = t·h·γc), slab
  * SELF-WEIGHT + superimposed dead load (D, kPa), and live load (L, kPa).
@@ -160,8 +215,7 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
   const memberSW: StructuralModel['loads'] = model.members
     .map((m) => {
       const sec = secMap.get(m.section) ?? model.sections[0]
-      const gamma = sec?.material === 'wood' ? woodGamma(sec) : gammaC
-      const w = sec ? (sec.b / 1000) * (sec.h / 1000) * gamma : 0
+      const w = sec ? memberWeightPerLength(sec, gammaC) : 0
       return { kind: 'member-udl' as const, member: m.id, w, cat: 'D' as const, sw: true }
     })
     .filter((l) => l.w > 0)
@@ -213,17 +267,13 @@ export function refreshSelfWeight(model: StructuralModel, gammaC = GAMMA_C): Str
   const sw: StructuralModel['loads'] = model.members
     .map((m) => {
       const sec = secMap.get(m.section) ?? model.sections[0]
-      let w = 0
-      if (sec) {
-        if (sec.material === 'steel') {
-          const shape = sec.shape ? shapeByName(sec.shape) : undefined
-          w = shape ? (shape.A / 1e6) * GAMMA_S : (sec.b / 1000) * (sec.h / 1000) * GAMMA_S
-        } else if (sec.material === 'wood') {
-          w = (sec.b / 1000) * (sec.h / 1000) * woodGamma(sec)
-        } else {
-          w = (sec.b / 1000) * (sec.h / 1000) * gammaC
-        }
-      }
+      // This branch WAS the only complete one in the codebase — steel by
+      // catalogue area at GAMMA_S, timber by G·9.81, everything else at γc —
+      // while `buildGravityLoads` above it, which runs FIRST at model
+      // creation, had only the timber half. The same model therefore reported
+      // two different self-weights depending on which function last touched
+      // it. Both are now the same call.
+      const w = sec ? memberWeightPerLength(sec, gammaC) : 0
       return { kind: 'member-udl' as const, member: m.id, w: w + (wallW.get(m.id) ?? 0), cat: 'D' as const, sw: true }
     })
     .filter((l) => l.w > 0)
