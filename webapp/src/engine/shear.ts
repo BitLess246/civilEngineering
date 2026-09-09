@@ -23,6 +23,19 @@ const PHI_SHEAR = 0.75;
 export const MAX_SHEAR_DEPTH = 3000;
 
 /**
+ * Did the solver actually SOLVE for this depth, or run out of range?
+ *
+ * The seam three footing engines share. Each one sizes its slab from the
+ * required depths and then checks the depth it adopted against them — and if
+ * the requirement is the saturation value, that comparison is a number against
+ * itself and always passes. Kept here, beside the cap it tests, so the three
+ * cannot drift apart again: they carried three copies of the same
+ * `let punchOK = true` and all three were wrong in the same way.
+ */
+export const depthSolved = (d: number): boolean =>
+  Number.isFinite(d) && d < MAX_SHEAR_DEPTH;
+
+/**
  * Two-way (punching) shear strength Vc, kN — the minimum of the three
  * ACI 318-14 §22.6.5.2 expressions.
  * @param fc       f′c, MPa

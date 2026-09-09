@@ -3,7 +3,7 @@
 // flexure into one design. Pure & typed; the React UI consumes this directly.
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing, squareSize } from './bearing';
-import { punchingDepth, oneWayShearDepth, MAX_SHEAR_DEPTH, type ColumnPosition } from './shear';
+import { punchingDepth, oneWayShearDepth, depthSolved, type ColumnPosition } from './shear';
 import { flexuralSteel, matLayout, type AsMinBasis } from './flexure';
 
 export interface SquareFootingInput {
@@ -260,7 +260,7 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
   const dProvided = DcMm - i.cover - i.barDia;
   const geometryOK = [B, qNet, qu, DcMm, dProvided].every(Number.isFinite) && B > 0;
   const shearOK = (dReq: number) =>
-    geometryOK && Number.isFinite(dReq) && dReq < MAX_SHEAR_DEPTH && dProvided >= dReq;
+    geometryOK && depthSolved(dReq) && dProvided >= dReq;
   const punchOK = shearOK(dPunch);
   const beamOK = shearOK(dBeam);
 
