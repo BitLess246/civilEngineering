@@ -31,11 +31,11 @@ mechanism was established by reading, not observed.
 | R6 | Every Model Space solver failure is invisible | medium | verified | ✅ #728 |
 | R8 | Calculation fetch has no timeout | medium | read | ✅ #728 |
 | R7 | Unknown URLs render an empty shell; `/about` missing | medium | verified | ✅ #728 |
-| E4 | ValidationMap row C003 is an algebraic tautology | medium | verified | ✅ #736 |
+| E4 | ValidationMap row C003 is an algebraic tautology | medium | verified | ✅ #737 |
 | S5 | No rate limiting; members never metered | low-med | verified | ☐ |
 | R9 | `update()` is not a functional update | low | latent | ✅ #728 |
 | S6 | `guest-quota` CORS lets any site burn a visitor's trial | low | read | ✅ #735 |
-| E5 | `Cv1` uses the superseded AISC 360-10 form (conservative) | low | read | ✅ #736 |
+| E5 | `Cv1` uses the superseded AISC 360-10 form (conservative) | low | read | ✅ #737 |
 
 **Found while deploying, not in the audit — R10, the double-charged arrival.**
 ✅ SHIPPED (#588). `guest-quota` called `consume_guest_trial` while the
@@ -569,7 +569,7 @@ UI fix be proven instead of reasoned about.
 
 ## Phase 8 — validation integrity (E4) and the unaudited remainder
 
-**E4 — ✅ SHIPPED (#736).** `columnDesign.test.ts` asserted `breslerReciprocal`
+**E4 — ✅ SHIPPED (#737).** `columnDesign.test.ts` asserted `breslerReciprocal`
 against its own algebra retyped, so it could catch a transcription slip and
 nothing else. The closed form IS the definition of Bresler's method, so there
 is no independent algebra to check it against; six PROPERTIES replace it —
@@ -581,7 +581,7 @@ dropped axial term are each caught, and no single property catches all three.
 The row stays 🔶 — this makes its internal evidence real, it is not the
 independent reference; PCA/spColumn remains open.
 
-**E5 — ✅ SHIPPED (#736).** `steelDesign.ts` declares AISC 360-16 in its header
+**E5 — ✅ SHIPPED (#737).** `steelDesign.ts` declares AISC 360-16 in its header
 and `Cv1` carried the 360-10 THREE-branch Cv, whose third term
 1.51·kv·E/(Fy·(h/tw)²) 360-16 dropped for Cv1 (Eq. G2-3/G2-4) and kept only for
 Cv2 under tension-field action (§G2.2), which this function does not compute.

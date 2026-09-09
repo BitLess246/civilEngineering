@@ -249,18 +249,18 @@ All shipped.
 
 ## P5 — validation-map corrections
 
-Both ✔ shipped (#736). Neither was a wrong answer in the shipped app; they were
+Both ✔ shipped (#737). Neither was a wrong answer in the shipped app; they were
 claims the map made that its evidence did not support.
 
 17. ~~**E4 — ValidationMap row C003 is an algebraic tautology.**~~ — ✔ shipped
-    (#736): the assertion restated the implementation as its own expected
+    (#737): the assertion restated the implementation as its own expected
     value. The closed form IS the definition of Bresler's method, so there is
     no independent algebra to check it against; six properties replace it
     (symmetry, both uniaxial degenerate cases, Pn < min(Pnx, Pny), monotonicity
     in each argument, the Po → ∞ harmonic limit from above), CHECKED against
     three plausible wrong formulas rather than assumed to discriminate. The row
     stays 🔶 — internal evidence made real, not an independent reference.
-18. ~~**E5 — `Cv1` uses the superseded AISC 360-10 form.**~~ — ✔ shipped (#736):
+18. ~~**E5 — `Cv1` uses the superseded AISC 360-10 form.**~~ — ✔ shipped (#737):
     `steelDesign.ts` declares 360-16 in its header and `Cv1` carried 360-10's
     three-branch Cv, whose elastic term 360-16 keeps only for Cv2 (§G2.2,
     tension-field action) — the module contradicted its own stated edition. A
@@ -281,7 +281,7 @@ calculation fetch times out at 15 s, **R9** `update()` reads a ref instead of
 its render closure), and **S6** closed in #735 — `guest-quota`'s `consume` now
 needs an allowlisted Origin, because that endpoint's subject is a digest of the
 client IP and so carries the ambient authority `_shared/cors.ts` says to
-revisit the wildcard for. **E4** and **E5** closed in #736 — C003's evidence was a
+revisit the wildcard for. **E4** and **E5** closed in #737 — C003's evidence was a
 restatement of the implementation and is now six properties checked against
 three wrong formulas, and `Cv1` now follows the 360-16 edition its own file
 header declares (a no-op on shipped numbers: no catalogue shape reaches the
