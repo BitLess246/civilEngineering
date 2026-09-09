@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { designSquareFooting } from './isolatedFooting';
+import { designSquareFooting, type SquareFootingInput } from './isolatedFooting';
 import { netBearing } from './bearing';
-import { twoWayVc, oneWayVc, type ColumnPosition } from './shear';
+import { twoWayVc, oneWayVc, punchingDepth, MAX_SHEAR_DEPTH, type ColumnPosition } from './shear';
 import { rhoMin } from './flexure';
 
 describe('designSquareFooting (integration)', () => {
@@ -200,6 +200,91 @@ describe('columnOffset — biaxial, not one axis at a time', () => {
     for (const P of [200, 900, 4000]) {
       const r = designSquareFooting({ ...base, serviceLoad: P, ultimateLoad: P * 1.45, position: 'corner' })
       expect(r.offset!.kernOK).toBe(r.offset!.qMin >= -1e-9)
+    }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// A VERDICT THAT CANNOT FAIL IS WORSE THAN NO VERDICT.
+//
+// `punchOK`/`beamOK` were initialised to `true` and assigned ONLY in `analyze`
+// mode. Both DESIGN paths size D_c from max(d_punch, d_beam) and never looked
+// again, so the two flags left the engine as a hardcoded `true` — nothing
+// about the footing could make them false. For a sound input they were right
+// by construction, which is exactly why it went unnoticed; for an input that
+// degenerates they were still `true`, and the schedule and the report repeated
+// it.
+//
+// Two things had to be true for the check to mean anything: the footing has to
+// HAVE a size, and the depth solvers saturate — both search to
+// MAX_SHEAR_DEPTH and return it when nothing in range works, so sizing D_c to
+// that value and then comparing the two compares a number with itself.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the shear verdicts are a check, not an assertion', () => {
+  const F: SquareFootingInput = {
+    serviceLoad: 1000, ultimateLoad: 1400, columnWidth: 400, fc: 28, fy: 415,
+    qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5, barDia: 20, cover: 75,
+    surcharge: 0, position: 'interior',
+  }
+
+  it('a sound footing still passes both, in every mode — no sound result moved', () => {
+    for (const over of [{}, { solutionMethod: 'approximate' as const }]) {
+      const r = designSquareFooting({ ...F, ...over })
+      expect(r.punchOK).toBe(true)
+      expect(r.beamOK).toBe(true)
+      // …and it passes because the depth built really does exceed both demands
+      expect(r.dProvided).toBeGreaterThanOrEqual(r.dPunch)
+      expect(r.dProvided).toBeGreaterThanOrEqual(r.dBeam)
+    }
+  })
+
+  it('a footing with NO SIZE fails both — q_allow = 0 makes the required area infinite', () => {
+    const r = designSquareFooting({ ...F, qAllow: 0 })
+    expect(Number.isFinite(r.B)).toBe(false)
+    expect(r.punchOK).toBe(false)
+    expect(r.beamOK).toBe(false)
+  })
+
+  it('a negative column load fails both, rather than reporting an adequate pad', () => {
+    const r = designSquareFooting({ ...F, serviceLoad: -1000, ultimateLoad: -1400 })
+    expect(r.punchOK).toBe(false)
+    expect(r.beamOK).toBe(false)
+  })
+
+  it('an overburden that swallows the bearing pressure fails, not passes', () => {
+    // 30 m of founding depth against a 200 kPa allowable: q_net goes negative,
+    // so there is no area that carries the load.
+    const r = designSquareFooting({ ...F, H: 30 })
+    expect(r.punchOK).toBe(false)
+    expect(r.beamOK).toBe(false)
+  })
+
+  it('a SATURATED depth solve is "no depth works", not "3000 mm works"', () => {
+    // punchingDepth/oneWayShearDepth return the ceiling when the loop runs out
+    expect(punchingDepth({ Pu: 1e9, qu: 0, c: 400, fc: 28 })).toBe(MAX_SHEAR_DEPTH)
+    // and the footing must not read that back as a satisfied check
+    const r = designSquareFooting({ ...F, serviceLoad: 1e7, ultimateLoad: 1.4e7 })
+    if (r.dPunch >= MAX_SHEAR_DEPTH || r.dBeam >= MAX_SHEAR_DEPTH) {
+      expect(r.punchOK && r.beamOK).toBe(false)
+    }
+  })
+
+  it('analyze mode is unchanged: a thin given slab still fails', () => {
+    const sound = designSquareFooting(F)
+    const thin = designSquareFooting({ ...F, analysis: 'analyze', givenB: sound.B, givenDc: 150 })
+    expect(thin.punchOK).toBe(false)
+    const ample = designSquareFooting({ ...F, analysis: 'analyze', givenB: sound.B, givenDc: sound.Dc })
+    expect(ample.punchOK).toBe(true)
+    expect(ample.beamOK).toBe(true)
+  })
+
+  it('fy = 0 and a zero bar Ø are FLEXURE faults — the shear verdict is not the place to catch them', () => {
+    // Forcing the shear flags false here would be lying about a different
+    // check. `barsFit` is the one that carries these, and it does.
+    for (const over of [{ fy: 0 }, { barDia: 0 }]) {
+      const r = designSquareFooting({ ...F, ...over })
+      expect(r.barsFit).toBe(false)
+      expect(r.punchOK).toBe(true)   // shear genuinely is unaffected
     }
   })
 })

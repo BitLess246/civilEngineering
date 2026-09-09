@@ -3,7 +3,7 @@
 // flexure into one design. Pure & typed; the React UI consumes this directly.
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing, squareSize } from './bearing';
-import { punchingDepth, oneWayShearDepth, type ColumnPosition } from './shear';
+import { punchingDepth, oneWayShearDepth, MAX_SHEAR_DEPTH, type ColumnPosition } from './shear';
 import { flexuralSteel, matLayout, type AsMinBasis } from './flexure';
 
 export interface SquareFootingInput {
@@ -193,7 +193,6 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
     oneWayShearDepth({ qu, B, c: cm, fc: i.fc, lambda: i.lambda });
 
   let B = 0, Dc = 0.25, qNet = 0, qu = 0, dPunch = 0, dBeam = 0;
-  let punchOK = true, beamOK = true;
 
   if (analysis === 'analyze') {
     // Given B and D_c — compute pressures, then check shear adequacy.
@@ -203,9 +202,6 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
     qu = i.ultimateLoad / (B * B);
     dPunch = reqPunch(qu);
     dBeam = reqBeam(qu, B);
-    const dProvidedShear = Dc * 1000 - i.cover - i.barDia;
-    punchOK = dProvidedShear >= dPunch;
-    beamOK = dProvidedShear >= dBeam;
   } else if (method === 'approximate') {
     // Single pass from an assumed D_c = 250 mm (no re-iteration of q_net/B).
     Dc = 0.25;
@@ -230,6 +226,44 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
   }
 
   const DcMm = Dc * 1000;
+  // ── THE SHEAR VERDICTS ARE A CHECK, NOT AN ASSERTION ───────────────────
+  //
+  // `punchOK`/`beamOK` were initialised to `true` and assigned ONLY in
+  // `analyze` mode. Both DESIGN paths size D_c from max(d_punch, d_beam) and
+  // then never looked again — so the two flags left this function as a
+  // hardcoded `true`, which is not a check: nothing about the footing could
+  // make them false.
+  //
+  // For a sound input they were right by construction, which is exactly why
+  // it went unnoticed. For an input that degenerates they were still `true`:
+  // a NEGATIVE column load, q_allow = 0, fy = 0 or a zero bar Ø all came back
+  // `punchOK: true, beamOK: true`, with the schedule and the report repeating
+  // it. A verdict that cannot fail is worse than no verdict, because it is
+  // read as evidence.
+  //
+  // Measured at the depth that will actually be BUILT, in every mode — the
+  // same trial → adopt → re-check the worked solution was given in #715, so
+  // the sheet and the engine now agree about which section was checked. And a
+  // comparison whose operands are not finite is not a pass: `>=` against NaN
+  // is false, but stating the finiteness makes that a decision rather than an
+  // accident of IEEE-754.
+  // The GEOMETRY has to exist before any check on it means anything: an
+  // impossible bearing pressure (q_allow = 0, or a net pressure driven
+  // negative by the overburden) makes the required area infinite and B comes
+  // out NaN. Every verdict on a footing with no size is false.
+  //
+  // And the depth solvers SATURATE. Both search to `MAX_SHEAR_DEPTH` and
+  // return it when nothing in the range works, so a returned 3000 mm is "no
+  // depth satisfies this", not "3000 mm does". Sizing D_c to that saturated
+  // value and then comparing the two — which is what the design path did —
+  // compares a number with itself and always passes.
+  const dProvided = DcMm - i.cover - i.barDia;
+  const geometryOK = [B, qNet, qu, DcMm, dProvided].every(Number.isFinite) && B > 0;
+  const shearOK = (dReq: number) =>
+    geometryOK && Number.isFinite(dReq) && dReq < MAX_SHEAR_DEPTH && dProvided >= dReq;
+  const punchOK = shearOK(dPunch);
+  const beamOK = shearOK(dBeam);
+
   const dFlex = DcMm - i.cover - i.barDia / 2;
   const arm = (B - cm) / 2;                         // cantilever from column face, m
   const Mu = qu * B * (arm * arm) / 2;              // kN·m over the full width B
@@ -253,7 +287,7 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
     bars: layout.n, barSpacing: layout.spacing,
     barSpacingMax: layout.sMax, spacingGoverned: layout.spacingGoverned,
     barsFit: layout.clearOK,
-    analysis, method, dProvided: DcMm - i.cover - i.barDia, punchOK, beamOK,
+    analysis, method, dProvided, punchOK, beamOK,
     offset: columnOffset(i, B, cy),
   };
 }
