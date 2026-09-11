@@ -297,7 +297,27 @@ export const CATEGORY_LABEL: Partial<Record<LoadCategory, string>> = {
  * figure out rather than printing an empty frame.
  */
 export function loadDiagram(model: StructuralModel, cat: LoadCategory, o: ModelDiagramOpts = {}): Drawing | null {
-  const loads = model.loads.filter((l) => l.cat === cat)
+  return drawLoads(model, model.loads.filter((l) => l.cat === cat), CATEGORY_LABEL[cat] ?? cat, o)
+}
+
+/**
+ * The same figure for ONE DIRECTIONAL CASE rather than a whole category.
+ *
+ * A model carries only the load pattern that was committed to it — the primary
+ * direction, untorsioned — while the analysis solves EVERY case the E/W
+ * builders produced. Drawn from the category alone, the report therefore
+ * showed one seismic and one wind figure for a run that enveloped twelve.
+ * This takes the case's own loads so each one can be drawn as it was solved.
+ */
+export function caseLoadDiagram(
+  model: StructuralModel, loads: ModelLoad[], title: string, o: ModelDiagramOpts = {},
+): Drawing | null {
+  return drawLoads(model, loads, title, o)
+}
+
+function drawLoads(
+  model: StructuralModel, loads: ModelLoad[], title: string, o: ModelDiagramOpts = {},
+): Drawing | null {
   if (!loads.length) return null
   const view = o.view ?? 'iso'
   // Arrows are drawn in PAGE units, so the geometry fit cannot see them: pad
@@ -381,7 +401,7 @@ export function loadDiagram(model: StructuralModel, cat: LoadCategory, o: ModelD
     }
   }
   const kinds = [...new Set(loads.map((l) => l.kind))].join(', ')
-  frameChrome(P, fit, `${CATEGORY_LABEL[cat] ?? cat} — APPLIED LOADS`,
+  frameChrome(P, fit, `${title} — APPLIED LOADS`,
     `${loads.length} assignment${loads.length === 1 ? '' : 's'} (${kinds})`
     + `${udlNoted ? ` · line loads to ${f1(peakUdl)} kN/m` : ''} · arrow length ∝ magnitude, not to scale with the geometry`)
   return { primitives: P, bounds: { minX: 0, minY: 0, maxX: fit.box.w, maxY: fit.box.h } }
