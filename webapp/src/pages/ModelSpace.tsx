@@ -42,7 +42,7 @@ import { useSolver } from '../lib/useSolver'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
 import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
 import { concreteClassForFc, type ConcreteClass } from '../engine/quantities'
-import { computeSeismic, buildECases, type SeismicResult, type DriftRow } from '../engine/seismic'
+import { computeSeismic, buildECases, type SeismicResult, type DriftRow, type StabilityRow } from '../engine/seismic'
 import type { IrregularityFlag } from '../engine/irregularity'
 import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
 import { freqFromDeflection, dg11Walking, DG11_OCCUPANCY } from '../engine/floorVibration'
@@ -249,6 +249,7 @@ export default function ModelSpace() {
   const [rsaGen, setRsaGen] = useState<{ x: RsaLateralResult; z: RsaLateralResult } | null>(null)   // RSA-derived E cases
   const [drift, setDrift] = useState<DriftRow[] | null>(null)
   const [irregular, setIrregular] = useState<IrregularityFlag[] | null>(null)
+  const [stability, setStability] = useState<StabilityRow[] | null>(null)
   // Wind (NSCP 207B directional procedure, MWFRS)
   const [Vw, setVw] = useState(n('Vw', 50)); const [expo, setExpo] = useState<'B' | 'C' | 'D'>((si.expo as 'B' | 'C' | 'D') ?? 'C')
   const [Kzt, setKzt] = useState(n('Kzt', 1.0))
@@ -631,14 +632,15 @@ export default function ModelSpace() {
     if (!model || busy || meshErrors) return   // §1 fail-fast: don't solve a singular mesh
     // 3D FEM + storey drift run in the worker so the UI stays responsive.
     run('analyze', {
-      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta }, crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel,
+      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta, Z: Zf }, crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel,
     }).then((r) => {
-      const res = r as { analysis: F3Analysis | null; orphans: number; drift: DriftRow[] | null; irregularities: IrregularityFlag[] | null }
+      const res = r as { analysis: F3Analysis | null; orphans: number; drift: DriftRow[] | null; irregularities: IrregularityFlag[] | null; stability: StabilityRow[] | null }
       setOrphans(res.orphans)
       setAnalysis(res.analysis)
       setAxialSets((res.analysis as ActiveSetAnalysis | null)?.axial ?? null)
       setDrift(res.drift)
       setIrregular(res.irregularities)
+      setStability(res.stability)
     }).catch((e) => console.error('analyze failed', e))
   }
 
@@ -1130,7 +1132,7 @@ export default function ModelSpace() {
    *  dialog can grey out what is not there before anything is generated. */
   const appendixInput = (): AppendixInput | null => model ? {
     model, design, analysis, lateral: [...eCases, ...wCases],
-    seismic: seisXZ, wind, modal, rsa, drift, irregular,
+    seismic: seisXZ, wind, modal, rsa, drift, stability, irregular,
     pushover: po, biaxial: bx, nonlinear: nl, nonlinearHinge: nlHinge,
     optimization: opt ? { result: opt, before: optBefore ?? undefined } : null,
     cages: cageBuild?.cages ?? null,
@@ -3513,6 +3515,24 @@ export default function ModelSpace() {
                   ))}
                   <p className="mt-1 text-[11px] text-slate-500">
                     Limit {seis.T < 0.7 ? '0.025' : '0.020'}·hs (T {seis.T < 0.7 ? '<' : '≥'} 0.7 s) — NSCP 208.5.10.
+                  </p>
+                </Sec>
+              )}
+
+              {stability && seis && (
+                <Sec id="pdelta-stability" grid={false} title="P-Δ stability coefficient θ — NSCP §208.5.10.2">
+                  {stability.map((row) => (
+                    <Row key={row.elevation} alert={row.pDeltaRequired && !pDelta}
+                      label={`Level ${f1(row.elevation)} m`}
+                      value={`θ = ${row.theta.toFixed(3)} ${row.pDeltaRequired ? '— second-order REQUIRED' : '✓'}`}
+                      sub={`Px ${row.Px.toFixed(0)} kN · Vx ${row.Vx.toFixed(0)} kN · Δs/hs ${(row.driftRatio * 100).toFixed(2)}%${row.exempt ? ' · exempt, Zone 3/4 Δs/hs ≤ 0.02/R' : ''}`} />
+                  ))}
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {stability.some((r) => r.pDeltaRequired)
+                      ? pDelta
+                        ? 'θ > 0.10 on at least one storey — P-Δ is required and is ON, so these results carry it.'
+                        : 'θ > 0.10 on at least one storey and P-Δ is OFF. Switch on second-order analysis in the Analysis options and re-run; these results do not satisfy §208.5.10.2.'
+                      : 'θ ≤ 0.10 on every storey (or exempt by the Zone 3/4 drift ratio), so P-Δ may be neglected.'}
                   </p>
                 </Sec>
               )}

@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { computeSeismic, storeyWeights, storeyWeightBreakdown, driftCheck, accidentalTorsionLoads, buildECases, caseResultant } from './seismic'
+import { computeSeismic, storeyWeights, storeyWeightBreakdown, driftCheck, accidentalTorsionLoads, buildECases, caseResultant, stabilityCheck, storeyLiveLoads } from './seismic'
 import { buildSeismicMass } from './modal'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { solveFrame3D, applyF3Combo } from './frame3d'
+import type { DriftRow } from './seismic'
 import type { RectSection, StructuralModel } from './model'
 
 const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -472,5 +473,87 @@ describe('inherent torsion — §208.7.2.7 “actual eccentricity”', () => {
       const V = eqs(skew, d.includes('X') ? 'x' : 'z').V
       expect(Math.hypot(r.Fx, r.Fz)).toBeCloseTo(V, 6)
     }
+  })
+})
+
+describe('stabilityCheck — §208.5.10.2 θ, the missing P-Δ verdict', () => {
+  const m = makeModel()                       // 1×1 bay, 2 storeys at 3 m
+  // Δs and hs are the inputs the drift check produces; the numbers here are
+  // chosen so θ can be checked by hand rather than read back off the engine.
+  const drift = (ds: number): DriftRow[] =>
+    [{ elevation: 3, hs: 3000, ds, dM: 0, limit: 0, ok: true }]
+  const force = [{ elevation: 3, F: 100 }, { elevation: 6, F: 200 }]
+
+  it('θ = Px·Δs / (Vx·hs), by hand', () => {
+    const rows = stabilityCheck(m, drift(20), force, { R: 8.5 })!
+    expect(rows).toHaveLength(1)
+    const r = rows[0]
+    // Px is every level's dead + floor live at and above 3 m; Vx = 100 + 200.
+    const dead = storeyWeights(m).reduce((s, w) => s + w.w, 0)
+    const live = storeyLiveLoads(m).reduce((s, w) => s + w.l, 0)
+    expect(r.Px).toBeCloseTo(dead + live, 9)
+    expect(r.Vx).toBeCloseTo(300, 9)
+    expect(r.theta).toBeCloseTo((r.Px * 20) / (300 * 3000), 12)
+  })
+
+  it('flags the storey when θ passes 0.10, and clears it below', () => {
+    // Solve for the drift that puts θ exactly on 0.10, then step either side.
+    const probe = stabilityCheck(m, drift(20), force, { R: 8.5 })!
+    const dsAt10 = (0.10 * probe[0].Vx * 3000) / probe[0].Px
+    expect(stabilityCheck(m, drift(dsAt10 * 0.99), force, { R: 8.5 })![0].pDeltaRequired).toBe(false)
+    expect(stabilityCheck(m, drift(dsAt10 * 1.01), force, { R: 8.5 })![0].pDeltaRequired).toBe(true)
+    // exactly on the threshold is "does not exceed 0.10" — still exempt
+    expect(stabilityCheck(m, drift(dsAt10), force, { R: 8.5 })![0].pDeltaRequired).toBe(false)
+  })
+
+  it('Zone 3/4 exempts a storey by drift ratio whatever θ comes to', () => {
+    // Δs/hs ≤ 0.02/R is a SECOND, independent exemption. Build a storey that is
+    // both under that ratio and over θ = 0.10, so the two rules disagree and
+    // the exemption has to be the one that decides.
+    const R = 2.0                                        // 0.02/R = 1.0%
+    const ds = 0.009 * 3000                              // 0.9% — inside the ratio
+    const Px = stabilityCheck(m, drift(ds), force, { R })![0].Px
+    // θ > 0.10 needs Vx < Px·Δs/(0.10·hs); take half of that.
+    const Vx = (Px * ds) / (0.10 * 3000) / 2
+    const soft = [{ elevation: 3, F: Vx / 2 }, { elevation: 6, F: Vx / 2 }]
+    const hot = stabilityCheck(m, drift(ds), soft, { R, Z: 0.4 })!
+    expect(hot[0].theta).toBeGreaterThan(0.10)           // the θ test alone would fail it
+    expect(hot[0].driftRatio).toBeLessThanOrEqual(0.02 / R)
+    expect(hot[0].exempt).toBe(true)
+    expect(hot[0].pDeltaRequired).toBe(false)
+    // the SAME storey outside Zone 3/4 has no exemption to stand on
+    const cold = stabilityCheck(m, drift(ds), soft, { R })!
+    expect(cold[0].exempt).toBe(false)
+    expect(cold[0].pDeltaRequired).toBe(true)
+  })
+
+  it('omits a storey with no seismic shear rather than calling it unstable', () => {
+    // θ = Px·Δs/(Vx·hs) is undefined at Vx = 0 — not zero, and not infinite.
+    expect(stabilityCheck(m, drift(20), [{ elevation: 3, F: 0 }], { R: 8.5 })).toBeNull()
+  })
+
+  it('refuses a non-physical R instead of publishing a verdict', () => {
+    for (const R of [0, -8.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(stabilityCheck(m, drift(20), force, { R })).toBeNull()
+    }
+  })
+
+  it('Px carries floor live load, which the seismic weight W does not', () => {
+    // §208.5.1.1's W is dead; §208.5.10.2's Px is dead AND floor live. Reading
+    // Px off storeyWeights alone would understate θ — the unconservative way to
+    // be wrong, since a smaller Px is a smaller θ and a check that passes.
+    const withL: StructuralModel = {
+      ...m,
+      loads: [...m.loads, ...m.plates.map((pl) => ({ kind: 'area' as const, plate: pl.id, q: 2.4, cat: 'L' as const }))],
+    }
+    const live = storeyLiveLoads(withL).reduce((s, w) => s + w.l, 0)
+    expect(live).toBeCloseTo(2.4 * 6 * 5 * 2, 6)         // 2.4 kPa over both 6×5 m levels
+    expect(storeyLiveLoads(m).reduce((s, w) => s + w.l, 0)).toBe(0)   // control: none to find
+    const deadOnly = storeyWeights(withL).reduce((s, w) => s + w.w, 0)
+    const rows = stabilityCheck(withL, drift(20), force, { R: 8.5 })!
+    expect(rows[0].Px).toBeCloseTo(deadOnly + live, 9)
+    expect(rows[0].Px).toBeGreaterThan(deadOnly)
+    // and it moves the verdict's input, not just a reported number
+    expect(rows[0].theta).toBeGreaterThan(stabilityCheck(m, drift(20), force, { R: 8.5 })![0].theta)
   })
 })

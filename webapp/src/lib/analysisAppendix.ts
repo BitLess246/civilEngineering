@@ -23,7 +23,7 @@ import { estimateTakeoff, barKgPerM, type TakeoffResult } from '../engine/takeof
 import { appliedResultant, type F3Analysis, type F3Result } from '../engine/frame3d'
 import { GRAVITY, type ModalResult } from '../engine/modal'
 import type { ResponseSpectrumResult } from '../engine/responseSpectrum'
-import { storeyWeightBreakdown, caseResultant, type DriftRow, type SeismicResult } from '../engine/seismic'
+import { storeyWeightBreakdown, caseResultant, type DriftRow, type SeismicResult, type StabilityRow } from '../engine/seismic'
 import type { WindResult } from '../engine/wind'
 import type { IrregularityFlag } from '../engine/irregularity'
 import type { PushoverModelResult } from '../engine/pushoverModel'
@@ -83,6 +83,7 @@ export interface AppendixInput {
   modal?: ModalResult | null
   rsa?: ResponseSpectrumResult | null
   drift?: DriftRow[] | null
+  stability?: StabilityRow[] | null
   irregular?: IrregularityFlag[] | null
   pushover?: PushoverModelResult | null
   biaxial?: BiaxialPushoverResult | null
@@ -127,7 +128,7 @@ export function appendixAvailability(i: AppendixInput): Record<AppendixKey, bool
     model: true,
     loading: true,
     analysis: !!i.analysis,
-    modal: !!(i.modal || i.seismic || i.rsa || i.drift || (i.irregular && i.irregular.length)),
+    modal: !!(i.modal || i.seismic || i.rsa || i.drift || i.stability || (i.irregular && i.irregular.length)),
     nonlinear: !!(i.nonlinear?.inelastic || i.nonlinearHinge?.inelastic),
     pushover: !!(i.pushover || i.biaxial),
     optimization: !!i.optimization,
@@ -647,6 +648,23 @@ function modalSection(i: AppendixInput): AppendixSection {
       title: 'D.3 Storey drift — NSCP §208.6.5 (ΔM = 0.7·R·Δs)',
       head: ['Level (m)', 'hs (m)', 'Δs (mm)', 'ΔM (mm)', 'Limit (mm)', 'Status'], right: [0, 1, 2, 3, 4],
       rows: i.drift.map((d) => [f2(d.elevation), f2(d.hs), f2(d.ds), f2(d.dM), f2(d.limit), d.ok ? 'PASS' : 'FAIL']),
+    })
+  }
+  if (i.stability && i.stability.length) {
+    const need = i.stability.filter((r) => r.pDeltaRequired)
+    tables.push({
+      title: 'D.3b P-\u0394 stability coefficient \u03b8 \u2014 NSCP \u00a7208.5.10.2',
+      head: ['Level (m)', 'Px (kN)', 'Vx (kN)', '\u0394s (mm)', 'hs (m)', '\u03b8', '\u0394s/hs', 'Second order'], right: [0, 1, 2, 3, 4, 5, 6],
+      rows: i.stability.map((r) => [
+        f2(r.elevation), f1(r.Px), f1(r.Vx), f2(r.ds), f2(r.hs), r.theta.toFixed(3),
+        `${(r.driftRatio * 100).toFixed(2)}%`,
+        r.pDeltaRequired ? 'REQUIRED' : r.exempt ? 'Exempt (Zone 3/4)' : 'May be neglected',
+      ]),
+      note: '\u03b8 = Px\u00b7\u0394s / (Vx\u00b7hs), with Px the total dead and FLOOR LIVE load above the storey and \u0394s the ELASTIC storey drift \u2014 both sides taken at design-level forces, which is why \u0394s and not \u0394M appears.'
+        + ' \u00a7208.5.10.2 lets P-\u0394 be neglected while \u03b8 does not exceed 0.10, and in Seismic Zone 3 and 4 also whenever \u0394s/hs does not exceed 0.02/R, which is an independent exemption that stands even where \u03b8 is larger.'
+        + (need.length
+          ? ` \u03b8 exceeds 0.10 at ${need.length === 1 ? 'one storey' : `${need.length} storeys`} (EL ${need.map((r) => f2(r.elevation)).join(', ')} m): a second-order analysis is REQUIRED there, and these results satisfy the clause only if P-\u0394 was switched on for the run \u2014 see the analysis options in B.1.`
+          : ' No storey exceeds 0.10, so a first-order analysis satisfies the clause.'),
     })
   }
   if (i.irregular) {

@@ -13,7 +13,7 @@ import {
   buildAnalysisAppendix, analysisStatus, appendixAvailability, equilibriumRows, comboExpression,
   capacityCurveDrawing, finalModelConsistency, APPENDIX_TITLES, LETTERS, type AppendixInput,
 } from './analysisAppendix'
-import { computeSeismic, buildECases } from '../engine/seismic'
+import { computeSeismic, buildECases, stabilityCheck, type DriftRow, type StabilityRow } from '../engine/seismic'
 import { storeyWeightBreakdown } from '../engine/seismic'
 import { DIAGRAM_W } from '../engine/analysisDiagram'
 
@@ -715,5 +715,50 @@ describe('B.3/B.4 state how the lateral force is distributed', () => {
     const n = noteOf('B.7', { ...full, lateral: buildECases(model, seis.x.loads, seis.z.loads, { dirs: ['+X', '-X'], torsion: true }) })
     expect(n).not.toMatch(/divided EQUALLY/)
     expect(n).toMatch(/centre of RIGIDITY/)
+  })
+})
+
+describe('D.3b — the P-Δ requirement reaches the report', () => {
+  const drift: DriftRow[] = [
+    { elevation: 3, hs: 3000, ds: 6, dM: 0, limit: 0, ok: true },
+    { elevation: 6, hs: 3000, ds: 3, dM: 0, limit: 0, ok: true },
+  ]
+  const force = [{ elevation: 3, F: 40 }, { elevation: 6, F: 60 }]
+  const rows = (p: { R: number; Z?: number }) => stabilityCheck(model, drift, force, p)!
+  const table = (stability: StabilityRow[] | null) =>
+    buildAnalysisAppendix({ ...full, drift, stability }).sections.find((s) => s.key === 'modal')!
+      .tables!.find((t) => t.title.startsWith('D.3b'))
+
+  it('prints θ per storey with the clause and the formula', () => {
+    const t = table(rows({ R: 8.5 }))!
+    expect(t.rows).toHaveLength(2)
+    expect(t.title).toContain('§208.5.10.2')
+    expect(t.note).toMatch(/θ = Px·Δs \/ \(Vx·hs\)/)
+    // the printed θ is the engine's, not a second opinion
+    expect(t.rows[0][5]).toBe(rows({ R: 8.5 })[0].theta.toFixed(3))
+  })
+
+  it('says REQUIRED and names the storeys when θ passes 0.10', () => {
+    // Shrink Vx until θ crosses; Px is fixed by the model.
+    const hot = stabilityCheck(model, drift, [{ elevation: 3, F: 1 }, { elevation: 6, F: 1 }], { R: 8.5 })!
+    expect(hot.some((r) => r.pDeltaRequired)).toBe(true)
+    const t = table(hot)!
+    expect(t.rows.some((r) => r[7] === 'REQUIRED')).toBe(true)
+    expect(t.note).toMatch(/second-order analysis is REQUIRED/)
+    expect(t.note).toMatch(/EL 3\.00/)
+  })
+
+  it('says a first-order run satisfies the clause when no storey does', () => {
+    const t = table(rows({ R: 8.5 }))!
+    expect(rows({ R: 8.5 }).some((r) => r.pDeltaRequired)).toBe(false)
+    expect(t.note).toMatch(/a first-order analysis satisfies the clause/)
+    expect(t.note).not.toMatch(/REQUIRED/)
+  })
+
+  it('is absent, not empty, when no stability check ran', () => {
+    // The control: a run without it must not publish a table implying θ ≤ 0.10.
+    expect(table(null)).toBeUndefined()
+    expect(buildAnalysisAppendix(bare).sections.find((s) => s.key === 'modal')!.tables ?? [])
+      .not.toContainEqual(expect.objectContaining({ title: expect.stringContaining('D.3b') }))
   })
 })

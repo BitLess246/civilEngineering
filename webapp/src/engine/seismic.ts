@@ -97,6 +97,67 @@ export function storeyWeights(model: StructuralModel, gammaC = GAMMA_C): { eleva
   return storeyWeightsFull(model, gammaC).map(({ elevation, w }) => ({ elevation, w }))
 }
 
+/**
+ * Which level a thing belongs to, and how long a member is — shared by the
+ * dead-weight pass and the floor-live pass so the two cannot disagree about
+ * where a load lands.
+ */
+function levelTools(model: StructuralModel) {
+  const nm = new Map(model.nodes.map((n) => [n.id, n]))
+  const levels = [...new Set(model.storeys.map((s) => s.elevation))].sort((a, b) => a - b)
+  const closest = (y: number) => levels.reduce((best, e) => (Math.abs(e - y) < Math.abs(best - y) ? e : best), levels[0])
+  const memberLen = (id: string) => {
+    const m = model.members.find((x) => x.id === id)
+    const a = m && nm.get(m.i), b = m && nm.get(m.j)
+    return a && b ? Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) : 0
+  }
+  /** The level a member's load belongs to — a beam's own, a column's top. */
+  const memberLevel = (id: string) => {
+    const m = model.members.find((x) => x.id === id)
+    const a = m && nm.get(m.i), b = m && nm.get(m.j)
+    if (!a || !b) return levels[0]
+    return closest(m.role === 'column' ? Math.max(a.y, b.y) : a.y)
+  }
+  return { nm, levels, closest, memberLen, memberLevel }
+}
+
+/**
+ * FLOOR LIVE LOAD per elevated level, kN — area loads on the level's panels
+ * plus any cat-'L' line, point or node load, assigned to levels exactly as the
+ * dead-weight pass assigns dead ones.
+ *
+ * Not part of the seismic weight W (§208.5.1.1 takes dead plus only specific
+ * live fractions); this exists for §208.5.10.2, whose Px is the total dead AND
+ * FLOOR LIVE load above the storey. Roof live Lr is not floor live and is not
+ * counted.
+ */
+export function storeyLiveLoads(model: StructuralModel): { elevation: number; l: number }[] {
+  const { nm, levels, closest, memberLen, memberLevel } = levelTools(model)
+  const live = new Map<number, number>(levels.map((e) => [e, 0]))
+  const add = (lvl: number, v: number) => live.set(lvl, (live.get(lvl) ?? 0) + v)
+  for (const p of model.plates) {
+    const c = p.corners.map((id) => nm.get(id))
+    if (c.some((q) => !q)) continue
+    const [c0, c1, , c3] = c as { x: number; y: number; z: number }[]
+    const lx = Math.hypot(c1.x - c0.x, c1.y - c0.y, c1.z - c0.z)
+    const lz = Math.hypot(c3.x - c0.x, c3.y - c0.y, c3.z - c0.z)
+    const q = model.loads
+      .filter((l) => l.kind === 'area' && l.plate === p.id && l.cat === 'L')
+      .reduce((t, l) => t + (l as { q: number }).q, 0)
+    add(closest(c0.y), q * lx * lz)
+  }
+  for (const l of model.loads) {
+    if (l.cat !== 'L') continue
+    if (l.kind === 'member-udl') add(memberLevel(l.member), l.w * memberLen(l.member))
+    else if (l.kind === 'member-point') add(memberLevel(l.member), l.P)
+    else if (l.kind === 'node') {
+      const n = nm.get(l.node)
+      if (n) add(closest(n.y), Math.abs(l.Fy ?? 0))
+    }
+  }
+  return levels.map((e) => ({ elevation: e, l: live.get(e) ?? 0 }))
+}
+
 function storeyWeightsFull(model: StructuralModel, gammaC = GAMMA_C): StoreyWeight[] {
   const nm = new Map(model.nodes.map((n) => [n.id, n]))
   const secMap = new Map(model.sections.map((s) => [s.id, s]))
@@ -109,23 +170,10 @@ function storeyWeightsFull(model: StructuralModel, gammaC = GAMMA_C): StoreyWeig
     const s = secMap.get(mSection) ?? model.sections[0]
     return s ? memberWeightPerLength(s, gc) : 0
   }
-  const levels = [...new Set(model.storeys.map((s) => s.elevation))].sort((a, b) => a - b)
+  const { levels, closest, memberLen, memberLevel } = levelTools(model)
   const parts = new Map<number, WeightComponent>(levels.map((e) => [e, zeroComponents()]))
-  const closest = (y: number) => levels.reduce((best, e) => (Math.abs(e - y) < Math.abs(best - y) ? e : best), levels[0])
   const add = (lvl: number, key: keyof WeightComponent, v: number) => {
     const c = parts.get(lvl); if (c) c[key] += v
-  }
-  const memberLen = (id: string) => {
-    const m = model.members.find((x) => x.id === id)
-    const a = m && nm.get(m.i), b = m && nm.get(m.j)
-    return a && b ? Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) : 0
-  }
-  /** The level a member's load belongs to — a beam's own, a column's top. */
-  const memberLevel = (id: string) => {
-    const m = model.members.find((x) => x.id === id)
-    const a = m && nm.get(m.i), b = m && nm.get(m.j)
-    if (!a || !b) return levels[0]
-    return closest(m!.role === 'column' ? Math.max(a.y, b.y) : a.y)
   }
 
   // slabs: dead area loads × panel area
@@ -380,6 +428,103 @@ export function caseResultant(model: StructuralModel, loads: ModelLoad[]): CaseR
     Mt += fz * (n.x - c.x) - fx * (n.z - c.z)
   }
   return { Fx, Fz, Mt }
+}
+
+// ── P-Δ stability coefficient (NSCP §208.5.10.2 / UBC-97 §1630.1.3) ──────
+//
+// SECOND-ORDER ANALYSIS IS A CHECKBOX IN THIS APP AND A REQUIREMENT IN THE
+// CODE, and nothing connected the two. `AnalyzeOptions.pDelta` could be left
+// off on a frame the code obliges to be analysed second-order, and the run
+// came back clean: no warning, no row, nothing that could fail. This is the
+// verdict that was missing rather than the verdict that could not fail.
+//
+// §208.5.10.2 lets P-Δ be neglected when the ratio of secondary to primary
+// moment does not exceed 0.10, and gives that ratio for any storey as
+//
+//     θ = Px·Δs / (Vx·hsx)
+//
+// with Px the total dead AND FLOOR LIVE load above the storey, Δs the elastic
+// seismic storey drift, Vx the seismic shear in that storey and hsx its
+// height. In Seismic Zone 3 and 4 there is a second exemption that stands on
+// its own: P-Δ need not be considered when the storey drift ratio Δs/hsx does
+// not exceed 0.02/R.
+//
+// Δs, NOT ΔM. The ratio is elastic drift over design shear — both sides come
+// from the same design-level forces, so amplifying one and not the other would
+// inflate θ by 0.7·R. (ASCE 7-10 §12.8.7 writes the same quantity as
+// Px·Δ/(Vx·hsx·Cd) with Δ already amplified, which is the identical number.)
+//
+// NO θmax IS PUBLISHED HERE. ASCE 7-10 caps θ at θmax = 0.5/(β·Cd) ≤ 0.25 and
+// calls the structure unstable above it; §208.5.10.2 in its UBC-97 lineage
+// carries no such ceiling, and inventing one under an NSCP clause reference
+// would be a claim this module cannot support. The 0.10 threshold and the
+// Zone 3/4 exemption are what it checks.
+
+export interface StabilityRow {
+  elevation: number
+  /** Storey height, mm. */
+  hs: number
+  /** Elastic seismic storey drift Δs, mm. */
+  ds: number
+  /** Total dead + floor live load above the storey, kN. */
+  Px: number
+  /** Seismic storey shear, kN — the applied lateral force at and above it. */
+  Vx: number
+  /** θ = Px·Δs/(Vx·hs). */
+  theta: number
+  /** Δs/hs, against the Zone 3/4 exemption limit 0.02/R. */
+  driftRatio: number
+  /** Zone 3/4 and Δs/hs ≤ 0.02/R — exempt whatever θ comes to. */
+  exempt: boolean
+  /** θ > 0.10 and not exempt: the code requires a second-order analysis. */
+  pDeltaRequired: boolean
+}
+
+/**
+ * Per-storey §208.5.10.2 stability coefficient.
+ *
+ * `drift` supplies Δs and hs (from `driftCheck`, same direction), `storeyForce`
+ * the applied lateral force per level (the E-case node loads summed by level),
+ * and the model its gravity load. Returns `null` when R is not a usable
+ * reduction factor or there is no storey to check.
+ *
+ * A storey carrying no seismic shear is OMITTED rather than reported: θ is
+ * Px·Δs over Vx·hs, so Vx = 0 makes it undefined — not zero, and not infinite.
+ * Saying nothing about a storey with no seismic demand is the honest answer;
+ * reporting θ = ∞ there would be a failure the structure did not earn.
+ */
+export function stabilityCheck(
+  model: StructuralModel,
+  drift: DriftRow[],
+  storeyForce: { elevation: number; F: number }[],
+  p: { R: number; Z?: number; gammaC?: number },
+): StabilityRow[] | null {
+  if (!(p.R > 0) || !Number.isFinite(p.R)) return null
+  if (drift.length === 0) return null
+  const dead = storeyWeights(model, p.gammaC ?? GAMMA_C)
+  const live = storeyLiveLoads(model)
+  // Zone 3 starts at Z = 0.3; the exemption is written for Zone 3 AND 4.
+  const zone34 = (p.Z ?? 0) >= 0.3
+  const limit = 0.02 / p.R
+
+  const out: StabilityRow[] = []
+  for (const row of drift) {
+    // everything at or above this level contributes to Px and Vx
+    const aboveOrAt = (e: number) => e >= row.elevation - 1e-6
+    let Px = 0
+    for (const w of dead) if (aboveOrAt(w.elevation)) Px += w.w
+    for (const l of live) if (aboveOrAt(l.elevation)) Px += l.l
+    const Vx = storeyForce.reduce((t, f) => t + (aboveOrAt(f.elevation) ? Math.abs(f.F) : 0), 0)
+    if (!(Vx > 1e-9) || !(row.hs > 0)) continue          // no seismic demand — θ undefined
+    const theta = (Px * row.ds) / (Vx * row.hs)
+    const driftRatio = row.ds / row.hs
+    const exempt = zone34 && driftRatio <= limit + 1e-12
+    out.push({
+      elevation: row.elevation, hs: row.hs, ds: row.ds, Px, Vx,
+      theta, driftRatio, exempt, pDeltaRequired: !exempt && theta > 0.10,
+    })
+  }
+  return out.length ? out : null
 }
 
 // ── Directional E-case builder (§208.7.2.7 + §208.8.1) ───────────────────
