@@ -20,6 +20,7 @@
 // valid model with a false error.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel } from './model'
+import { SHELL_SUBDIV_MIN, SHELL_SUBDIV_MAX } from './model'
 import { RHO_MIN, RHO_MAX } from './columnDesign'
 import { barContinuityGroups } from './modelBuilder'
 import { WOOD_SPECIES } from './woodDesign'
@@ -34,6 +35,12 @@ export interface MeshIssue {
 }
 
 const COINCIDENT_TOL = 1e-6  // m
+
+/** Free-DOF ceiling for the shell mesh. `frame3d` assembles the free block as a
+ *  DENSE nf×nf array (`Kff_raw`) and structured-clones it into every pool
+ *  worker, so the memory is 8·nf² bytes per copy — 4 000 DOF is 128 MB, 8 000 is
+ *  512 MB. Raising this is a solver change (sparse assembly), not a constant. */
+export const MESH_DOF_BUDGET = 4000
 
 export function validateMesh(model: StructuralModel): MeshIssue[] {
   const issues: MeshIssue[] = []
@@ -332,6 +339,118 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
         const A = box(p.openings[a]), B = box(p.openings[b2])
         if (A.x0 < B.x1 - 1e-9 && B.x0 < A.x1 - 1e-9 && A.y0 < B.y1 - 1e-9 && B.y0 < A.y1 - 1e-9)
           issues.push({ severity: 'error', code: 'OPENING_OVERLAP', message: `plate ${p.id}: openings ${p.openings[a].id} and ${p.openings[b2].id} overlap — merge them into one`, refs: [p.id] })
+      }
+    }
+  }
+
+  // ── Shell mesh quality (L1 rules for the n×n plate mesh) ─────────────────
+  //
+  // These are geometry rules, so they apply whether or not `shellElements` is
+  // on today — a panel that is warped or needle-thin is a bad panel either way,
+  // and the user should hear about it before switching the mesh on rather than
+  // after. Only the two rules that depend on the subdivision itself are gated
+  // on `shellElements`.
+  //
+  // The DOF budget is an ERROR rather than a warning on purpose. `frame3d`
+  // assembles the free block as a DENSE nf×nf array and structured-clones it to
+  // every pool worker, so the cost is 8·nf² bytes PER COPY: 4 000 DOF is 128 MB
+  // and 8 000 is 512 MB. Past the budget the failure mode is a browser tab that
+  // dies with no message, which is the exact class of silent failure this
+  // module exists to turn into a sentence.
+  {
+    const subdiv = model.shellSubdiv
+    if (subdiv !== undefined
+      && (!Number.isInteger(subdiv) || subdiv < SHELL_SUBDIV_MIN || subdiv > SHELL_SUBDIV_MAX))
+      issues.push({ severity: 'error', code: 'MESH_SUBDIV_RANGE', refs: [],
+        message: `Shell subdivision must be a whole number from ${SHELL_SUBDIV_MIN} to ${SHELL_SUBDIV_MAX} (got ${subdiv}).` })
+
+    const n = Number.isInteger(subdiv) && subdiv! >= SHELL_SUBDIV_MIN && subdiv! <= SHELL_SUBDIV_MAX
+      ? subdiv! : 1
+
+    for (const p of model.plates) {
+      const c = p.corners.map((id) => nodeById.get(id))
+      if (c.some((q) => !q)) continue          // already reported by the corner rule
+      const [c0, c1, c2, c3] = c as NonNullable<typeof c[0]>[]
+      const sub = (a: typeof c0, b: typeof c0): [number, number, number] => [b.x - a.x, b.y - a.y, b.z - a.z]
+      const cross = (u: [number, number, number], v: [number, number, number]): [number, number, number] =>
+        [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+      const dot = (u: [number, number, number], v: [number, number, number]) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
+      const norm = (u: [number, number, number]) => Math.hypot(u[0], u[1], u[2])
+
+      const e01 = sub(c0, c1), e03 = sub(c0, c3), e02 = sub(c0, c2)
+      const Lx = norm(e01), Ly = norm(e03)
+      const area = 0.5 * (norm(cross(e01, e02)) + norm(cross(e02, e03)))
+
+      if (!(area > 1e-9)) {
+        // Silently skipped by the bridge today, so the panel simply vanishes
+        // from the analysis with nothing said.
+        issues.push({ severity: 'error', code: 'PLATE_DEGENERATE', refs: [p.id],
+          message: `plate ${p.id}: the four corners enclose no area — the panel cannot be meshed and is dropped from the analysis.` })
+        continue
+      }
+
+      // WARP. A non-planar quad has two different triangulations, so its meshed
+      // area (and therefore the load it carries) depends on which diagonal the
+      // mesher happens to cut.
+      const nrm = cross(e01, e03)
+      const nl = norm(nrm)
+      const diag = Math.min(norm(e02), norm(sub(c1, c3)))
+      if (nl > 1e-12 && diag > 0) {
+        const off = Math.abs(dot(nrm, e02)) / nl   // corner 2 off the c0-c1-c3 plane
+        if (off > 0.02 * diag)
+          issues.push({ severity: 'warning', code: 'PLATE_WARP', refs: [p.id],
+            message: `plate ${p.id}: corners are not coplanar — out of plane by ${(off * 1000).toFixed(0)} mm, ${Math.round((off / diag) * 100)}% of its shorter diagonal. A warped panel's meshed area depends on which diagonal is cut, so its load and stiffness are both approximate.` })
+      }
+
+      // ASPECT. An n×n subdivision keeps the panel's own ratio in every cell,
+      // so a 5:1 panel is 5:1 cells however fine the mesh; DKT bending degrades
+      // past roughly 5:1.
+      if (Lx > 0 && Ly > 0) {
+        const ar = Math.max(Lx, Ly) / Math.min(Lx, Ly)
+        if (ar > 4)
+          issues.push({ severity: 'warning', code: 'PLATE_ASPECT', refs: [p.id],
+            message: `plate ${p.id}: aspect ratio ${ar.toFixed(1)}:1 (${Lx.toFixed(2)} × ${Ly.toFixed(2)} m). Subdividing keeps this ratio in every cell, and the DKT bending element loses accuracy past about 5:1 — split the panel instead.` })
+      }
+
+      // SKEW. Interior angles far from square distort the shape functions.
+      const ang = (a: typeof c0, b: typeof c0, cc: typeof c0) => {
+        const u = sub(b, a), v = sub(b, cc)
+        const m = norm(u) * norm(v)
+        return m > 1e-12 ? (Math.acos(Math.max(-1, Math.min(1, dot(u, v) / m))) * 180) / Math.PI : 90
+      }
+      const angles = [ang(c3, c0, c1), ang(c0, c1, c2), ang(c1, c2, c3), ang(c2, c3, c0)]
+      const worst = angles.reduce((w, a) => (Math.abs(a - 90) > Math.abs(w - 90) ? a : w), 90)
+      if (worst < 30 || worst > 150)
+        issues.push({ severity: 'warning', code: 'PLATE_SKEW', refs: [p.id],
+          message: `plate ${p.id}: corner angle ${worst.toFixed(0)}° is outside 30°–150°. A badly skewed panel meshes into badly skewed triangles.` })
+
+      // An opening the mesh cannot resolve. Cells are dropped by their CENTRE,
+      // so a hole narrower than one cell may fall between centres and be missed
+      // entirely — the panel would then carry load through solid concrete that
+      // is not there.
+      if (model.shellElements && p.openings?.length) {
+        const cell = Math.min(Lx, Ly) / n
+        for (const o of p.openings) {
+          const small = o.kind === 'circle' ? 2 * (o.r ?? 0) : Math.min(o.w ?? 0, o.h ?? 0)
+          if (small > 0 && small < cell)
+            issues.push({ severity: 'warning', code: 'MESH_OPENING_COARSE', refs: [p.id],
+              message: `plate ${p.id}, opening ${o.id}: ${small.toFixed(2)} m across is smaller than one ${cell.toFixed(2)} m mesh cell at subdivision ${n} — the mesh cannot resolve it and may carry load straight through the hole. Raise the subdivision or model it as a separate panel.` })
+        }
+      }
+    }
+
+    // DOF BUDGET. Upper bound (no credit for nodes shared between panels), so
+    // it never under-reports the cost.
+    if (model.shellElements) {
+      const est = 6 * (model.nodes.length + model.plates.length * (n + 1) * (n + 1))
+      if (est > MESH_DOF_BUDGET) {
+        const fits = (() => {
+          for (let k = n - 1; k >= SHELL_SUBDIV_MIN; k--)
+            if (6 * (model.nodes.length + model.plates.length * (k + 1) * (k + 1)) <= MESH_DOF_BUDGET) return k
+          return 0
+        })()
+        issues.push({ severity: 'error', code: 'MESH_DOF_BUDGET', refs: [],
+          message: `Subdivision ${n} over ${model.plates.length} panels needs about ${est.toLocaleString()} degrees of freedom, past the ${MESH_DOF_BUDGET.toLocaleString()} this solver can hold (the stiffness matrix is dense, so memory grows with the SQUARE of the count). ${fits >= SHELL_SUBDIV_MIN ? `Subdivision ${fits} fits.` : 'Split this model or turn shell elements off.'}` })
       }
     }
   }
