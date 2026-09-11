@@ -424,17 +424,27 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
         issues.push({ severity: 'warning', code: 'PLATE_SKEW', refs: [p.id],
           message: `plate ${p.id}: corner angle ${worst.toFixed(0)}° is outside 30°–150°. A badly skewed panel meshes into badly skewed triangles.` })
 
-      // An opening the mesh cannot resolve. Cells are dropped by their CENTRE,
-      // so a hole narrower than one cell may fall between centres and be missed
-      // entirely — the panel would then carry load through solid concrete that
-      // is not there.
+      // An opening the mesh cannot resolve. Cells are cut out by their CENTRE,
+      // so a hole that fits between centres is missed entirely and the panel
+      // carries load through concrete that is not there.
+      //
+      // The criterion is TWO CELLS in each direction, and per direction. An
+      // earlier version compared the hole's smallest dimension against
+      // min(Lx,Ly)/n, which is the FINER cell size, and it stayed silent on a
+      // measured miss: a 1 × 1 m hole in a 6 × 5 m panel at subdivision 6 has
+      // 1.0 × 0.83 m cells, its own width exactly spans one of them, and every
+      // cell centre fell on or outside the hole boundary — zero cells dropped,
+      // the whole opening ignored. A hole needs about two cells across before
+      // the staircase can represent it at all.
       if (model.shellElements && p.openings?.length) {
-        const cell = Math.min(Lx, Ly) / n
+        const cx = Lx / n, cy = Ly / n
         for (const o of p.openings) {
-          const small = o.kind === 'circle' ? 2 * (o.r ?? 0) : Math.min(o.w ?? 0, o.h ?? 0)
-          if (small > 0 && small < cell)
+          const w = o.kind === 'circle' ? 2 * (o.r ?? 0) : (o.w ?? 0)
+          const h = o.kind === 'circle' ? 2 * (o.r ?? 0) : (o.h ?? 0)
+          if (!(w > 0) || !(h > 0)) continue            // OPENING_SIZE has it
+          if (w < 2 * cx || h < 2 * cy)
             issues.push({ severity: 'warning', code: 'MESH_OPENING_COARSE', refs: [p.id],
-              message: `plate ${p.id}, opening ${o.id}: ${small.toFixed(2)} m across is smaller than one ${cell.toFixed(2)} m mesh cell at subdivision ${n} — the mesh cannot resolve it and may carry load straight through the hole. Raise the subdivision or model it as a separate panel.` })
+              message: `plate ${p.id}, opening ${o.id}: ${w.toFixed(2)} × ${h.toFixed(2)} m against ${cx.toFixed(2)} × ${cy.toFixed(2)} m mesh cells at subdivision ${n}. A hole needs about two cells across each way to be cut out at all — below that the mesh may carry load straight through it. Raise the subdivision or model the opening as its own panel.` })
         }
       }
     }

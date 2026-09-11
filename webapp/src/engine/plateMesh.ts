@@ -31,10 +31,13 @@
 //     so the bridge lumps q·A/3 from the same numbers the stiffness was built
 //     from and the load can never disagree with the mesh.
 //
-//   • EDGES. Which model members a mesh node lands on, so a later phase can
-//     split them and actually attach the panel to its beams. Until that phase
-//     lands, a subdivided panel hangs off its four corners, which is WORSE than
-//     two triangles — hence the default of 1 everywhere.
+//   • EDGES. Which model members a mesh node lands on, so the bridge can split
+//     them and actually attach the panel to its beams. Unattached, a subdivided
+//     panel hangs off its four corners, which is WORSE than two triangles.
+//
+//   • OPENINGS. Cells whose centre falls in a `SlabOpening` are cut out, and
+//     every node left unreferenced goes with them — an orphan carries six
+//     zero-stiffness DOFs and takes the whole solve down with it, silently.
 //
 // UNITS: geometry m, thickness mm (converted to m at the element), E MPa.
 // ─────────────────────────────────────────────────────────────────────────
@@ -66,11 +69,14 @@ export interface PlateMeshResult {
   edgeSplits: Map<string, string[]>
   /** Panels that were meshed (the caller skips their tributary edge loads). */
   meshedPlateIds: Set<string>
+  /** Mesh cells cut out for openings. 0 on a solid panel. */
+  droppedCells: number
 }
 
 const EMPTY: PlateMeshResult = {
   nodes: [], shells: [], elemsByPlate: new Map(), areaByElem: new Map(),
   nodesByElem: new Map(), edgeSplits: new Map(), meshedPlateIds: new Set(),
+  droppedCells: 0,
 }
 /** A mesh that meshed nothing — shared, and never mutated by `meshPlates`. */
 export const emptyPlateMesh = (): PlateMeshResult => EMPTY
@@ -114,7 +120,7 @@ export function meshPlates(model: StructuralModel, opts: PlateMeshOpts): PlateMe
   // Panels worth meshing, in model order so the output is deterministic.
   const specs: QuadPlateSpec[] = []
   const meshedPlateIds = new Set<string>()
-  const byId = new Map<string, Plate>()
+  const byId = new Map<string, { plate: Plate; corners: [V3, V3, V3, V3] }>()
   for (const p of model.plates) {
     const c = p.corners.map(pos)
     if (c.some((q) => !q)) continue
@@ -122,7 +128,7 @@ export function meshPlates(model: StructuralModel, opts: PlateMeshOpts): PlateMe
     if (triArea3(c0, c1, c2) + triArea3(c0, c2, c3) < 1e-9) continue
     specs.push({ id: p.id, corners: [c0, c1, c2, c3], E: opts.E, nu: opts.nu, t: p.thickness })
     meshedPlateIds.add(p.id)
-    byId.set(p.id, p)
+    byId.set(p.id, { plate: p, corners: [c0, c1, c2, c3] })
   }
   if (specs.length === 0) return emptyPlateMesh()
 
@@ -146,43 +152,100 @@ export function meshPlates(model: StructuralModel, opts: PlateMeshOpts): PlateMe
   const at = new Map<string, V3>(model.nodes.map((q) => [q.id, [q.x, q.y, q.z] as V3]))
   for (const q of nodes) at.set(q.id, [q.x, q.y, q.z])
 
+  // Cells to cut out for openings, keyed `${plate}_${i}_${j}`.
+  const holes = holeCells(byId, n)
+
   const shells: F3Shell[] = []
   const elemsByPlate = new Map<string, string[]>()
   const areaByElem = new Map<string, number>()
   const nodesByElem = new Map<string, [string, string, string]>()
+  let droppedCells = 0
+  const seenHole = new Set<string>()
   for (const e of elems) {
     const [a, b, c] = e.nodes.map((id) => at.get(id))
     if (!a || !b || !c) continue
-    const plateId = plateOf(e.id, meshedPlateIds)
-    if (plateId === null) continue
+    const cell = cellOf(e.id, meshedPlateIds)
+    if (cell === null) continue
+    const ck = `${cell.plate}_${cell.i}_${cell.j}`
+    if (holes.has(ck)) {
+      if (!seenHole.has(ck)) { seenHole.add(ck); droppedCells++ }
+      continue                                          // both triangles, never one
+    }
     shells.push({ id: e.id, nodes: e.nodes, E: e.E, nu: e.nu, t: e.t })
     areaByElem.set(e.id, triArea3(a, b, c))
     nodesByElem.set(e.id, e.nodes)
-    const list = elemsByPlate.get(plateId)
-    if (list) list.push(e.id); else elemsByPlate.set(plateId, [e.id])
+    const list = elemsByPlate.get(cell.plate)
+    if (list) list.push(e.id); else elemsByPlate.set(cell.plate, [e.id])
   }
 
+  // ORPHANS MUST GO. A node left inside a hole is referenced by no element, so
+  // it carries six free DOFs with zero stiffness — `symFactor` returns null and
+  // the WHOLE solve dies with no message. Dropping them before they are
+  // appended also keeps the model-node prefix untouched, so nothing renumbers.
+  const referenced = new Set(shells.flatMap((sh) => sh.nodes))
+  const live = nodes.filter((q) => referenced.has(q.id))
+
   return {
-    nodes, shells, elemsByPlate, areaByElem, nodesByElem,
-    edgeSplits: findEdgeSplits(model, nodes, tol),
-    meshedPlateIds,
+    nodes: live, shells, elemsByPlate, areaByElem, nodesByElem,
+    edgeSplits: findEdgeSplits(model, live, tol),
+    meshedPlateIds, droppedCells,
   }
 }
 
 /**
- * Which plate an element id came from. `subdivideQuadPlates` names elements
- * `${plateId}_${i}_${j}_${k}`, and a plate id may itself contain underscores,
- * so the only safe reading is to match against the plate ids we asked for.
+ * Which plate and which cell an element id came from.
+ *
+ * `subdivideQuadPlates` names elements `${plateId}_${i}_${j}_${k}`, and a plate
+ * id may itself contain underscores, so the plate is whatever is left after the
+ * three trailing segments and it is only accepted if we asked for it.
  */
-function plateOf(elemId: string, plateIds: Set<string>): string | null {
-  // strip the three trailing _i_j_k segments
-  let s = elemId
-  for (let k = 0; k < 3; k++) {
-    const i = s.lastIndexOf('_')
-    if (i < 0) return null
-    s = s.slice(0, i)
+function cellOf(
+  elemId: string, plateIds: Set<string>,
+): { plate: string; i: number; j: number } | null {
+  const seg = elemId.split('_')
+  if (seg.length < 4) return null
+  seg.pop()                                   // the 0|1 triangle within the cell
+  const j = Number(seg.pop()), i = Number(seg.pop())
+  const plate = seg.join('_')
+  if (!Number.isInteger(i) || !Number.isInteger(j) || !plateIds.has(plate)) return null
+  return { plate, i, j }
+}
+
+/**
+ * The cells a panel's openings cut out, keyed `${plate}_${i}_${j}`.
+ *
+ * A cell is dropped when its CENTRE falls in a hole. Centre-in-hole rather than
+ * any-overlap keeps Σ(dropped area) unbiased — it under-cuts on one side of the
+ * boundary and over-cuts on the other, so the panel's remaining area, and with
+ * it the load it carries, stays right on average instead of drifting one way.
+ *
+ * `SlabOpening.x`/`y` are metres from the panel's corner 0 along its two edges
+ * (`model.ts`), and `bilinearQuad(c, s, u)` runs `s` from corner 0 to corner 1
+ * and `u` from corner 0 to corner 3 — the same pair of edges. So a cell centre
+ * at (s, u) = ((i+½)/n, (j+½)/n) is simply that fraction of each edge length,
+ * with no extra geometry to get wrong.
+ */
+function holeCells(
+  plates: Map<string, { plate: Plate; corners: [V3, V3, V3, V3] }>, n: number,
+): Set<string> {
+  const out = new Set<string>()
+  for (const [id, { plate: p, corners: c }] of plates) {
+    if (!p.openings?.length) continue
+    const Lx = norm(sub(c[0], c[1])), Ly = norm(sub(c[0], c[3]))
+    if (!(Lx > 0) || !(Ly > 0)) continue
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const x = ((i + 0.5) / n) * Lx, y = ((j + 0.5) / n) * Ly
+        for (const o of p.openings) {
+          const inside = o.kind === 'circle'
+            ? (x - o.x) ** 2 + (y - o.y) ** 2 < (o.r ?? 0) ** 2
+            : x > o.x && x < o.x + (o.w ?? 0) && y > o.y && y < o.y + (o.h ?? 0)
+          if (inside) { out.add(`${id}_${i}_${j}`); break }
+        }
+      }
+    }
   }
-  return plateIds.has(s) ? s : null
+  return out
 }
 
 /**
