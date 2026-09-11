@@ -4,7 +4,8 @@ import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { solveFrame3D } from './frame3d'
 import { stitchResult } from './memberSplit'
-import type { RectSection, StructuralModel } from './model'
+import type { RectSection, SlabOpening, StructuralModel } from './model'
+import { validateMesh } from './meshValidation'
 
 const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 const MAT = { E: 24870, nu: 0.2 }
@@ -289,5 +290,93 @@ describe('the meshed panel, solved through the bridge', () => {
     })
     const loosely = Math.abs(loose.d[6 * best + 1])
     expect(loosely).toBeGreaterThan(3 * run(4).uy)
+  })
+})
+
+describe('meshPlates — openings are cut out of the mesh', () => {
+  const A = 6, B = 5
+  const holed = (openings: SlabOpening[]): StructuralModel => ({
+    version: 1, name: 'p', sections: [section],
+    nodes: [
+      { id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: A, y: 0, z: 0 },
+      { id: 'c', x: A, y: 0, z: B }, { id: 'd', x: 0, y: 0, z: B },
+    ],
+    members: [], walls: [],
+    // supported, or `validateMesh` stops at `no-supports` before it reaches the
+    // mesh-quality rules this file also exercises
+    supports: ['a', 'b', 'c', 'd'].map((n) => ({ node: n, fixity: 'pin' as const })),
+    plates: [{ id: 'p1', corners: ['a', 'b', 'c', 'd'], role: 'slab', thickness: 150, openings }],
+    loads: [], storeys: [{ id: 's0', name: 'L0', elevation: 0 }],
+  })
+  const meshed = (openings: SlabOpening[], n: number) =>
+    meshPlates(holed(openings), { subdiv: n, ...MAT })
+
+  it('cuts whole cells, never half of one', () => {
+    // Dropping a single triangle would leave a hanging edge inside the panel.
+    // Whole cells keep the hole boundary made of shared cell edges, so the mesh
+    // stays conforming with nothing special at the hole.
+    const m = meshed([{ id: 'o', kind: 'rect', x: 2, y: 1.5, w: 2, h: 2 }], 6)
+    expect(m.droppedCells).toBe(4)
+    expect(m.shells).toHaveLength(2 * 36 - 2 * 4)          // two triangles per dropped cell
+  })
+
+  it('removes the area it cut, so the panel carries less load', () => {
+    const solid = area(meshed([], 6))
+    const m = meshed([{ id: 'o', kind: 'rect', x: 2, y: 1.5, w: 2, h: 2 }], 6)
+    expect(solid).toBeCloseTo(A * B, 9)
+    // 4 cells of 1.00 × 0.833 m
+    expect(area(m)).toBeCloseTo(A * B - 4 * (A / 6) * (B / 6), 9)
+    expect(area(m)).toBeLessThan(solid)
+  })
+
+  it('leaves no orphan node behind — the failure would be a silent dead solve', () => {
+    // A node inside the hole is referenced by no element, so it carries six
+    // zero-stiffness DOFs: `symFactor` returns null and the WHOLE solve dies
+    // with no message. This is the one that must never regress.
+    for (const n of [4, 6, 8, 10]) {
+      const m = meshed([{ id: 'o', kind: 'rect', x: 1.5, y: 1.25, w: 3, h: 2.5 }], n)
+      const referenced = new Set(m.shells.flatMap((sh) => sh.nodes))
+      expect(m.nodes.filter((q) => !referenced.has(q.id))).toEqual([])
+      expect(m.droppedCells).toBeGreaterThan(0)
+    }
+  })
+
+  it('a circular opening is cut as a staircase of cells', () => {
+    const r = 1
+    const m = meshed([{ id: 'o', kind: 'circle', x: 3, y: 2.5, r }], 10)
+    expect(m.droppedCells).toBe(12)
+    // the staircase under-cuts a circle at this density: 12 cells of
+    // 0.60 × 0.50 m is 3.60 m² against the true πr² = 3.14 m²
+    const cut = A * B - area(m)
+    expect(cut).toBeCloseTo(12 * (A / 10) * (B / 10), 9)
+    expect(Math.abs(cut - Math.PI * r * r) / (Math.PI * r * r)).toBeLessThan(0.2)
+  })
+
+  it('is exact when the opening lines up with the grid', () => {
+    // 2 × 1.667 m at subdivision 6 is exactly 2 × 2 cells on the boundary.
+    const m = meshed([{ id: 'o', kind: 'rect', x: 0, y: 0, w: 2, h: (2 * B) / 6 }], 6)
+    expect(m.droppedCells).toBe(4)
+    expect(A * B - area(m)).toBeCloseTo(2 * ((2 * B) / 6), 6)
+  })
+
+  it('a hole the mesh cannot resolve drops nothing — which is why the rule warns', () => {
+    // Measured: a 1 × 1 m hole in a 6 × 5 m panel at subdivision 6 has cells of
+    // 1.00 × 0.83 m and every cell centre falls on or outside its boundary, so
+    // the opening is ignored outright. `MESH_OPENING_COARSE` exists for exactly
+    // this, and the two-cells-across criterion is what catches it.
+    const tiny: SlabOpening[] = [{ id: 'o', kind: 'rect', x: 2.5, y: 2, w: 1, h: 1 }]
+    expect(meshed(tiny, 6).droppedCells).toBe(0)
+    expect(area(meshed(tiny, 6))).toBeCloseTo(A * B, 9)
+    const flagged = validateMesh({ ...holed(tiny), shellElements: true, shellSubdiv: 6 })
+    expect(flagged.some((i) => i.code === 'MESH_OPENING_COARSE')).toBe(true)
+    // and a denser mesh does cut it
+    expect(meshed(tiny, 10).droppedCells).toBeGreaterThan(0)
+  })
+
+  it('a solid panel is untouched and reports nothing dropped', () => {
+    const m = meshed([], 6)
+    expect(m.droppedCells).toBe(0)
+    expect(m.shells).toHaveLength(2 * 36)
+    expect(area(m)).toBeCloseTo(A * B, 9)
   })
 })

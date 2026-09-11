@@ -439,8 +439,10 @@ describe('validateMesh — shell mesh quality', () => {
   })
 
   it('MESH_OPENING_COARSE flags a hole the mesh cannot resolve, only when meshing', () => {
-    // 6×5 panel: cells are min(6,5)/n, so 2.5 m at subdivision 2 and 0.83 m at
-    // 6. A 1.2 m stair void is missed by the first and resolved by the second.
+    // 6×5 panel: cells are 6/n × 5/n, so 3.00 × 2.50 m at subdivision 2 and
+    // 1.00 × 0.83 m at 6. A hole needs about TWO cells across each way before
+    // the centre-in-hole rule can cut it out at all — measured: a 1 × 1 m hole
+    // at subdivision 6 drops ZERO cells and is ignored outright.
     const withHole = (subdiv: number, r: number) => ({
       ...flat(),
       shellElements: true,
@@ -448,11 +450,11 @@ describe('validateMesh — shell mesh quality', () => {
       plates: [{ id: 'p1', corners: ['n0', 'n1', 'n2', 'n3'] as [string, string, string, string], role: 'slab' as const, thickness: 150,
         openings: [{ id: 'o1', kind: 'circle' as const, x: 3, y: 2.5, r }] }],
     })
-    expect(codes(withHole(2, 0.6))).toContain('MESH_OPENING_COARSE')       // 1.2 m across vs 2.5 m cells
-    expect(codes(withHole(6, 0.6))).not.toContain('MESH_OPENING_COARSE')   // 0.83 m cells resolve it
-    expect(codes(withHole(2, 2.0))).not.toContain('MESH_OPENING_COARSE')   // a 4 m hole is resolved
+    expect(codes(withHole(6, 0.5))).toContain('MESH_OPENING_COARSE')       // 1.0 m across vs 2.00 × 1.67 needed
+    expect(codes(withHole(6, 1.25))).not.toContain('MESH_OPENING_COARSE')  // 2.5 m clears both
+    expect(codes(withHole(2, 1.25))).toContain('MESH_OPENING_COARSE')      // same hole, 3.00 × 2.50 m cells
     // silent while the mesh is off — nothing is being meshed to miss it
-    expect(codes({ ...withHole(2, 0.6), shellElements: false })).not.toContain('MESH_OPENING_COARSE')
+    expect(codes({ ...withHole(6, 0.5), shellElements: false })).not.toContain('MESH_OPENING_COARSE')
   })
 
   it('MESH_DOF_BUDGET refuses a mesh that would exhaust the dense stiffness matrix', () => {
