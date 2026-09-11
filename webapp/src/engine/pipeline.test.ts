@@ -1681,3 +1681,68 @@ describe('peakUtilisation & failingChecks', () => {
     expect(peakUtilisation(r.design)).toBeLessThanOrEqual(1 + 1e-6)
   })
 })
+
+describe('useShells — slab stiffness in the design solve, opt-in', () => {
+  const grid = () => {
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5, 5], storeyH: [3, 3], section, slabThickness: 200 })
+    m.loads = buildGravityLoads(m, 4.8, 2.4)
+    m.shellElements = true
+    return m
+  }
+  const peakMu = (d: NonNullable<ReturnType<typeof designStructure>>) =>
+    d.beams.map((b) => Math.max(...b.sections.map((s) => Math.abs(s.Mu))))
+
+  it('is OFF by default — the model flag alone must not move a published result', () => {
+    // `shellElements` is an ANALYSIS setting. A user who turned it on to look at
+    // slab stresses has not asked for every beam and column in their design to
+    // change, so the design path must ignore it until asked directly.
+    const m = grid()
+    const withFlag = designStructure(m, soil)!
+    const withoutFlag = designStructure({ ...m, shellElements: false }, soil)!
+    expect(peakMu(withFlag)).toEqual(peakMu(withoutFlag))
+  })
+
+  it('moves the beams when asked, and by a reportable amount', () => {
+    const m = grid()
+    const trib = designStructure(m, soil, {}, { useShells: false })!
+    const shell = designStructure(m, soil, {}, { useShells: true })!
+    const a = peakMu(trib), b = peakMu(shell)
+    expect(a).toHaveLength(b.length)
+    // a slab modelled as a plate is not the tributary idealisation, and the
+    // design moments say so — measured −14.7% … +18.3% on this frame
+    const rel = b.map((x, i) => (x - a[i]) / a[i])
+    expect(Math.max(...rel.map(Math.abs))).toBeGreaterThan(0.05)
+    expect(Math.max(...rel.map(Math.abs))).toBeLessThan(0.5)
+  })
+
+  it('floors the mesh at 2 — subdivision 1 would design the beams unloaded', () => {
+    // THE MEASUREMENT THAT PUT THE FLOOR IN. Two triangles on four corner nodes
+    // deliver the panel's whole load to those corners, which are columns: beam
+    // design moments came out 79.5% to 89.5% BELOW the tributary model. That is
+    // not a coarse plate, it is a wrong one.
+    const m = grid()
+    const at1 = designStructure({ ...m, shellSubdiv: 1 }, soil, {}, { useShells: true })!
+    const at2 = designStructure({ ...m, shellSubdiv: 2 }, soil, {}, { useShells: true })!
+    expect(peakMu(at1)).toEqual(peakMu(at2))
+    // and the floored result is nowhere near the 80-90% collapse
+    const trib = designStructure(m, soil, {}, { useShells: false })!
+    const rel = peakMu(at1).map((x, i) => (x - peakMu(trib)[i]) / peakMu(trib)[i])
+    expect(Math.min(...rel)).toBeGreaterThan(-0.5)
+  })
+
+  it('keeps a denser mesh the user asked for', () => {
+    // The floor is a floor, not an override.
+    const m = grid()
+    const at2 = designStructure({ ...m, shellSubdiv: 2 }, soil, {}, { useShells: true })!
+    const at4 = designStructure({ ...m, shellSubdiv: 4 }, soil, {}, { useShells: true })!
+    expect(peakMu(at4)).not.toEqual(peakMu(at2))
+  })
+
+  it('reaches every beam — the panels are attached, not hanging off the corners', () => {
+    // If the split were missing, the mesh would dump its load at the corners
+    // and the interior beams would carry almost nothing. Every beam must still
+    // have a real design moment.
+    const shell = designStructure(grid(), soil, {}, { useShells: true })!
+    for (const mu of peakMu(shell)) expect(mu).toBeGreaterThan(1)
+  })
+})

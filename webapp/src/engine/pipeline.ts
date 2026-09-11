@@ -11,6 +11,7 @@ import type { StructuralModel, RectSection, ModelLoad, Member, WoodDeck } from '
 import { enforceSectionHierarchy, refreshSelfWeight, barContinuityGroups } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { precomputeFrame, solveWithGeometry, applyF3Combo, serializePrecomp, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
+import { stitchResult } from './memberSplit'
 import type { BridgeResult } from './modelBridge'
 import { FramePool } from './framePool'
 import { nscpCombos, type Combo } from './beamAnalysis'
@@ -107,6 +108,32 @@ export interface AnalyzeOptions {
    *  bf per ACI §6.3.2 from the adjoining panels, used when a ≤ hf AND the
    *  flanged design actually saves steel. */
   tBeamAction?: boolean
+  /**
+   * Assemble slab/wall panels as flat shells in the DESIGN solve, instead of
+   * converting their area loads to tributary line loads on the edge beams.
+   *
+   * DEFAULT FALSE, and deliberately so. Every published beam and column result
+   * in this app is anchored to the tributary path; a slab modelled as a shell
+   * is a stiff plate that sheds moment from the beams it sits on, so turning
+   * this on MOVES those answers. It is a user's choice to make, not a default
+   * to slide under them — the Model Space card says as much beside the switch.
+   *
+   * Both are legitimate idealisations: the tributary model is the hand method
+   * the code is written around, and the shell model is what a general FE
+   * package would do. Neither is the "true" one, which is why this is an
+   * option and not a fix.
+   *
+   * THE MESH IS FLOORED AT 2 WHEN THIS IS ON, whatever the model says. A
+   * subdivision of 1 is two triangles on the panel's four corner nodes, and it
+   * does not merely under-resolve the plate — it delivers the panel's whole
+   * load to those four corners, which are normally columns. Measured on a
+   * 2×2-bay, 2-storey frame: beam design moments fell by 79.5% to 89.5%
+   * against the tributary model, i.e. the beams would be designed very nearly
+   * unloaded. At subdivision 2 the spread is −14.7% to +18.3% and at 4 it is
+   * +0.7% to +32.3%, which is the behaviour of a real plate. So 1 is not a
+   * coarse shell model, it is a wrong one, and the design path will not use it.
+   */
+  useShells?: boolean
 }
 
 export interface BeamSectionDesign {
@@ -1201,13 +1228,19 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
   // slab tributary line loads and member self-weight; lateral cases are pure
   // node loads applied on top per direction.
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
-  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections, shearDeformation: opts.shearDeformation, beamTopOfSteel: opts.beamTopOfSteel })
+  const br = modelToFrame3D(gravityModel, { useShells: opts.useShells ?? false, shellSubdiv: designSubdiv(model, opts), crackedSections: opts.crackedSections, shearDeformation: opts.shearDeformation, beamTopOfSteel: opts.beamTopOfSteel })
 
   const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
   // expand every combo into its directional variants up front so progress has a total
   const tasks = buildComboTasks(lateral, opts)
 
-  const precomp = precomputeFrame(br.nodes, br.members, br.supports)
+  // The shells MUST be passed whenever the bridge produced them. With
+  // `useShells` on and this left as it was, the panels would contribute no
+  // stiffness while their tributary edge loads had already been suppressed —
+  // every beam designed very nearly unloaded. (The `undefined` is the model's
+  // diaphragm, which this path has never passed; that is a separate
+  // pre-existing gap, flagged rather than fixed here.)
+  const precomp = precomputeFrame(br.nodes, br.members, br.supports, undefined, br.shells)
   const runs: FrameRun[] = []
   for (let i = 0; i < tasks.length; i++) {
     const t = tasks[i]
@@ -1216,10 +1249,22 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
     onProgress?.({ phase: 'Solving load cases', current: i + 1, total: tasks.length, detail: t.name })
     const factored = applyF3Combo([...br.loads, ...t.lat], t.combo.f)
     if (!factored.length) continue
+    // Stitch before anything reads it: with the mesh on, a beam carrying mesh
+    // nodes was cut into `B1#0..#k`, and every design check looks members up by
+    // their MODEL id. Empty split map ⇒ this is the identity.
     const result = solveWithGeometry(precomp, factored, opts)
-    if (result) runs.push({ name: t.name, result })
+    if (result) runs.push({ name: t.name, result: stitchResult(result, br.memberSplits) })
   }
   return { br, runs, precomp }
+}
+
+/** Mesh density for the DESIGN solve: the model's own, floored at 2 whenever
+ *  shells are actually assembled. See `AnalyzeOptions.useShells` for the
+ *  measurement — at 1 the beams come out 80-90% under-loaded. `undefined` when
+ *  shells are off, so the bridge is left exactly as it was. */
+function designSubdiv(model: StructuralModel, opts: AnalyzeOptions): number | undefined {
+  if (!opts.useShells) return undefined
+  return Math.max(2, model.shellSubdiv ?? 2)
 }
 
 /** All member/footing/slab design given pre-solved FEM results. Shared by the
@@ -1935,15 +1980,16 @@ export function designStructureOnce(
   // The service run is read for its support REACTIONS and nothing else — see
   // `designFromRuns`. Recovering a diagram for every member of it was work
   // nothing looked at.
-  const serviceRes = serviceLoads.length ? solveWithGeometry(precomp, serviceLoads, opts, NO_MEMBERS) : null
+  const stitch = (r: F3Result | null) => (r ? stitchResult(r, br.memberSplits) : null)
+  const serviceRes = stitch(serviceLoads.length ? solveWithGeometry(precomp, serviceLoads, opts, NO_MEMBERS) : null)
   const dLoads = applyF3Combo(br.loads, { D: 1 })
   const lLoads = applyF3Combo(br.loads, { L: 1 })
   // The D-only and L-only runs are read for reactions, and for the moment
   // diagrams of the FLEXURAL members whose §424.2 deflection is integrated from
   // them. A column's diagram in these runs has no reader.
   const flexural = flexuralIds(model)
-  const dRes = dLoads.length ? solveWithGeometry(precomp, dLoads, opts, flexural) : null
-  const lRes = lLoads.length ? solveWithGeometry(precomp, lLoads, opts, flexural) : null
+  const dRes = stitch(dLoads.length ? solveWithGeometry(precomp, dLoads, opts, flexural) : null)
+  const lRes = stitch(lLoads.length ? solveWithGeometry(precomp, lLoads, opts, flexural) : null)
   return designFromRuns(model, soil, plan, opts, br, runs, serviceRes, dRes, lRes, onProgress)
 }
 
@@ -1955,12 +2001,18 @@ async function buildRunsParallel(
   neededCombos?: Set<string>,
 ): Promise<{ br: BridgeResult; runs: FrameRun[] }> {
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
-  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections, shearDeformation: opts.shearDeformation, beamTopOfSteel: opts.beamTopOfSteel })
+  const br = modelToFrame3D(gravityModel, { useShells: opts.useShells ?? false, shellSubdiv: designSubdiv(model, opts), crackedSections: opts.crackedSections, shearDeformation: opts.shearDeformation, beamTopOfSteel: opts.beamTopOfSteel })
 
   const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
   const tasks = buildComboTasks(lateral, opts)
 
-  const precomp = precomputeFrame(br.nodes, br.members, br.supports)
+  // The shells MUST be passed whenever the bridge produced them. With
+  // `useShells` on and this left as it was, the panels would contribute no
+  // stiffness while their tributary edge loads had already been suppressed —
+  // every beam designed very nearly unloaded. (The `undefined` is the model's
+  // diaphragm, which this path has never passed; that is a separate
+  // pre-existing gap, flagged rather than fixed here.)
+  const precomp = precomputeFrame(br.nodes, br.members, br.supports, undefined, br.shells)
   await pool.init(serializePrecomp(precomp))
 
   onProgress?.({ phase: 'Solving load cases', current: 0, total: tasks.length })
@@ -1972,7 +2024,7 @@ async function buildRunsParallel(
     if (!factored.length) return null
     const result = await pool.solve(factored, opts)
     onProgress?.({ phase: 'Solving load cases', current: ++done, total: tasks.length, detail: t.name })
-    return result ? { name: t.name, result } satisfies FrameRun : null
+    return result ? { name: t.name, result: stitchResult(result, br.memberSplits) } satisfies FrameRun : null
   })
   const settled = await Promise.all(promises)
   const runs = settled.filter((r): r is FrameRun => r !== null)
@@ -1993,13 +2045,15 @@ async function designStructureWithPool(
   // Same reads as the sync path: the service run for reactions only, the D/L
   // runs for the flexural members' moment diagrams.
   const flexural = flexuralIds(model)
-  const [serviceRes, dRes, lRes] = await Promise.all([
+  const [serviceRaw, dRaw, lRaw] = await Promise.all([
     serviceLoads.length ? pool.solve(serviceLoads, opts, NO_MEMBERS) : Promise.resolve(null),
     dLoads.length ? pool.solve(dLoads, opts, flexural) : Promise.resolve(null),
     lLoads.length ? pool.solve(lLoads, opts, flexural) : Promise.resolve(null),
   ])
+  const stitch = (r: F3Result | null) => (r ? stitchResult(r, br.memberSplits) : null)
 
-  return designFromRuns(model, soil, plan, opts, br, runs, serviceRes, dRes, lRes, onProgress)
+  return designFromRuns(model, soil, plan, opts, br, runs,
+    stitch(serviceRaw), stitch(dRaw), stitch(lRaw), onProgress)
 }
 
 /** Async (Worker-pool) version of designStructure. Spawns N frame-solve workers
