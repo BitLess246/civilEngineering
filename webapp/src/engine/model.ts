@@ -314,10 +314,19 @@ export interface StructuralModel {
   /** Rigid-zone factor (0–1) scaling the auto end-offset length (default 0.5). */
   rigidZoneFactor?: number
   /** Model slab/wall panels as flat-shell finite elements (CST membrane + DKT
-   *  bending) assembled into the solve, instead of tributary edge load sources.
-   *  Each panel meshes to two triangles on its four corner nodes. */
+   *  bending) assembled into the solve, instead of tributary edge load sources. */
   shellElements?: boolean
+  /** n×n subdivision of every slab/wall panel when `shellElements` is on.
+   *  Absent or 1 keeps the classic two-triangles-per-panel mesh on the corner
+   *  nodes. Mesh density is GEOMETRY, so it lives on the model rather than in
+   *  the analysis options: a saved model must be able to reproduce its own
+   *  mesh, and it then rides through every worker boundary with the model. */
+  shellSubdiv?: number
 }
+
+/** Subdivision bounds for `StructuralModel.shellSubdiv` (see MESH_SUBDIV_RANGE). */
+export const SHELL_SUBDIV_MIN = 1
+export const SHELL_SUBDIV_MAX = 6
 
 export function emptyModel(name = 'Untitled'): StructuralModel {
   return { version: 1, name, nodes: [], sections: [], members: [], plates: [], walls: [], supports: [], loads: [], storeys: [] }

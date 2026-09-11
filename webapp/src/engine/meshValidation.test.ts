@@ -364,3 +364,123 @@ describe('section properties must be physical', () => {
     expect(wood).not.toContain('SECTION_DIMS')
   })
 })
+
+describe('validateMesh — shell mesh quality', () => {
+  // One flat 6 × 5 m panel on four nodes, which is what the grid generator
+  // makes and what every rule below deforms one corner of.
+  const panel = (corners: { x: number; y: number; z: number }[], extra: Partial<StructuralModel> = {}): StructuralModel => ({
+    ...emptyModel(),
+    nodes: corners.map((c, i) => ({ id: `n${i}`, ...c })),
+    sections: [section],
+    plates: [{ id: 'p1', corners: ['n0', 'n1', 'n2', 'n3'], role: 'slab', thickness: 150 }],
+    supports: corners.map((_, i) => ({ node: `n${i}`, fixity: 'fixed' as const })),
+    storeys: [{ id: 's0', name: 'L0', elevation: 0 }],
+    ...extra,
+  })
+  const flat = (lx = 6, lz = 5) => panel([
+    { x: 0, y: 0, z: 0 }, { x: lx, y: 0, z: 0 }, { x: lx, y: 0, z: lz }, { x: 0, y: 0, z: lz },
+  ])
+
+  it('a square, flat, well-proportioned panel raises nothing', () => {
+    // The control. Every rule below must be silent here or it cannot
+    // discriminate a bad panel from a good one.
+    const c = codes(flat())
+    for (const k of ['PLATE_WARP', 'PLATE_ASPECT', 'PLATE_SKEW', 'PLATE_DEGENERATE', 'MESH_SUBDIV_RANGE', 'MESH_DOF_BUDGET', 'MESH_OPENING_COARSE'])
+      expect(c).not.toContain(k)
+  })
+
+  it('MESH_SUBDIV_RANGE rejects a subdivision that is not a whole number in 1..6', () => {
+    for (const bad of [0, -1, 7, 2.5, Number.NaN]) {
+      expect(codes({ ...flat(), shellSubdiv: bad })).toContain('MESH_SUBDIV_RANGE')
+    }
+    for (const ok of [1, 2, 6]) {
+      expect(codes({ ...flat(), shellSubdiv: ok })).not.toContain('MESH_SUBDIV_RANGE')
+    }
+    expect(codes(flat())).not.toContain('MESH_SUBDIV_RANGE')   // absent is fine
+  })
+
+  it('PLATE_WARP flags a corner lifted out of plane, and tolerates a small lift', () => {
+    // Shorter diagonal of a 6×5 panel is √61 = 7.81 m, so the 2% threshold is
+    // 156 mm. Straddle it rather than picking one comfortable value.
+    const lift = (dy: number) => panel([
+      { x: 0, y: 0, z: 0 }, { x: 6, y: 0, z: 0 }, { x: 6, y: dy, z: 5 }, { x: 0, y: 0, z: 5 },
+    ])
+    expect(codes(lift(0.10))).not.toContain('PLATE_WARP')
+    expect(codes(lift(0.40))).toContain('PLATE_WARP')
+  })
+
+  it('PLATE_ASPECT flags a needle panel because every cell keeps the ratio', () => {
+    expect(codes(flat(6, 5))).not.toContain('PLATE_ASPECT')     // 1.2:1
+    expect(codes(flat(24, 5))).toContain('PLATE_ASPECT')        // 4.8:1
+  })
+
+  it('PLATE_SKEW flags a corner angle outside 30°–150°', () => {
+    // Slide corner 1 far along +x: the angle at corner 0 stays 90° but the
+    // angle at corner 1 collapses.
+    const sheared = panel([
+      { x: 0, y: 0, z: 0 }, { x: 6, y: 0, z: 0 }, { x: 20, y: 0, z: 1 }, { x: 0, y: 0, z: 5 },
+    ])
+    expect(codes(sheared)).toContain('PLATE_SKEW')
+    expect(codes(flat())).not.toContain('PLATE_SKEW')
+  })
+
+  it('PLATE_DEGENERATE names the panel the bridge silently drops', () => {
+    // All four corners collinear — zero area. modelBridge `continue`s past this
+    // without a word, so the panel leaves the analysis unannounced.
+    const line = panel([
+      { x: 0, y: 0, z: 0 }, { x: 2, y: 0, z: 0 }, { x: 4, y: 0, z: 0 }, { x: 6, y: 0, z: 0 },
+    ])
+    const issues = validateMesh(line)
+    expect(issues.some((i) => i.code === 'PLATE_DEGENERATE' && i.refs.includes('p1'))).toBe(true)
+    expect(hasMeshErrors(issues)).toBe(true)
+    // and it reports ONLY that for the panel — the other rules would divide by
+    // a zero it no longer reaches
+    expect(codes(line)).not.toContain('PLATE_SKEW')
+  })
+
+  it('MESH_OPENING_COARSE flags a hole the mesh cannot resolve, only when meshing', () => {
+    // 6×5 panel: cells are min(6,5)/n, so 2.5 m at subdivision 2 and 0.83 m at
+    // 6. A 1.2 m stair void is missed by the first and resolved by the second.
+    const withHole = (subdiv: number, r: number) => ({
+      ...flat(),
+      shellElements: true,
+      shellSubdiv: subdiv,
+      plates: [{ id: 'p1', corners: ['n0', 'n1', 'n2', 'n3'] as [string, string, string, string], role: 'slab' as const, thickness: 150,
+        openings: [{ id: 'o1', kind: 'circle' as const, x: 3, y: 2.5, r }] }],
+    })
+    expect(codes(withHole(2, 0.6))).toContain('MESH_OPENING_COARSE')       // 1.2 m across vs 2.5 m cells
+    expect(codes(withHole(6, 0.6))).not.toContain('MESH_OPENING_COARSE')   // 0.83 m cells resolve it
+    expect(codes(withHole(2, 2.0))).not.toContain('MESH_OPENING_COARSE')   // a 4 m hole is resolved
+    // silent while the mesh is off — nothing is being meshed to miss it
+    expect(codes({ ...withHole(2, 0.6), shellElements: false })).not.toContain('MESH_OPENING_COARSE')
+  })
+
+  it('MESH_DOF_BUDGET refuses a mesh that would exhaust the dense stiffness matrix', () => {
+    // 40 panels at subdivision 6 → 40·49 = 1960 mesh nodes ≈ 11 800 DOF against
+    // the 4 000 budget. The message must name a subdivision that fits, because
+    // "too big" without a number is not actionable.
+    const many: StructuralModel = {
+      ...flat(),
+      shellElements: true,
+      shellSubdiv: 6,
+      plates: Array.from({ length: 40 }, (_, i) => ({
+        id: `p${i}`, corners: ['n0', 'n1', 'n2', 'n3'] as [string, string, string, string], role: 'slab' as const, thickness: 150,
+      })),
+    }
+    const hit = validateMesh(many).find((i) => i.code === 'MESH_DOF_BUDGET')
+    expect(hit).toBeDefined()
+    expect(hit!.severity).toBe('error')
+    expect(hit!.message).toMatch(/Subdivision \d fits\.|Split this model/)
+    // the same model at subdivision 1 is well inside the budget
+    expect(codes({ ...many, shellSubdiv: 1 })).not.toContain('MESH_DOF_BUDGET')
+    // and the budget is not charged while the mesh is off
+    expect(codes({ ...many, shellElements: false })).not.toContain('MESH_DOF_BUDGET')
+  })
+
+  it('the quality rules apply before the mesh is switched on', () => {
+    // A warped or needle panel is a bad panel either way; the user should hear
+    // it before flipping the switch, not after.
+    expect(codes(flat(24, 5))).toContain('PLATE_ASPECT')
+    expect(flat(24, 5).shellElements).toBeUndefined()
+  })
+})

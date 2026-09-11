@@ -644,7 +644,17 @@ until individually checked, the 🔶 rows first.
 - **All of L5 dynamics** — modal Jacobi extraction, response spectrum SRSS/CQC
   and §208.6.4.2 scaling, both time-history paths, buckling, pushover, floor
   vibration. Frequencies were never checked against a closed form.
-- **`shell.ts`** — no patch test, no plate closed form.
+- ~~**`shell.ts`** — no patch test, no plate closed form.~~ **Stale — it has
+  both, and had them when this line was written.** `shell.test.ts` carries a
+  constant-strain membrane patch test (uniaxial tension recovering ε = σ/E
+  exactly, plus the Poisson contraction), a rigid-body zero-force test, and the
+  Timoshenko plate closed forms in both support conditions — simply supported
+  0.00406 qL⁴/D to ±5%, clamped 0.00126 qL⁴/D to ±7% at 8×8 — with a
+  mesh-convergence check (e8 < e4) and an orientation-independence check (X-Y vs
+  X-Z). What the element lacked was not verification but *use*: the analysis
+  bridge meshed every panel into two triangles on its corner nodes, so the
+  benchmarked element was never given a mesh to be accurate on. That is what the
+  plate-mesh work addresses.
 - Accessibility and input handling across ~50 pages.
 - `remoteStore.ts` sync/conflict logic.
 - Deployment config — whether `x-forwarded-for` is spoofable on this Vercel
