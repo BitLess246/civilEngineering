@@ -10,6 +10,7 @@ import type { StructuralModel } from './model'
 import { modelToFrame3D } from './modelBridge'
 import { analyzeFrame3D, solveFrame3D, applyF3Combo, type F3AnalyzeOpts } from './frame3d'
 import { analyzeActiveSet, solveActiveSet, axialModes } from './axialOnly'
+import { splitAxialModes, stitchAnalysis } from './memberSplit'
 import { modalAnalysis, type MassModel } from './modal'
 import { runPushoverModel, type PushoverModelOpts } from './pushoverModel'
 import { runBiaxialPushover, type BiaxialPushoverOpts } from './biaxialFrameModel'
@@ -49,11 +50,17 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
       // Tension/compression-only members break superposition: the shared-LU
       // combo sweep is only valid while every combo sees the same structure.
       // When any member is limited, each combo gets its own active set instead.
-      const modes = axialModes(msg.model.members)
-      const analysis = modes.size
+      // A beam carrying mesh nodes was cut into collinear parts by the bridge,
+      // so the solver sees `B1#0..#k` where the model has `B1`. The axial modes
+      // must follow the cut — a tension-only brace stays tension-only along its
+      // whole length — and the results must be put back on the parent id before
+      // anything downstream reads them.
+      const modes = splitAxialModes(axialModes(msg.model.members), br.memberSplits)
+      const raw = modes.size
         ? analyzeActiveSet(br.nodes, br.members, br.supports, br.loads,
             modes, { ...msg.opts, diaphragms: br.diaphragmGroups }, onProgress, br.shells)
         : analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, msg.opts, onProgress, br.diaphragmGroups, br.shells)
+      const analysis = raw ? stitchAnalysis(raw, br.memberSplits) : raw
       let drift = null
       let irregularities = null
       let stability = null
@@ -67,7 +74,13 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
             ? solveActiveSet(br.nodes, br.members, br.supports, eOnly, modes,
                 { pDelta: msg.drift.pDelta, diaphragms: br.diaphragmGroups }, br.shells)?.result ?? null
             : solveFrame3D(br.nodes, br.members, br.supports, eOnly, { pDelta: msg.drift.pDelta }, br.shells)
-        drift = sol ? driftCheck(msg.model, br.nodes, sol.d, msg.drift.R, msg.drift.T, msg.drift.axis) : null
+        // Storey drift is a property of the LATERAL SYSTEM. `driftCheck` picks
+        // the largest lateral displacement of any node at a storey elevation,
+        // and mesh nodes sit at exactly those elevations — so a slab's own
+        // in-plane deformation could be reported as the storey's drift. Hand it
+        // the model's nodes only; the prefix is 1:1 with them by construction.
+        const frameNodes = br.nodes.slice(0, br.nodes.length - br.meshNodeCount)
+        drift = sol ? driftCheck(msg.model, frameNodes, sol.d, msg.drift.R, msg.drift.T, msg.drift.axis) : null
         if (sol) {
           // applied lateral storey force per level (E-case, run direction) → storey shear
           const yById = new Map(br.nodes.map((n) => [n.id, n.y]))
@@ -79,7 +92,7 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
             fByLevel.set(y, (fByLevel.get(y) ?? 0) + F)
           }
           const storeyForce = [...fByLevel].map(([elevation, F]) => ({ elevation, F }))
-          irregularities = assessIrregularities(msg.model, { nodeOrder: br.nodes, d: sol.d, storeyForce, dir: msg.drift.axis })
+          irregularities = assessIrregularities(msg.model, { nodeOrder: frameNodes, d: sol.d, storeyForce, dir: msg.drift.axis })
           // §208.5.10.2: whether the code REQUIRES the second-order run the
           // user may or may not have switched on. Same Δs and the same storey
           // forces the drift check and the irregularity flags already use.
