@@ -4,7 +4,7 @@
 // and land on the matching edge members as vdl/udl gravity loads (categories
 // preserved) — the load path, automated.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel, RectSection, MemberReleases, MemberConnections, ConnectionKind, Plate, MemberRole } from './model'
+import type { StructuralModel, RectSection, MemberReleases, MemberConnections, ConnectionKind, MemberRole } from './model'
 import type { F3Node, F3Member, F3Support, F3Load, F3DiaphragmGroup, F3Shell } from './frame3d'
 import { rectJ, defaultAxisRotation } from './frame3d'
 import { buildDiaphragmGroups } from './diaphragm'
@@ -14,6 +14,7 @@ import { distributePanel, type AreaLoad } from './tributary'
 import type { BeamLoad } from './beamAnalysis'
 import { shapeByName, torsionJ, type AiscShape } from './aiscSections'
 import { deriveWSection, E_STEEL } from './steelDesign'
+import { meshPlates, emptyPlateMesh } from './plateMesh'
 import { woodRefOf } from './woodDesign'
 
 export interface BridgeResult {
@@ -27,6 +28,14 @@ export interface BridgeResult {
   orphanEdges: string[]
   /** Rigid floor diaphragm groups (one per storey); empty when diaphragm disabled. */
   diaphragmGroups: F3DiaphragmGroup[]
+  /** How many shell-mesh nodes were APPENDED after the model's own.
+   *  `nodes[0 .. nodes.length − meshNodeCount − 1]` stay 1:1 with `model.nodes`,
+   *  which is what lets `driftCheck`, `assessIrregularities`, `displacedNodes`
+   *  and the deflection scan keep indexing the DOF vector by array position. */
+  meshNodeCount: number
+  /** model member id → mesh node ids lying inside it, ordered i→j. Empty until
+   *  the mesh is on; consumed by the edge-attachment phase. */
+  edgeSplits: Map<string, string[]>
 }
 
 /** Concrete shell material for slab/wall panels: E = 4700√fc (NSCP/ACI), ν = 0.2.
@@ -35,24 +44,6 @@ export interface BridgeResult {
 function plateMaterial(model: StructuralModel): { E: number; nu: number } {
   const fc = model.sections.find((s) => (s.material ?? 'concrete') === 'concrete')?.fc ?? 28
   return { E: 4700 * Math.sqrt(Math.max(fc, 1)), nu: 0.2 }
-}
-
-/** Triangle area (m²) from three model node ids. */
-function triArea(p: [F3Node, F3Node, F3Node]): number {
-  const [a, b, c] = p
-  const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z
-  const vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z
-  const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx
-  return 0.5 * Math.hypot(cx, cy, cz)
-}
-
-/** Mesh one quad panel into two triangular shells across the c0–c2 diagonal. */
-function plateShells(plate: Plate, mat: { E: number; nu: number }): F3Shell[] {
-  const [c0, c1, c2, c3] = plate.corners
-  return [
-    { id: `${plate.id}#0`, nodes: [c0, c1, c2], E: mat.E, nu: mat.nu, t: plate.thickness },
-    { id: `${plate.id}#1`, nodes: [c0, c2, c3], E: mat.E, nu: mat.nu, t: plate.thickness },
-  ]
 }
 
 /** Timber member stiffness: mean modulus E from the species (wet-adjusted by CM),
@@ -267,6 +258,9 @@ export interface BridgeOpts {
    * `beamAxisOffsets`.
    */
   beamTopOfSteel?: boolean
+  /** Override the model's `shellSubdiv` (n×n cells per panel). Exists for tests
+   *  and the mesh-convergence study; production reads the model. */
+  shellSubdiv?: number
 }
 
 export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): BridgeResult {
@@ -318,22 +312,23 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
     return { node: s.node, fixity: s.fixity === 'fixed' ? 'fixed' : 'pin' }
   })
 
-  // Optional: mesh slab/wall panels into flat-shell elements (two triangles per
-  // panel on its corner nodes). Panels handled as shells carry their area loads
-  // through the shell — the tributary edge-load path is skipped for them below.
-  const shells: F3Shell[] = []
-  const shellPlateIds = new Set<string>()
-  if (useShells) {
-    const mat = plateMaterial(model)
-    for (const plate of model.plates) {
-      const c = plate.corners.map((id) => nm.get(id))
-      if (c.some((q) => !q)) continue
-      const [c0, c1, c2, c3] = c as F3Node[]
-      if (triArea([c0, c1, c2]) + triArea([c0, c2, c3]) < 1e-9) continue   // degenerate
-      shells.push(...plateShells(plate, mat))
-      shellPlateIds.add(plate.id)
-    }
-  }
+  // Optional: mesh slab/wall panels into flat-shell elements. Panels handled as
+  // shells carry their area loads through the shell — the tributary edge-load
+  // path is skipped for them below.
+  //
+  // The mesh nodes are APPENDED after the model's own and never inserted, so
+  // `nodes[i]` keeps answering for `model.nodes[i]` — five downstream consumers
+  // index the DOF vector by that array position (see `BridgeResult.meshNodeCount`).
+  const mesh = useShells
+    ? meshPlates(model, {
+      subdiv: opts?.shellSubdiv ?? model.shellSubdiv ?? 1,
+      ...plateMaterial(model),
+    })
+    : emptyPlateMesh()
+  const shells: F3Shell[] = mesh.shells
+  const shellPlateIds = mesh.meshedPlateIds
+  nodes.push(...mesh.nodes)
+  for (const q of mesh.nodes) nm.set(q.id, q)
 
   const loads: F3Load[] = []
   const orphanEdges: string[] = []
@@ -370,16 +365,24 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
     if (c.some((q) => !q)) continue
     const [c0, c1, c2, c3] = c as F3Node[]
 
-    // Shell panel: lump each gravity area load to the corner nodes (−Y), split
-    // per triangle (q·A_tri/3 to each of its three nodes). Avoids double-count
-    // with the shell stiffness (no tributary edge loads for this panel).
+    // Shell panel: lump each gravity area load over the MESH (−Y), q·A/3 to each
+    // of an element's three nodes. Avoids double-counting with the shell
+    // stiffness (no tributary edge loads for this panel). At subdiv 1 the mesh
+    // is the same two triangles as before, so this is the same arithmetic term
+    // for term — which is what keeps the default bit-identical.
+    //
+    // 1/3 lumping is NOT the consistent DKT load vector (which would also feed
+    // the rotational DOFs). It converges, and it preserves ΣF exactly on a
+    // planar panel, but at coarse n it gives a slightly different centre
+    // deflection than a consistent load would. Stated rather than hidden.
     if (shellPlateIds.has(plate.id)) {
-      const A0 = triArea([c0, c1, c2]), A1 = triArea([c0, c2, c3])
       for (const al of areaLoads) {
-        const f0 = (al.q * A0) / 3, f1 = (al.q * A1) / 3
-        const add = (id: string, f: number) => loads.push({ kind: 'node', node: id, Fy: -f, cat: al.cat })
-        add(c0.id, f0); add(c1.id, f0); add(c2.id, f0)
-        add(c0.id, f1); add(c2.id, f1); add(c3.id, f1)
+        for (const eid of mesh.elemsByPlate.get(plate.id) ?? []) {
+          const f = (al.q * (mesh.areaByElem.get(eid) ?? 0)) / 3
+          if (!(Math.abs(f) > 0)) continue
+          for (const nid of mesh.nodesByElem.get(eid) ?? [])
+            loads.push({ kind: 'node', node: nid, Fy: -f, cat: al.cat })
+        }
       }
       continue
     }
@@ -416,5 +419,8 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
   }
 
   const diaphragmGroups = model.diaphragm ? buildDiaphragmGroups(model) : []
-  return { nodes, members, supports, loads, shells, orphanEdges, diaphragmGroups }
+  return {
+    nodes, members, supports, loads, shells, orphanEdges, diaphragmGroups,
+    meshNodeCount: mesh.nodes.length, edgeSplits: mesh.edgeSplits,
+  }
 }

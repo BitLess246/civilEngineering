@@ -427,12 +427,18 @@ export interface QuadPlateSpec { id: string; corners: [V3, V3, V3, V3]; E: numbe
  * Subdivide a set of 3D quad plates into an n×n triangular mesh each, sharing
  * nodes between plates that meet on a common edge (coordinate-hashed identity).
  * `cornerId(pos)` may return an existing model node id for a coincident position
- * (so supports/loads still attach); other vertices get synthetic `sv*` ids.
- * n = 1 reproduces the original 2-triangle-per-quad mesh.
+ * (so supports/loads still attach); other vertices get synthetic ids built from
+ * `prefix`. n = 1 reproduces the original 2-triangle-per-quad mesh — the same
+ * two triangles across the same c0–c2 diagonal, so it is a no-op substitution.
+ *
+ * `prefix` exists because the default `sv` can collide with a real model node
+ * that happens to be named `sv3`: two distinct nodes would then merge into one
+ * and weld unrelated parts of the structure together. A caller that meshes a
+ * user's model must pass a prefix it has proved unused.
  */
 export function subdivideQuadPlates(
   plates: QuadPlateSpec[], n: number,
-  cornerId?: (pos: V3) => string | undefined, tol = 1e-4,
+  cornerId?: (pos: V3) => string | undefined, tol = 1e-4, prefix = 'sv',
 ): { nodes: ShellNode[]; elems: ShellElem[] } {
   const m = Math.max(1, Math.floor(n))
   const reg = new Map<string, string>()        // snapped-coord key → node id
@@ -443,7 +449,7 @@ export function subdivideQuadPlates(
     const k = key(p)
     const ex = reg.get(k)
     if (ex) return ex
-    const id = cornerId?.(p) ?? `sv${ctr++}`
+    const id = cornerId?.(p) ?? `${prefix}${ctr++}`
     reg.set(k, id)
     if (!nodeMap.has(id)) nodeMap.set(id, { id, x: p[0], y: p[1], z: p[2] })
     return id

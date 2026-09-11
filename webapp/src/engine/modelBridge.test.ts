@@ -172,6 +172,65 @@ describe('modelToFrame3D — shell elements', () => {
     const br = modelToFrame3D(model, { useShells: false })
     expect(br.shells).toEqual([])
     expect(br.loads.some((l) => l.kind === 'member-vdl')).toBe(true)
+    expect(br.meshNodeCount).toBe(0)
+    expect(br.edgeSplits.size).toBe(0)
+  })
+})
+
+describe('modelToFrame3D — subdivided plate mesh', () => {
+  const meshed = (subdiv?: number) =>
+    modelToFrame3D({ ...slabModel(), shellElements: true }, subdiv === undefined ? undefined : { shellSubdiv: subdiv })
+  const sumFy = (br: ReturnType<typeof modelToFrame3D>) =>
+    br.loads.reduce((s, l) => s + (l.kind === 'node' ? (l.Fy ?? 0) : 0), 0)
+
+  it('defaults to the two-triangle mesh and adds no nodes', () => {
+    // The regression contract. Nothing may move until a user asks for a finer
+    // mesh, so the default has to BE the old behaviour, not merely resemble it.
+    for (const br of [meshed(), meshed(1)]) {
+      expect(br.shells).toHaveLength(2)
+      expect(br.shells.map((sh) => sh.nodes)).toEqual([['n0', 'n1', 'n2'], ['n0', 'n2', 'n3']])
+      expect(br.meshNodeCount).toBe(0)
+      expect(br.nodes).toHaveLength(slabModel().nodes.length)
+      expect(sumFy(br)).toBeCloseTo(-60, 9)
+    }
+    // the model field and the option agree
+    const viaModel = modelToFrame3D({ ...slabModel(), shellElements: true, shellSubdiv: 4 })
+    expect(viaModel.shells).toHaveLength(32)
+    expect(viaModel.shells.map((sh) => sh.nodes)).toEqual(meshed(4).shells.map((sh) => sh.nodes))
+  })
+
+  it('subdivides into 2n² elements and appends the new nodes AFTER the model’s', () => {
+    // The appending contract: five consumers index the DOF vector by array
+    // position against model.nodes, so nodes[i] must keep answering for
+    // model.nodes[i]. Inserting anywhere would silently shift all of them.
+    const model = { ...slabModel(), shellElements: true }
+    for (const n of [2, 3, 4]) {
+      const br = modelToFrame3D(model, { shellSubdiv: n })
+      expect(br.shells).toHaveLength(2 * n * n)
+      expect(br.meshNodeCount).toBe((n + 1) * (n + 1) - 4)
+      expect(br.nodes).toHaveLength(model.nodes.length + br.meshNodeCount)
+      expect(br.nodes.slice(0, model.nodes.length).map((q) => q.id))
+        .toEqual(model.nodes.map((q) => q.id))
+      // every shell node resolves in the node list the solver will be handed
+      const ids = new Set(br.nodes.map((q) => q.id))
+      for (const sh of br.shells) for (const id of sh.nodes) expect(ids.has(id)).toBe(true)
+    }
+  })
+
+  it('carries the same total area load however fine the mesh', () => {
+    // −q·A = −5 kPa × 4 × 3 m = −60 kN, exactly, at every density. If Σ A
+    // drifted from the panel area the applied load would drift with it.
+    for (const n of [1, 2, 3, 4, 5, 6]) expect(sumFy(meshed(n))).toBeCloseTo(-60, 9)
+    // and still no tributary edge loads — the panel must not be loaded twice
+    expect(meshed(4).loads.some((l) => l.kind === 'member-vdl' || l.kind === 'member-udl')).toBe(false)
+  })
+
+  it('reports the edge members the mesh landed on', () => {
+    // Consumed by the edge-attachment phase. Until that lands a subdivided
+    // panel hangs off its four corners, which is why the default stays 1.
+    const br = meshed(4)
+    expect(br.edgeSplits.size).toBeGreaterThan(0)
+    for (const hits of br.edgeSplits.values()) expect(hits).toHaveLength(3)
   })
 })
 
