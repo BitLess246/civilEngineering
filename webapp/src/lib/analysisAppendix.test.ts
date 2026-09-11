@@ -762,3 +762,20 @@ describe('D.3b — the P-Δ requirement reaches the report', () => {
       .not.toContainEqual(expect.objectContaining({ title: expect.stringContaining('D.3b') }))
   })
 })
+
+describe('A.0 modelling line — the mesh density is on the record', () => {
+  const meta = (m: typeof model) =>
+    buildAnalysisAppendix({ ...full, model: m }).sections.find((s) => s.key === 'model')!
+      .stats!.find((x) => x.label === 'Modelling')!.value
+
+  it('names the mesh when shells are on', () => {
+    // A report that says "shell slabs" without saying how finely says almost
+    // nothing: the answers at 2×2 and at 6×6 are different answers.
+    expect(meta({ ...model, shellElements: true, shellSubdiv: 4 })).toContain('shell slabs (4×4 mesh)')
+    expect(meta({ ...model, shellElements: true })).toContain('1×1')
+  })
+
+  it('says nothing about a mesh that is not used', () => {
+    expect(meta({ ...model, shellElements: false })).not.toContain('shell slabs')
+  })
+})

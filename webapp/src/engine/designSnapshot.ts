@@ -131,6 +131,12 @@ export function modelDigest(m: StructuralModel): string {
       rigidEndZones: !!m.rigidEndZones,
       rigidZoneFactor: m.rigidZoneFactor ?? null,
       shellElements: !!m.shellElements,
+      // Mesh density is part of the model's geometry, so two models that differ
+      // only in it are DIFFERENT models — without this they would hash alike
+      // and a stale result would be reported as current. Stored as the
+      // EFFECTIVE value the bridge will use, so an absent field and an explicit
+      // 1 are one model rather than two: they mesh identically.
+      shellSubdiv: m.shellSubdiv ?? 1,
     },
   })
 }

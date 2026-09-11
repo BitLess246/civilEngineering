@@ -43,6 +43,12 @@ import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '..
 import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
 import { concreteClassForFc, type ConcreteClass } from '../engine/quantities'
 import { computeSeismic, buildECases, type SeismicResult, type DriftRow, type StabilityRow } from '../engine/seismic'
+import { SHELL_SUBDIV_MIN, SHELL_SUBDIV_MAX } from '../engine/model'
+
+/** Keep `shellSubdiv` inside the range `meshValidation` enforces, so the input
+ *  cannot put the model into a state the validator will reject. */
+const clampSubdiv = (v: number) =>
+  Math.max(SHELL_SUBDIV_MIN, Math.min(SHELL_SUBDIV_MAX, Math.round(v) || SHELL_SUBDIV_MIN))
 import type { IrregularityFlag } from '../engine/irregularity'
 import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
 import { freqFromDeflection, dg11Walking, DG11_OCCUPANCY } from '../engine/floorVibration'
@@ -271,6 +277,7 @@ export default function ModelSpace() {
   const [beamTopSteel, setBeamTopSteel] = useState(b('beamTopSteel', false))
   const [allAround, setAllAround] = useState(b('allAround', true)) // column P–M bars on all four faces
   const [tBeamOn, setTBeamOn] = useState(b('tBeamOn', true))       // §6.3.2 flanged sagging design
+  const [designShells, setDesignShells] = useState(false)
   const [tryBars, setTryBars] = useState(b('tryBars', true))        // let design/optimize pick bar Ø from a ladder
   const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
@@ -380,7 +387,6 @@ export default function ModelSpace() {
   const [shellStress, setShellStress] = useState<{ nodes: ShellNode[]; elems: ShellElem[]; stresses: ElementStress[] } | null>(null)
   const [slabFE, setSlabFE] = useState<SlabFEScheduleRow[] | null>(null)
   const [recSpec, setRecSpec] = useState<{ spec: AccelSpectrum; design: DesignSpectrumPoint[]; name: string } | null>(null)
-  const [shellSubdiv, setShellSubdiv] = useState(4)   // n×n triangulation per plate
   const [thCsv, setThCsv] = useState<{ text: string; name: string; npts: number } | null>(null)
   const [thCsvUnits, setThCsvUnits] = useState<'g' | 'ms2'>('g')
   const [thCsvDt, setThCsvDt] = useState(0.02)  // s, for one-column CSV
@@ -626,7 +632,7 @@ export default function ModelSpace() {
   const hasELoads = model?.loads.some((l) => l.cat === 'E') ?? false
   const seismicSystem: 'gravity' | 'imf' | 'smf' = hasELoads ? (Rw >= 8 ? 'smf' : Rw >= 5 ? 'imf' : 'gravity') : 'gravity'
   // §208.4.1 vertical seismic component folded into the E-combo D factors.
-  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel, Ev: evOn ? 0.5 * Ca * Ie : undefined, colLayout: (allAround ? 'all-around' as const : 'two-face' as const), tBeamAction: tBeamOn }
+  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel, Ev: evOn ? 0.5 * Ca * Ie : undefined, colLayout: (allAround ? 'all-around' as const : 'two-face' as const), tBeamAction: tBeamOn, useShells: designShells }
 
   const analyze = () => {
     if (!model || busy || meshErrors) return   // §1 fail-fast: don't solve a singular mesh
@@ -733,7 +739,7 @@ export default function ModelSpace() {
     // Mesh + solve the model's shell plates under the SERVICE area-load field for
     // display (subdivision, conforming edges and corner-id reuse handled by the
     // shared shellModel bridge). Pass nothing for D/L factors → unfactored stress.
-    const solved = solveModelShells(model, { subdiv: shellSubdiv })
+    const solved = solveModelShells(model, { subdiv: model.shellSubdiv ?? 4 })
     if (!solved) { setShellStress(null); return }
     setShellStress({ nodes: solved.nodes, elems: solved.elems, stresses: solved.stresses })
   }
@@ -741,7 +747,7 @@ export default function ModelSpace() {
   const runSlabFE = () => {
     if (!model || !model.shellElements || model.plates.length === 0) return
     // Factored (1.2D + 1.6L) shell moment field → Wood-Armer slab reinforcement.
-    const out = designModelSlabsFE(model, { subdiv: shellSubdiv })
+    const out = designModelSlabsFE(model, { subdiv: model.shellSubdiv ?? 4 })
     setSlabFE(out ? out.rows : null)
   }
 
@@ -3371,10 +3377,30 @@ export default function ModelSpace() {
                   <span>Shell elements for slab / wall panels</span>
                 </label>
                 {model?.shellElements && (
-                  <p className="col-span-full pl-6 text-[11px] text-slate-500">
-                    Two triangles per panel, corner nodes only — for stress plots and slab FE, not for loading a
-                    frame. The design pipeline keeps the tributary load model either way.
-                  </p>
+                  <>
+                    <label className="col-span-full flex items-center gap-2 pl-6 text-sm">
+                      <span className="text-slate-600">Mesh subdivision n×n</span>
+                      <input type="number" min={SHELL_SUBDIV_MIN} max={SHELL_SUBDIV_MAX} step={1}
+                        value={model.shellSubdiv ?? 1}
+                        onChange={(e) => model && save({ ...model, shellSubdiv: clampSubdiv(parseFloat(e.target.value)) })}
+                        className="w-20 rounded border border-slate-300 px-2 py-1" />
+                      <span className="text-[11px] text-slate-500">
+                        {(model.shellSubdiv ?? 1) > 1
+                          ? `${2 * (model.shellSubdiv ?? 1) ** 2} triangles per panel; edge beams are split at the mesh nodes so the panel is held by them`
+                          : '2 triangles per panel on its corner nodes — no node between the supports, so the slab cannot deflect'}
+                      </span>
+                    </label>
+                    <label className="col-span-full flex items-center gap-2 pl-6 text-sm">
+                      <input type="checkbox" checked={designShells}
+                        onChange={(e) => setDesignShells(e.target.checked)} />
+                      <span>Use the slab mesh in the DESIGN solve too</span>
+                    </label>
+                    <p className="col-span-full pl-6 text-[11px] text-slate-500">
+                      {designShells
+                        ? 'Every beam and column result now comes from a frame with slab stiffness in it, instead of tributary line loads — measured −15% to +18% on beam design moments. The design mesh is at least 2×2 whatever is set above: two triangles deliver the panel\u2019s whole load to its corner columns and design the beams 80–90% under-loaded.'
+                        : 'Off: the design keeps the tributary load model, so the mesh changes stress plots and the analysis only. Turning it on moves every published beam and column result.'}
+                    </p>
+                  </>
                 )}
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={tryBars} onChange={(e) => setTryBars(e.target.checked)} />
@@ -3388,6 +3414,7 @@ export default function ModelSpace() {
                 {/* Slab load path — the one place this frame solve is known to sit on the
                     unconservative side, measured against a meshed-slab reference. Stated on the
                     card rather than only in the ⓘ, because it changes what a girder result means. */}
+                {!designShells && (
                 <p className="col-span-full rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-900">
                   <b>Slab loads reach beams by 45° tributary area</b>, not a slab mesh. Cross-checked against
                   STAAD.Pro with the slab meshed, every input matched (2×1 bay, 2 storeys): total reaction agrees
@@ -3396,6 +3423,7 @@ export default function ModelSpace() {
                   moment into the girders and columns that a tributary line load cannot. Long-span beams are
                   7–11% conservative. Check interior girders and column moments separately.
                 </p>
+                )}
                 <div className="col-span-full">
                   <button type="button" onClick={analyze} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'analyze' ? '⏳ Analyzing…' : '▶ Analyze (3D FEM)'}
@@ -3437,12 +3465,9 @@ export default function ModelSpace() {
                     moments (Mx, My, Mxy) from the shell FEM. Uses E = 25 000 MPa, ν = 0.2 for
                     all plates. Area loads are applied as uniform pressure.
                   </p>
-                  <Num label="Mesh subdivision n×n" value={shellSubdiv} step="1"
-                    onChange={(v) => setShellSubdiv(Math.max(1, Math.min(12, Math.round(v) || 1)))}
-                    hint="1–12 cells per side" />
                   <p className="col-span-full text-[11px] text-slate-500">
-                    Each quad is split into {shellSubdiv}×{shellSubdiv} cells (2·{shellSubdiv}² triangles); finer meshes
-                    reduce the stiffness overestimate of coarse 2-triangle plates. Edges shared by adjacent plates stay conforming.
+                    Mesh density is set with the model, beside the shell-elements switch above —
+                    it is the same mesh the analysis solves.
                   </p>
                   <div className="col-span-full flex flex-wrap gap-2">
                     <button type="button" onClick={runShellStress} disabled={!model || !!busy}
