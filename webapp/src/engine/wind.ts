@@ -18,6 +18,7 @@
 // MWFRS side-wall pressures remain out of scope.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, ModelLoad } from './model'
+import { columnShares } from './storeyDistribution'
 
 export interface WindParams {
   V: number                  // basic wind speed, m/s (§207A.5)
@@ -116,11 +117,16 @@ export function computeWind(model: StructuralModel, p: WindParams): WindResult |
     levels.push({ elevation: e, Kz: windKz(e, p.exposure), qz, pWind, pLee, tribH, Fx: F, nodes: nodes.length })
     baseShear += F
     if (nodes.length > 0 && F > 1e-9) {
-      const per = F / nodes.length
+      // Same basis as the seismic storey force: the level's force is shared by
+      // the stiffness each node's column presents to the push, with the equal
+      // split kept for a level that has no column under it.
+      const cs = columnShares(model, e, p.dir)
       for (const n of nodes) {
+        const Fn = cs.usable ? F * (cs.share.get(n.id) ?? 0) : F / nodes.length
+        if (Fn < 1e-12) continue
         loads.push(p.dir === 'x'
-          ? { kind: 'node', node: n.id, Fx: per, cat: 'W' }
-          : { kind: 'node', node: n.id, Fz: per, cat: 'W' })
+          ? { kind: 'node', node: n.id, Fx: Fn, cat: 'W' }
+          : { kind: 'node', node: n.id, Fz: Fn, cat: 'W' })
       }
     }
   }

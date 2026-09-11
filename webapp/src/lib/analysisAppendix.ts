@@ -276,7 +276,11 @@ function loadingSection(i: AppendixInput): AppendixSection {
         title: `B.3 Static seismic — NSCP §208.5, ${dir} direction`,
         head: ['Level (m)', 'hx (m)', 'wx (kN)', 'Fx (kN)', 'Nodes'], right: [0, 1, 2, 3, 4],
         rows: s.storeys.map((r) => [f2(r.elevation), f2(r.hx), f1(r.wx), f1(r.Fx), String(r.nodes)]),
-        note: `T = ${f3(s.T)} s (method ${s.Tmethod}; Ta = ${f3(s.Ta)} s) · W = ${f1(s.W)} kN · V = ${f1(s.V)} kN (raw ${f1(s.Vraw)}, min ${f1(s.Vmin)}, max ${f1(s.Vmax)}) · Ft = ${f1(s.Ft)} kN`,
+        note: `T = ${f3(s.T)} s (method ${s.Tmethod}; Ta = ${f3(s.Ta)} s) · W = ${f1(s.W)} kN · V = ${f1(s.V)} kN (raw ${f1(s.Vraw)}, min ${f1(s.Vmin)}, max ${f1(s.Vmax)}) · Ft = ${f1(s.Ft)} kN`
+          + ' VERTICALLY, §208.5.5: Fx = (V − Ft)·wx·hx / Σ(wi·hi), with Ft = min(0.07·T·V, 0.25·V) added at the roof when T > 0.7 s and zero below it; hx is measured from the base.'
+          + ' V itself is Eq. 208-8 capped by 208-9, floored by 208-10, and in Zone 4 floored again by 208-11 — the raw, min and max above are those three.'
+          + ' HORIZONTALLY, each level\u2019s Fx is shared between its nodes in proportion to the flexural stiffness E·I of the column BELOW each one, for bending in the load direction; with the storey\u2019s columns at a common height that is the same as sharing by lateral stiffness 12·E·I/h³.'
+          + ' A node with no column under it takes none, and a level with no columns at all falls back to an equal split.',
       })
     }
   }
@@ -286,7 +290,9 @@ function loadingSection(i: AppendixInput): AppendixSection {
       title: 'B.4 Wind — NSCP §207',
       head: ['Level (m)', 'Kz', 'qz (kPa)', 'p windward (kPa)', 'p leeward (kPa)', 'Fx (kN)'], right: [0, 1, 2, 3, 4, 5],
       rows: w.levels.map((l) => [f2(l.elevation), f3(l.Kz), f3(l.qz), f3(l.pWind), f3(l.pLee), f1(l.Fx)]),
-      note: `V = ${f0(w.V)} m/s · h = ${f1(w.h)} m · B = ${f1(w.B)} m · L = ${f1(w.L)} m · G = ${f2(w.G)} · qh = ${f3(w.qh)} kPa · base shear ${f1(w.baseShear)} kN`,
+      note: `V = ${f0(w.V)} m/s · h = ${f1(w.h)} m · B = ${f1(w.B)} m · L = ${f1(w.L)} m · G = ${f2(w.G)} · qh = ${f3(w.qh)} kPa · base shear ${f1(w.baseShear)} kN`
+        + ' Each level\u2019s force is the net windward + leeward pressure over its tributary height and the width B facing the wind.'
+        + ' It reaches the nodes on the same basis as the seismic storey force: in proportion to the E·I of the column below each node, for bending in the wind direction.',
     })
   }
   if (i.analysis) {
@@ -362,7 +368,7 @@ function loadingSection(i: AppendixInput): AppendixSection {
       note: 'Every row is solved: one FEM run per NSCP combination per case, and the design envelopes all of them.'
         + ' Mt is taken about the vertical axis through each level\u2019s MASS centroid \u2014 the axis \u00a7208.7.2.7 measures its \u00b15% eccentricity from.'
         + ' On a symmetric plan the \u27f3/\u27f2 pair of a direction reads \u00b10.05\u00b7L\u22a5\u00b7V and nothing else, because the storey force itself contributes no torque.'
-        + ' A pair that is NOT centred on zero means the applied pattern carries an eccentricity of its own: the storey force is divided EQUALLY between the nodes at each level, so its resultant sits at the nodes\u2019 geometric centroid, which coincides with the mass centroid only when the plan is regular.',
+        + ' A pair that is NOT centred on zero means the applied pattern carries an eccentricity of its own \u2014 the level\u2019s force is shared out by the stiffness of the column under each node, so its resultant sits at the centre of RIGIDITY, which coincides with the mass centroid only when the plan is regular in both stiffness and mass.',
     })
     lat.forEach(({ name, kind, loads }, k) => {
       const d = caseLoadDiagram(i.model, loads, name, { view })

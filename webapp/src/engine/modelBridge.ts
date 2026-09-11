@@ -73,7 +73,10 @@ function woodSectionProps(s: RectSection) {
   }
 }
 
-function sectionProps(s: RectSection) {
+/** Exported so the storey-force distribution can weigh a column by the SAME
+ *  E and I the solver will use for it, rather than a second opinion about what
+ *  a section is made of. */
+export function sectionProps(s: RectSection) {
   if (s.material === 'steel') return steelSectionProps(s)
   if (s.material === 'wood') return woodSectionProps(s)
   const E = 4700 * Math.sqrt(Math.max(s.fc, 1))

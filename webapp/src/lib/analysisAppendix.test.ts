@@ -678,3 +678,42 @@ describe('the export dialog and the appendix agree on what exists', () => {
       expect(typeof a[k]).toBe('boolean')
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE REPORT SHOULD NOT MAKE A READER ASK HOW THE FORCE GOT THERE.
+//
+// B.3 tabulated the storey forces and never said what produced them, nor how
+// each level's force reached its nodes — so both had to be traced in the
+// source to be known. These pin the two statements.
+// ─────────────────────────────────────────────────────────────────────────
+describe('B.3/B.4 state how the lateral force is distributed', () => {
+  const seis = {
+    x: computeSeismic(model, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!,
+    z: computeSeismic(model, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'z' })!,
+  }
+  const noteOf = (prefix: string, input: AppendixInput) =>
+    buildAnalysisAppendix(input).sections.find((s) => s.key === 'loading')!
+      .tables!.find((t) => t.title.startsWith(prefix))!.note ?? ''
+
+  it('B.3 gives the §208.5.5 vertical distribution, Ft included', () => {
+    const n = noteOf('B.3', { ...full, seismic: seis })
+    expect(n).toMatch(/Fx = \(V − Ft\)·wx·hx \/ Σ\(wi·hi\)/)
+    expect(n).toMatch(/0\.07·T·V/)
+    expect(n).toMatch(/T > 0\.7/)
+  })
+
+  it('B.3 gives the horizontal basis, and its fallback', () => {
+    const n = noteOf('B.3', { ...full, seismic: seis })
+    expect(n).toMatch(/E·I of the column BELOW/)
+    expect(n).toMatch(/12·E·I\/h³/)          // the equivalence it rests on
+    expect(n).toMatch(/equal split/)          // and what happens without columns
+  })
+
+  it('no longer claims the force is divided equally', () => {
+    // It was, until the stiffness share-out replaced it; a report that still
+    // said so would be a documented lie rather than a stale comment.
+    const n = noteOf('B.7', { ...full, lateral: buildECases(model, seis.x.loads, seis.z.loads, { dirs: ['+X', '-X'], torsion: true }) })
+    expect(n).not.toMatch(/divided EQUALLY/)
+    expect(n).toMatch(/centre of RIGIDITY/)
+  })
+})

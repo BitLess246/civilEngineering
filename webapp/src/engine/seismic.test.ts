@@ -4,7 +4,7 @@ import { buildSeismicMass } from './modal'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { solveFrame3D, applyF3Combo } from './frame3d'
-import type { RectSection } from './model'
+import type { RectSection, StructuralModel } from './model'
 
 const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 
@@ -350,5 +350,54 @@ describe('storeyWeightBreakdown', () => {
     const before = storeyWeights(m).reduce((s, r) => s + r.w, 0)
     m.loads = [...m.loads, { kind: 'node', node: top.id, Fy: -40, cat: 'D' }]
     expect(storeyWeightBreakdown(m).reduce((s, r) => s + r.w, 0) - before).toBeCloseTo(40, 6)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE STOREY FORCE REACHES THE NODES BY COLUMN STIFFNESS, NOT IN EQUAL SLICES.
+//
+// It used to be `F / nodes.length`, which loads a slender corner column
+// exactly as hard as a stout interior one. These pin the WIRING — that
+// `computeSeismic` actually consults `columnShares` — as opposed to
+// `storeyDistribution.test.ts`, which pins the shares themselves.
+// ─────────────────────────────────────────────────────────────────────────
+describe('storey force → the nodes of its level', () => {
+  const base = { cover: 40, barDia: 20, tieDia: 10, fc: 28, fy: 415, material: 'concrete' as const }
+  const C = (id: string, b: number, h: number): RectSection => ({ ...base, id, name: id, b, h })
+  const P = { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, Z: 0.4, dir: 'x' as const }
+  const uniform = generateGridModel({ baysX: [6, 6], baysZ: [6, 6], storeyH: [3, 3], section: C('S', 400, 400) })
+  const fxOf = (m: StructuralModel) => {
+    const r = computeSeismic(m, P)!
+    const top = Math.max(...m.storeys.map((s) => s.elevation))
+    const at = new Set(m.nodes.filter((n) => Math.abs(n.y - top) < 1e-6).map((n) => n.id))
+    return r.loads.filter((l) => at.has((l as { node: string }).node)).map((l) => (l as { Fx?: number }).Fx ?? 0)
+  }
+
+  it('a uniform grid is still split evenly — a regular building does not move', () => {
+    const fs = fxOf(uniform)
+    expect(fs).toHaveLength(9)
+    for (const f of fs) expect(f).toBeCloseTo(fs[0], 12)
+  })
+
+  it('a stiffer frame line draws more of the storey force', () => {
+    const nm = new Map(uniform.nodes.map((n) => [n.id, n]))
+    const m: StructuralModel = {
+      ...uniform,
+      sections: [...uniform.sections, C('BIG', 400, 900)],
+      members: uniform.members.map((x) => {
+        if (x.role !== 'column') return x
+        const a = nm.get(x.i)
+        return a && Math.abs(a.z) < 1e-6 ? { ...x, section: 'BIG' } : x
+      }),
+    }
+    const fs = fxOf(m)
+    // The invariant that matters: sharing it out must not lose any of it. The
+    // level's own Fx is what the vertical distribution assigned.
+    const r = computeSeismic(m, P)!
+    const top = Math.max(...m.storeys.map((x) => x.elevation))
+    const levelF = r.storeys.find((x) => Math.abs(x.elevation - top) < 1e-6)!.Fx
+    expect(fs.reduce((a, b) => a + b, 0)).toBeCloseTo(levelF, 6)
+    // …and it is shared in the columns' own ratio: (900/400)³ = 11.39.
+    expect(Math.max(...fs) / Math.min(...fs)).toBeCloseTo((900 / 400) ** 3, 4)
   })
 })
