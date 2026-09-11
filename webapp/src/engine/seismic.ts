@@ -15,6 +15,7 @@
 // or 0.020·hs otherwise.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, ModelLoad } from './model'
+import { columnShares } from './storeyDistribution'
 import { memberWeightPerLength } from './modelBuilder'
 import type { LateralCase } from './pipeline'
 import { buildSeismicMass } from './modal'
@@ -212,15 +213,21 @@ export function computeSeismic(model: StructuralModel, p: SeismicParams): Seismi
     return { elevation: s.elevation, hx: s.elevation, wx: s.w, Fx, nodes: nodesAt(s.elevation).length }
   })
 
+  // Share each level's force out by the stiffness its columns present to the
+  // push — see `storeyDistribution`. The equal split stays as the fallback for
+  // a level with no column under it, where there is nothing to weigh by.
   const loads: ModelLoad[] = []
   for (const s of storeys) {
     const nodes = nodesAt(s.elevation)
     if (nodes.length === 0 || Math.abs(s.Fx) < 1e-9) continue
-    const per = s.Fx / nodes.length
+    const cs = columnShares(model, s.elevation, p.dir)
+    const per = (id: string) => (cs.usable ? s.Fx * (cs.share.get(id) ?? 0) : s.Fx / nodes.length)
     for (const n of nodes) {
+      const F = per(n.id)
+      if (Math.abs(F) < 1e-12) continue
       loads.push(p.dir === 'x'
-        ? { kind: 'node', node: n.id, Fx: per, cat: 'E' }
-        : { kind: 'node', node: n.id, Fz: per, cat: 'E' })
+        ? { kind: 'node', node: n.id, Fx: F, cat: 'E' }
+        : { kind: 'node', node: n.id, Fz: F, cat: 'E' })
     }
   }
 
