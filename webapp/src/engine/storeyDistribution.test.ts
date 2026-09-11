@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from './modelBuilder'
-import { columnShares } from './storeyDistribution'
-import type { RectSection, StructuralModel } from './model'
+import { columnShares, centreOfRigidity, shiftResultantLoads } from './storeyDistribution'
+import type { ModelLoad, RectSection, StructuralModel } from './model'
 
 const base = { cover: 40, barDia: 20, tieDia: 10, fc: 28, fy: 415, material: 'concrete' as const }
 const C = (id: string, b: number, h: number): RectSection => ({ ...base, id, name: id, b, h })
@@ -106,5 +106,92 @@ describe('columnShares — a level’s force by the stiffness under it', () => {
     }
     void nm
     expect(columnShares(raised, 6, 'x').equalHeights).toBe(false)
+  })
+})
+
+describe('centreOfRigidity + shiftResultantLoads — where the resultant acts', () => {
+  const uniform = grid(C('S', 400, 400))
+  const top = Math.max(...uniform.storeys.map((s) => s.elevation))
+  // z = 0 line stiffened to 400×900; pushed along X that is (900/400)³ = 11.39
+  // times the stiffness of the other two lines, so the rigidity centre of a
+  // 0/6/12 m plan collapses from 6.0 m to 0.0747·(6+12) = 1.344 m.
+  const skew = restyle(uniform, C('BIG', 400, 900), (n) => Math.abs(n.z) < 1e-6)
+
+  it('a symmetric plan has its rigidity centre at mid-plan', () => {
+    expect(centreOfRigidity(uniform, top, 'x')).toBeCloseTo(6, 9)
+    expect(centreOfRigidity(uniform, top, 'z')).toBeCloseTo(6, 9)
+  })
+
+  it('stiffening one frame line drags the rigidity centre onto it', () => {
+    const r = (900 / 400) ** 3
+    expect(centreOfRigidity(skew, top, 'x')).toBeCloseTo((6 + 12) / (r + 2), 9)
+    // the stiffened line runs along X, so a push along Z is unaffected in plan
+    expect(centreOfRigidity(skew, top, 'z')).toBeCloseTo(6, 9)
+  })
+
+  it('reports nothing when no column carries stiffness below the level', () => {
+    const noCols = { ...uniform, members: uniform.members.filter((m) => m.role !== 'column') }
+    expect(centreOfRigidity(noCols, top, 'x')).toBeNull()
+  })
+
+  /** Perp coordinate of the resultant of a node-load set at one level. */
+  const line = (m: StructuralModel, loads: ModelLoad[], dir: 'x' | 'z', y: number) => {
+    const nm = new Map(m.nodes.map((n) => [n.id, n]))
+    let F = 0, M = 0
+    for (const l of loads) {
+      if (l.kind !== 'node') continue
+      const n = nm.get(l.node)
+      if (!n || Math.abs(n.y - y) > 1e-6) continue
+      const f = (dir === 'x' ? l.Fx : l.Fz) ?? 0
+      F += f; M += f * (dir === 'x' ? n.z : n.x)
+    }
+    return { F, at: M / F }
+  }
+
+  /** The stiffness-weighted pattern `columnShares` produces for force `F`. */
+  const pattern = (m: StructuralModel, y: number, dir: 'x' | 'z', F: number): ModelLoad[] => {
+    const cs = columnShares(m, y, dir)
+    return [...cs.share].map(([node, s]) => (dir === 'x'
+      ? { kind: 'node' as const, node, Fx: F * s, cat: 'E' as const }
+      : { kind: 'node' as const, node, Fz: F * s, cat: 'E' as const }))
+  }
+
+  it('an EI-weighted pattern really does land on the rigidity centre', () => {
+    // The premise of the correction: without it the applied force acts at CR,
+    // where it twists nothing. If this ever stops holding the fix is moot.
+    const p = pattern(skew, top, 'x', 100)
+    expect(line(skew, p, 'x', top).at).toBeCloseTo(centreOfRigidity(skew, top, 'x')!, 9)
+  })
+
+  it('the couple moves the line of action onto the target, force unchanged', () => {
+    const p = pattern(skew, top, 'x', 100)
+    const w = (id: string) => (columnShares(skew, top, 'x').share.get(id) ?? 0)
+    const fix = shiftResultantLoads(skew, p, 'x', 'E', () => 6, w)
+    expect(line(skew, fix, 'x', top).F).toBeCloseTo(0, 9)          // self-equilibrating
+    const both = line(skew, [...p, ...fix], 'x', top)
+    expect(both.F).toBeCloseTo(100, 9)                              // ΣF untouched
+    expect(both.at).toBeCloseTo(6, 9)                               // line of action moved
+  })
+
+  it('adds nothing when the pattern already acts on the target', () => {
+    const p = pattern(uniform, top, 'x', 100)
+    const w = (id: string) => (columnShares(uniform, top, 'x').share.get(id) ?? 0)
+    expect(shiftResultantLoads(uniform, p, 'x', 'E', () => 6, w)).toEqual([])
+  })
+
+  it('a level with no torsional lever is left alone rather than mis-loaded', () => {
+    // One frame line: Σw·d² = 0, so no couple can be built. Applying part of
+    // one would change ΣF, which is worse than declining.
+    const single = grid(C('S', 400, 400), [])
+    const y = Math.max(...single.storeys.map((s) => s.elevation))
+    const p = pattern(single, y, 'x', 100)
+    expect(shiftResultantLoads(single, p, 'x', 'E', () => 99, (id) => (columnShares(single, y, 'x').share.get(id) ?? 0)))
+      .toEqual([])
+  })
+
+  it('a null target leaves that level untouched', () => {
+    const p = pattern(skew, top, 'x', 100)
+    const w = (id: string) => (columnShares(skew, top, 'x').share.get(id) ?? 0)
+    expect(shiftResultantLoads(skew, p, 'x', 'E', () => null, w)).toEqual([])
   })
 })

@@ -32,7 +32,7 @@
 // so a column rotated by an explicit `axisRotation` is weighed on the stiffness
 // it actually presents to the push, not on the one it would present unrotated.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel } from './model'
+import type { StructuralModel, ModelLoad } from './model'
 import { sectionProps } from './modelBridge'
 import { localAxes, defaultAxisRotation } from './frame3d'
 
@@ -94,4 +94,123 @@ export function columnShares(
   for (const [id, v] of w) if (v > 0) share.set(id, v / total)
   const hMin = Math.min(...heights), hMax = Math.max(...heights)
   return { share, usable: true, equalHeights: hMax - hMin < 1e-6 }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// WHERE THE RESULTANT ENDS UP.
+//
+// Sharing a level's force by column stiffness fixes how hard each column is
+// pushed, but it also decides WHERE the level's resultant acts: the line of
+// action passes through the weighted centroid of the pattern. With E·I weights
+// that centroid is the level's centre of RIGIDITY, and a resultant applied at
+// the centre of rigidity twists nothing — the inherent torsion F·(CM − CR) the
+// building actually feels is thrown away. (The equal split had the same defect
+// with a different target: it put the resultant at the nodes' geometric
+// centroid, which is no more the right point, just a less predictable one.)
+//
+// NSCP §208.7.2.7 is explicit that the design eccentricity is the ACTUAL
+// eccentricity plus the ±5% accidental one. In a hand calculation the actual
+// part is applied as a torque F·e about the centre of rigidity. In an FEM it
+// is applied by putting the force where it comes from — the centre of MASS —
+// and letting the structure twist about whatever centre of rigidity it has.
+// `shiftResultantLoads` is that correction: a self-equilibrating couple that
+// moves the pattern's line of action onto a stated plan coordinate, leaving
+// ΣF untouched. Wind gets the same treatment against a different target, the
+// centre of the face the pressure acts on.
+
+/** Perpendicular plan coordinate: a push along x levers about z, and v.v. */
+const perp = (n: { x: number; z: number }, dir: 'x' | 'z') => (dir === 'x' ? n.z : n.x)
+
+/**
+ * Perpendicular plan coordinate of a level's centre of rigidity for a push
+ * along `dir` — Σ(k_i·d_i)/Σk_i over the columns below the level. `null` when
+ * no column below the level carries stiffness, i.e. when `columnShares` is not
+ * usable and there is no rigidity centre to speak of.
+ */
+export function centreOfRigidity(
+  model: StructuralModel, elevation: number, dir: 'x' | 'z',
+): number | null {
+  const cs = columnShares(model, elevation, dir)
+  if (!cs.usable) return null
+  const nm = new Map(model.nodes.map((n) => [n.id, n]))
+  let c = 0
+  for (const [id, f] of cs.share) {
+    const n = nm.get(id)
+    if (n) c += f * perp(n, dir)
+  }
+  return c
+}
+
+/**
+ * Self-equilibrating node forces that move the resultant of `base` onto the
+ * plan coordinate `target` gives for each level.
+ *
+ * For a level carrying ΣF at the weighted centroid c̄ of the pattern, the
+ * required torque is T = ΣF·(target − c̄); it is realised exactly as the
+ * §208.7.2.7 accidental couple is, by
+ *
+ *     ΔF_i = T · w_i·d_i / Σ w_j·d_j²      (d measured from the w-centroid)
+ *
+ * so ΣΔF = 0 (statics unchanged) and ΣΔF·d = T (the shift is exact). `weight`
+ * supplies w_i; a level with no torsional lever (single frame line, Σw·d² ≈ 0)
+ * cannot be shifted and contributes nothing. `target` returning `null` means
+ * "leave this level alone".
+ */
+export function shiftResultantLoads(
+  model: StructuralModel,
+  base: ModelLoad[],
+  dir: 'x' | 'z',
+  cat: ModelLoad['cat'],
+  target: (nodes: StructuralModel['nodes'], elevation: number) => number | null,
+  weight: (id: string) => number,
+): ModelLoad[] {
+  const nm = new Map(model.nodes.map((n) => [n.id, n]))
+
+  // group the pattern's forces by level (node elevation)
+  const byLevel = new Map<number, { node: string; F: number }[]>()
+  for (const l of base) {
+    if (l.kind !== 'node') continue
+    const n = nm.get(l.node)
+    if (!n) continue
+    const F = (dir === 'x' ? l.Fx : l.Fz) ?? 0
+    if (F === 0) continue
+    const key = [...byLevel.keys()].find((e) => Math.abs(e - n.y) < 1e-6) ?? n.y
+    const arr = byLevel.get(key) ?? []
+    arr.push({ node: l.node, F })
+    byLevel.set(key, arr)
+  }
+
+  const out: ModelLoad[] = []
+  for (const [y, entries] of byLevel) {
+    const Flevel = entries.reduce((s, e) => s + e.F, 0)
+    if (!(Math.abs(Flevel) > 1e-12)) continue
+    const nodes = model.nodes.filter((n) => Math.abs(n.y - y) < 1e-6)
+    if (nodes.length < 2) continue
+    const tgt = target(nodes, y)
+    if (tgt === null) continue
+    // torque needed to move the pattern's line of action onto the target
+    let applied = 0
+    for (const e of entries) {
+      const n = nm.get(e.node)
+      if (n) applied += e.F * perp(n, dir)
+    }
+    const T = Flevel * tgt - applied
+    if (!(Math.abs(T) > 1e-12)) continue
+    // weighted centroid and torsional lever Σw·d² of the level
+    let wTot = 0, wC = 0
+    for (const n of nodes) { const w = weight(n.id); wTot += w; wC += w * perp(n, dir) }
+    if (!(wTot > 0)) continue
+    const cbar = wC / wTot
+    let denom = 0
+    for (const n of nodes) denom += weight(n.id) * (perp(n, dir) - cbar) ** 2
+    if (!(denom > 1e-9)) continue                    // no lever — single frame line
+    for (const n of nodes) {
+      const dF = (T * weight(n.id) * (perp(n, dir) - cbar)) / denom
+      if (Math.abs(dF) < 1e-12) continue
+      out.push(dir === 'x'
+        ? { kind: 'node', node: n.id, Fx: dF, cat }
+        : { kind: 'node', node: n.id, Fz: dF, cat })
+    }
+  }
+  return out
 }

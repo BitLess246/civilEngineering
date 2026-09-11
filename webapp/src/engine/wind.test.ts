@@ -3,7 +3,7 @@ import { computeWind, windKz, cpLeeward, velocityPressure, gcpiMagnitude, wallGC
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { solveFrame3D, applyF3Combo } from './frame3d'
-import type { RectSection } from './model'
+import type { RectSection, StructuralModel } from './model'
 
 const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 
@@ -147,5 +147,54 @@ describe('NSCP 207E.4 — Components & Cladding wall pressures', () => {
     const flat = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })
     flat.nodes = flat.nodes.map((n) => ({ ...n, y: 0 }))
     expect(computeCladding(flat, { V: 50, exposure: 'C', dir: 'x', area: 1, enclosure: 'enclosed' })).toBeNull()
+  })
+})
+
+describe('wind — the level resultant acts at the centre of the face', () => {
+  // Same skewed plan as the seismic inherent-torsion case: the z = 0 frame
+  // line is 400×900 against 400×400 elsewhere, so for a push along X its
+  // rigidity centre sits at 1.34 m of a 12 m plan.
+  const s400: RectSection = { id: 'S', name: 'S', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const big: RectSection = { ...s400, id: 'BIG', name: 'BIG', h: 900 }
+  const uniform = generateGridModel({ baysX: [6, 6], baysZ: [6, 6], storeyH: [3, 3], section: s400 })
+  const nm = new Map(uniform.nodes.map((n) => [n.id, n]))
+  const skew: StructuralModel = {
+    ...uniform,
+    sections: [...uniform.sections, big],
+    members: uniform.members.map((x) =>
+      x.role === 'column' && Math.abs(nm.get(x.i)!.z) < 1e-6 ? { ...x, section: big.id } : x),
+  }
+  const p = { V: 200, exposure: 'C' as const, dir: 'x' as const, enclosure: 'enclosed' as const }
+
+  /** ΣF and its perpendicular line of action, per level. */
+  const lines = (m: StructuralModel, loads: NonNullable<ReturnType<typeof computeWind>>['loads']) => {
+    const map = new Map(m.nodes.map((n) => [n.id, n]))
+    const by = new Map<number, { F: number; M: number }>()
+    for (const l of loads) {
+      if (l.kind !== 'node') continue
+      const n = map.get(l.node)!
+      const q = by.get(n.y) ?? { F: 0, M: 0 }
+      q.F += l.Fx ?? 0; q.M += (l.Fx ?? 0) * n.z
+      by.set(n.y, q)
+    }
+    return [...by].map(([y, q]) => ({ y, F: q.F, at: q.M / q.F }))
+  }
+
+  it('a uniform pressure lands at mid-width even when the stiffness does not', () => {
+    const w = computeWind(skew, p)!
+    const ls = lines(skew, w.loads)
+    expect(ls.length).toBeGreaterThan(0)
+    for (const l of ls) expect(l.at).toBeCloseTo(6, 6)
+  })
+
+  it('keeps the base shear it redistributes', () => {
+    const w = computeWind(skew, p)!
+    expect(lines(skew, w.loads).reduce((s, l) => s + l.F, 0)).toBeCloseTo(w.baseShear, 6)
+  })
+
+  it('a symmetric plan is unchanged — the face centre is already the centroid', () => {
+    const w = computeWind(uniform, p)!
+    for (const l of lines(uniform, w.loads)) expect(l.at).toBeCloseTo(6, 6)
+    expect(lines(uniform, w.loads).reduce((s, l) => s + l.F, 0)).toBeCloseTo(w.baseShear, 6)
   })
 })

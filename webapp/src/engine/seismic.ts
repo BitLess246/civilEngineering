@@ -15,7 +15,7 @@
 // or 0.020·hs otherwise.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, ModelLoad } from './model'
-import { columnShares } from './storeyDistribution'
+import { columnShares, shiftResultantLoads } from './storeyDistribution'
 import { memberWeightPerLength } from './modelBuilder'
 import type { LateralCase } from './pipeline'
 import { buildSeismicMass } from './modal'
@@ -302,6 +302,35 @@ export function accidentalTorsionLoads(
   return out
 }
 
+/**
+ * The §208.7.2.7 INHERENT torsion: the couple that puts a case's resultant on
+ * the level's centre of MASS, wherever the plan distribution happened to leave
+ * it. `base` is the case's signed node-load set; the returned loads are ADDED
+ * to it and change no resultant force, only its line of action.
+ *
+ * This is not an optional refinement, and it is not the accidental ±5%. A
+ * seismic force originates at the mass; applying it anywhere else — at the
+ * centre of rigidity, which is exactly where stiffness-weighted shares put it,
+ * or at a geometric centroid, which is where an equal split put it — changes
+ * how much the storey twists. §208.7.2.7 sets the design eccentricity as the
+ * actual eccentricity plus the accidental one; this term is the actual part.
+ * In an FEM it is applied by moving the force to the mass centre rather than
+ * by adding F·(CM − CR) as a torque about the rigidity centre: the structure
+ * then develops its own inherent torsion from its own stiffness, and the two
+ * routes must not both be taken or the eccentricity is counted twice.
+ */
+export function inherentTorsionLoads(
+  model: StructuralModel, base: ModelLoad[], dir: 'x' | 'z',
+): ModelLoad[] {
+  const mass = buildSeismicMass(model)
+  const w = (id: string) => mass.get(id) ?? 0
+  return shiftResultantLoads(model, base, dir, 'E', (nodes) => {
+    let m = 0, c = 0
+    for (const n of nodes) { const q = w(n.id); m += q; c += q * (dir === 'x' ? n.z : n.x) }
+    return m > 0 ? c / m : null      // no mass at this level — nothing to centre on
+  }, w)
+}
+
 /** What a directional lateral case actually applies. */
 export interface CaseResultant {
   /** Σ of the node forces, kN. */
@@ -403,7 +432,13 @@ export function buildECases(
       : [{ tag: '', loads: [] as ModelLoad[] }]
     for (const pv of perpVariants) {
       const name = `E${d}${pv.tag}`
-      const loads = [...prim, ...pv.loads]
+      // Inherent torsion first, and unconditionally: it is where the force
+      // acts, not an accidental allowance that can be switched off.
+      const inh = [
+        ...inherentTorsionLoads(model, prim, axis),
+        ...(pv.loads.length ? inherentTorsionLoads(model, pv.loads, perpAxis) : []),
+      ]
+      const loads = [...prim, ...pv.loads, ...inh]
       if (!o.torsion) { out.push({ name, kind: 'E', loads }); continue }
       for (const s of [1, -1] as const) {
         const tor = [
