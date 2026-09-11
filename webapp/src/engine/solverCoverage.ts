@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 544
+export const SOLVER_TEST_COUNT = 548
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -83,6 +83,22 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "modelToFrame3D — shell elements",
         "name": "useShells:false overrides the model flag (keeps tributary for design)"
+      },
+      {
+        "suite": "modelToFrame3D — subdivided plate mesh",
+        "name": "defaults to the two-triangle mesh and adds no nodes"
+      },
+      {
+        "suite": "modelToFrame3D — subdivided plate mesh",
+        "name": "subdivides into 2n² elements and appends the new nodes AFTER the model’s"
+      },
+      {
+        "suite": "modelToFrame3D — subdivided plate mesh",
+        "name": "carries the same total area load however fine the mesh"
+      },
+      {
+        "suite": "modelToFrame3D — subdivided plate mesh",
+        "name": "reports the edge members the mesh landed on"
       },
       {
         "suite": "modelToFrame3D — member-thermal loads",
