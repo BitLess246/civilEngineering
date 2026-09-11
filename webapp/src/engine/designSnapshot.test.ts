@@ -241,3 +241,21 @@ describe('snapshotStamp', () => {
     expect(stamp.length).toBeLessThan(80)
   })
 })
+
+describe('modelDigest — mesh density is part of the model', () => {
+  it('two models differing only in shellSubdiv hash differently', () => {
+    // Without this the two would be indistinguishable, and a report printed
+    // from a 2×2 mesh would carry the same id as one printed from 6×6 — a
+    // stale result reported as current, which is the failure this file exists
+    // to prevent.
+    const base = { ...frame(), shellElements: true }
+    const a = modelDigest({ ...base, shellSubdiv: 2 })
+    const b = modelDigest({ ...base, shellSubdiv: 6 })
+    expect(a).not.toBe(b)
+    // absent and 1 are the same model — 1 IS the default mesh
+    expect(modelDigest({ ...base, shellSubdiv: undefined }))
+      .toBe(modelDigest({ ...base, shellSubdiv: undefined }))
+    expect(modelDigest({ ...base, shellSubdiv: 2 })).not.toBe(modelDigest(base))
+    expect(modelDigest({ ...base, shellSubdiv: 1 })).toBe(modelDigest(base))
+  })
+})

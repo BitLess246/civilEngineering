@@ -159,7 +159,7 @@ function modelSection(i: AppendixInput): AppendixSection {
     { label: 'Materials', value: String(materials.length) },
     { label: 'Load categories', value: cats.length ? cats.join(', ') : '—' },
     { label: 'Combinations run', value: combos ? String(combos) : '—' },
-    { label: 'Modelling', value: [m.diaphragm && 'rigid diaphragm', m.rigidEndZones && 'rigid end zones', m.shellElements && 'shell slabs'].filter(Boolean).join(' · ') || 'bare frame' },
+    { label: 'Modelling', value: [m.diaphragm && 'rigid diaphragm', m.rigidEndZones && 'rigid end zones', m.shellElements && `shell slabs (${m.shellSubdiv ?? 1}\u00d7${m.shellSubdiv ?? 1} mesh)`].filter(Boolean).join(' · ') || 'bare frame' },
   ]
   const tables: AppendixTable[] = [
     {
