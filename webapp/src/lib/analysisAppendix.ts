@@ -23,7 +23,7 @@ import { estimateTakeoff, barKgPerM, type TakeoffResult } from '../engine/takeof
 import { appliedResultant, type F3Analysis, type F3Result } from '../engine/frame3d'
 import { GRAVITY, type ModalResult } from '../engine/modal'
 import type { ResponseSpectrumResult } from '../engine/responseSpectrum'
-import { storeyWeightBreakdown, type DriftRow, type SeismicResult } from '../engine/seismic'
+import { storeyWeightBreakdown, caseResultant, type DriftRow, type SeismicResult } from '../engine/seismic'
 import type { WindResult } from '../engine/wind'
 import type { IrregularityFlag } from '../engine/irregularity'
 import type { PushoverModelResult } from '../engine/pushoverModel'
@@ -35,7 +35,7 @@ import type { Drawing } from '../engine/planRenderer'
 import { WOOD_SPECIES } from '../engine/woodDesign'
 import { validateMesh } from '../engine/meshValidation'
 import {
-  modelDiagram, loadDiagram, deflectedDiagram, reactionDiagram, forceDiagram,
+  modelDiagram, loadDiagram, caseLoadDiagram, deflectedDiagram, reactionDiagram, forceDiagram,
   modeShapeDiagram, seriesDrawing, hingeDiagram, planeFrameDiagram,
   bestView, CATEGORY_LABEL, type DiagramView, type HingeMark,
 } from '../engine/analysisDiagram'
@@ -337,6 +337,45 @@ function loadingSection(i: AppendixInput): AppendixSection {
     const d = loadDiagram(i.model, c, { view })
     if (d) figures.push({ caption: `B.${k + 1}f ${CATEGORY_LABEL[c] ?? c} — every assignment of this category, drawn on the model. Arrow length is proportional to magnitude within the figure, not to the geometry.`, drawing: d })
   })
+
+  // ── EVERY DIRECTIONAL CASE, not just the one the model carries ─────────
+  //
+  // The model stores ONE lateral pattern — the primary direction, untorsioned
+  // — because that is what the viewport overlay and the drift check read. The
+  // analysis, though, solves every case the E/W builders produced: §208.8.1
+  // orthogonal variants and §208.7.2.7 ⟳/⟲ accidental torsion for seismic,
+  // each wind direction for wind, one FEM run per combination per case. Drawn
+  // from `model.loads` alone the report therefore showed a single seismic and
+  // a single wind figure for a run that had enveloped twelve, which reads as
+  // though eleven of them were never analysed.
+  const lat = i.lateral ?? []
+  if (lat.length > 1) {
+    // The resultant is what tells the figures apart: ⟳ and ⟲ differ only by a
+    // torsion increment that is small beside the storey force, so the pictures
+    // look alike and the numbers do not.
+    const res = lat.map((c) => ({ c, r: caseResultant(i.model, c.loads) }))
+    tables.push({
+      title: 'B.7 Directional lateral cases — every case the analysis enveloped',
+      head: ['Case', 'Kind', 'ΣFx (kN)', 'ΣFz (kN)', 'Mt about mass centroid (kN·m)'],
+      right: [0, 0, 1, 1, 1],
+      rows: res.map(({ c, r }) => [c.name, c.kind, f1(r.Fx), f1(r.Fz), f1(r.Mt)]),
+      note: 'Every row is solved: one FEM run per NSCP combination per case, and the design envelopes all of them.'
+        + ' Mt is taken about the vertical axis through each level\u2019s MASS centroid \u2014 the axis \u00a7208.7.2.7 measures its \u00b15% eccentricity from.'
+        + ' On a symmetric plan the \u27f3/\u27f2 pair of a direction reads \u00b10.05\u00b7L\u22a5\u00b7V and nothing else, because the storey force itself contributes no torque.'
+        + ' A pair that is NOT centred on zero means the applied pattern carries an eccentricity of its own: the storey force is divided EQUALLY between the nodes at each level, so its resultant sits at the nodes\u2019 geometric centroid, which coincides with the mass centroid only when the plan is regular.',
+    })
+    lat.forEach(({ name, kind, loads }, k) => {
+      const d = caseLoadDiagram(i.model, loads, name, { view })
+      if (!d) return
+      const r = res[k].r
+      figures.push({
+        caption: `B.${cats.length + k + 1}f ${name} — ${kind === 'E' ? 'seismic' : 'wind'} case as solved.`
+          + ` \u03a3Fx = ${f1(r.Fx)} kN, \u03a3Fz = ${f1(r.Fz)} kN, Mt = ${f1(r.Mt)} kN\u00b7m about the mass centroid.`
+          + ' Arrow length is proportional to magnitude within this figure only, so two cases cannot be compared by eye \u2014 compare the resultants in B.7.',
+        drawing: d,
+      })
+    })
+  }
   return { key: 'loading', letter: LETTERS.loading, title: APPENDIX_TITLES.loading, available: true, tables, figures: figures.length ? figures : undefined }
 }
 

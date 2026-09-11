@@ -295,6 +295,57 @@ export function accidentalTorsionLoads(
   return out
 }
 
+/** What a directional lateral case actually applies. */
+export interface CaseResultant {
+  /** Σ of the node forces, kN. */
+  Fx: number; Fz: number
+  /** Torque about the vertical axis through the level MASS centroid, kN·m —
+   *  the axis §208.7.2.7 measures its ±5% eccentricity from. Summed over
+   *  levels. A pattern with no intended torsion still reports a non-zero value
+   *  when the force is spread over nodes whose centroid is not the mass
+   *  centroid, which is the whole point of printing it. */
+  Mt: number
+}
+
+/**
+ * The resultant of a lateral case's node loads.
+ *
+ * Exists so a report can tell twelve directional figures apart: ⟳ and ⟲ differ
+ * only by a torsion increment that is small beside the storey force, so the
+ * pictures look alike and the numbers are what distinguish them.
+ */
+export function caseResultant(model: StructuralModel, loads: ModelLoad[]): CaseResultant {
+  const nm = new Map(model.nodes.map((n) => [n.id, n]))
+  const mass = buildSeismicMass(model)
+  let Fx = 0, Fz = 0, Mt = 0
+  // Mass centroid per level, so the torque is about the axis the code means.
+  const levels = [...new Set(model.nodes.map((n) => n.y))]
+  const centroid = new Map<number, { x: number; z: number }>()
+  for (const y of levels) {
+    const at = model.nodes.filter((n) => Math.abs(n.y - y) < 1e-6)
+    let m = 0, cx = 0, cz = 0
+    for (const n of at) { const q = mass.get(n.id) ?? 0; m += q; cx += q * n.x; cz += q * n.z }
+    centroid.set(y, m > 0
+      ? { x: cx / m, z: cz / m }
+      // No mass at this level — fall back to the geometric centre so the
+      // torque is still measured about something, and say nothing more.
+      : { x: at.reduce((t, n) => t + n.x, 0) / (at.length || 1), z: at.reduce((t, n) => t + n.z, 0) / (at.length || 1) })
+  }
+  for (const l of loads) {
+    if (l.kind !== 'node') continue
+    const n = nm.get(l.node)
+    if (!n) continue
+    const fx = l.Fx ?? 0, fz = l.Fz ?? 0
+    Fx += fx; Fz += fz
+    const c = centroid.get([...centroid.keys()].find((y) => Math.abs(y - n.y) < 1e-6) ?? n.y)
+    if (!c) continue
+    // Mt about +y: a force in x at offset z gives −Fx·(z−cz); one in z at
+    // offset x gives +Fz·(x−cx).
+    Mt += fz * (n.x - c.x) - fx * (n.z - c.z)
+  }
+  return { Fx, Fz, Mt }
+}
+
 // ── Directional E-case builder (§208.7.2.7 + §208.8.1) ───────────────────
 
 export interface ECaseOpts {

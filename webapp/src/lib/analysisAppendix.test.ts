@@ -13,7 +13,7 @@ import {
   buildAnalysisAppendix, analysisStatus, appendixAvailability, equilibriumRows, comboExpression,
   capacityCurveDrawing, finalModelConsistency, APPENDIX_TITLES, LETTERS, type AppendixInput,
 } from './analysisAppendix'
-import { computeSeismic } from '../engine/seismic'
+import { computeSeismic, buildECases } from '../engine/seismic'
 import { storeyWeightBreakdown } from '../engine/seismic'
 import { DIAGRAM_W } from '../engine/analysisDiagram'
 
@@ -488,8 +488,11 @@ describe('H · model QA/QC', () => {
 // ─────────────────────────────────────────────────────────────────────────
 describe('the figures', () => {
   const ap = buildAnalysisAppendix(full)
-  const sec = (k: string) => ap.sections.find((s) => s.key === k)!
-  const captions = (k: string) => (sec(k).figures ?? []).map((f) => f.caption)
+  const sec = (k: string, i: AppendixInput = full) =>
+    (i === full ? ap : buildAnalysisAppendix(i)).sections.find((s) => s.key === k)!
+  const captions = (k: string, i: AppendixInput = full) => (sec(k, i).figures ?? []).map((f) => f.caption)
+  const seisX = computeSeismic(model, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!
+  const seisZ = computeSeismic(model, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'z' })!
 
   it('A opens with the analytical model, and asks for the room to letter it', () => {
     const figs = sec('model').figures!
@@ -510,6 +513,56 @@ describe('the figures', () => {
     for (const c of cats) expect(captions('loading').join(' ')).toContain(c)
     // nothing invented: a category with no assignment gets no figure
     expect(captions('loading').join(' ')).not.toMatch(/WIND/)
+  })
+
+  // ─────────────────────────────────────────────────────────────────────
+  // THE REPORT SHOWED ONE SEISMIC FIGURE FOR A RUN THAT ENVELOPED EIGHT.
+  //
+  // A model carries ONE lateral pattern — the primary direction, untorsioned,
+  // because that is what the viewport overlay and the drift check read. The
+  // analysis solves every case the E/W builders produced, one FEM run per
+  // combination per case. Drawn from the model's own loads alone, the report
+  // could not show that, and eleven solved cases looked like they had never
+  // been analysed.
+  // ─────────────────────────────────────────────────────────────────────
+  describe('every directional lateral case', () => {
+    const eCases = buildECases(model, seisX.loads, seisZ.loads, { dirs: ['+X', '-X', '+Z', '-Z'], torsion: true })
+    const withCases = { ...full, lateral: eCases }
+    const caps = () => captions('loading', withCases)
+
+    it('draws one figure per case, on top of the per-category ones', () => {
+      expect(eCases).toHaveLength(8)
+      const cats = [...new Set(model.loads.map((l) => l.cat))]
+      expect(caps()).toHaveLength(cats.length + eCases.length)
+      for (const c of eCases) expect(caps().join(' ')).toContain(c.name)
+    })
+
+    it('prints each case resultant, so ⟳ and ⟲ are told apart by number', () => {
+      // The two differ only by a torsion increment that is small beside the
+      // storey force, so the PICTURES look alike — the caption is what
+      // distinguishes them, and a reader has to be able to check it.
+      const cw = caps().find((c) => c.includes('E+X⟳'))!
+      const ccw = caps().find((c) => c.includes('E+X⟲'))!
+      expect(cw).toMatch(/ΣFx = /)
+      expect(cw).toMatch(/Mt = /)
+      expect(cw).not.toBe(ccw)
+    })
+
+    it('B.7 lists every case with its resultant', () => {
+      const t = buildAnalysisAppendix(withCases).sections.find((s) => s.key === 'loading')!
+        .tables!.find((x) => x.title.startsWith('B.7'))!
+      expect(t.rows).toHaveLength(eCases.length)
+      // On this symmetric plan the ⟳/⟲ pair of a direction is ±0.05·L⊥·V and
+      // nothing else: the storey force itself contributes no torque, because
+      // its equal split lands on a geometric centroid that IS the mass one.
+      const mt = (n: string) => Number(t.rows.find((r) => r[0] === n)![4])
+      expect(mt('E+X⟳')).toBeCloseTo(-mt('E+X⟲'), 6)
+    })
+
+    it('adds nothing when there is only one case to draw', () => {
+      const cats = [...new Set(model.loads.map((l) => l.cat))]
+      expect(captions('loading', { ...full, lateral: [eCases[0]] })).toHaveLength(cats.length)
+    })
   })
 
   it('C draws the deflected shape, the reactions and the three force diagrams', () => {
