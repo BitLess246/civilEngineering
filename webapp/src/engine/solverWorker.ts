@@ -16,12 +16,12 @@ import { runBiaxialPushover, type BiaxialPushoverOpts } from './biaxialFrameMode
 import { runTimeHistoryModel, makeGroundMotion, type TimeHistoryModelOpts, type GroundMotionSpec } from './timeHistoryModel'
 import { runNonlinearModel, type NonlinearModelOpts } from './nonlinearModel'
 import { runNonlinearFrameModel } from './nonlinearFrameModel'
-import { driftCheck } from './seismic'
+import { driftCheck, stabilityCheck } from './seismic'
 import { assessIrregularities } from './irregularity'
 import { designStructureAsync, optimizeStructureAsync, selectBarDiameters, type SoilOptions, type FootingPlan, type AnalyzeOptions } from './pipeline'
 import type { SolveProgress } from './progress'
 
-type DriftReq = { hasSeis: boolean; T: number; R: number; axis: 'x' | 'z'; pDelta: boolean }
+type DriftReq = { hasSeis: boolean; T: number; R: number; axis: 'x' | 'z'; pDelta: boolean; Z?: number }
 export type SolverRequest =
   | { id: number; kind: 'analyze'; model: StructuralModel; opts: F3AnalyzeOpts; drift: DriftReq; crackedSections?: boolean; shearDeformation?: boolean; beamTopOfSteel?: boolean }
   | { id: number; kind: 'design'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean }
@@ -56,6 +56,7 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
         : analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, msg.opts, onProgress, br.diaphragmGroups, br.shells)
       let drift = null
       let irregularities = null
+      let stability = null
       if (msg.drift.hasSeis) {
         onProgress({ phase: 'Storey-drift check' })
         const eOnly = applyF3Combo(br.loads, { E: 1 })
@@ -79,9 +80,13 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
           }
           const storeyForce = [...fByLevel].map(([elevation, F]) => ({ elevation, F }))
           irregularities = assessIrregularities(msg.model, { nodeOrder: br.nodes, d: sol.d, storeyForce, dir: msg.drift.axis })
+          // §208.5.10.2: whether the code REQUIRES the second-order run the
+          // user may or may not have switched on. Same Δs and the same storey
+          // forces the drift check and the irregularity flags already use.
+          stability = drift ? stabilityCheck(msg.model, drift, storeyForce, { R: msg.drift.R, Z: msg.drift.Z }) : null
         }
       }
-      ctx.postMessage({ id: msg.id, ok: true, result: { analysis, orphans: br.orphanEdges.length, drift, irregularities } })
+      ctx.postMessage({ id: msg.id, ok: true, result: { analysis, orphans: br.orphanEdges.length, drift, irregularities, stability } })
     } else if (msg.kind === 'modal') {
       onProgress({ phase: 'Modal analysis' })
       const modal = modalAnalysis(msg.model, msg.nModes, msg.massModel ? { massModel: msg.massModel } : {})
