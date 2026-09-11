@@ -15,6 +15,7 @@ import type { BeamLoad } from './beamAnalysis'
 import { shapeByName, torsionJ, type AiscShape } from './aiscSections'
 import { deriveWSection, E_STEEL } from './steelDesign'
 import { meshPlates, emptyPlateMesh } from './plateMesh'
+import { splitMembers, splitLoads, type SplitMap } from './memberSplit'
 import { woodRefOf } from './woodDesign'
 
 export interface BridgeResult {
@@ -33,9 +34,14 @@ export interface BridgeResult {
    *  which is what lets `driftCheck`, `assessIrregularities`, `displacedNodes`
    *  and the deflection scan keep indexing the DOF vector by array position. */
   meshNodeCount: number
-  /** model member id → mesh node ids lying inside it, ordered i→j. Empty until
-   *  the mesh is on; consumed by the edge-attachment phase. */
+  /** model member id → mesh node ids lying inside it, ordered i→j. Empty
+   *  unless the mesh is on. */
   edgeSplits: Map<string, string[]>
+  /** Members cut at those nodes, so the panel is actually HELD by its beams.
+   *  `members` and `loads` above are already split; solver RESULTS must be put
+   *  back on the parent ids with `stitchResult`/`stitchAnalysis` before anything
+   *  downstream sees them. Empty unless the mesh is on. */
+  memberSplits: SplitMap[]
 }
 
 /** Concrete shell material for slab/wall panels: E = 4700√fc (NSCP/ACI), ν = 0.2.
@@ -419,8 +425,28 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
   }
 
   const diaphragmGroups = model.diaphragm ? buildDiaphragmGroups(model) : []
+
+  // ATTACH THE MESH TO THE FRAME. A mesh node sitting on a beam shares no DOF
+  // with it until the beam is cut there, so a subdivided panel would hang off
+  // its four corners — deflection running away and load walking to the corner
+  // columns. Cutting the member is the only way the beam's SPAN moment picks
+  // the transfer up: `postprocessMember` builds the diagram from end forces
+  // plus the member's own load list, and a constraint's force never enters it.
+  //
+  // The interior offset is the `beamTopOfSteel` drop, and only that. A rigid
+  // end zone belongs to the JOINT, so it stays on the outer ends; the drop is a
+  // translation of the whole member's axis below the node line, so every
+  // interior end needs the same arm — it is the rigid link from the slab-level
+  // mesh node down to the beam centroid, which is the physical connection.
+  const split = splitMembers(members, nodes, mesh.edgeSplits,
+    { interiorOffset: (m) => drop?.get(m.id) })
+
   return {
-    nodes, members, supports, loads, shells, orphanEdges, diaphragmGroups,
-    meshNodeCount: mesh.nodes.length, edgeSplits: mesh.edgeSplits,
+    nodes, members: split.members, supports,
+    loads: splitLoads(loads, split.map),
+    shells, orphanEdges, diaphragmGroups,
+    meshNodeCount: mesh.nodes.length,
+    edgeSplits: mesh.edgeSplits,
+    memberSplits: split.map,
   }
 }

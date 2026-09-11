@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { meshPlates, meshPrefix, emptyPlateMesh } from './plateMesh'
 import { generateGridModel } from './modelBuilder'
+import { modelToFrame3D } from './modelBridge'
+import { solveFrame3D } from './frame3d'
+import { stitchResult } from './memberSplit'
 import type { RectSection, StructuralModel } from './model'
 
 const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -158,5 +161,133 @@ describe('meshPlates — edge splits', () => {
     const m = meshPlates(model, { subdiv: 4, ...MAT })
     // the z = 2.5 grid line has 5 points; 2 are the member's own ends
     expect(m.edgeSplits.get('sec')).toHaveLength(3)
+  })
+})
+
+describe('the meshed panel, solved through the bridge', () => {
+  // ───────────────────────────────────────────────────────────────────────
+  // THE PAYOFF. `shell.test.ts` already anchors the ELEMENT against both
+  // Timoshenko plate closed forms using its own benchmark mesher. This asks
+  // whether the BRIDGE reproduces that on a model-space panel: meshed by
+  // `meshPlates`, attached by the member split, loaded through the area-load
+  // path, solved by `frame3d`.
+  //
+  // A 6 × 6 m panel on four 2000 × 2000 mm edge beams pinned at the corners is
+  // very nearly CLAMPED, not simply supported: the beams are torsionally stiff,
+  // so the slab edge cannot rotate. The clamped coefficient is the right anchor
+  // and the measured numbers say so — see the ratios below.
+  // ───────────────────────────────────────────────────────────────────────
+  const stiff: RectSection = { id: 'ST', name: 'stiff', b: 2000, h: 2000, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const Q = 10, A = 6, T = 150
+
+  const square = (): StructuralModel => ({
+    version: 1, name: 'panel', sections: [stiff],
+    nodes: [
+      { id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: A, y: 0, z: 0 },
+      { id: 'c', x: A, y: 0, z: A }, { id: 'd', x: 0, y: 0, z: A },
+    ],
+    members: [
+      { id: 'e0', i: 'a', j: 'b', role: 'beam', section: 'ST' },
+      { id: 'e1', i: 'b', j: 'c', role: 'beam', section: 'ST' },
+      { id: 'e2', i: 'd', j: 'c', role: 'beam', section: 'ST' },
+      { id: 'e3', i: 'a', j: 'd', role: 'beam', section: 'ST' },
+    ],
+    plates: [{ id: 'p1', corners: ['a', 'b', 'c', 'd'], role: 'slab', thickness: T }],
+    walls: [],
+    supports: ['a', 'b', 'c', 'd'].map((n) => ({ node: n, fixity: 'pin' as const })),
+    loads: [{ kind: 'area', plate: 'p1', q: Q, cat: 'D' }],
+    storeys: [{ id: 's0', name: 'L0', elevation: 0 }],
+    shellElements: true,
+  })
+
+  /** Timoshenko clamped square plate: w = 0.00126·q·a⁴/D. */
+  const clamped = (() => {
+    const E = 4700 * Math.sqrt(28) * 1e3            // kPa
+    const t = T / 1000
+    const D = (E * t ** 3) / (12 * (1 - 0.2 ** 2))
+    return (0.00126 * Q * A ** 4) / D
+  })()
+
+  /** Centre deflection (m, magnitude) and Σ vertical reaction, at subdivision n. */
+  const run = (n: number) => {
+    const br = modelToFrame3D(square(), { shellSubdiv: n })
+    const sol = solveFrame3D(br.nodes, br.members, br.supports, br.loads, {}, br.shells)!
+    let best = 0, bd = Infinity
+    br.nodes.forEach((q, i) => {
+      const dd = Math.hypot(q.x - A / 2, q.z - A / 2)
+      if (dd < bd) { bd = dd; best = i }
+    })
+    return {
+      uy: Math.abs(sol.d[6 * best + 1]),
+      sumR: sol.reactions.reduce((s, r) => s + r.F[1], 0),
+      br, sol,
+    }
+  }
+
+  it('converges monotonically toward the clamped closed form, from above', () => {
+    const ns = [2, 4, 6, 8]
+    const uy = ns.map((n) => run(n).uy)
+    // strictly decreasing — a finer mesh is a softer, more honest plate
+    for (let k = 1; k < uy.length; k++) expect(uy[k]).toBeLessThan(uy[k - 1])
+    // and from ABOVE: a displacement-based element approaches the exact
+    // answer from the stiff side, so it may never undershoot
+    for (const w of uy) expect(w).toBeGreaterThan(clamped)
+    // measured 1.175 → 1.110 → 1.066 → 1.046 of the closed form
+    expect(uy[0] / clamped).toBeLessThan(1.20)
+    expect(uy[uy.length - 1] / clamped).toBeLessThan(1.06)
+  })
+
+  it('has no interior freedom at all at n = 1 — the defect being fixed', () => {
+    // Two triangles on four pinned corners: there is no node between the
+    // supports, so the panel cannot deflect anywhere. That is the state every
+    // shipped shell analysis was in.
+    const { uy, br } = run(1)
+    expect(br.nodes).toHaveLength(4)
+    expect(uy).toBeCloseTo(0, 12)
+  })
+
+  it('transfers the whole applied load into the supports at every density', () => {
+    // Statics does not pass through the stitching, so it cannot be fooled by a
+    // split that reassembles a wrong answer consistently.
+    for (const n of [1, 2, 4, 6, 8]) {
+      expect(run(n).sumR).toBeCloseTo(Q * A * A, 6)
+    }
+  })
+
+  it('cuts all four edge beams and reports them as splits', () => {
+    const { br } = run(4)
+    expect(br.memberSplits).toHaveLength(4)
+    for (const s of br.memberSplits) {
+      expect(s.parts).toHaveLength(4)                        // n parts per edge
+      expect(s.lengths.reduce((x, y) => x + y, 0)).toBeCloseTo(A, 9)
+    }
+    // the solver sees the parts, never the parents
+    const ids = new Set(br.members.map((m) => m.id))
+    for (const s of br.memberSplits) {
+      expect(ids.has(s.parent)).toBe(false)
+      for (const p of s.parts) expect(ids.has(p)).toBe(true)
+    }
+  })
+
+  it('stitching puts the beams back under their model ids', () => {
+    const { br, sol } = run(4)
+    const stitched = stitchResult(sol, br.memberSplits)
+    expect(stitched.members.map((m) => m.id).sort()).toEqual(['e0', 'e1', 'e2', 'e3'])
+    for (const m of stitched.members) expect(m.L).toBeCloseTo(A, 9)
+  })
+
+  it('an unattached mesh is far softer — which is why the split is not optional', () => {
+    // Drop the split (keep the parents whole) and the panel hangs off its four
+    // corners. The contrast is the argument for this whole phase.
+    const br = modelToFrame3D(square(), { shellSubdiv: 4 })
+    const whole = modelToFrame3D(square(), { shellSubdiv: 4, useShells: false }).members
+    const loose = solveFrame3D(br.nodes, whole, br.supports, br.loads, {}, br.shells)!
+    let best = 0, bd = Infinity
+    br.nodes.forEach((q, i) => {
+      const dd = Math.hypot(q.x - A / 2, q.z - A / 2)
+      if (dd < bd) { bd = dd; best = i }
+    })
+    const loosely = Math.abs(loose.d[6 * best + 1])
+    expect(loosely).toBeGreaterThan(3 * run(4).uy)
   })
 })
