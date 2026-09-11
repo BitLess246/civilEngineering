@@ -280,7 +280,8 @@ function loadingSection(i: AppendixInput): AppendixSection {
           + ' VERTICALLY, §208.5.5: Fx = (V − Ft)·wx·hx / Σ(wi·hi), with Ft = min(0.07·T·V, 0.25·V) added at the roof when T > 0.7 s and zero below it; hx is measured from the base.'
           + ' V itself is Eq. 208-8 capped by 208-9, floored by 208-10, and in Zone 4 floored again by 208-11 — the raw, min and max above are those three.'
           + ' HORIZONTALLY, each level\u2019s Fx is shared between its nodes in proportion to the flexural stiffness E·I of the column BELOW each one, for bending in the load direction; with the storey\u2019s columns at a common height that is the same as sharing by lateral stiffness 12·E·I/h³.'
-          + ' A node with no column under it takes none, and a level with no columns at all falls back to an equal split.',
+          + ' A node with no column under it takes none, and a level with no columns at all falls back to an equal split.'
+          + ' That share puts the resultant on the centre of rigidity, so a self-equilibrating couple then moves it onto the level\u2019s MASS centroid \u2014 \u00a7208.7.2.7\u2019s ACTUAL eccentricity, which the structure develops by twisting about its own rigidity centre. The \u00b15% accidental eccentricity is added on top of that, in both senses.',
       })
     }
   }
@@ -292,7 +293,8 @@ function loadingSection(i: AppendixInput): AppendixSection {
       rows: w.levels.map((l) => [f2(l.elevation), f3(l.Kz), f3(l.qz), f3(l.pWind), f3(l.pLee), f1(l.Fx)]),
       note: `V = ${f0(w.V)} m/s · h = ${f1(w.h)} m · B = ${f1(w.B)} m · L = ${f1(w.L)} m · G = ${f2(w.G)} · qh = ${f3(w.qh)} kPa · base shear ${f1(w.baseShear)} kN`
         + ' Each level\u2019s force is the net windward + leeward pressure over its tributary height and the width B facing the wind.'
-        + ' It reaches the nodes on the same basis as the seismic storey force: in proportion to the E·I of the column below each node, for bending in the wind direction.',
+        + ' It reaches the nodes on the same basis as the seismic storey force: in proportion to the E\u00b7I of the column below each node, for bending in the wind direction.'
+        + ' A uniform pressure has its resultant at the middle of the face, so a self-equilibrating couple moves the line of action there rather than leaving it on the centre of rigidity.',
     })
   }
   if (i.analysis) {
@@ -368,7 +370,9 @@ function loadingSection(i: AppendixInput): AppendixSection {
       note: 'Every row is solved: one FEM run per NSCP combination per case, and the design envelopes all of them.'
         + ' Mt is taken about the vertical axis through each level\u2019s MASS centroid \u2014 the axis \u00a7208.7.2.7 measures its \u00b15% eccentricity from.'
         + ' On a symmetric plan the \u27f3/\u27f2 pair of a direction reads \u00b10.05\u00b7L\u22a5\u00b7V and nothing else, because the storey force itself contributes no torque.'
-        + ' A pair that is NOT centred on zero means the applied pattern carries an eccentricity of its own \u2014 the level\u2019s force is shared out by the stiffness of the column under each node, so its resultant sits at the centre of RIGIDITY, which coincides with the mass centroid only when the plan is regular in both stiffness and mass.',
+        + ' Each level\u2019s force is shared out by the stiffness of the column under each node, which lands its resultant on the centre of RIGIDITY; a self-equilibrating couple then moves the line of action back onto the MASS centroid, so \u00a7208.7.2.7\u2019s actual eccentricity is carried by the structure twisting about its own rigidity centre rather than discarded.'
+        + ' Wind is centred the same way, on the middle of the face the pressure acts over.'
+        + ' A \u27f3/\u27f2 pair that is NOT centred on zero therefore means the correction could not be applied \u2014 a level with a single frame line has no torsional lever to apply it with.',
     })
     lat.forEach(({ name, kind, loads }, k) => {
       const d = caseLoadDiagram(i.model, loads, name, { view })

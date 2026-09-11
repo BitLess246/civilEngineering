@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeSeismic, storeyWeights, storeyWeightBreakdown, driftCheck, accidentalTorsionLoads, buildECases } from './seismic'
+import { computeSeismic, storeyWeights, storeyWeightBreakdown, driftCheck, accidentalTorsionLoads, buildECases, caseResultant } from './seismic'
 import { buildSeismicMass } from './modal'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
@@ -399,5 +399,78 @@ describe('storey force → the nodes of its level', () => {
     expect(fs.reduce((a, b) => a + b, 0)).toBeCloseTo(levelF, 6)
     // …and it is shared in the columns' own ratio: (900/400)³ = 11.39.
     expect(Math.max(...fs) / Math.min(...fs)).toBeCloseTo((900 / 400) ** 3, 4)
+  })
+})
+
+describe('inherent torsion — §208.7.2.7 “actual eccentricity”', () => {
+  // A 3×3 grid on 6 m bays with the z = 0 frame line stiffened to 400×900.
+  // Pushed along X that line is (900/400)³ = 11.39 times as stiff as the other
+  // two, so the rigidity centre of the 0/6/12 m plan sits at 1.34 m while the
+  // mass — slab and beams, symmetric bar the heavier columns — stays near 5.8.
+  const base400: RectSection = { id: 'S', name: 'S', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const big: RectSection = { ...base400, id: 'BIG', name: 'BIG', h: 900 }
+  const uniform = generateGridModel({ baysX: [6, 6], baysZ: [6, 6], storeyH: [3, 3], section: base400 })
+  const nm = new Map(uniform.nodes.map((n) => [n.id, n]))
+  const skew: StructuralModel = {
+    ...uniform,
+    sections: [...uniform.sections, big],
+    members: uniform.members.map((x) =>
+      x.role === 'column' && Math.abs(nm.get(x.i)!.z) < 1e-6 ? { ...x, section: big.id } : x),
+  }
+  const eq = { Ca: 0.44, Cv: 0.64, I: 1.0, R: 8.5, Z: 0.4 }
+  const eqs = (m: StructuralModel, dir: 'x' | 'z') => computeSeismic(m, { ...eq, dir })!
+  const cases = (m: StructuralModel, o: Parameters<typeof buildECases>[3]) =>
+    buildECases(m, eqs(m, 'x').loads, eqs(m, 'z').loads, o)
+
+  it('puts the case resultant on the centre of mass, not the centre of rigidity', () => {
+    // Without the correction this case carries the whole F·(CM − CR) as an
+    // applied torque — force delivered where the columns are, not where the
+    // mass is — and the storey never twists the way the code intends.
+    const [c] = cases(skew, { dirs: ['+X'] })
+    const r = caseResultant(skew, c.loads)
+    expect(r.Fx).toBeCloseTo(eqs(skew, 'x').V, 6)
+    expect(Math.abs(r.Mt)).toBeLessThan(1e-6)
+  })
+
+  it('the raw stiffness-weighted pattern is what needed correcting', () => {
+    // The control for the assertion above: the pattern buildECases starts from
+    // really is off-centre, by far more than the ±5% accidental allowance.
+    const s = eqs(skew, 'x')
+    const raw = caseResultant(skew, s.loads)
+    expect(Math.abs(raw.Mt)).toBeGreaterThan(0.3 * 12 * s.V)     // e > 30% of L⊥
+  })
+
+  it('leaves the ⟳/⟲ envelope as a clean ±5%·L⊥ about the mass centre', () => {
+    // The point of centring: the accidental torsion is now explored in BOTH
+    // senses. Applied at the rigidity centre it rode on top of a large
+    // one-sided inherent torque, so ⟲ never reached the other side.
+    const cw = cases(skew, { dirs: ['+X'], torsion: true })
+    expect(cw).toHaveLength(2)
+    const [a, b] = cw.map((c) => caseResultant(skew, c.loads))
+    const V = eqs(skew, 'x').V
+    expect(a.Mt).toBeCloseTo(-0.05 * 12 * V, 6)
+    expect(b.Mt).toBeCloseTo(+0.05 * 12 * V, 6)
+    expect(Math.sign(a.Mt)).toBe(-Math.sign(b.Mt))
+  })
+
+  it('a symmetric plan is untouched — CM and CR coincide', () => {
+    // The regression control. No published result for a regular building may
+    // move: there is no actual eccentricity to add.
+    for (const c of cases(uniform, { dirs: ['+X', '+Z'] })) {
+      expect(Math.abs(caseResultant(uniform, c.loads).Mt)).toBeLessThan(1e-6)
+    }
+    const V = eqs(uniform, 'x').V
+    for (const c of cases(uniform, { dirs: ['+X'], torsion: true })) {
+      expect(Math.abs(caseResultant(uniform, c.loads).Mt)).toBeCloseTo(0.05 * 12 * V, 6)
+    }
+  })
+
+  it('does not change the base shear it is redistributing', () => {
+    for (const d of ['+X', '-X', '+Z', '-Z']) {
+      const [c] = cases(skew, { dirs: [d] })
+      const r = caseResultant(skew, c.loads)
+      const V = eqs(skew, d.includes('X') ? 'x' : 'z').V
+      expect(Math.hypot(r.Fx, r.Fz)).toBeCloseTo(V, 6)
+    }
   })
 })

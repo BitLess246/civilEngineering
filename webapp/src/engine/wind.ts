@@ -18,7 +18,7 @@
 // MWFRS side-wall pressures remain out of scope.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, ModelLoad } from './model'
-import { columnShares } from './storeyDistribution'
+import { columnShares, shiftResultantLoads } from './storeyDistribution'
 
 export interface WindParams {
   V: number                  // basic wind speed, m/s (§207A.5)
@@ -121,13 +121,24 @@ export function computeWind(model: StructuralModel, p: WindParams): WindResult |
       // the stiffness each node's column presents to the push, with the equal
       // split kept for a level that has no column under it.
       const cs = columnShares(model, e, p.dir)
+      const level: ModelLoad[] = []
       for (const n of nodes) {
         const Fn = cs.usable ? F * (cs.share.get(n.id) ?? 0) : F / nodes.length
         if (Fn < 1e-12) continue
-        loads.push(p.dir === 'x'
+        level.push(p.dir === 'x'
           ? { kind: 'node', node: n.id, Fx: Fn, cat: 'W' }
           : { kind: 'node', node: n.id, Fz: Fn, cat: 'W' })
       }
+      // Stiffness shares decide how hard each column is pushed, but they also
+      // move the level's line of action onto the centre of RIGIDITY. A uniform
+      // pressure over a face of width B has its resultant at mid-width, so the
+      // couple below puts it back there; without it a plan with its stiffness
+      // off-centre would shed the twist the wind actually applies.
+      const wt = (id: string) => (cs.usable ? cs.share.get(id) ?? 0 : 1)
+      loads.push(...level, ...shiftResultantLoads(model, level, p.dir, 'W', (ns) => {
+        const cs2 = ns.map((n) => (p.dir === 'x' ? n.z : n.x))
+        return (Math.min(...cs2) + Math.max(...cs2)) / 2
+      }, wt))
     }
   }
   return { V: p.V, h, B, L, LB, Kd, G, qh, CpLee, levels, baseShear, loads }
