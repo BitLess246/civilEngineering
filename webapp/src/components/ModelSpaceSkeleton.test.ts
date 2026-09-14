@@ -58,6 +58,8 @@ describe('the shell keeps the footer at the bottom', () => {
     // shell stretched to full height but stacked its children in block flow.
     const shell = (await import('./AppShell.tsx?raw')).default
     expect(shell).toContain('flex min-w-0 flex-1 flex-col')
-    expect(shell).toMatch(/<main className="min-h-0 flex-1">/)
+    // The classes are the contract; an inline style alongside them (the embed
+    // preview's pointer lock) does not touch it.
+    expect(shell).toMatch(/<main className="min-h-0 flex-1"[^>]*>/)
   })
 })

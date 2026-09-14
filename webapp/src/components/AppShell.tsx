@@ -139,13 +139,25 @@ function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const [palette, setPalette] = useState(false)
-  usePaletteHotkey(setPalette)
+  /**
+   * ?embed=1 — Model Space is being iframed into the landing page as a
+   * scaled-down preview of itself. The page stays fully DRAWN (the preview is
+   * meant to read as the page, not a crop of it), but the shell goes inert:
+   * the pointer lock sits here, above the tool content, and only <main> —
+   * where the page re-enables its walkthrough and 3D viewport — takes pointer
+   * events again. A sidebar link clicked inside a poster would navigate the
+   * iframe to a place the marketing page never promised, and a command
+   * palette summoned over it answers a hotkey that was aimed at the page the
+   * poster lives on. Both are the same rule: in embed the shell is scenery.
+   */
+  const embed = useMemo(() => new URLSearchParams(search).get('embed') === '1', [search])
+  usePaletteHotkey(setPalette, !embed)
   const tool = useMemo(() => ALL_TOOLS.find((t) => t.to === pathname), [pathname])
 
   return (
-    <div className="flex min-h-screen bg-[#f4f3ef]">
+    <div className="flex min-h-screen bg-[#f4f3ef]" style={embed ? { pointerEvents: 'none' } : undefined}>
       <Sidebar onOpenPalette={() => setPalette(true)} />
       {/* A COLUMN, so the footer can be pushed to the bottom.
           This div is stretched to the full height of a `min-h-screen` row, but
@@ -192,7 +204,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* `flex-1` is what absorbs the slack above the footer; `min-h-0`
             keeps a page that scrolls inside itself (Model Space) from being
             blown out by its own content. */}
-        <main className="min-h-0 flex-1">
+        {/* The one region embed hands back to the visitor. The tool page
+            inside re-applies its own narrower lock (Model Space leaves only
+            the walkthrough and the viewport live), so this is the boundary of
+            what the preview allows, not a bypass of it. */}
+        <main className="min-h-0 flex-1" style={embed ? { pointerEvents: 'auto' } : undefined}>
           <ErrorBoundary key={pathname}>
             <TrialGate>{children}</TrialGate>
           </ErrorBoundary>

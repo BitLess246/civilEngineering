@@ -8,6 +8,7 @@ import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { PipelineDiagram } from '../components/PipelineDiagram'
 import { WorkedSolutionPreview } from '../components/WorkedSolutionPreview'
 import { Storyboard, ReportComparison } from '../components/Storyboard'
+import { ModelSpacePreview } from '../components/ModelSpacePreview'
 import { useToolPrefs } from '../lib/useToolPrefs'
 import { visibleGroups } from '../lib/toolPrefs'
 import { useAuth } from '../lib/auth/authContext'
@@ -146,19 +147,39 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         <ReportComparison />
       </section>
 
+      {/* ── Rather than watch a demo, run one ───────────────────────────────
+          The card used to ADVERTISE the walkthrough with a button; it now
+          embeds the workbench itself — a scaled-down iframe of this very page
+          at /model?embed=1, next to the model page's own copy. The preview
+          lets exactly two things be touched — the walkthrough (the Guide
+          button in its ribbon) and the 3D viewport — so the CTA that used to
+          live here is gone: the section no longer asks you to go run it, it
+          IS running, and going is one click on the viewport's Guide. */}
       <section className="mx-auto max-w-[1200px] px-6 pt-10">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-[#e3e1da] bg-[#f7f5ef] px-6 py-5">
-          <div className="min-w-[260px] flex-1">
-            <h2 className="text-[17px] font-extrabold tracking-tight">Rather than watch a demo, run one</h2>
-            <p className="mt-1 text-[13px] leading-relaxed text-[#5c6675]">
-              The workbench walks you through it — a guided pass over geometry, loading, analysis
-              and design, on a model it builds for you and clears afterwards.
+        <div className="grid items-center gap-7 rounded-lg border border-[#e3e1da] bg-white p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)]">
+          <div className="min-w-[260px]">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="text-[19px] font-extrabold tracking-tight">3D Model Space</h2>
+              <span className="rounded border border-[#cddcf0] bg-[#eaf1f9] px-1.5 py-px font-mono text-[10px] font-semibold tracking-wide text-[#0f4c92]">BIM-lite viewer</span>
+            </div>
+            {/* The model page's own copy, duplicated alongside its viewport:
+                the name it draws in the corner, the directory's one-line sub,
+                the guide's opening description of the tab sequence, and the
+                viewport's own navigation hint. */}
+            <p className="mt-2.5 text-[13.5px] leading-relaxed text-[#5c6675]">
+              The tabs are a sequence, not a menu. Three labelled groups, worked left to right:
+              MODEL builds the frame, ANALYSE solves it, RESULTS is where the design and the
+              drawings are read. Each group needs the one before it — geometry, properties,
+              supports, loading, analysis, design.
             </p>
+            <p className="mt-2 text-[12.5px] leading-relaxed text-[#8b8574]">
+              This is the workbench itself, live and scaled down — it builds a demo frame on open
+              and keeps it off the record. Grab the model to orbit it, or press Guide in the
+              ribbon for the walkthrough. Everything else in the picture is scenery.
+            </p>
+            <p className="mt-3 font-mono text-[11px] text-[#a39d8d]">orbit: drag · pan: ⇧drag · zoom: scroll</p>
           </div>
-          <Link to="/model?tour=1"
-            className="whitespace-nowrap rounded-lg bg-[#0f4c92] px-5 py-3 text-sm font-bold text-white hover:bg-[#135caf]">
-            Run the guided walkthrough
-          </Link>
+          <ModelSpacePreview />
         </div>
       </section>
 

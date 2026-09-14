@@ -138,7 +138,23 @@ const DEFAULT_DECK: WoodDeck = {
  *  the Geometry/Properties/Loading/etc. fields consistent with the 3D model
  *  (soil, seismic, wind & γc aren't part of the model, so they'd otherwise reset
  *  to defaults while the model stays loaded). */
+/**
+ * ?embed=1 — the landing page's scaled-down preview of this page. The home
+ * section that used to advertise the walkthrough with a link now embeds the
+ * workbench itself in a small iframe, so the marketing page shows the real
+ * thing instead of a picture of it.
+ *
+ * Embed is a poster with exactly two live parts — the walkthrough and the 3D
+ * viewport — and nothing it does may touch the visitor's session: the demo
+ * frame it generates on open lives in React state only and is never written
+ * to the sessionStorage autosave, so opening the workbench properly afterwards
+ * starts from whatever the visitor actually had (see `applyModel`).
+ */
+const EMBED = typeof window !== 'undefined'
+  && new URLSearchParams(window.location.search).get('embed') === '1'
+
 function loadInputs(): Record<string, unknown> {
+  if (EMBED) return {}   // the preview starts from the page's own defaults
   try { const raw = sessionStorage.getItem(INPUTS_KEY); return raw ? JSON.parse(raw) as Record<string, unknown> : {} }
   catch { return {} }
 }
@@ -292,6 +308,10 @@ export default function ModelSpace() {
     setCageKinds((v) => (v.includes(k) ? v.filter((x) => x !== k) : [...v, k]))
 
   const [model, setModel] = useState<StructuralModel | null>(() => {
+    // The embed preview generates its own demo frame (mount effect near
+    // `generate`); reading the tab's autosave would show the visitor work they
+    // never brought into the marketing page.
+    if (EMBED) return null
     try {
       const raw = sessionStorage.getItem(AUTOSAVE_KEY)
       // migrate pre-per-member models so each member owns its section
@@ -455,6 +475,20 @@ export default function ModelSpace() {
   // twice.
   const [stLandLo, setStLandLo] = useState(0); const [stLandHi, setStLandHi] = useState(0)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
+  // ?embed=1 — the preview idles into a slow orbit, so a scroll-past on the
+  // landing page still shows a live model rather than a frozen one, and hands
+  // the camera back the moment the visitor touches it, resuming 6 s after the
+  // last interaction. The real page never moves the camera on its own: an
+  // engineer placing a view does not want it drifting mid-thought.
+  const [idleOrbit, setIdleOrbit] = useState(EMBED)
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const orbitWake = () => {
+    if (!EMBED) return
+    setIdleOrbit(false)
+    if (idleTimer.current) clearTimeout(idleTimer.current)
+    idleTimer.current = setTimeout(() => setIdleOrbit(true), 6000)
+  }
+  useEffect(() => () => { if (idleTimer.current) clearTimeout(idleTimer.current) }, [])
   const { busy, run: runSolver, progress, error: solveErr } = useSolver()   // off-thread FEM/design/optimise
   const gate = usePlanGate()
   const [planBlock, setPlanBlock] = useState<string | null>(null)
@@ -508,6 +542,7 @@ export default function ModelSpace() {
   // Persist the design inputs so a reload restores them alongside the autosaved
   // model (keeps the Geometry/Properties tabs + report inputs in sync with it).
   useEffect(() => {
+    if (EMBED) return   // a preview writes nothing — see `EMBED`
     try {
       sessionStorage.setItem(INPUTS_KEY, JSON.stringify({
         baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
@@ -551,10 +586,13 @@ export default function ModelSpace() {
     setExpanded(null)
     setDrift(null)
     setIrregular(null)
-    try {
-      if (m) sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m))
-      else sessionStorage.removeItem(AUTOSAVE_KEY)
-    } catch { /* quota — ignore */ }
+    // The embed preview keeps its demo out of the autosave — see `EMBED`.
+    if (!EMBED) {
+      try {
+        if (m) sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m))
+        else sessionStorage.removeItem(AUTOSAVE_KEY)
+      } catch { /* quota — ignore */ }
+    }
     // A geometry edit invalidates every member result the last run produced —
     // including the copy the calculators read from a saved project.
     try { sessionStorage.removeItem(DESIGN_KEY) } catch { /* ignore */ }
@@ -614,7 +652,7 @@ export default function ModelSpace() {
     setExpanded(null)
     setDrift(null)
     setIrregular(null)
-    try { sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m)) } catch { /* quota — ignore */ }
+    if (!EMBED) { try { sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m)) } catch { /* quota — ignore */ } }
     // The session design must go too: load-bearing state was just replaced
     // (new loads), and leaving the old design recorded here would resurrect
     // it on the next mount — design init reads the session (see useState above).
@@ -1450,6 +1488,24 @@ export default function ModelSpace() {
     tourStart()
   }, [tourParam, params, setParams, tourStart])
 
+  // ── ?embed=1 — the preview opens onto a demo frame ──────────────────────
+  // The same move the guide makes on a first visit (tour.onStart above): no
+  // model on open, so generate the standard grid from the inputs already on
+  // the Geometry tab. Deliberately NOT cleared on close — nothing in embed is
+  // persisted, so the demo lives and dies with the iframe. Mount-only by
+  // design: every control that could call `generate` again is inert in embed.
+  const bootstrapped = useRef(false)
+  useEffect(() => {
+    if (!EMBED || bootstrapped.current) return
+    bootstrapped.current = true
+    // Off the effect tick: `generate` sets a dozen states, and doing that
+    // synchronously inside an effect cascades renders (the rule that guards
+    // this also buys the iframe's first paint a clean empty viewport).
+    const t = setTimeout(() => { if (!model) generate() }, 0)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only on purpose; `generate` closes over the default inputs, which is what the demo frame wants
+  }, [])
+
   const nodePos = useMemo(() => {
     const map = new Map<string, THREE.Vector3>()
     model?.nodes.forEach((n) => map.set(n.id, new THREE.Vector3(n.x, n.y, n.z)))
@@ -1601,7 +1657,12 @@ export default function ModelSpace() {
     : '3D Model Space'
 
   return (
-    <div className="mx-auto max-w-[1700px]">
+    // ?embed=1 — the page-wide pointer lock that makes the preview a poster
+    // with two live parts: the 3D viewport and the walkthrough re-enable
+    // pointer events on themselves below; everything else — ribbon, control
+    // rail, the report stack — draws but does not respond. The shell around
+    // the page applies the same rule one level up (AppShell).
+    <div className="mx-auto max-w-[1700px]" style={EMBED ? { pointerEvents: 'none' } : undefined}>
       {/* Backstop message from the gated `run`. The buttons for off-plan
           features are already disabled, so reaching this means a path was
           missed — it is shown rather than swallowed so that shows up. */}
@@ -1683,7 +1744,11 @@ export default function ModelSpace() {
           className="rounded-md border border-[#0f4c92] bg-white px-2.5 py-1 text-[11.5px] font-bold text-[#0f4c92] hover:bg-[#eaf1f9] disabled:opacity-40">
           {exporting ? '⏳ PDF…' : '⎙ PDF'}
         </button>
-        <TourButton onClick={tour.start} label="Guide" />
+        {/* In embed the Guide is one of the two live controls, so it re-enables
+            pointer events inside the page-wide lock (see the root div). */}
+        <span className="inline-flex" style={EMBED ? { pointerEvents: 'auto' } : undefined}>
+          <TourButton onClick={tour.start} label="Guide" />
+        </span>
       </div>
 
       {/* ── Main split: the viewport takes the width, the controls a fixed rail
@@ -1700,7 +1765,11 @@ export default function ModelSpace() {
       <div className="grid grid-cols-1 gap-4 p-4 lg:h-[calc(100vh-6.5rem)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* LEFT — sticky 3D viewport */}
         <div className="no-print lg:flex lg:min-h-0 lg:flex-col">
-          <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a] lg:h-full lg:min-h-0">
+          {/* The live half of the embed: this container re-enables pointer
+              events under the page-wide lock, so orbit, pan, zoom and member
+              selection keep working inside the preview. */}
+          <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a] lg:h-full lg:min-h-0"
+            style={EMBED ? { pointerEvents: 'auto' } : undefined}>
             {model ? (
               <Canvas camera={{ position: [14, 11, 14], fov: 45 }} gl={{ preserveDrawingBuffer: true }} onPointerMissed={() => setSelected(null)}>
                 {/* Outer net only: it stops ANY suspension in here from bubbling
@@ -1865,7 +1934,8 @@ export default function ModelSpace() {
                   />
                 )}
                 <OrbitControls ref={controlsRef} makeDefault enablePan target={[6, 3, 2.5]}
-                  onStart={() => setNavHintDone(true)} />
+                  autoRotate={idleOrbit} autoRotateSpeed={0.8}
+                  onStart={() => { setNavHintDone(true); orbitWake() }} />
                 </Suspense>
               </Canvas>
             ) : (
@@ -1878,7 +1948,9 @@ export default function ModelSpace() {
               <h1 className="rounded-md bg-white/85 px-2.5 py-1 text-[15px] font-extrabold tracking-tight text-[#0f1b2a] shadow-sm backdrop-blur">
                 {modelName}
               </h1>
-              {model && (
+              {/* Embed persists nothing on purpose (see `EMBED`), so the
+                  badge would be a promise the preview does not keep. */}
+              {model && !EMBED && (
                 <span className="rounded border border-[#cddcf0] bg-[#eaf1f9]/90 px-1.5 py-px font-mono text-[10px] font-medium text-[#0f4c92] backdrop-blur">
                   autosaved
                 </span>
@@ -4370,8 +4442,12 @@ export default function ModelSpace() {
       </div>
 
       {tour.on && (
-        <GuidedTour step={tour.step} index={tour.at} total={tour.total}
-          onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
+        /* The walkthrough is embed's other live part — the overlay re-enables
+           pointer events so the guide stays operable inside the preview. */
+        <div style={EMBED ? { pointerEvents: 'auto' } : undefined}>
+          <GuidedTour step={tour.step} index={tour.at} total={tour.total}
+            onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
+        </div>
       )}
 
       {/* ── Optimisation log (full width) ── */}

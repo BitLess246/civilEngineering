@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useState } from 'react'
+import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { useScrollTopOnChange } from './lib/useScrollTop'
@@ -118,7 +118,7 @@ export default function App() {
   // app. Without this, leaving a page you had scrolled deep into drops you into
   // the middle of the next one. Keyed on pathname, so a query-string or hash
   // change (an in-page anchor) does not yank the viewport.
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   useScrollTopOnChange(pathname)
   // GA4 counts SPA navigations — the initial load is counted by the gtag
   // snippet in index.html, so this skips its first render (see analytics.ts).
@@ -134,7 +134,13 @@ export default function App() {
   // inline arrow here would change every render, tearing the key listener down
   // and rebuilding it each time — quietly defeating the memo on the other side.
   const closePrefs = useCallback(() => { setDismissed(true) }, [])
-  const askPrefs = !hasAnswered(prefs) && !dismissed && !NO_ASK_ROUTES.includes(pathname)
+  // The embed preview (the landing page's scaled-down Model Space iframe)
+  // never asks: the question is about the real workbench's sidebar, and a
+  // modal popping over the mini viewport is the preview interrupting the
+  // marketing page it sits on. The answer is still collected on the next
+  // ordinary page — nothing is lost by waiting.
+  const embed = useMemo(() => new URLSearchParams(search).get('embed') === '1', [search])
+  const askPrefs = !hasAnswered(prefs) && !dismissed && !NO_ASK_ROUTES.includes(pathname) && !embed
 
   // Home carries its own hero navigation; every tool route lives inside the
   // workbench shell (sidebar + breadcrumb header + command palette).
