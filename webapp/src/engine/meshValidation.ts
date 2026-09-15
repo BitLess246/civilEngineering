@@ -460,7 +460,7 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
           return 0
         })()
         issues.push({ severity: 'error', code: 'MESH_DOF_BUDGET', refs: [],
-          message: `Subdivision ${n} over ${model.plates.length} panels needs about ${est.toLocaleString()} degrees of freedom, past the ${MESH_DOF_BUDGET.toLocaleString()} this solver can hold (the stiffness matrix is dense, so memory grows with the SQUARE of the count). ${fits >= SHELL_SUBDIV_MIN ? `Subdivision ${fits} fits.` : 'Split this model or turn shell elements off.'}` })
+          message: `Subdivision ${n} over ${model.plates.length} panels needs about ${est.toLocaleString()} degrees of freedom, past the ${MESH_DOF_BUDGET.toLocaleString()} this solver can hold (the factorised stiffness fills in beyond the mesh's own connectivity, so memory grows faster than the DOF count). ${fits >= SHELL_SUBDIV_MIN ? `Subdivision ${fits} fits.` : 'Split this model or turn shell elements off.'}` })
       }
     }
   }

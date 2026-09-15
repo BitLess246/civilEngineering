@@ -9,8 +9,12 @@
 // vectors (Gauss + Hermite for the distributed ones).
 // Units: coordinates m; E,G MPa; A mm²; I,J mm⁴; forces kN, kN·m.
 // ─────────────────────────────────────────────────────────────────────────
-import { luFactor, luSolve, symFactor, symSolve, matVec, matVecT, hermite, gauss5Vec } from './fem'
+import { luFactor, luSolve, symFactorSparse, symSolve, matVec, matVecT, hermite, gauss5Vec } from './fem'
 import type { SymFactor } from './fem'
+import {
+  type SparseSym, type SparseSymSerial, sparseSym, sparseAdd, sparseToDense,
+  sparseClone, serializeSparse, deserializeSparse,
+} from './sparseSym'
 import { nscpCombos, type Combo, type LoadCategory } from './beamAnalysis'
 import type { ProgressFn } from './progress'
 import { triShell } from './shell'
@@ -459,7 +463,12 @@ export interface FramePrecomp {
    *  reordering where the block is symmetric positive definite — which is the
    *  ordinary case — and the dense pivoting LU where it is not. */
   Kff: SymFactor | null
-  Kff_raw: number[][]            // un-factored nf×nf elastic stiffness (P-Δ baseline)
+  /** Un-factored elastic free block (the P-Δ baseline), stored as the entries
+   *  that are actually in it. A DOF couples only to the DOFs of the elements it
+   *  belongs to, so this is ~15 per row whatever the model size, against the
+   *  nf² a dense array costs — 0.46 MB rather than 125.5 MB on a 4 056-DOF
+   *  frame, and the same saving again on every worker it is cloned to. */
+  Kff_raw: SparseSym
   /** Diaphragm constraint transformation rows (present when rigid floor diaphragm active).
    *  diaT[k] = sparse row of T for the k-th free DOF; T maps free→independent DOFs. */
   diaT?: { ind: number; coeff: number }[][]
@@ -708,15 +717,15 @@ function buildDiaphragmT(
 }
 
 /** Apply constraint transformation: K_ind[a,b] = Σ_{i,j} T[i,a]·Kff[i][j]·T[j,b] */
-function applyTtoK(Kff: number[][], Trow: TEntry[][], ni: number): number[][] {
-  const nf = Kff.length
-  const K = Array.from({ length: ni }, () => new Array(ni).fill(0))
-  for (let i = 0; i < nf; i++) {
+function applyTtoK(Kff: SparseSym, Trow: TEntry[][], ni: number): SparseSym {
+  const K = sparseSym(ni)
+  for (let i = 0; i < Kff.n; i++) {
+    const row = Kff.rows[i]
+    if (row.size === 0) continue
     for (const { ind: a, coeff: ca } of Trow[i]) {
-      for (let j = 0; j < nf; j++) {
-        const kij = Kff[i][j]
+      for (const [j, kij] of row) {
         if (kij === 0) continue
-        for (const { ind: b, coeff: cb } of Trow[j]) K[a][b] += ca * kij * cb
+        for (const { ind: b, coeff: cb } of Trow[j]) sparseAdd(K, a, b, ca * kij * cb)
       }
     }
   }
@@ -762,7 +771,7 @@ export function precomputeFrame(
   const freeIdx = new Map(free.map((dof, k) => [dof, k]))
 
   const nf = free.length
-  const Kff_raw: number[][] = Array.from({ length: nf }, () => new Array(nf).fill(0))
+  const Kff_raw = sparseSym(nf)
   for (const g of geoms) {
     for (let a = 0; a < 12; a++) {
       const ia = freeIdx.get(g.dofs[a])
@@ -770,7 +779,7 @@ export function precomputeFrame(
       for (let b = 0; b < 12; b++) {
         const ib = freeIdx.get(g.dofs[b])
         if (ib === undefined) continue
-        Kff_raw[ia][ib] += g.kg[a][b]
+        sparseAdd(Kff_raw, ia, ib, g.kg[a][b])
       }
     }
   }
@@ -782,7 +791,7 @@ export function precomputeFrame(
       for (let b = 0; b < 18; b++) {
         const ib = freeIdx.get(sg.dofs[b])
         if (ib === undefined) continue
-        Kff_raw[ia][ib] += sg.Ke[a][b]
+        sparseAdd(Kff_raw, ia, ib, sg.Ke[a][b])
       }
     }
   }
@@ -796,7 +805,7 @@ export function precomputeFrame(
     ks.forEach((k, dir) => {
       if (k <= 0) return
       const pos = freeIdx.get(6 * i + dir)
-      if (pos !== undefined) Kff_raw[pos][pos] += k
+      if (pos !== undefined) sparseAdd(Kff_raw, pos, pos, k)
     })
   }
 
@@ -804,12 +813,12 @@ export function precomputeFrame(
     const dia = buildDiaphragmT(nodes, idx, freeIdx, diaphragms, nf)
     if (dia) {
       const K_ind = applyTtoK(Kff_raw, dia.Trow, dia.ni)
-      const Kff_ind = symFactor(K_ind)
+      const Kff_ind = symFactorSparse(K_ind)
       return { nm, idx, nodes, members, supports, geoms, shellGeoms, ndof, free, freeIdx,
                Kff: Kff_ind, Kff_raw, diaT: dia.Trow, diaNi: dia.ni }
     }
   }
-  const Kff = symFactor(Kff_raw)   // null if singular; {n:0} if nf===0
+  const Kff = symFactorSparse(Kff_raw)   // null if singular; {n:0} if nf===0
   return { nm, idx, nodes, members, supports, geoms, shellGeoms, ndof, free, freeIdx, Kff, Kff_raw }
 }
 
@@ -824,7 +833,7 @@ export interface FramePrecompSerial {
   free: number[]
   freeIdxEntries: [number, number][]
   Kff: SymFactor | null
-  Kff_raw: number[][]
+  Kff_raw: SparseSymSerial
   diaT?: { ind: number; coeff: number }[][]
   diaNi?: number
 }
@@ -834,7 +843,7 @@ export function serializePrecomp(p: FramePrecomp): FramePrecompSerial {
     nodes: p.nodes, members: p.members, supports: p.supports,
     geoms: p.geoms, shellGeoms: p.shellGeoms, ndof: p.ndof, free: p.free,
     freeIdxEntries: [...p.freeIdx],
-    Kff: p.Kff, Kff_raw: p.Kff_raw,
+    Kff: p.Kff, Kff_raw: serializeSparse(p.Kff_raw),
     ...(p.diaT ? { diaT: p.diaT, diaNi: p.diaNi } : {}),
   }
 }
@@ -846,7 +855,7 @@ export function deserializePrecomp(s: FramePrecompSerial): FramePrecomp {
     nodes: s.nodes, members: s.members, supports: s.supports,
     geoms: s.geoms, shellGeoms: s.shellGeoms ?? [], ndof: s.ndof, free: s.free,
     freeIdx: new Map(s.freeIdxEntries),
-    Kff: s.Kff, Kff_raw: s.Kff_raw,
+    Kff: s.Kff, Kff_raw: deserializeSparse(s.Kff_raw),
     ...(s.diaT ? { diaT: s.diaT, diaNi: s.diaNi } : {}),
   }
 }
@@ -970,13 +979,12 @@ export function solveWithGeometry(
   if (free.length > 0) {
     if (!Kff) return null   // singular stiffness
     const Ff = free.map((dof) => F[dof])
-    const nf = free.length
 
     // Free-block tangent Kt = Ke + Σ Kg(N): geometric stiffness assembled from a
     // per-member axial force (tension +). Shared by the self-consistent P-Δ
     // iteration and the fixed-axial (constant geometric tangent) pushover path.
-    const assembleKtff = (axialOf: (mi: number) => number): number[][] => {
-      const Ktff: number[][] = Array.from({ length: nf }, (_, i) => [...Kff_raw[i]])
+    const assembleKtff = (axialOf: (mi: number) => number): SparseSym => {
+      const Ktff = sparseClone(Kff_raw)
       for (let mi = 0; mi < geoms.length; mi++) {
         const g = geoms[mi]
         const kgg = mul(mul(transpose(g.T), kgLocal(axialOf(mi), g.L)), g.T)
@@ -986,7 +994,7 @@ export function solveWithGeometry(
           for (let b = 0; b < 12; b++) {
             const ib = freeIdx.get(g.dofs[b])
             if (ib === undefined) continue
-            Ktff[ia][ib] += kgg[a][b]
+            sparseAdd(Ktff, ia, ib, kgg[a][b])
           }
         }
       }
@@ -1007,12 +1015,12 @@ export function solveWithGeometry(
       const fixed = opts.fixedAxial
       const Ktff = assembleKtff((mi) => fixed[mi] ?? 0)
       if (diaT && diaNi !== undefined) {
-        const fac = luFactor(applyTtoK(Ktff, diaT, diaNi))
+        const fac = luFactor(sparseToDense(applyTtoK(Ktff, diaT, diaNi)))
         if (!fac) return null
         const dn = applyTrecover(luSolve(fac, applyTtoLoad(Ff, diaT, diaNi)), diaT)
         free.forEach((dof, k) => (d[dof] = dn[k]))
       } else {
-        const fac = luFactor(Ktff)
+        const fac = luFactor(sparseToDense(Ktff))
         if (!fac) return null
         const dn = luSolve(fac, Ff)
         free.forEach((dof, k) => (d[dof] = dn[k]))
@@ -1032,7 +1040,7 @@ export function solveWithGeometry(
         let res = Infinity, singular = false, iters = 0
         for (let it = 0; it < maxIter; it++) {
           const Kt_ind = applyTtoK(assembleKtff(axialFromState), diaT, diaNi)
-          const Ktff_fac = luFactor(Kt_ind)
+          const Ktff_fac = luFactor(sparseToDense(Kt_ind))
           if (!Ktff_fac) { singular = true; break }   // elastic instability — retain last d, flagged in status
           const dn = applyTrecover(luSolve(Ktff_fac, Ff_ind), diaT)
           let num = 0, den = 0
@@ -1056,7 +1064,7 @@ export function solveWithGeometry(
         const tol = opts.tol ?? 1e-5
         let res = Infinity, singular = false, iters = 0
         for (let it = 0; it < maxIter; it++) {
-          const Ktff_fac = luFactor(assembleKtff(axialFromState))
+          const Ktff_fac = luFactor(sparseToDense(assembleKtff(axialFromState)))
           if (!Ktff_fac) { singular = true; break }          // elastic instability — retain last d, flagged in status
           const dn = luSolve(Ktff_fac, Ff)
           let num = 0, den = 0

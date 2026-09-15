@@ -22,6 +22,7 @@ import type { MemberGeom } from './frame3d'
 import { modelToFrame3D } from './modelBridge'
 import { symSolve, matVec } from './fem'
 import type { SymFactor } from './fem'
+import { type SparseSym, sparseMatVec } from './sparseSym'
 import { validateMesh, hasMeshErrors } from './meshValidation'
 import { applyF3Combo } from './frame3d'
 import type { LoadCategory } from './beamAnalysis'
@@ -91,7 +92,7 @@ const _scale = (a: number[], s: number): number[] => a.map((v) => v * s)
 function inversePowerIter(
   Kff: SymFactor,
   Ksff: number[][],   // −Kgff (positive for compressive loads)
-  Kff_raw: number[][],
+  Kff_raw: SparseSym,
   nModes: number,
   maxIter = 300,
   tol = 1e-7,
@@ -147,7 +148,7 @@ function inversePowerIter(
       const Ksx2 = matVec(Ksff, x)
       const xKsx = _dot(x, Ksx2)
       if (Math.abs(xKsx) < 1e-14) break
-      const Kx = matVec(Kff_raw, x)
+      const Kx = sparseMatVec(Kff_raw, x)
       const lambda = _dot(x, Kx) / xKsx
 
       if (lambda <= 0) break  // tension-dominated mode

@@ -216,22 +216,28 @@ All shipped.
     selectable in the modal panel and reported in both the appendix and the
     report's assumptions.
 
-11. **The dense free block caps the plate mesh at n = 2.** The plate-mesh series
-    (#743–#748) meshes each panel n×n, splits the edge beams at the mesh nodes
-    so the panel is actually held, cuts openings out, and offers the mesh to the
-    design solve opt-in. It converges from above onto Timoshenko's clamped
-    plate — but `frame3d` assembles the free block as a DENSE `nf × nf` array
-    (`Kff_raw`, `frame3d.ts:765`), retains it on the precomp and
-    structured-clones it into every pool worker, so the cost is `8·nf²` bytes
-    PER COPY: 4 000 DOF is 128 MB and 8 000 is 512 MB.
-    `meshValidation`'s `MESH_DOF_BUDGET` hard-stops past 4 000 with a message
-    naming a subdivision that fits, which is why **n > 2 is not usable on a real
-    building**. Sparse assembly is the unlock and it is NOT a drive-by: six
-    consumers read `Kff_raw` — `symFactor`, `applyTtoK` (diaphragm), the P-Δ
-    tangent's dense copy (`frame3d.ts:979`), `buckling`'s `matVec`,
-    `directTimeHistory`'s `C = αM + βK`, and `serializePrecomp` — and two of
-    them genuinely want a dense matrix. L3 is frozen infrastructure, so this
-    needs its own stated justification and the full statics re-check.
+11. **The plate mesh is capped at n = 2 by a budget that no longer has its
+    original basis.** The plate-mesh series (#743–#748) meshes each panel n×n,
+    splits the edge beams at the mesh nodes so the panel is actually held, cuts
+    openings out, and offers the mesh to the design solve opt-in. It converges
+    from above onto Timoshenko's clamped plate — but `meshValidation`'s
+    `MESH_DOF_BUDGET` hard-stops past 4 000 DOF, which is why **n > 2 is not
+    usable on a real building**. The 4 000 came from the free block being a
+    DENSE `nf × nf` array retained on the precomp and structured-cloned into
+    every pool worker (`8·nf²` bytes PER COPY: 4 000 DOF is 128 MB, 8 000 is
+    512 MB). ~~Sparse assembly is the unlock~~ — ✔ shipped (#750, #751):
+    `sparseSym.ts` is the storage and `precomputeFrame` now assembles into it;
+    all six consumers were rewired, two of them deliberately materialising dense
+    at their own boundary (the P-Δ tangent, whose `luFactor`-returns-null
+    instability test LDLᵀ would trip earlier, and `directTimeHistory`, already
+    dense-bound by its own integrator). Measured: nnz/row is 15–21 and FLAT from
+    nf = 108 to nf = 32 670, where the dense block would have been 8.1 GB
+    against 3.98 MB of entries. **What is left is the budget itself**: the
+    binding cost is now the skyline FACTOR (9.4 MB at nf = 4 056, 65 MB at
+    nf = 15 000, 238 MB at nf = 32 670, and it ships to every pool worker), so
+    `MESH_DOF_BUDGET` and the UI subdivision cap need re-measuring against that
+    — including how many worker copies of the factor a real browser tab can
+    hold — rather than being raised by guess.
 
 ## P4 — design & geotech capability
 

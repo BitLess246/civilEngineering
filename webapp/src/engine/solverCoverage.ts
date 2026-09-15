@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 548
+export const SOLVER_TEST_COUNT = 551
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -659,6 +659,18 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "solveWithGeometry — recovering only the members a caller reads",
         "name": "the envelopes describe the members actually recovered"
+      },
+      {
+        "suite": "sparse free block — scatter-add and connectivity pattern",
+        "name": "a shared DOF carries the SUM of both members, not the last one written"
+      },
+      {
+        "suite": "sparse free block — scatter-add and connectivity pattern",
+        "name": "stores no entry for DOF pairs that share no element"
+      },
+      {
+        "suite": "sparse free block — scatter-add and connectivity pattern",
+        "name": "nonzeros per row stay flat as the mesh grows, while dense storage squares"
       }
     ]
   },
