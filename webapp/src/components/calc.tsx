@@ -176,7 +176,11 @@ export function DrawingCard({ title, meta, children, pdfDrawing }: {
         <h2 className="text-[13.5px] font-bold text-ink">{title}</h2>
         {meta && <span className="font-mono text-[10px] text-faint">{meta}</span>}
       </div>
-      <div {...(pdfDrawing ? { 'data-pdf-drawing': '' } : {})}
+      {/* `data-drawing-sheet` marks a drawing surface: a dark theme inverts the
+          INK inside it, never the card. `data-pdf-drawing` marks what the
+          exporter captures — the SVG, whose own palette never changes, so the
+          PDF is white paper in every theme. */}
+      <div data-drawing-sheet {...(pdfDrawing ? { 'data-pdf-drawing': '' } : {})}
         className="p-3 [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
         {children}
       </div>

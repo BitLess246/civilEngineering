@@ -199,3 +199,35 @@ body { counter-reset: calccard; }
   /* don't pin the preview panel when printing */
   [class*="sticky"] { position: static !important; }
 }
+
+/* ── Drawings: dark on screen, white on paper ────────────────────────────
+   A structural drawing is dark ink on light paper, and the exported PDF must
+   stay that way whatever theme the workbench wears — a client receives a sheet,
+   not a screenshot of an app. But a pure-white panel inside a dark theme is a
+   bright rectangle in a dim room, which is the eye strain the dark theme exists
+   to avoid; and on the pages whose card is already themed, dark ink on a dark
+   card is worse still — the drawing simply disappears.
+
+   So the INK is inverted for the screen and the card stays whatever the theme
+   makes it. `hue-rotate(180deg)` after the inversion puts hues back where they
+   started, so the blue reinforcement accent stays blue instead of turning
+   orange; `invert(.92)` rather than a full invert keeps the linework just off
+   pure white so it reads as drawn rather than glowing.
+
+   THIS CANNOT REACH THE PDF, and that is load-bearing rather than lucky:
+   `svgToPng` clones the SVG and serialises it to a data: URL, and a filter
+   applied by a STYLESHEET is not an inline attribute, so it is not part of the
+   markup that gets rasterised. Verified by replicating the capture with the
+   filter live — the serialised markup contains no filter and the raster comes
+   back at mean luminance 246/255, i.e. white paper, in every theme.
+
+   Print is excluded in the other direction: `window.print()` renders the live
+   DOM, so the filter has to come off or a printed page would carry the
+   screen's inversion onto real paper. */
+[data-theme="blueprint"] [data-pdf-drawing] svg,
+[data-theme="blueprint"] [data-drawing-sheet] svg {
+  filter: invert(0.92) hue-rotate(180deg);
+}
+@media print {
+  [data-pdf-drawing] svg, [data-drawing-sheet] svg { filter: none !important; }
+}
