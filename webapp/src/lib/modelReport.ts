@@ -266,6 +266,8 @@ export function buildModelReport(
     checks.push({ name: 'Unchecked members', detail: design.unchecked.map((u) => `${u.id} (${u.shape})`).join(', '), ratio: null, ok: false })
   if (design.pDeltaIssues.length)
     checks.push({ name: 'P-Δ convergence', detail: `failed: ${design.pDeltaIssues.join(', ')}`, ratio: null, ok: false })
+  if (design.pDeltaSkipped.length)
+    checks.push({ name: 'P-Δ not run', detail: `model past the second-order DOF limit, first-order forces used: ${design.pDeltaSkipped.join(', ')}`, ratio: null, ok: false })
   // seismic regularity (advisory — does not gate designOK; irregular structures
   // are permitted but trigger the code's added detailing/analysis requirements)
   if (irregular)

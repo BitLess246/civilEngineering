@@ -472,6 +472,13 @@ export interface StructureDesign {
    *  residual above tol) — the forces from those runs are not trustworthy.
    *  Non-empty ⇒ designOK is false. Empty for first-order analyses. */
   pDeltaIssues: string[]
+  /** Load-case runs where the second-order iteration was never attempted because
+   *  the model is past `PDELTA_DENSE_DOF_MAX` (the tangent is factored dense).
+   *  Those runs carry FIRST-ORDER forces — a different fact from a diverged run,
+   *  and not evidence of instability, so it is reported separately rather than
+   *  folded into `pDeltaIssues`. Also fails the design: the user asked for a
+   *  second-order analysis and did not get one. */
+  pDeltaSkipped: string[]
 }
 
 /** Every check the pipeline runs must pass — members, foundations, slabs
@@ -487,7 +494,7 @@ export function designOK(d: StructureDesign): boolean {
     && d.stairs.every((s) => s.ok)
     && d.joints.every((j) => j.ok) && d.beamJoints.every((j) => j.ok) && d.scwb.every((j) => j.ok)
     && d.unchecked.length === 0
-    && d.pDeltaIssues.length === 0
+    && d.pDeltaIssues.length === 0 && d.pDeltaSkipped.length === 0
 }
 
 /**
@@ -1829,7 +1836,9 @@ function designFromRuns(
     orphanEdges: br.orphanEdges.length,
     unchecked,
     // fail-loud: forces from a non-converged P-Δ run must not silently drive design
-    pDeltaIssues: runs.filter((r) => r.result.pDelta && !r.result.pDelta.converged).map((r) => r.name),
+    pDeltaIssues: runs.filter((r) => r.result.pDelta && !r.result.pDelta.converged
+      && !r.result.pDelta.skipped).map((r) => r.name),
+    pDeltaSkipped: runs.filter((r) => r.result.pDelta?.skipped).map((r) => r.name),
   }
   partialDesign.joints = designSteelJoints(model, partialDesign)
   partialDesign.beamJoints = designBeamBeamJoints(model, partialDesign)

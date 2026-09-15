@@ -4540,6 +4540,15 @@ export default function ModelSpace() {
               </ul>
             </div>
           )}
+          {design.pDeltaSkipped.length > 0 && (
+            <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+              <p className="font-bold">⚠ P-Δ was NOT run for {design.pDeltaSkipped.length} load case(s) — the model has more degrees of freedom than the second-order tangent can be factored at, so these carry FIRST-ORDER forces.</p>
+              <p className="mt-1">This is not an instability warning. Lower the shell subdivision (or turn shell elements off) to bring the model under the limit, then re-run.</p>
+              <ul className="mt-1 list-inside list-disc">
+                {design.pDeltaSkipped.map((n) => <li key={n}><span className="font-mono">{n}</span></li>)}
+              </ul>
+            </div>
+          )}
           {design.unchecked.length > 0 && (
             <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
               <p className="font-bold">⚠ {design.unchecked.length} member(s) could NOT be design-checked — the result is not a passing design.</p>

@@ -216,28 +216,38 @@ All shipped.
     selectable in the modal panel and reported in both the appendix and the
     report's assumptions.
 
-11. **The plate mesh is capped at n = 2 by a budget that no longer has its
-    original basis.** The plate-mesh series (#743–#748) meshes each panel n×n,
-    splits the edge beams at the mesh nodes so the panel is actually held, cuts
-    openings out, and offers the mesh to the design solve opt-in. It converges
-    from above onto Timoshenko's clamped plate — but `meshValidation`'s
-    `MESH_DOF_BUDGET` hard-stops past 4 000 DOF, which is why **n > 2 is not
-    usable on a real building**. The 4 000 came from the free block being a
-    DENSE `nf × nf` array retained on the precomp and structured-cloned into
-    every pool worker (`8·nf²` bytes PER COPY: 4 000 DOF is 128 MB, 8 000 is
-    512 MB). ~~Sparse assembly is the unlock~~ — ✔ shipped (#750, #751):
-    `sparseSym.ts` is the storage and `precomputeFrame` now assembles into it;
-    all six consumers were rewired, two of them deliberately materialising dense
-    at their own boundary (the P-Δ tangent, whose `luFactor`-returns-null
-    instability test LDLᵀ would trip earlier, and `directTimeHistory`, already
-    dense-bound by its own integrator). Measured: nnz/row is 15–21 and FLAT from
-    nf = 108 to nf = 32 670, where the dense block would have been 8.1 GB
-    against 3.98 MB of entries. **What is left is the budget itself**: the
-    binding cost is now the skyline FACTOR (9.4 MB at nf = 4 056, 65 MB at
-    nf = 15 000, 238 MB at nf = 32 670, and it ships to every pool worker), so
-    `MESH_DOF_BUDGET` and the UI subdivision cap need re-measuring against that
-    — including how many worker copies of the factor a real browser tab can
-    hold — rather than being raised by guess.
+11. ~~**The plate mesh is capped at n = 2.**~~ — ✔ shipped (#750, #751, #752).
+    The plate-mesh series (#743–#748) meshes each panel n×n, splits the edge
+    beams at the mesh nodes so the panel is actually held, cuts openings out,
+    and offers the mesh to the design solve opt-in; it converges from above onto
+    Timoshenko's clamped plate. What capped it was `MESH_DOF_BUDGET = 4 000`,
+    resting on a DENSE nf×nf free block structured-cloned into every pool worker
+    (8·nf² bytes PER COPY). Closed in three phases: `sparseSym.ts` as the
+    storage (#750); `precomputeFrame` assembling into it with all six consumers
+    rewired (#751) — nnz/row measured at 15–21 and FLAT from nf = 108 to 32 670,
+    where the dense block would have been 8.1 GB against 3.98 MB; and the
+    ceiling re-measured (#752) against what binds now, the skyline factor plus
+    element geometry copied to each of up to 8 workers plus the main thread
+    (10 236 DOF = 57.2 MB per worker, 515 MB aggregate, 3.5 s precompute).
+    Budget **10 000**, on a measured row. The DOF ESTIMATE was wrong too — it
+    charged every panel a full (n+1)² with no credit for shared edges, reading
+    15 294 DOF where the truth was 8 958 — so `meshNodeBound` replaces it and is
+    asserted exact against the mesher. A 6×6-bay 4-storey frame goes from **no
+    usable mesh at all** to subdivision 3.
+
+    **Two ceilings are left, both stated in code rather than discovered later.**
+    (a) The P-Δ tangent is still factored DENSE — on purpose, since the
+    iteration detects elastic instability by `luFactor` returning null — so it
+    stops at `PDELTA_DENSE_DOF_MAX = 5 000` and returns the first-order answer
+    labelled `pDelta.skipped`, surfaced separately from non-convergence because
+    "we didn't look" is not "it may be buckling". Making the tangent sparse means
+    changing that instability test, which is an L3 semantics change needing its
+    own justification. (b) The factor is duplicated per worker by
+    structured-clone, and that is inherent to fan-out — every worker needs a
+    factor to solve with, so shipping the sparse block and re-factoring locally
+    saves nothing. The only collapse to a single copy is a `SharedArrayBuffer`,
+    which needs COOP/COEP cross-origin isolation headers on the deployment: a
+    hosting decision with its own consequences, not an engine change.
 
 ## P4 — design & geotech capability
 

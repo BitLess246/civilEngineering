@@ -824,15 +824,37 @@ shell analysis was in.
   0.00126·q·a⁴/D — 1.175× → 1.046× at n = 2→8 — with Σ reactions exact at every
   density.
 
-**The open blocker: `Kff_raw` is dense.** `frame3d` assembles the free block as
-an `nf × nf` array, retains it on the precomp and structured-clones it into
-every pool worker — `8·nf²` bytes per copy, so 4 000 DOF is 128 MB and 8 000 is
-512 MB. `meshValidation`'s `MESH_DOF_BUDGET` hard-stops past 4 000 with a
-message naming a subdivision that fits, which is why **n > 2 is not usable on a
-real building yet**. Sparse assembly is the unlock and is an L3 change with six
-consumers (`symFactor`, `applyTtoK`, the P-Δ tangent copy, `buckling`'s
-`matVec`, `directTimeHistory`'s `C = αM + βK`, and the worker serialization) —
-it needs its own justification, not a drive-by.
+**The blocker is cleared — the mesh is usable on a real building.** `Kff_raw`
+was a dense `nf × nf` array retained on the precomp and structured-cloned into
+every pool worker (`8·nf²` bytes per copy), and `MESH_DOF_BUDGET` hard-stopped at
+4 000 because of it. Three phases closed it:
+
+- **#750** — `sparseSym.ts`: Map-per-row symmetric storage, plus
+  `rcmOrderSparse` / `skylineFactorSparse` / `symFactorSparse` reading the same
+  matrix, with the column profile folded from the pattern in O(nnz).
+- **#751** — `precomputeFrame` assembles into it and the six consumers are
+  rewired. Two stay dense on purpose and materialise at their own boundary: the
+  **P-Δ tangent** (it detects elastic instability by `luFactor` returning null,
+  and LDᴸᵀ refuses a non-positive pivot earlier, so switching the factoriser
+  would change which iteration reports divergence) and **`directTimeHistory`**
+  (already dense-bound by its own integrator). Measured: nnz/row **15–21 and
+  flat** from nf = 108 to 32 670, where the dense block would have been 8.1 GB
+  against 3.98 MB of entries.
+- **#752** — the ceiling re-measured against what binds now: the skyline factor
+  plus element geometry, copied to each of up to 8 workers plus the main thread.
+  **Budget 10 000** (10 236 DOF measured at 57.2 MB per worker, 515 MB
+  aggregate, 3.5 s precompute). The DOF *estimate* was also wrong — it charged
+  every panel a full (n+1)² with no credit for shared edges — so `meshNodeBound`
+  replaces it and is asserted exact against the mesher. A 6×6-bay 4-storey
+  frame goes from **no usable mesh at all** to subdivision 3.
+
+**What still has a ceiling.** The P-Δ tangent is dense, so it stops at
+`PDELTA_DENSE_DOF_MAX = 5 000` and returns the first-order answer labelled
+`pDelta.skipped` — reported separately from non-convergence, because "we didn't
+look" is not "it may be buckling", and gating `designOK` all the same. And the
+factor is duplicated per worker by structured-clone, which is inherent to
+fan-out; only a `SharedArrayBuffer` collapses it to one copy, and that needs
+COOP/COEP headers on the deployment.
 
 
 **Tier 3 complete — the full STAAD-parity roadmap (Tiers 1–3) is shipped.**
