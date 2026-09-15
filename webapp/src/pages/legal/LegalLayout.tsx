@@ -17,7 +17,7 @@ export function LegalLayout({ title, subtitle, children }: {
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Legal</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">{title}</h1>
+      <h1 className="mt-1 text-2xl font-bold text-brand">{title}</h1>
       {subtitle && <p className="mt-2 text-sm leading-6 text-slate-600">{subtitle}</p>}
       <p className="mt-1 text-[12px] text-slate-500">Last updated {SITE.policiesUpdated}</p>
 
@@ -29,7 +29,7 @@ export function LegalLayout({ title, subtitle, children }: {
             {missing.map((m) => <li key={m}>{m}</li>)}
           </ul>
           <p className="mt-1.5">
-            Set them in <code className="rounded bg-white/70 px-1">webapp/src/lib/siteConfig.ts</code> and
+            Set them in <code className="rounded bg-sheet/70 px-1">webapp/src/lib/siteConfig.ts</code> and
             redeploy. This notice disappears on its own once they are all present.
           </p>
         </div>
@@ -49,11 +49,11 @@ export function LegalLayout({ title, subtitle, children }: {
           circumstances.
         </p>
         <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-          <Link to="/terms" className="text-[#0056b3] underline">Terms</Link>
-          <Link to="/privacy" className="text-[#0056b3] underline">Privacy</Link>
-          <Link to="/refunds" className="text-[#0056b3] underline">Refunds</Link>
-          <Link to="/contact" className="text-[#0056b3] underline">Contact</Link>
-          <Link to="/pricing" className="text-[#0056b3] underline">Plans</Link>
+          <Link to="/terms" className="text-brand underline">Terms</Link>
+          <Link to="/privacy" className="text-brand underline">Privacy</Link>
+          <Link to="/refunds" className="text-brand underline">Refunds</Link>
+          <Link to="/contact" className="text-brand underline">Contact</Link>
+          <Link to="/pricing" className="text-brand underline">Plans</Link>
         </p>
       </div>
     </main>
@@ -64,7 +64,7 @@ export function LegalLayout({ title, subtitle, children }: {
 export function Clause({ n, title, children }: { n: string; title: string; children: ReactNode }) {
   return (
     <section id={`s${n}`}>
-      <h2 className="mt-6 text-[15px] font-bold text-[#0f1b2a]">{n}. {title}</h2>
+      <h2 className="mt-6 text-[15px] font-bold text-ink">{n}. {title}</h2>
       <div className="mt-1.5 space-y-2">{children}</div>
     </section>
   )

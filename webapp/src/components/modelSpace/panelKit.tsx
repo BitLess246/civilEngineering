@@ -19,8 +19,8 @@ export function SolverProgress({ p }: { p: SolveProgress | null }) {
   if (!p) return null
   const pct = p.total && p.current ? Math.min(100, Math.round((p.current / p.total) * 100)) : null
   return (
-    <div className="col-span-full rounded-lg border border-[#0f4c92]/30 bg-blue-50/60 p-2.5">
-      <div className="flex items-center justify-between text-[11px] font-semibold text-[#0f4c92]">
+    <div className="col-span-full rounded-lg border border-brand/30 bg-blue-50/60 p-2.5">
+      <div className="flex items-center justify-between text-[11px] font-semibold text-brand">
         <span>⏳ {p.phase}</span>
         <span className="tabular-nums text-slate-500">
           {p.total && p.current ? `${p.current} / ${p.total}` : ''}{pct !== null ? ` · ${pct}%` : ''}
@@ -28,14 +28,14 @@ export function SolverProgress({ p }: { p: SolveProgress | null }) {
       </div>
       {p.detail && (
         <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-600">
-          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#0f4c92] opacity-70" />
+          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-brand opacity-70" />
           <span className="truncate font-mono">{p.detail}</span>
         </div>
       )}
       <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
         {pct !== null
-          ? <div className="h-full rounded-full bg-[#0f4c92] transition-all duration-150" style={{ width: `${pct}%` }} />
-          : <div className="h-full w-1/3 animate-pulse rounded-full bg-[#0f4c92]" />}
+          ? <div className="h-full rounded-full bg-brand transition-all duration-150" style={{ width: `${pct}%` }} />
+          : <div className="h-full w-1/3 animate-pulse rounded-full bg-brand" />}
       </div>
     </div>
   )
@@ -48,7 +48,7 @@ export function DirPicker({ value, onChange }: { value: string[]; onChange: (v: 
       <span className="mb-1 font-medium text-slate-600">Directions to envelope</span>
       <div className="flex gap-1.5">
         {LAT_DIRS.map((d) => (
-          <label key={d} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${value.includes(d) ? 'border-[#0f4c92] bg-blue-50 text-[#0f4c92]' : 'border-slate-200 text-slate-500'}`}>
+          <label key={d} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${value.includes(d) ? 'border-brand bg-blue-50 text-brand' : 'border-slate-200 text-slate-500'}`}>
             <input type="checkbox" className="sr-only" checked={value.includes(d)} onChange={() => toggle(d)} />{d}
           </label>
         ))}
@@ -85,14 +85,14 @@ export function Sec({ id, title, hint, grid = true, children }: {
         <button type="button" onClick={() => toggleSectionInStore(key)} aria-expanded={!folded}
           className="group flex min-w-0 items-baseline gap-1.5 text-left">
           <span aria-hidden
-            className={`shrink-0 text-[8px] leading-none text-[#c3bdae] transition-transform group-hover:text-[#0f4c92] ${folded ? '' : 'rotate-90'}`}>
+            className={`shrink-0 text-[8px] leading-none text-faint transition-transform group-hover:text-brand ${folded ? '' : 'rotate-90'}`}>
             ▶
           </span>
-          <span className="text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d] group-hover:text-[#0f4c92]">
+          <span className="text-[10px] font-bold uppercase tracking-[.12em] text-faint group-hover:text-brand">
             {title}
           </span>
         </button>
-        {hint && <span className="text-[10.5px] text-[#a39d8d]">{hint}</span>}
+        {hint && <span className="text-[10.5px] text-faint">{hint}</span>}
       </div>
       {/* Column count follows THE RAIL, not the viewport. `lg:` is where the
           panel stops being full-width and becomes a fixed 380 px column, so
@@ -136,13 +136,13 @@ export function Swatches({ items }: { items: readonly (readonly [string, string]
 
 /** Hairline between two ribbon groups. */
 export function Rule() {
-  return <span aria-hidden className="mx-1.5 h-4 w-px shrink-0 bg-[#e3e1da]" />
+  return <span aria-hidden className="mx-1.5 h-4 w-px shrink-0 bg-hairline" />
 }
 
 export function TabBtn({ id, label, active, onClick }: { id: Tab; label: string; active: boolean; onClick: (t: Tab) => void }) {
   return (
     <button type="button" onClick={() => onClick(id)}
-      className={`rounded-[5px] px-2.5 py-[5px] text-[11.5px] font-semibold transition ${active ? 'bg-[#0f4c92] text-white' : 'text-[#5c6675] hover:bg-[#eaf1f9] hover:text-[#0f1b2a]'}`}>
+      className={`rounded-[5px] px-2.5 py-[5px] text-[11.5px] font-semibold transition ${active ? 'bg-brand text-on-solid' : 'text-muted hover:bg-brand-tint hover:text-ink'}`}>
       {label}
     </button>
   )
@@ -158,7 +158,7 @@ export function SchedChip<T>({ items, ok }: { items: T[]; ok: (r: T) => boolean 
   const good = failed === 0
   return (
     <span className={`ml-2 inline-block rounded px-1.5 py-px align-middle font-mono text-[10px] font-semibold ${
-      good ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>
+      good ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
       {good ? 'all passed' : `${failed} failed`}
     </span>
   )

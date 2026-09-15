@@ -90,10 +90,10 @@ export default function SoilNail() {
       <ReportControls title="Soil-Nail Wall" badges={['FHWA GEC-7']} report={report} />
       <CalcBody>
         <div className="space-y-5">
-          <p className="text-[13px] text-[#5c6675]">
+          <p className="text-[13px] text-muted">
             Preliminary FHWA GEC-7 checks for a single nail: tributary active demand vs bar-tensile and
             grout-ground pullout capacities. Global (slip-surface) stability is separate — use the{' '}
-            <a href="/slope" className="text-[#0f4c92] underline">slope-stability tool</a>.
+            <a href="/slope" className="text-brand underline">slope-stability tool</a>.
           </p>
 
           <Card title="Geometry & soil">
@@ -124,7 +124,7 @@ export default function SoilNail() {
           <Out label="Pullout Qult = π·DDH·Le·qu" value={`${f2(r.Qult)} kN`} />
           <Out label="FS pullout (Qult / Tmax ≥ 2.0)" value={f2(r.fsPullout)} ok={r.pulloutOK} />
           <Out label="Bond length for FS = 2.0" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
-          <p className="mt-2 text-[10px] text-[#a39d8d]">
+          <p className="mt-2 text-[10px] text-faint">
             FHWA GEC-7. Tmax is the tributary active load on one nail at depth z. Allowable bar load Tn/1.8,
             allowable pullout Qult/2.0. Provide Le ≥ the required bond length beyond the slip surface.
             This is a preliminary component check — verify global stability separately.

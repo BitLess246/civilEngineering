@@ -17,8 +17,8 @@ export function ModalPanel({ result, selectedMode, onSelectMode }: {
   const cum: [number, number, number] = [0, 0, 0]
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">Modal Analysis — natural periods &amp; mass participation</h2>
+    <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+      <h2 className="mb-1 text-[1.02rem] font-bold text-brand">Modal Analysis — natural periods &amp; mass participation</h2>
       <p className="mb-3 text-[11px] text-slate-500">
         Lumped-mass free vibration. Effective modal mass per global direction; the cumulative column turns green at the
         NSCP 208.5.5 ≥90% threshold. Total mass {f2(totalMass[0])} t (X), {f2(totalMass[1])} t (Y), {f2(totalMass[2])} t (Z).

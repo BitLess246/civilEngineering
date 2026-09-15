@@ -204,9 +204,9 @@ function BoltedConnectionCalc() {
             {custom ? (
               <div className="mt-3">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-[11.5px] font-semibold text-[#5c6675]">Bolt coordinates (mm, from the plate corner)</span>
+                  <span className="text-[11.5px] font-semibold text-muted">Bolt coordinates (mm, from the plate corner)</span>
                   <button type="button" onClick={addBolt}
-                    className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-[#0f4c92] hover:bg-blue-50">+ Add bolt</button>
+                    className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-brand hover:bg-blue-50">+ Add bolt</button>
                 </div>
                 <div className="max-h-60 overflow-auto">
                   <table className="w-full text-xs">

@@ -29,6 +29,13 @@ export default defineConfig(({ command }) => ({
   },
   test: {
     environment: 'node',
+    // Process CSS in tests. Vitest's default is `css: false`, which resolves a
+    // stylesheet import to an EMPTY STRING — so `theme.test.ts` would have
+    // parsed nothing and passed every contrast assertion vacuously. It reads
+    // `styles/themes.css` because the shipped bytes are the only honest thing
+    // to check: a TypeScript copy of the palette can pass while the browser
+    // paints something else.
+    css: true,
     // The Supabase Edge Function's pure logic (webhook signature verification
     // and event parsing) lives outside src/ but is plain Web-Crypto TypeScript,
     // so the one suite covers it rather than leaving the money path untested.

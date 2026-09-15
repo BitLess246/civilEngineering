@@ -116,7 +116,7 @@ export function GuidedTour({
           <div className="absolute right-0 bg-slate-900/55" style={{ top: rect.top, left: rect.left + rect.width, height: rect.height }} onClick={onClose} />
           <div className="absolute bottom-0 left-0 right-0 bg-slate-900/55" style={{ top: rect.top + rect.height }} onClick={onClose} />
           <div
-            className="pointer-events-none absolute rounded-lg ring-2 ring-[#0056b3] ring-offset-2 ring-offset-transparent"
+            className="pointer-events-none absolute rounded-lg ring-2 ring-brand ring-offset-2 ring-offset-transparent"
             style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }} />
         </>
       ) : (
@@ -124,7 +124,7 @@ export function GuidedTour({
       )}
 
       <div
-        className={`absolute w-[min(26rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-4 shadow-2xl ${
+        className={`absolute w-[min(26rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-sheet p-4 shadow-2xl ${
           rect ? '' : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}
         style={{
           maxHeight: 'calc(100vh - 2rem)',
@@ -137,7 +137,7 @@ export function GuidedTour({
         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
           Step {index + 1} of {total}
         </p>
-        <h2 className="mt-1 text-[15px] font-bold text-[#0056b3]">{step.title}</h2>
+        <h2 className="mt-1 text-[15px] font-bold text-brand">{step.title}</h2>
         <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-700">{step.body}</p>
         {step.why && <p className="mt-2 text-[11px] leading-relaxed text-slate-500">{step.why}</p>}
 
@@ -162,7 +162,7 @@ export function GuidedTour({
               </button>
             )}
             <button onClick={last ? onClose : onNext}
-              className="rounded-md bg-[#0056b3] px-3 py-1 text-[12px] font-semibold text-white hover:bg-[#004a99]">
+              className="rounded-md bg-brand px-3 py-1 text-[12px] font-semibold text-on-solid hover:bg-brand">
               {last ? 'Done' : 'Next'}
             </button>
           </div>
@@ -170,7 +170,7 @@ export function GuidedTour({
 
         <div className="mt-3 flex gap-1">
           {Array.from({ length: total }, (_, i) => (
-            <span key={i} className={`h-1 flex-1 rounded-full ${i <= index ? 'bg-[#0056b3]' : 'bg-slate-200'}`} />
+            <span key={i} className={`h-1 flex-1 rounded-full ${i <= index ? 'bg-brand' : 'bg-slate-200'}`} />
           ))}
         </div>
       </div>

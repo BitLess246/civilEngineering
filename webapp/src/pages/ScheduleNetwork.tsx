@@ -11,7 +11,7 @@ import { PersistenceAlerts } from '../components/PersistenceAlerts'
 // figures, critical path in brick red, and draggable nodes (view-only: moving a
 // node never changes the schedule). Reuses the store-backed project + solve.
 
-const btn = 'inline-flex items-center gap-1.5 rounded-md border border-[#d6d3c9] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]'
+const btn = 'inline-flex items-center gap-1.5 rounded-md border border-field-line bg-sheet px-2.5 py-1.5 text-[12px] font-semibold text-ink-2 hover:border-brand-hover hover:text-brand'
 const CRITICAL = '#c2402a'
 const clip = (s: string, n = 20) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
 
@@ -38,7 +38,7 @@ function Diagram({ nodes, edges, width, height }: ReturnType<typeof layoutNetwor
   const h = Math.max(height, ...nodes.map((n) => posOf(n).y + n.h + 16))
 
   return (
-    <div className="overflow-auto rounded-lg border border-[#e3e1da] bg-white [background-image:linear-gradient(#f4f3ef_1px,transparent_1px),linear-gradient(90deg,#f4f3ef_1px,transparent_1px)] [background-size:24px_24px]" style={{ maxHeight: '70vh' }}>
+    <div className="overflow-auto rounded-lg border border-hairline bg-sheet [background-image:linear-gradient(#f4f3ef_1px,transparent_1px),linear-gradient(90deg,#f4f3ef_1px,transparent_1px)] [background-size:24px_24px]" style={{ maxHeight: '70vh' }}>
       <svg width={w} height={h} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} style={{ touchAction: 'none' }}>
         <defs>
           <marker id="net-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
@@ -76,16 +76,16 @@ function Diagram({ nodes, edges, width, height }: ReturnType<typeof layoutNetwor
               {n.milestone ? (
                 <>
                   <rect width={n.w} height={n.h} rx={6} fill={fill} stroke={stroke} strokeWidth={n.critical ? 2 : 1} strokeDasharray="4 3" />
-                  <text x={10} y={20} className="fill-[#0f1b2a]" style={{ fontSize: 12, fontWeight: 700 }}>◆ {clip(n.name)}</text>
-                  <text x={10} y={40} className="fill-[#5c6675]" style={{ fontSize: 10, fontFamily: 'monospace' }}>milestone · day {n.es}</text>
+                  <text x={10} y={20} className="fill-ink" style={{ fontSize: 12, fontWeight: 700 }}>◆ {clip(n.name)}</text>
+                  <text x={10} y={40} className="fill-muted" style={{ fontSize: 10, fontFamily: 'monospace' }}>milestone · day {n.es}</text>
                 </>
               ) : (
                 <>
                   <rect width={n.w} height={n.h} rx={6} fill={fill} stroke={stroke} strokeWidth={n.critical ? 2 : 1} />
                   {n.critical && <rect width={4} height={n.h} rx={2} fill={CRITICAL} />}
-                  <text x={12} y={19} className="fill-[#0f1b2a]" style={{ fontSize: 12, fontWeight: 700 }}>{clip(n.name)}</text>
+                  <text x={12} y={19} className="fill-ink" style={{ fontSize: 12, fontWeight: 700 }}>{clip(n.name)}</text>
                   <line x1={8} y1={28} x2={n.w - 8} y2={28} stroke="#eeece5" />
-                  <text x={12} y={44} className="fill-[#5c6675]" style={{ fontSize: 10, fontFamily: 'monospace' }}>ES {n.es} · EF {n.ef}</text>
+                  <text x={12} y={44} className="fill-muted" style={{ fontSize: 10, fontFamily: 'monospace' }}>ES {n.es} · EF {n.ef}</text>
                   <text x={n.w - 12} y={44} textAnchor="end" style={{ fontSize: 10, fontFamily: 'monospace', fill: n.critical ? CRITICAL : '#a39d8d' }}>TF {n.totalFloat}</text>
                 </>
               )}
@@ -124,19 +124,19 @@ export default function ScheduleNetwork() {
           conflict={api.conflict} reloadTheirs={api.reloadTheirs}
           overwriteWithMine={api.overwriteWithMine} />
         {!project ? (
-          <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
-            <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>
-            <Link to="/schedule" className="mt-4 inline-flex rounded-md bg-[#0f4c92] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#0d3f78]">Go to the schedule grid</Link>
+          <div className="rounded-lg border border-dashed border-field-line bg-sheet px-6 py-16 text-center">
+            <h2 className="text-[16px] font-bold text-ink">No schedule open</h2>
+            <Link to="/schedule" className="mt-4 inline-flex rounded-md bg-brand px-3 py-1.5 text-[12px] font-semibold text-on-solid hover:bg-brand-hover">Go to the schedule grid</Link>
           </div>
         ) : project.activities.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center text-[13px] text-[#a39d8d]">No activities to plot — add some in the grid.</div>
+          <div className="rounded-lg border border-dashed border-field-line bg-sheet px-6 py-16 text-center text-[13px] text-faint">No activities to plot — add some in the grid.</div>
         ) : !solve.ok || !layout ? (
-          <div className="rounded-lg border border-[#efd9cc] bg-[#fdf3ee] px-4 py-2.5 text-[12px] text-[#8f4a2f]">The schedule has {solve.errorCount} blocking issue(s); fix them in the grid to draw the network.</div>
+          <div className="rounded-lg border border-fail-line bg-fail-tint px-4 py-2.5 text-[12px] text-fail">The schedule has {solve.errorCount} blocking issue(s); fix them in the grid to draw the network.</div>
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[#5c6675]">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted">
               <span className="inline-flex items-center gap-1.5"><span className="h-3 w-4 rounded-[2px] border-2" style={{ borderColor: CRITICAL, background: '#fdf3f0' }} /> Critical activity</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-3 w-4 rounded-[2px] border border-[#c9c3b4] bg-white" /> Non-critical</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-3 w-4 rounded-[2px] border border-faint bg-sheet" /> Non-critical</span>
               <span className="inline-flex items-center gap-1.5"><svg width="20" height="8"><line x1="0" y1="4" x2="20" y2="4" stroke={CRITICAL} strokeWidth="2" /></svg> Critical link</span>
               <span>Nodes are draggable · ES/EF and total float are per the CPM solve.</span>
             </div>

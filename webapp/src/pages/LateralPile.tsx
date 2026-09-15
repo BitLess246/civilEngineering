@@ -47,7 +47,7 @@ function PyProfiles({ res, L }: { res: PyResult; L: number }) {
   const Y = (z: number) => padT + ((H - padT - padB) * z) / Math.max(L, 1e-9)
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-slate-200 bg-white" style={{ maxHeight: 320 }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-slate-200 bg-sheet" style={{ maxHeight: 320 }}>
       {series.map((s, si) => {
         const vals = res.stations.map((st) => st[s.key])
         const m = Math.max(...vals.map(Math.abs), 1e-9)

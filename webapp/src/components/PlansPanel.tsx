@@ -35,7 +35,7 @@ function RawSvg({ svg, className, ...rest }:
 function Sheet({ sheet, svg, onOpen }: { sheet: PlanSheet; svg: string; onOpen: () => void }): JSX.Element {
   return (
     <div className="space-y-1">
-      <div className="rounded-xl border border-slate-200 bg-white">
+      <div className="rounded-xl border border-slate-200 bg-sheet">
         <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5">
           <span className="text-xs font-semibold text-slate-600">
             {sheet.title}

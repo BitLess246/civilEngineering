@@ -13,17 +13,17 @@ export function HintButton({ title, label = 'ⓘ Guide', children }: { title: st
   return (
     <>
       <button type="button" onClick={() => setOpen(true)}
-        className="no-print inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-0.5 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50"
+        className="no-print inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-0.5 text-xs font-semibold text-brand hover:border-brand hover:bg-blue-50"
         title={title} aria-label={title}>
         {label}
       </button>
       {open && (
         <div className="no-print fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4"
           onClick={() => setOpen(false)}>
-          <div className="my-8 w-full max-w-2xl rounded-xl border border-slate-200 bg-white shadow-xl"
+          <div className="my-8 w-full max-w-2xl rounded-xl border border-slate-200 bg-sheet shadow-xl"
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <h3 className="text-[1.02rem] font-bold text-[#0056b3]">{title}</h3>
+              <h3 className="text-[1.02rem] font-bold text-brand">{title}</h3>
               <button type="button" onClick={() => setOpen(false)}
                 className="rounded-md px-2 py-1 text-sm font-semibold text-slate-500 hover:bg-slate-100">✕</button>
             </div>

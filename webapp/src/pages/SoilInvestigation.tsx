@@ -77,7 +77,7 @@ function IssueList({ issues }: { issues: ValidationIssue[] }) {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+    <div className="rounded-lg border border-slate-200 bg-sheet px-3 py-2">
       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</p>
       <p className="mt-0.5 font-mono text-[15px] font-semibold text-slate-800">{value}</p>
       {sub && <p className="text-[10px] text-slate-500">{sub}</p>}
@@ -306,17 +306,17 @@ export default function SoilInvestigation() {
     return (
       <main className="mx-auto max-w-3xl px-5 py-10">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
-        <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Soil investigation</h1>
+        <h1 className="mt-1 text-2xl font-bold text-brand">Soil investigation</h1>
         <p className="mt-2 text-sm text-slate-600">
           Enter a site investigation once — boreholes, strata, samples and field tests — and reuse it across the
           bearing-capacity, settlement, slope and pile calculators instead of retyping soil properties on each.
         </p>
 
-        <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-[1.05rem] font-bold text-[#0056b3]">Start</h2>
+        <section className="mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+          <h2 className="text-[1.05rem] font-bold text-brand">Start</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             <button onClick={() => api.newInvestigation()}
-              className="rounded-md bg-[#0056b3] px-3 py-1.5 text-sm font-semibold text-white hover:bg-[#004a99]">
+              className="rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-on-solid hover:bg-brand">
               New investigation
             </button>
             <button onClick={api.loadSample}
@@ -338,7 +338,7 @@ export default function SoilInvestigation() {
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">
+      <h1 className="mt-1 text-2xl font-bold text-brand">
         {inv.meta.title || 'Untitled investigation'}
       </h1>
       <p className="mt-1 text-sm text-slate-600">
@@ -381,7 +381,7 @@ export default function SoilInvestigation() {
               preparedBy: inv.meta.engineer,
             }))
           }}
-          className="rounded-md bg-[#0056b3] px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-[#004a99]"
+          className="rounded-md bg-brand px-2.5 py-1 text-[12px] font-semibold text-on-solid hover:bg-brand"
           data-tour="report-button">
           Report PDF
         </button>
@@ -417,7 +417,7 @@ export default function SoilInvestigation() {
         {(['overview', 'boreholes', 'profile', 'spt', 'cpt', 'lab', 'liquefaction', 'parameters', 'classification'] as Tab[]).map((t) => (
           <button key={t} onClick={() => { setTab(t); scrollTop() }}
             className={`rounded-t-md px-3 py-1.5 text-[13px] font-medium capitalize ${
-              tab === t ? 'border-b-2 border-[#0056b3] text-[#0056b3]' : 'text-slate-600 hover:text-slate-900'
+              tab === t ? 'border-b-2 border-brand text-brand' : 'text-slate-600 hover:text-slate-900'
             }`}>
             {t === 'spt' ? 'SPT' : t === 'cpt' ? 'CPT' : t === 'lab' ? 'Laboratory' : t}
           </button>
@@ -436,8 +436,8 @@ export default function SoilInvestigation() {
               value={String(inv.boreholes.reduce((n, b) => n + b.samples.reduce((m, s) => m + s.tests.length, 0), 0))} />
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-tour="meta-card">
-            <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Investigation</h2>
+          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm" data-tour="meta-card">
+            <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Investigation</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {([
                 ['Reference', inv.meta.investigationNo, (v: string) => set((d) => { d.meta.investigationNo = v })],
@@ -466,8 +466,8 @@ export default function SoilInvestigation() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Data integrity</h2>
+          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+            <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Data integrity</h2>
             <IssueList issues={issues} />
             <p className="mt-3 text-[11px] text-slate-500">
               Errors are the physically impossible — overlapping layers, groundwater below the hole, a plastic limit
@@ -486,7 +486,7 @@ export default function SoilInvestigation() {
             {inv.boreholes.map((b, i) => (
               <button key={b.id} onClick={() => setHoleIdx(i)}
                 className={`rounded-md px-2.5 py-1 text-[12px] font-medium ${
-                  i === holeIdx ? 'bg-[#0056b3] text-white' : 'border border-slate-300 text-slate-700 hover:bg-slate-50'
+                  i === holeIdx ? 'bg-brand text-white' : 'border border-slate-300 text-slate-700 hover:bg-slate-50'
                 }`}>
                 {b.name}
               </button>
@@ -512,8 +512,8 @@ export default function SoilInvestigation() {
 
           {bh && (
             <>
-              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">{bh.name}</h2>
+              <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+                <h2 className="mb-3 text-[1.05rem] font-bold text-brand">{bh.name}</h2>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {([
                     ['Name', bh.name, 'text', (v: string) => set((d) => { d.boreholes[holeIdx].name = v })],
@@ -540,8 +540,8 @@ export default function SoilInvestigation() {
                 </p>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Borehole log</h2>
+              <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+                <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Borehole log</h2>
                 <LogView bh={bh} />
                 <p className="mt-2 text-[11px] text-slate-500">
                   Strata hatching follows the USCS group symbol where one has been entered, otherwise the description —
@@ -558,9 +558,9 @@ export default function SoilInvestigation() {
       {tab === 'profile' && bh && (
         <section className="mt-5 space-y-4">
           <SectionPanel boreholes={inv.boreholes} />
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[1.05rem] font-bold text-[#0056b3]">{bh.name} — stratigraphy</h2>
+              <h2 className="text-[1.05rem] font-bold text-brand">{bh.name} — stratigraphy</h2>
               <button
                 onClick={() => set((d) => {
                   const layers = d.boreholes[holeIdx].layers
@@ -600,9 +600,9 @@ export default function SoilInvestigation() {
             )}
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-[1.05rem] font-bold text-[#0056b3]">{bh.name} — samples</h2>
+              <h2 className="text-[1.05rem] font-bold text-brand">{bh.name} — samples</h2>
               <button
                 onClick={() => set((d) => {
                   const hole = d.boreholes[holeIdx]
@@ -664,8 +664,8 @@ export default function SoilInvestigation() {
       {/* ── SPT ── */}
       {tab === 'spt' && bh && profile && (
         <section className="mt-5 space-y-4" data-tour="spt-panel">
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Unit weights for the stress profile</h2>
+          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+            <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Unit weights for the stress profile</h2>
             <p className="mb-3 text-[11px] text-slate-500">
               (N₁)₆₀ needs the effective stress at each test depth, which needs a unit weight per layer. These are an
               interpretation, so they are stored as ASSUMED values with that stated on them — which is also what
@@ -702,8 +702,8 @@ export default function SoilInvestigation() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Corrected blow counts</h2>
+          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+            <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Corrected blow counts</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-right text-[12px]">
                 <thead className="text-slate-500">
@@ -854,10 +854,10 @@ function SyncPanel() {
       : { text: 'not configured', cls: 'bg-slate-200 text-slate-700' }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-[1.05rem] font-bold text-[#0056b3]">
+          <h2 className="text-[1.05rem] font-bold text-brand">
             Cloud backup
             <span className={`ml-2 rounded px-1.5 py-0.5 align-middle text-[10px] font-semibold ${badge.cls}`}>
               {badge.text}
@@ -874,7 +874,7 @@ function SyncPanel() {
             Check connection
           </button>
           <button onClick={() => { setOpen(true); void s.sync() }} disabled={s.busy || s.availability.kind !== 'ready'}
-            className="rounded-md bg-[#0056b3] px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-[#004a99] disabled:opacity-40">
+            className="rounded-md bg-brand px-2.5 py-1 text-[12px] font-semibold text-on-solid hover:bg-brand disabled:opacity-40">
             {s.busy ? 'Working…' : 'Sync now'}
           </button>
         </div>
@@ -939,7 +939,7 @@ function SyncPanel() {
                 yours to make.
               </p>
               {s.report.conflicts.map((c) => (
-                <div key={c.id} className="mt-2 rounded border border-amber-200 bg-white p-2">
+                <div key={c.id} className="mt-2 rounded border border-amber-200 bg-sheet p-2">
                   <p className="font-mono text-[11px] font-semibold text-slate-800">
                     {c.local.meta.investigationNo || c.id}
                   </p>
@@ -1008,8 +1008,8 @@ function CptPanel({ bh, unitWeights, onChange }: {
 
   if (!layers.length) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Cone penetration test</h2>
+      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Cone penetration test</h2>
         <p className="text-[12px] text-amber-800">
           Every normalised cone quantity needs the effective stress at the reading depth, which needs a logged
           layer with a unit weight. Log the strata and enter unit weights on the SPT tab first — nothing here is
@@ -1021,10 +1021,10 @@ function CptPanel({ bh, unitWeights, onChange }: {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
         <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-[1.05rem] font-bold text-[#0056b3]">Cone penetration test</h2>
+            <h2 className="text-[1.05rem] font-bold text-brand">Cone penetration test</h2>
             <p className="mt-0.5 text-[11px] text-slate-500">
               {cite('d5778')}. A cone recovers NO SAMPLE, so the classification below is a soil BEHAVIOUR type —
               a clayey sand and a sandy clay can plot in the same zone, and only a sample settles it.
@@ -1108,8 +1108,8 @@ function CptPanel({ bh, unitWeights, onChange }: {
       </div>
 
       {zones.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-2 text-[1.05rem] font-bold text-[#0056b3]">Behaviour over the sounding</h2>
+        <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+          <h2 className="mb-2 text-[1.05rem] font-bold text-brand">Behaviour over the sounding</h2>
           <ul className="space-y-0.5 text-[12px]">
             {zones.map((z) => (
               <li key={z.zone} className="flex items-baseline gap-2">
@@ -1123,8 +1123,8 @@ function CptPanel({ bh, unitWeights, onChange }: {
       )}
 
       {sounding.rows.some((r) => r.normalised) && (
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-2 text-[1.05rem] font-bold text-[#0056b3]">Correlations</h2>
+        <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+          <h2 className="mb-2 text-[1.05rem] font-bold text-brand">Correlations</h2>
           <p className="mb-2 text-[11px] text-slate-500">
             Each is refused outside the soil it applies to, with the reason — the same rule the SPT correlations follow.
           </p>
@@ -1176,8 +1176,8 @@ function SectionPanel({ boreholes }: { boreholes: Borehole[] }) {
   )
   if (!svg) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Correlated section</h2>
+      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Correlated section</h2>
         <p className="text-[12px] text-slate-600">
           A section needs at least two boreholes. With one there is nothing to correlate.
         </p>
@@ -1185,8 +1185,8 @@ function SectionPanel({ boreholes }: { boreholes: Borehole[] }) {
     )
   }
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Correlated section</h2>
+    <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Correlated section</h2>
       <p className="mb-3 text-[11px] text-slate-500">
         Only the vertical hole traces are measured. Every boundary between holes is inferred and is drawn
         dashed to say so — this is the most over-read drawing in a geotechnical report, and it is an
@@ -1235,8 +1235,8 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Design earthquake</h2>
+      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Design earthquake</h2>
         <p className="mb-3 text-[11px] text-slate-500">
           a_max is the peak acceleration at the GROUND SURFACE. A site-specific hazard or site-response study is the
           defensible source; the NSCP seismic coefficient below is a screening stand-in only, and using it is a
@@ -1280,8 +1280,8 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Fines content</h2>
+      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Fines content</h2>
         {fines.length ? (
           <ul className="text-[11px] text-slate-600">
             {fines.map((f) => (
@@ -1302,12 +1302,12 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
         )}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
         <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: svg }} />
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Triggering by test</h2>
+      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Triggering by test</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[12px]">
             <thead className="text-slate-500">
@@ -1393,8 +1393,8 @@ function ClassificationPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Gradation and plasticity</h2>
+      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Gradation and plasticity</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {([
             ['Gravel (%)', gravel, setGravel], ['Sand (%)', sand, setSand], ['Fines (%)', fines, setFines],
@@ -1415,8 +1415,8 @@ function ClassificationPanel() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-2 text-[1.05rem] font-bold text-[#0056b3]">USCS — ASTM D2487</h2>
+      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-2 text-[1.05rem] font-bold text-brand">USCS — ASTM D2487</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Group symbol" value={result.symbol ?? '—'} sub={result.dual ? 'dual symbol' : undefined} />
           <Stat label="PI" value={f0(pi)} sub="LL − PL" />
@@ -1483,7 +1483,7 @@ function TestCard({
   const implemented = isImplemented(test.type)
 
   return (
-    <div className={`rounded-lg border p-3 ${test.status === 'void' ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-slate-200 bg-white'}`}>
+    <div className={`rounded-lg border p-3 ${test.status === 'void' ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-slate-200 bg-sheet'}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <span className="text-[13px] font-semibold text-slate-800">{spec?.label ?? test.type}</span>
@@ -1716,7 +1716,7 @@ function LabPanel({
 }) {
   if (!bh.samples.length) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
         <p className="text-[12px] text-slate-600">
           No samples in {bh.name}. Laboratory tests are booked against a sample, not a layer — a sample recovered
           across a stratigraphic boundary belongs to the hole at a depth.
@@ -1728,9 +1728,9 @@ function LabPanel({
   return (
     <div className="space-y-4">
       {bh.samples.map((s) => (
-        <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div key={s.id} className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-[1.05rem] font-bold text-[#0056b3]">
+            <h2 className="text-[1.05rem] font-bold text-brand">
               {s.name}
               <span className="ml-2 font-mono text-[12px] font-normal text-slate-500">
                 {f2(s.depthTop)}–{f2(s.depthBottom)} m · {s.type}
@@ -1893,7 +1893,7 @@ function SampleClassificationCard({
 
       {symbol ? (
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="font-mono text-[16px] font-semibold text-[#0056b3]">{symbol}</span>
+          <span className="font-mono text-[16px] font-semibold text-brand">{symbol}</span>
           <span className="text-[12px] text-slate-700">{c.uscs!.name}</span>
         </div>
       ) : (
@@ -1954,7 +1954,7 @@ function SampleClassificationCard({
           </p>
         ) : (
           <button onClick={() => onApply(layer.id, symbol)}
-            className="mt-2 rounded-md bg-[#0056b3] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#004a99]">
+            className="mt-2 rounded-md bg-brand px-2.5 py-1 text-[11px] font-semibold text-on-solid hover:bg-brand">
             {layer.symbol
               ? `Replace ${layer.symbol} with ${symbol} on “${layer.name}”`
               : `Apply ${symbol} to “${layer.name}”`}
@@ -2087,8 +2087,8 @@ function ParametersPanel({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Design parameters</h2>
+      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Design parameters</h2>
         <p className="text-[11px] text-slate-500">
           Resolved once per layer from every piece of evidence available, each carrying where it came from. A stated
           engineer override beats a measurement, a measurement beats a correlation, and a parameter with no evidence
@@ -2107,9 +2107,9 @@ function ParametersPanel({
       {resolutions.map(({ layer, r }) => {
         const bearing = bearingInputs(r, unitWeights[layer.id]?.gamma)
         return (
-          <div key={layer.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div key={layer.id} className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-              <h3 className="text-[1rem] font-bold text-[#0056b3]">
+              <h3 className="text-[1rem] font-bold text-brand">
                 {layer.name}
                 <span className="ml-2 font-mono text-[12px] font-normal text-slate-500">
                   {f2(layer.depthTop)}–{f2(layer.depthBottom)} m{layer.symbol ? ` · ${layer.symbol}` : ''}

@@ -287,10 +287,10 @@ export default function BeamDesign() {
     <div>
       <PageHeader title="Rectangular RC Beam" badges={['ACI 318-14', 'NSCP 2015']}
         actions={
-          <div className="flex items-center gap-0.5 rounded-md border border-[#d6d3c9] bg-[#fcfbf8] p-0.5">
+          <div className="flex items-center gap-0.5 rounded-md border border-field-line bg-field p-0.5">
             {([['single', 'Single section'], ['multi', 'Multiple sections']] as const).map(([v, t]) => (
               <button key={v} type="button" onClick={() => setMulti(v === 'multi')}
-                className={`rounded px-3 py-1.5 text-[11.5px] font-semibold ${(v === 'multi') === multi ? 'bg-[#0f4c92] text-white' : 'text-[#5c6675] hover:text-[#0f1b2a]'}`}>
+                className={`rounded px-3 py-1.5 text-[11.5px] font-semibold ${(v === 'multi') === multi ? 'bg-brand text-on-solid' : 'text-muted hover:text-ink'}`}>
                 {t}
               </button>
             ))}
@@ -317,9 +317,9 @@ export default function BeamDesign() {
         <div className="space-y-3.5">
           <Card title="Section"
             hint={
-              <label className="no-print flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[#5c6675]">
+              <label className="no-print flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-muted">
                 <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-[#0f4c92]" />
+                  className="h-3.5 w-3.5 accent-brand" />
                 Auto-select bar ⌀
               </label>
             }>
@@ -364,24 +364,24 @@ export default function BeamDesign() {
           </Card>
 
           {multi && (
-            <fieldset className="rounded-lg border border-[#e3e1da] bg-white p-4">
-              <legend className="px-2 text-[13.5px] font-bold text-[#0f1b2a]">Critical sections</legend>
+            <fieldset className="rounded-lg border border-hairline bg-sheet p-4">
+              <legend className="px-2 text-[13.5px] font-bold text-ink">Critical sections</legend>
               <div className="no-print mb-3 flex flex-wrap items-center gap-2">
                 <button type="button"
                   onClick={() => setSections((ss) => [...ss, { id: uid++, label: `Section ${ss.length + 1}`, x: 0, Mu: 50, Vu: 30 }])}
-                  className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">
+                  className="rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">
                   + Add section
                 </button>
-                <span className="text-xs text-slate-500">or auto-detect from <Link to="/beam-analysis" className="text-[#0056b3] hover:underline">Beam Analysis</Link>. Negative Mu = hogging (top steel).</span>
+                <span className="text-xs text-slate-500">or auto-detect from <Link to="/beam-analysis" className="text-brand hover:underline">Beam Analysis</Link>. Negative Mu = hogging (top steel).</span>
               </div>
               <div className="space-y-3">
                 {sections.map((s) => (
-                  <div key={s.id} className={`rounded-lg border p-3 ${s.id === active?.id ? 'border-[#0056b3] bg-blue-50/40' : 'border-slate-200 bg-slate-50'}`}>
+                  <div key={s.id} className={`rounded-lg border p-3 ${s.id === active?.id ? 'border-brand bg-blue-50/40' : 'border-slate-200 bg-slate-50'}`}>
                     <div className="mb-2 flex items-center justify-between">
                       <input value={s.label} onChange={(e) => setSec(s.id, { label: e.target.value })}
-                        className="w-1/2 rounded border border-transparent bg-transparent px-1 text-xs font-bold uppercase tracking-wide text-slate-600 focus:border-slate-300 focus:bg-white" />
+                        className="w-1/2 rounded border border-transparent bg-transparent px-1 text-xs font-bold uppercase tracking-wide text-slate-600 focus:border-slate-300 focus:bg-sheet" />
                       <span className="flex gap-3">
-                        <button type="button" onClick={() => setSelId(s.id)} className="text-xs text-[#0056b3] hover:underline">view</button>
+                        <button type="button" onClick={() => setSelId(s.id)} className="text-xs text-brand hover:underline">view</button>
                         <button type="button" onClick={() => setSections((ss) => ss.filter((q) => q.id !== s.id))} className="text-xs text-red-500 hover:underline">remove</button>
                       </span>
                     </div>
@@ -438,7 +438,7 @@ export default function BeamDesign() {
                       return (
                         <tr key={s.id} onClick={() => setSelId(s.id)}
                           className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${
-                            bad ? 'bg-red-50 text-red-700' : ''} ${s.id === active?.id ? 'outline outline-1 outline-[#0056b3]' : ''}`}>
+                            bad ? 'bg-red-50 text-red-700' : ''} ${s.id === active?.id ? 'outline outline-1 outline-brand' : ''}`}>
                           <td className="py-1 pr-2">{s.label}{s.Mu < 0 ? ' (hog)' : ''}</td>
                           <td className="py-1 pr-2">{d ? d.mode : '—'}</td>
                           <td className="py-1 pr-2">{d ? `${d.bars}⌀${fd.barDia}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}` : '—'}</td>
@@ -461,7 +461,7 @@ export default function BeamDesign() {
               /* Say WHICH input is wrong. "d must be positive" was the only
                  reason ever printed, and it was the wrong one whenever f'c, fy
                  or a bar diameter was what the form actually got. */
-              <p className="py-8 text-center text-sm text-[#a39d8d]">
+              <p className="py-8 text-center text-sm text-faint">
                 {detailingNotes(f)[0] ?? 'Enter a valid section.'}
               </p>
             )}
@@ -518,7 +518,7 @@ export default function BeamDesign() {
           )}
           {deflection && (
             <ResultCard title={<span className="flex items-center justify-between">Serviceability — ACI 318-14 §24.2
-              <span className={`rounded px-1.5 py-px font-mono text-[10px] font-semibold ${deflection.liveOK && deflection.totalOK && deflection.hMinOK ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>
+              <span className={`rounded px-1.5 py-px font-mono text-[10px] font-semibold ${deflection.liveOK && deflection.totalOK && deflection.hMinOK ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
                 {deflection.liveOK && deflection.totalOK && deflection.hMinOK ? 'PASS' : 'CHECK'}</span></span>}>
               <Row label="Min. thickness h_min" value={`${deflection.hMin.toFixed(0)} mm`}
                 alert={!deflection.hMinOK}

@@ -29,7 +29,7 @@ export default function ForgotPassword() {
     <AuthCard
       title="Reset your password"
       subtitle="We'll email you a link to choose a new one."
-      footer={<Link to="/signin" className="font-medium text-[#0056b3] underline">Back to sign in</Link>}
+      footer={<Link to="/signin" className="font-medium text-brand underline">Back to sign in</Link>}
     >
       {!configured ? <NotConfigured /> : sent ? (
         <FormAlert tone="success">

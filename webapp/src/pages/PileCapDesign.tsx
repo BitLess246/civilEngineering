@@ -69,7 +69,7 @@ function NumField({ label, unit, value, onChange, step = 'any', min, max }: {
         type="number" inputMode="decimal" step={step} min={min} max={max}
         value={Number.isFinite(value) ? value : ''}
         onChange={e => onChange(clampTo(parseFloat(e.target.value), min, max))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none focus:ring-1 focus:ring-[#0056b3]"
+        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
       />
     </label>
   )
@@ -82,7 +82,7 @@ function SelectField<T extends string | number>({ label, value, onChange, option
     <label className="flex flex-col text-sm">
       <span className="mb-1 font-medium text-slate-600">{label}</span>
       <select value={String(value)} onChange={e => onChange(e.target.value as T)}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none">
+        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none">
         {options.map(([v, t]) => <option key={String(v)} value={String(v)}>{t}</option>)}
       </select>
     </label>
@@ -93,10 +93,10 @@ function SelectField<T extends string | number>({ label, value, onChange, option
  *  differs but the palette must not — this matches `components/qty`. */
 function Row({ label, value, check }: { label: ReactNode; value: ReactNode; check?: ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-[#f3f1ea] py-1.5 last:border-0">
-      <span className="text-[12px] text-[#5c6675]">{label}</span>
-      <span className="text-right font-mono text-[12.5px] font-semibold text-[#0f1b2a]">{value}</span>
-      {check ? <span className="w-32 text-right text-[10.5px] text-[#a39d8d]">{check}</span> : null}
+    <div className="flex items-baseline justify-between gap-3 border-b border-hairline-2 py-1.5 last:border-0">
+      <span className="text-[12px] text-muted">{label}</span>
+      <span className="text-right font-mono text-[12.5px] font-semibold text-ink">{value}</span>
+      {check ? <span className="w-32 text-right text-[10.5px] text-faint">{check}</span> : null}
     </div>
   )
 }
@@ -251,8 +251,8 @@ export default function PileCapDesign() {
         {/* ── Results ── */}
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
           {/* Schematic */}
-          <div data-pdf-drawing className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
-            <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Cap plan</h2>
+          <div data-pdf-drawing className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+            <h2 className="mb-2 text-[13.5px] font-bold text-ink">Cap plan</h2>
             {result ? (
               <PileCapSchematic d={result.d}
                 capBx={result.capBx}
@@ -278,8 +278,8 @@ export default function PileCapDesign() {
               </div>
 
               {/* Cap geometry */}
-              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
-                <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Cap geometry</h2>
+              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+                <h2 className="mb-2 text-[13.5px] font-bold text-ink">Cap geometry</h2>
                 <Row label="Plan (Bx × By)"
                   value={`${f2(result.capBx / 1000)} × ${f2(result.capBy / 1000)} m`} />
                 <Row label={<>Thickness <KTex tex="D_c" /></>} value={`${f0(result.Dc)} mm`} />
@@ -287,8 +287,8 @@ export default function PileCapDesign() {
               </div>
 
               {/* Pile reactions */}
-              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
-                <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Pile reactions (service)</h2>
+              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+                <h2 className="mb-2 text-[13.5px] font-bold text-ink">Pile reactions (service)</h2>
                 {result.reactions.map((r, i) => (
                   <Row key={i}
                     label={`Pile ${i + 1} (${(result.coords[i].x / 1000).toFixed(2)}, ${(result.coords[i].y / 1000).toFixed(2)}) m`}
@@ -303,8 +303,8 @@ export default function PileCapDesign() {
               </div>
 
               {/* Shear checks */}
-              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
-                <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Shear checks (factored)</h2>
+              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+                <h2 className="mb-2 text-[13.5px] font-bold text-ink">Shear checks (factored)</h2>
                 <CheckRow label="Column punching" Vu={result.VuPunchCol} phiVc={result.phiVcPunchCol} ok={result.punchColOK} />
                 <CheckRow label="Pile punching (worst)" Vu={result.VuPunchPile} phiVc={result.phiVcPunchPile} ok={result.punchPileOK} />
                 <CheckRow label={<>Beam shear — <KTex tex="x" /></>} Vu={result.VuBeamX} phiVc={result.phiVcBeamX} ok={result.beamXOK} />
@@ -312,8 +312,8 @@ export default function PileCapDesign() {
               </div>
 
               {/* Flexure & steel */}
-              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
-                <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Flexure & reinforcement</h2>
+              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+                <h2 className="mb-2 text-[13.5px] font-bold text-ink">Flexure & reinforcement</h2>
                 <Row label={<>Design moment <KTex tex="M_{u,x}" /></>} value={`${f3(result.MuX)} kN·m`} />
                 <Row label={<>Design moment <KTex tex="M_{u,y}" /></>} value={`${f3(result.MuY)} kN·m`} />
                 {steelRow(<>Bars — <KTex tex="x" />-direction (bottom)</>, result.steelX, form.barDia)}
@@ -321,8 +321,8 @@ export default function PileCapDesign() {
               </div>
 
               {/* Development length */}
-              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
-                <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Development length</h2>
+              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+                <h2 className="mb-2 text-[13.5px] font-bold text-ink">Development length</h2>
                 <Row
                   label={<>Required <KTex tex="\ell_d" /></>}
                   value={`${f0(result.ldRequired)} mm`}
@@ -339,8 +339,8 @@ export default function PileCapDesign() {
               </div>
 
               {/* Basis */}
-              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4 text-sm text-[#5c6675]">
-                <h2 className="mb-1 text-[13.5px] font-bold text-[#0f1b2a]">Basis</h2>
+              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4 text-sm text-muted">
+                <h2 className="mb-1 text-[13.5px] font-bold text-ink">Basis</h2>
                 <KTex block tex={String.raw`R_i = \frac{P}{N} + \frac{M_x \cdot y_i}{\sum y_i^2} + \frac{M_y \cdot x_i}{\sum x_i^2}`} />
                 <p className="mt-1 text-xs text-slate-500">
                   NSCP 2015 / ACI 318-14. φ_v = 0.75, φ_f = 0.90.

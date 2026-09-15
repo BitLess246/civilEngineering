@@ -8,7 +8,7 @@ export function TourButton({ onClick, label = 'Step-by-step guide' }: {
 }) {
   return (
     <button type="button" onClick={onClick}
-      className="rounded-md border border-[#0056b3] px-2.5 py-1 text-[12px] font-semibold text-[#0056b3] hover:bg-[#0056b3]/5">
+      className="rounded-md border border-brand px-2.5 py-1 text-[12px] font-semibold text-brand hover:bg-brand/5">
       {label}
     </button>
   )

@@ -89,12 +89,12 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
   )
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-[#0f1b2a]/55 p-4 py-[6vh]"
+    <div className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-rail/55 p-4 py-[6vh]"
       onMouseDown={close} role="dialog" aria-modal="true" aria-labelledby="export-title">
-      <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-[#e3e1da] bg-white shadow-2xl"
+      <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-hairline bg-sheet shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}>
         <div className="border-b border-slate-100 px-5 py-3">
-          <h2 id="export-title" className="text-[13px] font-bold uppercase tracking-wide text-[#0f4c92]">Generate report</h2>
+          <h2 id="export-title" className="text-[13px] font-bold uppercase tracking-wide text-brand">Generate report</h2>
           <p className="mt-0.5 text-[11px] text-slate-500">Choose what the print includes and which PDFs to write. Sections the engine has not produced are greyed out.</p>
         </div>
 
@@ -134,7 +134,7 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
           </button>
           <button type="button" disabled={blocked || busy}
             onClick={() => onGenerate({ reportSections: REPORT_KEYS.filter((k) => report.has(k)), appendixSections: APPENDIX_KEYS.filter((k) => appendix.has(k) && available[k]), outputs })}
-            className="rounded-md bg-[#0f4c92] px-4 py-1.5 text-[12px] font-semibold text-white hover:bg-[#0d417d] disabled:opacity-40">
+            className="rounded-md bg-brand px-4 py-1.5 text-[12px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-40">
             {busy ? '⏳ Building…' : 'Generate'}
           </button>
         </div>

@@ -44,20 +44,20 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
 
         <input ref={fileRef} type="file" accept=".xlsx" className="sr-only" onChange={onPick} />
         <button type="button" onClick={() => fileRef.current?.click()} disabled={busy}
-          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:shadow disabled:opacity-60">
+          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-br from-brand to-brand px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:shadow disabled:opacity-60">
           <UploadIcon />{busy ? 'Reading…' : 'Choose file'}
         </button>
         <span className="text-[0.83rem] text-slate-500">{fileName}</span>
 
         <button type="button" onClick={() => void downloadFoundationTemplate()}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-[#0056b3] transition hover:border-[#0056b3] hover:bg-blue-50">
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-sheet px-3.5 py-2 text-sm font-semibold text-brand transition hover:border-brand hover:bg-blue-50">
           <DownloadIcon />Blank template
         </button>
 
         <span className="ml-auto inline-flex items-center gap-2 text-[0.83rem] text-slate-500">
           One row = one foundation.
           <button type="button" onClick={() => setShowHelp(true)}
-            className="inline-flex items-center gap-1 font-semibold text-[#0056b3] hover:underline">
+            className="inline-flex items-center gap-1 font-semibold text-brand hover:underline">
             <InfoIcon />What format?
           </button>
         </span>
@@ -68,9 +68,9 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
       {showHelp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4"
           role="dialog" aria-modal="true" aria-label="Excel upload format" onClick={() => setShowHelp(false)}>
-          <div className="max-h-[85vh] w-full max-w-xl overflow-auto rounded-xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="max-h-[85vh] w-full max-w-xl overflow-auto rounded-xl bg-sheet shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-              <h3 className="text-base font-bold text-[#0056b3]">Excel upload format</h3>
+              <h3 className="text-base font-bold text-brand">Excel upload format</h3>
               <button type="button" onClick={() => setShowHelp(false)} aria-label="Close"
                 className="text-2xl leading-none text-slate-500 hover:text-slate-700">×</button>
             </div>

@@ -247,7 +247,7 @@ export default function DevLength() {
                   alert={!fit.fits} />
                 <Row label="Depth that would develop it" value={`${f0(fit.depthNeeded)} mm`} />
                 {!fit.fits && (
-                  <div className="mt-2 rounded-md bg-[#fbeeea] p-2 text-[11.5px] leading-relaxed text-[#8f2f1e]">
+                  <div className="mt-2 rounded-md bg-fail-tint p-2 text-[11.5px] leading-relaxed text-fail">
                     Deepen the member to {f0(fit.depthNeeded)} mm, use a smaller bar, raise f'c,
                     earn ψc/ψr (§25.4.3.2), or anchor with a headed bar or mechanical device
                     (§25.4.4). <strong>Lengthening the tail does not help</strong> — ℓdh is
@@ -275,7 +275,7 @@ export default function DevLength() {
             </ResultCard>
           </div>
         ) : (
-          <p className="self-start rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-slate-500">
             Fill in all inputs to see results.
           </p>
         )}
@@ -283,8 +283,8 @@ export default function DevLength() {
       {/* What the four lengths are measured BETWEEN — the part the numbers
           on their own cannot carry. */}
       {r && (
-        <div className="mt-6 rounded-lg border border-[#e3e1da] bg-white p-4 print-avoid-break">
-          <h2 className="mb-3 text-[13.5px] font-bold text-[#0f1b2a]">
+        <div className="mt-6 rounded-lg border border-hairline bg-sheet p-4 print-avoid-break">
+          <h2 className="mb-3 text-[13.5px] font-bold text-ink">
             Detail — where each length is measured from
           </h2>
           <DevLengthDetail

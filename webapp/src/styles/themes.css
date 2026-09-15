@@ -1,0 +1,339 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   UI THEMES — 30 semantic roles, five palettes.
+
+   The app stated colour 1 450 times as literal hex in className: 78 distinct
+   values doing about 30 jobs — EIGHT different blues for "this is an action",
+   four near-identical hairlines, three greys for one caption. The `:root`
+   tokens meant to prevent that were referenced ZERO times from a component.
+
+   ROLES CAME FROM MEASUREMENT, NOT TASTE. Three exist only because the
+   evidence forced them:
+     · `rail*` — the sidebar paints the INK token as a background, so it is a
+       surface, not a colour. Its counters measured 2.98:1 because nothing
+       modelled the thing they sit on.
+     · `on_solid` — 60 sites hardcode `text-white` on a solid brand fill. In
+       Blueprint a brand light enough to read as a link on a dark ground gives
+       white text 2.3:1, so the text colour on a fill has to be its own role.
+     · `focus` — the app has ZERO `focus:` utilities; what ships today is the
+       Chromium default ring, never checked against the dark rail.
+     · `rail-accent` — the brand blue is unreadable on a near-black rail, so
+       the rail needs brand AT ITS OWN luminance. Four roles exist only
+       because a surface the palette never modelled turned out to have text,
+       links and an active-state indicator on it.
+
+   ROLE, NOT VALUE. `brand-hover` is "the state under the pointer", not "a
+   darker blue" — in Blueprint it is LIGHTER than `brand`. Calling it
+   `brand-dark` is how a dark theme gets hover states that vanish.
+
+   CONTRAST IS ENFORCED, NOT INTENDED. `theme.test.ts` parses THIS FILE and
+   fails CI when a text role drops below WCAG AA on a surface it is actually
+   painted on, or the focus ring below 3:1. Three shipped values did not pass
+   and are corrected in Drafting.
+
+   KNOWN GAP, not fixed here: field borders measure 1.43–1.70:1 against the
+   page where WCAG 1.4.11 wants 3:1. That is inherited, and raising it
+   darkens every input in the app — a visual change that belongs in its own
+   pass, not inside a token migration.
+
+   PRINT IS NOT THEMED, ON PURPOSE. The drawing and PDF renderers in
+   `src/engine/` carry their own ink. Choosing Blueprint must not post a dark
+   PDF to a client.
+   ───────────────────────────────────────────────────────────────────────── */
+
+
+/* ── 1 · DRAFTING SHEET ───────────────────────────────────
+   The shipped look, with its three contrast failures corrected.
+   Warm paper, ink navy, drafting blue. */
+:root,
+[data-theme="drafting"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --t-paper: #f4f3ef;
+  --t-sheet: #ffffff;
+  --t-sheet-2: #f9f8f4;
+  --t-field: #fcfbf8;
+
+  /* Rail — the second neutral layer (sidebar, toolbars, hero) */
+  --t-rail: #0f1b2a;
+  --t-rail-ink: #e8eaed;
+  --t-rail-muted: #9eb0c5;  /* was #55677c — 2.98:1 on the rail */
+  --t-rail-accent: #6ba4dc;  /* brand is invisible on the rail; this is brand AT rail luminance */
+
+  /* Ink */
+  --t-ink: #0f1b2a;
+  --t-ink-2: #3d4a5c;
+  --t-muted: #5c6675;
+  --t-faint: #736d5e;  /* was #a39d8d — 2.44:1 on paper, below AA */
+
+  /* Lines */
+  --t-hairline: #e3e1da;
+  --t-hairline-2: #eeece5;
+  --t-field-line: #d6d3c9;
+
+  /* Brand */
+  --t-brand: #0f4c92;
+  --t-brand-hover: #0d3f78;
+  --t-brand-tint: #eaf1f9;
+  --t-brand-line: #cddcf0;
+  --t-on-solid: #ffffff;
+  --t-focus: #0f4c92;
+
+  /* Status — each carries solid / tint / line */
+  --t-ok: #14603a;
+  --t-ok-tint: #ddefe3;
+  --t-ok-line: #c2ddcb;
+  --t-warn: #8a6a1e;  /* was #b97d10 — 3.50:1, below AA */
+  --t-warn-tint: #fdf6e9;
+  --t-warn-line: #ead9b0;
+  --t-fail: #c2402a;
+  --t-fail-tint: #fbeeea;
+  --t-fail-line: #eec6bc;
+}
+
+/* ── 2 · DAYLIGHT ───────────────────────────────────
+   The same drafting language on a true-neutral ground: one blue,
+   cooler greys, every role a step crisper. */
+[data-theme="daylight"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --t-paper: #fafaf8;
+  --t-sheet: #ffffff;
+  --t-sheet-2: #f5f5f3;
+  --t-field: #fcfcfb;
+
+  /* Rail — the second neutral layer (sidebar, toolbars, hero) */
+  --t-rail: #111a2c;
+  --t-rail-ink: #e9edf4;
+  --t-rail-muted: #a3b2c6;
+  --t-rail-accent: #71aae2;
+
+  /* Ink */
+  --t-ink: #10192b;
+  --t-ink-2: #38445a;
+  --t-muted: #4f5a68;
+  --t-faint: #686e79;
+
+  /* Lines */
+  --t-hairline: #e4e2dc;
+  --t-hairline-2: #efeeea;
+  --t-field-line: #d8d6d0;
+
+  /* Brand */
+  --t-brand: #0b4a8f;
+  --t-brand-hover: #083a70;
+  --t-brand-tint: #eaf2fb;
+  --t-brand-line: #c9dcf2;
+  --t-on-solid: #ffffff;
+  --t-focus: #0b4a8f;
+
+  /* Status — each carries solid / tint / line */
+  --t-ok: #14713f;
+  --t-ok-tint: #e2f3e9;
+  --t-ok-line: #c4e0cf;
+  --t-warn: #8a5b0b;
+  --t-warn-tint: #fdf4e3;
+  --t-warn-line: #ecdcb4;
+  --t-fail: #b03523;
+  --t-fail-tint: #fceeeb;
+  --t-fail-line: #f0c8bf;
+}
+
+/* ── 3 · BLUEPRINT ───────────────────────────────────
+   Inverted sheet for long sessions and low light. Hover LIFTS rather
+   than darkens; tints are deep, not pale. */
+[data-theme="blueprint"] {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --t-paper: #0b1420;
+  --t-sheet: #121e2e;
+  --t-sheet-2: #162336;
+  --t-field: #0e1927;
+
+  /* Rail — the second neutral layer (sidebar, toolbars, hero) */
+  --t-rail: #070e17;
+  --t-rail-ink: #e8eef7;
+  --t-rail-muted: #9bb0c8;
+  --t-rail-accent: #7cb8ff;
+
+  /* Ink */
+  --t-ink: #e8eef7;
+  --t-ink-2: #c8d5e6;
+  --t-muted: #a3b4c8;
+  --t-faint: #8d9eb3;
+
+  /* Lines */
+  --t-hairline: #24374d;
+  --t-hairline-2: #1c2d42;
+  --t-field-line: #2f4463;
+
+  /* Brand */
+  --t-brand: #7cb8ff;
+  --t-brand-hover: #a3cdff;  /* LIGHTER: on a dark ground, lift reads as interactive */
+  --t-brand-tint: #13283f;
+  --t-brand-line: #2a405c;
+  --t-on-solid: #08111c;  /* dark text on a light brand fill — white would be 2.3:1 */
+  --t-focus: #a3cdff;
+
+  /* Status — each carries solid / tint / line */
+  --t-ok: #5fd9a2;
+  --t-ok-tint: #0f2b21;
+  --t-ok-line: #1d4436;
+  --t-warn: #f0c765;
+  --t-warn-tint: #2b2312;
+  --t-warn-line: #413418;
+  --t-fail: #ff8d84;
+  --t-fail-tint: #2e1715;
+  --t-fail-line: #4a2521;
+
+  /* Tailwind's STOCK palette, inverted.
+     ~2 400 utilities still name it directly (1 768 of them `slate-*`), and
+     those compile to `var(--color-slate-N)` — which nothing redefined, so on a
+     dark ground `text-slate-900` stayed near-black and vanished. I assumed
+     they would follow a theme for free; a screenshot proved otherwise.
+     Step N takes the value of step (1000−N), so the ramp reads the same way
+     round on a dark ground: 50 is the darkest, 950 the lightest, 500 pivots.
+     Only this theme needs it — the other four are light. */
+  --color-amber-50: oklch(27.9% 0.077 45.635);
+  --color-amber-100: oklch(41.4% 0.112 45.904);
+  --color-amber-200: oklch(47.3% 0.137 46.201);
+  --color-amber-300: oklch(55.5% 0.163 48.998);
+  --color-amber-400: oklch(66.6% 0.179 58.318);
+  --color-amber-600: oklch(82.8% 0.189 84.429);
+  --color-amber-700: oklch(87.9% 0.169 91.605);
+  --color-amber-800: oklch(92.4% 0.12 95.746);
+  --color-amber-900: oklch(96.2% 0.059 95.617);
+  --color-amber-950: oklch(98.7% 0.022 95.277);
+  --color-emerald-100: oklch(37.8% 0.077 168.94);
+  --color-emerald-200: oklch(43.2% 0.095 166.913);
+  --color-emerald-500: oklch(69.6% 0.17 162.48);
+  --color-emerald-800: oklch(90.5% 0.093 164.15);
+  --color-emerald-900: oklch(95% 0.052 163.051);
+  --color-red-50: oklch(25.8% 0.092 26.042);
+  --color-red-100: oklch(39.6% 0.141 25.723);
+  --color-red-200: oklch(44.4% 0.177 26.899);
+  --color-red-300: oklch(50.5% 0.213 27.518);
+  --color-red-400: oklch(57.7% 0.245 27.325);
+  --color-red-500: oklch(63.7% 0.237 25.331);
+  --color-red-600: oklch(70.4% 0.191 22.216);
+  --color-red-700: oklch(80.8% 0.114 19.571);
+  --color-red-800: oklch(88.5% 0.062 18.334);
+  --color-red-900: oklch(93.6% 0.032 17.717);
+  --color-red-950: oklch(97.1% 0.013 17.38);
+  --color-sky-100: oklch(39.1% 0.09 240.876);
+  --color-sky-200: oklch(44.3% 0.11 240.79);
+  --color-sky-800: oklch(90.1% 0.058 230.902);
+  --color-sky-900: oklch(95.1% 0.026 236.824);
+  --color-slate-100: oklch(20.8% 0.042 265.755);
+  --color-slate-200: oklch(27.9% 0.041 260.031);
+  --color-slate-300: oklch(37.2% 0.044 257.287);
+  --color-slate-400: oklch(44.6% 0.043 257.281);
+  --color-slate-500: oklch(55.4% 0.046 257.417);
+  --color-slate-600: oklch(70.4% 0.04 256.788);
+  --color-slate-700: oklch(86.9% 0.022 252.894);
+  --color-slate-800: oklch(92.9% 0.013 255.508);
+  --color-slate-900: oklch(96.8% 0.007 247.896);
+  --color-violet-200: oklch(43.2% 0.232 292.759);
+  --color-violet-500: oklch(60.6% 0.25 292.717);
+  --color-violet-800: oklch(89.4% 0.057 293.283);
+}
+
+/* ── 4 · MONO ───────────────────────────────────
+   Near-black on white, colour reserved for verdicts. The only saturated
+   thing on screen should be a failing utilisation. */
+[data-theme="mono"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --t-paper: #ffffff;
+  --t-sheet: #ffffff;
+  --t-sheet-2: #f4f4f4;
+  --t-field: #fbfbfb;
+
+  /* Rail — the second neutral layer (sidebar, toolbars, hero) */
+  --t-rail: #0a0a0a;
+  --t-rail-ink: #f2f2f2;
+  --t-rail-muted: #b4b4b4;
+  --t-rail-accent: #e8e8e8;
+
+  /* Ink */
+  --t-ink: #0a0a0a;
+  --t-ink-2: #1a1a1a;
+  --t-muted: #3d3d3d;
+  --t-faint: #545454;
+
+  /* Lines */
+  --t-hairline: #c9c9c9;
+  --t-hairline-2: #e0e0e0;
+  --t-field-line: #a8a8a8;
+
+  /* Brand */
+  --t-brand: #00429b;
+  --t-brand-hover: #002f6f;
+  --t-brand-tint: #eef2f9;
+  --t-brand-line: #c3d0e6;
+  --t-on-solid: #ffffff;
+  --t-focus: #00429b;
+
+  /* Status — each carries solid / tint / line */
+  --t-ok: #0f6b3a;
+  --t-ok-tint: #eaf4ee;
+  --t-ok-line: #bcd3c3;
+  --t-warn: #6b4e00;
+  --t-warn-tint: #f7f1e2;
+  --t-warn-line: #d6c9a6;
+  --t-fail: #a21b12;
+  --t-fail-tint: #f9ecea;
+  --t-fail-line: #dcb9b4;
+}
+
+/* ── 5 · MINIMAL ───────────────────────────────────
+   No brand colour at all: actions are ink. Hairlines carry the structure
+   that colour carries elsewhere. */
+[data-theme="minimal"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --t-paper: #fcfcfc;
+  --t-sheet: #ffffff;
+  --t-sheet-2: #f7f7f7;
+  --t-field: #ffffff;
+
+  /* Rail — the second neutral layer (sidebar, toolbars, hero) */
+  --t-rail: #1c1c1c;
+  --t-rail-ink: #f0f0f0;
+  --t-rail-muted: #a6a6a6;
+  --t-rail-accent: #f0f0f0;
+
+  /* Ink */
+  --t-ink: #1c1c1c;
+  --t-ink-2: #3a3a3a;
+  --t-muted: #5e5e5e;
+  --t-faint: #6f6f6f;
+
+  /* Lines */
+  --t-hairline: #e7e7e7;
+  --t-hairline-2: #f1f1f1;
+  --t-field-line: #d8d8d8;
+
+  /* Brand */
+  --t-brand: #2b2b2b;  /* the action IS ink — minimal means no accent */
+  --t-brand-hover: #000000;
+  --t-brand-tint: #f2f2f2;
+  --t-brand-line: #dedede;
+  --t-on-solid: #ffffff;
+  --t-focus: #2b2b2b;
+
+  /* Status — each carries solid / tint / line */
+  --t-ok: #3a6b4a;
+  --t-ok-tint: #f0f4f1;
+  --t-ok-line: #d2ded6;
+  --t-warn: #7a6320;
+  --t-warn-tint: #f6f3ea;
+  --t-warn-line: #ded4bb;
+  --t-fail: #93392f;
+  --t-fail-tint: #f7efee;
+  --t-fail-line: #e0c8c3;
+}

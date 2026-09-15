@@ -75,7 +75,7 @@ function CanvasWrap({ children, box, dir = [1.2, 0.9, 1.5] }: {
     // against a long thin member leaves deep empty bands top and bottom and the
     // member itself small. 56 (224 px) against a ~370 px width is much closer
     // to what these scenes actually occupy.
-    <div className="no-print h-56 w-full overflow-hidden rounded-lg border border-[#e3e1da] bg-white sm:h-80">
+    <div className="no-print h-56 w-full overflow-hidden rounded-lg border border-hairline bg-sheet sm:h-80">
       <Canvas camera={{ fov: 45, near: 0.01, far: 500 }}>
         {/* The Canvas paints its own background, so the wrapper's colour never
             showed through — the viewport has to be told, not the div. */}

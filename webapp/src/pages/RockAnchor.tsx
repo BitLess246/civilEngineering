@@ -80,7 +80,7 @@ export default function RockAnchor() {
       <ReportControls title="Rock Anchor" badges={['PTI DC35.1']} report={report} />
       <CalcBody>
         <div className="space-y-5">
-          <p className="text-[13px] text-[#5c6675]">
+          <p className="text-[13px] text-muted">
             PTI DC35.1 / FHWA-IF-99-015 check: prestressing-tendon design load (0.60·GUTS) and grout-ground
             (rock socket) bond capacity vs the applied anchor tension. Governing allowable = the smaller.
           </p>

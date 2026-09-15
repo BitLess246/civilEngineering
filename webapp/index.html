@@ -33,6 +33,24 @@
         })(),
       })
     </script>
+    <!-- Theme, before first paint. This runs synchronously in <head>, ahead of
+         the bundle, because React applying the attribute on mount is one frame
+         too late: a Blueprint user would see a white page flash on every
+         navigation and reload. Inlined for the same reason — an external file
+         is another round trip before anything can be painted.
+         Kept deliberately tiny and duplicated from lib/theme.ts rather than
+         imported: this must not depend on the bundle it precedes. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('civeng-theme')
+          var ok = ['drafting', 'daylight', 'blueprint', 'mono', 'minimal']
+          document.documentElement.setAttribute('data-theme', ok.indexOf(t) > -1 ? t : 'drafting')
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'drafting')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

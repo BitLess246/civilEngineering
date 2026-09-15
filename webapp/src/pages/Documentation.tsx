@@ -49,11 +49,11 @@ function ControlTable({ controls }: { controls: DocControl[] }) {
 
 function ToolDoc({ t }: { t: DocTool }) {
   return (
-    <section id={t.id} className="scroll-mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section id={t.id} className="scroll-mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline gap-2">
-        <h2 className="text-lg font-bold text-[#0f4c92]">{t.name}</h2>
-        <a href={`#${t.id}`} className="text-[11px] text-slate-400 hover:text-[#0056b3]" aria-label={`Link to ${t.name}`}>#</a>
-        <Link to={t.route} className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">
+        <h2 className="text-lg font-bold text-brand">{t.name}</h2>
+        <a href={`#${t.id}`} className="text-[11px] text-slate-400 hover:text-brand" aria-label={`Link to ${t.name}`}>#</a>
+        <Link to={t.route} className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-brand hover:border-brand-hover hover:bg-blue-50">
           Open tool →
         </Link>
       </div>
@@ -90,7 +90,7 @@ export default function Documentation() {
   return (
     <main className="mx-auto max-w-[1400px] px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Reference</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Documentation</h1>
+      <h1 className="mt-1 text-2xl font-bold text-brand">Documentation</h1>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
         Every control in the app — each field, dropdown, checkbox, button, tab and result — with what it does and
         what changes downstream when you touch it. Labels are reproduced exactly as they appear on screen, so
@@ -106,12 +106,12 @@ export default function Documentation() {
         <input
           value={q} onChange={(e) => setQ(e.target.value)}
           placeholder="Search controls, tools, clauses…"
-          className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-[#0f4c92] focus:outline-none sm:w-96"
+          className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none sm:w-96"
         />
         {q.trim() && (
           <span className="text-xs text-slate-500">
             {shown.length} tool{shown.length === 1 ? '' : 's'} · {shownControls} controls
-            <button type="button" onClick={() => setQ('')} className="ml-2 text-[#0056b3] underline">clear</button>
+            <button type="button" onClick={() => setQ('')} className="ml-2 text-brand underline">clear</button>
           </span>
         )}
       </div>
@@ -129,7 +129,7 @@ export default function Documentation() {
                 <ul className="mt-1 space-y-px border-l border-slate-200 pl-2">
                   {tools.map((t) => (
                     <li key={t.id}>
-                      <a href={`#${t.id}`} className="block py-0.5 text-[11px] text-slate-600 hover:text-[#0056b3]">
+                      <a href={`#${t.id}`} className="block py-0.5 text-[11px] text-slate-600 hover:text-brand">
                         {t.name}
                       </a>
                     </li>
@@ -143,7 +143,7 @@ export default function Documentation() {
         {/* ── body ── */}
         <div className="space-y-8">
           {shown.length === 0 && (
-            <p className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+            <p className="rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-slate-500">
               Nothing matches “{q}”. Every word has to match — try fewer of them.
             </p>
           )}
@@ -165,7 +165,7 @@ export default function Documentation() {
       <p className="mt-10 text-[11px] text-slate-500">
         Codes: NSCP 2015 · ACI 318-14 · AISC 360-16 · NDS. Engine results are checked against independent hand
         calculations on the{' '}
-        <Link to="/validation" className="text-[#0056b3] underline">validation page</Link>.
+        <Link to="/validation" className="text-brand underline">validation page</Link>.
       </p>
     </main>
   )

@@ -59,7 +59,7 @@ export function ConnectionDrawing({ geom, db, boltForces, critical, Vu, Hu, ex_l
   const X0 = tx(px0), X1 = tx(px1), Y0 = ty(py1), Y1 = ty(py0)   // plate rect in px (Y0 = top)
 
   return (
-    <div className="print-avoid-break rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+    <div className="print-avoid-break rounded-xl border border-slate-200 bg-sheet p-3 shadow-sm">
       <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
         Connection face — {connType === 'bolt' ? 'bolt layout' : 'weld layout'}
       </h3>

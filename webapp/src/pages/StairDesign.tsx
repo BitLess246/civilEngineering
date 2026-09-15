@@ -94,8 +94,8 @@ export default function StairDesign() {
         triangular treads, finishes, and the NSCP 205 stair live load (4.8 kPa), designed per metre width.
       </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Geometry &amp; loads</h2>
+      <section className="mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Geometry &amp; loads</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {/* PLAN, not along the slope: the load is kPa of plan area, so the
               moment is w·L_plan²/denom — and the drawing's span dimension is a
@@ -118,7 +118,7 @@ export default function StairDesign() {
             </select>
           </label>
         </div>
-        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Materials</h2>
+        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-brand">Materials</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="f′c" unit="MPa" value={fc} onChange={setFc} min={1} />
           <Field label="fy" unit="MPa" value={fy} onChange={setFy} min={1} />
@@ -127,8 +127,8 @@ export default function StairDesign() {
         </div>
       </section>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
+      <section className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Results</h2>
         <Out label="Slope θ" value={`${f2(r.geom.thetaDeg)}°`} />
         <Out label="Dead / Live" value={`${f2(r.loads.dead)} / ${f2(r.loads.live)} kPa`} />
         <Out label="Factored wu" value={`${f2(r.loads.wu)} kPa`} />

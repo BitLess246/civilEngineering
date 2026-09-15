@@ -64,16 +64,16 @@ export function WelcomeDialog({ onClose }: { onClose: () => void }) {
   const all = chosen.size === CHOOSABLE_GROUPS.length
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-[#0f1b2a]/55 p-4 py-[6vh]"
+    <div className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-rail/55 p-4 py-[6vh]"
       onMouseDown={skip} role="dialog" aria-modal="true" aria-labelledby="welcome-title">
-      <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-[#e3e1da] bg-white shadow-2xl"
+      <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-hairline bg-sheet shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}>
-        <div className="border-b border-[#e3e1da] bg-[#f7f5ef] px-6 py-4">
-          <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.18em] text-[#a39d8d]">Getting to know you</p>
-          <h2 id="welcome-title" className="mt-1 text-[19px] font-extrabold tracking-tight text-[#0f1b2a]">
+        <div className="border-b border-hairline bg-sheet-2 px-6 py-4">
+          <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.18em] text-faint">Getting to know you</p>
+          <h2 id="welcome-title" className="mt-1 text-[19px] font-extrabold tracking-tight text-ink">
             Which of these do you work on?
           </h2>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-[#5c6675]">
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
             We will keep the home page and the sidebar to what you tick. Nothing is removed —
             every tool stays reachable by search and by link — and you can change this any time
             in your profile.
@@ -87,7 +87,7 @@ export function WelcomeDialog({ onClose }: { onClose: () => void }) {
             </span>
             <button type="button"
               onClick={() => setChosen(all ? new Set() : new Set(CHOOSABLE_GROUPS))}
-              className="text-[12px] font-semibold text-[#0f4c92] hover:underline">
+              className="text-[12px] font-semibold text-brand hover:underline">
               {all ? 'Clear all' : 'Select all'}
             </button>
           </div>
@@ -95,13 +95,13 @@ export function WelcomeDialog({ onClose }: { onClose: () => void }) {
           <DisciplinePicker chosen={chosen} onToggle={toggle} />
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 border-t border-[#e3e1da] bg-[#fbfaf7] px-6 py-4">
+        <div className="flex flex-wrap items-center gap-3 border-t border-hairline bg-sheet-2 px-6 py-4">
           <button type="button" onClick={save} disabled={none}
-            className="rounded-lg bg-[#0f4c92] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#135caf] disabled:cursor-not-allowed disabled:opacity-50">
+            className="rounded-lg bg-brand px-5 py-2.5 text-sm font-bold text-on-solid hover:bg-brand disabled:cursor-not-allowed disabled:opacity-50">
             Save and continue
           </button>
           <button type="button" onClick={skip}
-            className="text-[13px] font-semibold text-slate-600 hover:text-[#0f4c92] hover:underline">
+            className="text-[13px] font-semibold text-slate-600 hover:text-brand hover:underline">
             Skip — show me everything
           </button>
           {none && (

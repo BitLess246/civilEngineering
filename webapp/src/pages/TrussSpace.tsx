@@ -202,14 +202,14 @@ export default function TrussSpace() {
       <PageHeader title="Truss Space" badges={['AISC LRFD']} />
       <div className="mx-auto max-w-[1700px] px-5 py-5 sm:px-7">
       <ReportControls title="Truss Design Report" />
-      <p className="mt-2 text-[13px] text-[#5c6675]">
+      <p className="mt-2 text-[13px] text-muted">
         Planar pin-jointed truss — generate, analyse (axial forces) &amp; design (AISC LRFD).
       </p>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
         {/* 3D viewport */}
         <div className="no-print lg:sticky lg:top-4">
-          <div className="relative h-[70vh] min-h-[420px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="relative h-[70vh] min-h-[420px] overflow-hidden rounded-xl border border-slate-200 bg-sheet shadow-sm">
             <Canvas camera={{ position: [cx - span * 0.35, cyc + height + span * 0.22, Math.max(span, 6) * 1.0], fov: 45 }} onPointerMissed={() => setSelected(null)}>
               <color attach="background" args={['#f8fafc']} />
               <ambientLight intensity={0.9} />
@@ -235,8 +235,8 @@ export default function TrussSpace() {
               <OrbitControls ref={controlsRef} makeDefault enablePan target={[cx, cyc, 0]} />
             </Canvas>
             {selForce && (
-              <div className="no-print absolute left-3 top-3 flex items-center gap-2 rounded-lg border border-[#0056b3]/30 bg-white/90 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
-                <span className="font-semibold text-[#0056b3]">▣ {selForce.kind} {selForce.id}</span>
+              <div className="no-print absolute left-3 top-3 flex items-center gap-2 rounded-lg border border-brand/30 bg-sheet/90 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
+                <span className="font-semibold text-brand">▣ {selForce.kind} {selForce.id}</span>
                 <span className={selForce.N >= 0 ? 'text-blue-700' : 'text-red-600'}>
                   {f1(Math.abs(selForce.N))} kN {selForce.N >= 0 ? 'tension' : 'compression'}
                 </span>
@@ -262,7 +262,7 @@ export default function TrussSpace() {
               <Num label="Height" unit="m" value={height} onChange={setHeight} step="0.25" />
               <Num label="Panels" value={panels} onChange={(v) => setPanels(Math.max(2, Math.round(v)))} step="1" />
               <button type="button" onClick={() => { setCustom(structuredClone(generated)); setSelected(null) }}
-                className="col-span-full mt-1 w-full rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-2 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">
+                className="col-span-full mt-1 w-full rounded-md border border-brand-line bg-brand-tint px-3 py-2 text-sm font-semibold text-brand hover:bg-brand-tint">
                 ✎ Customize this truss (free-form editor)
               </button>
             </Card>
@@ -345,7 +345,7 @@ export default function TrussSpace() {
             <div className="col-span-full flex items-center gap-3 border-t border-slate-100 pt-2">
               {!customSec && <SectionShape sec={eff} />}
               <div className="text-[11px] text-slate-500">
-                <div className="font-semibold text-[#0056b3]">{eff.label}</div>
+                <div className="font-semibold text-brand">{eff.label}</div>
                 <div>A = {Math.round(eff.A)} mm²</div>
                 <div>rx {eff.rx.toFixed(1)} · ry {eff.ry.toFixed(1)} mm</div>
                 <div>r_min = {eff.rmin.toFixed(1)} mm (governs buckling)</div>
@@ -408,13 +408,13 @@ export default function TrussSpace() {
       {/* Member schedule (printable report) */}
       {result && design && (
         <div className="mt-6 space-y-4">
-          <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
+          <h2 className="text-xl font-extrabold tracking-tight text-brand">
             Truss member schedule — {custom ? 'custom truss' : `${type} · ${f1(span)} m span`}
             <span className="ml-3 text-sm font-normal text-slate-500">
               {result.determinacy.status} · {opt ? `${opt.groups.length} auto-sized sections` : eff.label} · Fy {Fy} MPa · max util {(design.maxUtil * 100).toFixed(0)}%
             </span>
           </h2>
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -464,7 +464,7 @@ export default function TrussSpace() {
       {takeoff && bill && (
         <div className="mt-6 space-y-4 break-before-page">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
+            <h2 className="text-xl font-extrabold tracking-tight text-brand">
               Material Take-off &amp; Bill of Materials
               <span className="ml-3 text-sm font-normal text-slate-500">{takeoff.section}</span>
             </h2>
@@ -479,17 +479,17 @@ export default function TrussSpace() {
               [`Gusset (${gussetPct}%)`, `${f1(takeoff.gussetKg)} kg`],
               ['Total steel', `${f1(takeoff.totalKg)} kg`],
             ].map(([k, v]) => (
-              <div key={k} className="rounded-lg border border-slate-200 bg-white p-2 text-center shadow-sm">
+              <div key={k} className="rounded-lg border border-slate-200 bg-sheet p-2 text-center shadow-sm">
                 <div className="text-[11px] uppercase tracking-wide text-slate-500">{k}</div>
-                <div className="text-base font-bold text-[#0056b3]">{v}</div>
+                <div className="text-base font-bold text-brand">{v}</div>
               </div>
             ))}
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Per-member table */}
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Steel by member</h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel by member</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -520,8 +520,8 @@ export default function TrussSpace() {
 
             {/* By-kind subtotals + priced BOM */}
             <div className="space-y-4">
-              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">By element kind</h3>
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+                <h3 className="mb-2 text-[1.02rem] font-bold text-brand">By element kind</h3>
                 <table className="w-full border-collapse text-xs">
                   <thead>
                     <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -551,9 +551,9 @@ export default function TrussSpace() {
               </div>
 
               {/* Priced BOM */}
-              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Priced Bill of Materials</h3>
+                  <h3 className="text-[1.02rem] font-bold text-brand">Priced Bill of Materials</h3>
                   <div className="flex flex-wrap items-center gap-3 text-xs">
                     <label className="flex items-center gap-1 text-slate-600">
                       Steel price

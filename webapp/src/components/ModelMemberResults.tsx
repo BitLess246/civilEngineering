@@ -25,7 +25,7 @@ import { Card } from './qty'
 // ─────────────────────────────────────────────────────────────────────────
 
 const utilTone = (u: number | null): string =>
-  u === null ? 'text-[#5b5648]' : u > 1 ? 'text-[#c2402a]' : u > 0.9 ? 'text-[#b47a14]' : 'text-[#1a7f4b]'
+  u === null ? 'text-faint' : u > 1 ? 'text-fail' : u > 0.9 ? 'text-warn' : 'text-ok'
 
 const utilText = (u: number | null): string => (u === null ? '—' : `${(u * 100).toFixed(0)}%`)
 
@@ -103,9 +103,9 @@ export function ModelMemberResults({ kind, onLoad }: {
   if (!project) {
     return (
       <Card title={`From your saved project — ${TITLES[kind]}`} grid={false}>
-        <p className="text-[12.5px] leading-relaxed text-[#5b5648]">
+        <p className="text-[12.5px] leading-relaxed text-faint">
           No saved project yet. Model your structure in{' '}
-          <Link to="/model" className="font-semibold text-[#0f4c92] hover:underline">3D Model Space</Link>, run the
+          <Link to="/model" className="font-semibold text-brand hover:underline">3D Model Space</Link>, run the
           design, and save it — this calculator will then offer every {TITLES[kind].toLowerCase()} of that project
           in the dropdown below, ready to load into the fields.
         </p>
@@ -117,10 +117,10 @@ export function ModelMemberResults({ kind, onLoad }: {
     <Card title={`From your saved project — ${TITLES[kind]}`} grid={false}>
       {projects.length > 1 && (
         <div className="mb-2 flex items-center gap-2">
-          <label className="text-[12px] text-[#5c6675]" htmlFor={`mmr-project-${kind}`}>Project</label>
+          <label className="text-[12px] text-muted" htmlFor={`mmr-project-${kind}`}>Project</label>
           <select
             id={`mmr-project-${kind}`}
-            className="min-w-0 flex-1 rounded border border-[#cddcf0] bg-white px-2 py-1 text-[12.5px]"
+            className="min-w-0 flex-1 rounded border border-brand-line bg-sheet px-2 py-1 text-[12.5px]"
             value={sourceId ?? ''}
             onChange={(e) => { setPicked(e.target.value); setSelId(null) }}
           >
@@ -130,16 +130,16 @@ export function ModelMemberResults({ kind, onLoad }: {
       )}
 
       {!design && (
-        <p className="text-[12.5px] leading-relaxed text-[#5b5648]">
-          <span className="font-semibold text-[#5b5648]">{project.meta.name}</span> was saved without design results.
+        <p className="text-[12.5px] leading-relaxed text-faint">
+          <span className="font-semibold text-faint">{project.meta.name}</span> was saved without design results.
           Run <span className="font-semibold">Design</span> (or <span className="font-semibold">Optimize</span>) in{' '}
-          <Link to="/model" className="font-semibold text-[#0f4c92] hover:underline">Model Space</Link> and save the
+          <Link to="/model" className="font-semibold text-brand hover:underline">Model Space</Link> and save the
           project — its members will appear here.
         </p>
       )}
 
       {design && rows.length === 0 && (
-        <p className="text-[12.5px] leading-relaxed text-[#5b5648]">
+        <p className="text-[12.5px] leading-relaxed text-faint">
           The saved design has no {TITLES[kind].toLowerCase()} — the model has none of these members, or that part of
           the design produced nothing to check.
         </p>
@@ -147,15 +147,15 @@ export function ModelMemberResults({ kind, onLoad }: {
 
       {design && rows.length > 0 && (
         <div className="space-y-2">
-          <p className="text-[11.5px] text-[#8a8574]">
-            Results from the last design run on <span className="font-semibold text-[#5b5648]">{project.meta.name}</span> ·{' '}
+          <p className="text-[11.5px] text-faint">
+            Results from the last design run on <span className="font-semibold text-faint">{project.meta.name}</span> ·{' '}
             {HINTS[kind]} · picking a member fills this calculator's fields and its worked solution below.
           </p>
           <div className="flex items-center gap-2">
-            <label className="flex-none text-[12px] text-[#5c6675]" htmlFor={`mmr-member-${kind}`}>Member</label>
+            <label className="flex-none text-[12px] text-muted" htmlFor={`mmr-member-${kind}`}>Member</label>
             <select
               id={`mmr-member-${kind}`}
-              className="min-w-0 flex-1 rounded border border-[#cddcf0] bg-white px-2 py-1.5 text-[12.5px]"
+              className="min-w-0 flex-1 rounded border border-brand-line bg-sheet px-2 py-1.5 text-[12.5px]"
               value={selId ?? ''}
               onChange={(e) => { if (e.target.value) pick(e.target.value) }}
             >
@@ -172,7 +172,7 @@ export function ModelMemberResults({ kind, onLoad }: {
           </div>
 
           {sel && sel.ok === false && (
-            <p className="rounded border border-[#efd4cc] bg-[#fbeeea] px-3 py-2 text-[12px] text-[#7a2c1c]">
+            <p className="rounded border border-fail-line bg-fail-tint px-3 py-2 text-[12px] text-fail">
               {sel.id} fails its check in the saved design. Model Space marks the same member — fix it there and save,
               or open the optimizer.
             </p>

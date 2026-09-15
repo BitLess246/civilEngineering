@@ -80,10 +80,10 @@ export default function BearingCapacity() {
             <Num label="γ (moist)" unit="kN/m³" value={gamma} onChange={setGamma} />
             <Num label="γsat" unit="kN/m³" value={gammaSat} onChange={setGammaSat} />
             <label className="flex flex-col text-sm">
-              <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">Water table depth (m)</span>
+              <span className="mb-1 text-[11.5px] font-semibold text-muted">Water table depth (m)</span>
               <input type="number" step="0.5" value={dw} placeholder="none"
                 onChange={(e) => setDw(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                className="rounded-md border border-[#d6d3c9] bg-[#fcfbf8] px-2.5 py-1.5 text-[13px]" />
+                className="rounded-md border border-field-line bg-field px-2.5 py-1.5 text-[13px]" />
             </label>
           </Card>
 

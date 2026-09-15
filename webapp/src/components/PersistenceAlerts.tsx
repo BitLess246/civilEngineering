@@ -57,7 +57,7 @@ export function PersistenceAlerts({
           </div>
           <div className="mt-2 flex flex-wrap gap-2 pl-[68px]">
             <button type="button" onClick={reloadTheirs}
-              className="rounded-md border border-red-300 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-red-800 hover:bg-red-100">
+              className="rounded-md border border-red-300 bg-sheet px-2.5 py-1 text-[11.5px] font-semibold text-red-800 hover:bg-red-100">
               Load their version
             </button>
             <button type="button" onClick={overwriteWithMine}

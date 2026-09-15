@@ -96,15 +96,15 @@ export default function WaterTank() {
         the base cantilever moment governs the vertical steel; the wall is checked against concrete cracking.
       </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Geometry</h2>
+      <section className="mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Geometry</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Water depth H" unit="m" value={H} onChange={setH} min={0.1} />
           <Field label="Diameter D" unit="m" value={D} onChange={setD} min={0.1} />
           <Field label="Wall thickness t" unit="mm" value={t} onChange={setT} min={1} />
           <Field label="Freeboard" unit="m" value={freeboard} onChange={setFreeboard} step="0.05" min={0} />
         </div>
-        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Materials &amp; permissible stresses</h2>
+        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-brand">Materials &amp; permissible stresses</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="f′c" unit="MPa" value={fc} onChange={setFc} min={1} />
           <Field label="σst (steel)" unit="MPa" value={sigmaSt} onChange={setSigmaSt} min={1} />
@@ -114,16 +114,16 @@ export default function WaterTank() {
         </div>
       </section>
 
-      <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm
+      <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm
         [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Wall section &amp; ring plan</h2>
+        <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Wall section &amp; ring plan</h2>
         <TankSection H={H} D={D} t={t} freeboard={freeboard} T={r.T}
           hoopBars={`⌀${barDia} @ ${f0(r.hoopSpacing)} mm`}
           vertBars={`⌀${barDia} @ ${f0(r.vertSpacing)} mm`} />
       </section>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
+      <section className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Results</h2>
         <Out label="Max hoop tension T = γw·H·D/2" value={`${f2(r.T)} kN/m`} />
         <Out label="Ring (hoop) steel As" value={`${f0(r.hoopAs)} mm²/m — ⌀${barDia} @ ${f0(r.hoopSpacing)} mm (each face)`} />
         <Out label="Base cantilever moment M = γw·H³/6" value={`${f2(r.M)} kN·m/m`} />

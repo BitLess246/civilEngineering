@@ -55,28 +55,28 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-[#0f1b2a]/45 p-4 pt-[12vh]" onMouseDown={onClose} role="dialog" aria-modal="true" aria-label="Find a tool">
-      <div className="w-full max-w-xl overflow-hidden rounded-lg border border-[#e3e1da] bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-3 border-b border-[#eeece5] px-4 py-3">
+    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-rail/45 p-4 pt-[12vh]" onMouseDown={onClose} role="dialog" aria-modal="true" aria-label="Find a tool">
+      <div className="w-full max-w-xl overflow-hidden rounded-lg border border-hairline bg-sheet shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 border-b border-hairline-2 px-4 py-3">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#a39d8d" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
           <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
             placeholder={`Search ${ALL_TOOLS.length} tools — try "footing", "W-shape", "seismic"…`}
-            className="flex-1 !border-0 !bg-transparent !p-0 text-sm !shadow-none placeholder:text-[#a39d8d] focus:!shadow-none" />
-          <kbd className="rounded border border-[#d6d3c9] px-1.5 py-0.5 font-mono text-[10px] text-[#a39d8d]">esc</kbd>
+            className="flex-1 !border-0 !bg-transparent !p-0 text-sm !shadow-none placeholder:text-faint focus:!shadow-none" />
+          <kbd className="rounded border border-field-line px-1.5 py-0.5 font-mono text-[10px] text-faint">esc</kbd>
         </div>
         <div ref={listRef} className="max-h-[46vh] overflow-y-auto py-1.5">
-          {hits.length === 0 && <p className="px-4 py-6 text-center text-sm text-[#a39d8d]">No tool matches “{q}”.</p>}
+          {hits.length === 0 && <p className="px-4 py-6 text-center text-sm text-faint">No tool matches “{q}”.</p>}
           {hits.map((t, i) => (
             <button key={t.to + t.name} type="button" data-selected={i === sel}
               onMouseEnter={() => setSel(i)} onClick={() => go(t.to)}
-              className={`flex w-full items-baseline gap-3 px-4 py-2 text-left ${i === sel ? 'bg-[#eaf1f9]' : ''}`}>
-              <span className={`text-[13px] font-semibold ${i === sel ? 'text-[#0f4c92]' : 'text-[#0f1b2a]'}`}>{t.name}</span>
-              <span className="font-mono text-[10.5px] text-[#8b8574]">{t.sub}</span>
+              className={`flex w-full items-baseline gap-3 px-4 py-2 text-left ${i === sel ? 'bg-brand-tint' : ''}`}>
+              <span className={`text-[13px] font-semibold ${i === sel ? 'text-brand' : 'text-ink'}`}>{t.name}</span>
+              <span className="font-mono text-[10.5px] text-faint">{t.sub}</span>
               {t.hidden && (
-                <span className="rounded border border-[#e3e1da] bg-[#f7f5ef] px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-[#a39d8d]"
+                <span className="rounded border border-hairline bg-sheet-2 px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-faint"
                   title="Not in your sidebar — still works">hidden</span>
               )}
-              <span className="ml-auto font-mono text-[9.5px] uppercase tracking-widest text-[#a39d8d]">{t.groupLabel}</span>
+              <span className="ml-auto font-mono text-[9.5px] uppercase tracking-widest text-faint">{t.groupLabel}</span>
             </button>
           ))}
         </div>

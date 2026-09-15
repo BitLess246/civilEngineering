@@ -12,7 +12,7 @@ import { PersistenceAlerts } from '../components/PersistenceAlerts'
 // shows a per-resource daily-load histogram with over-allocation in red, and a
 // summary table. Reuses the store-backed project + solve. Drawing-sheet palette.
 
-const btn = 'inline-flex items-center gap-1.5 rounded-md border border-[#d6d3c9] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]'
+const btn = 'inline-flex items-center gap-1.5 rounded-md border border-field-line bg-sheet px-2.5 py-1.5 text-[12px] font-semibold text-ink-2 hover:border-brand-hover hover:text-brand'
 const CRITICAL = '#c2402a'
 const TYPE_COLOR: Record<ResourceType, string> = { labor: '#0f4c92', equipment: '#7c3aed', material: '#1a7f4b' }
 const n1 = (v: number) => (Number.isFinite(v) ? v.toFixed(1) : '—')
@@ -60,7 +60,7 @@ export default function ScheduleResources() {
   }, [project, solve.cpm])
 
   const anyOver = hasOverAllocation(loads)
-  const th = 'px-2.5 py-2 text-left text-[9.5px] font-bold uppercase tracking-widest text-[#5c6675]'
+  const th = 'px-2.5 py-2 text-left text-[9.5px] font-bold uppercase tracking-widest text-muted'
   const td = 'px-2.5 py-1.5 align-middle'
 
   return (
@@ -71,27 +71,27 @@ export default function ScheduleResources() {
           conflict={api.conflict} reloadTheirs={api.reloadTheirs}
           overwriteWithMine={api.overwriteWithMine} />
         {!project ? (
-          <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
-            <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>
-            <Link to="/schedule" className="mt-4 inline-flex rounded-md bg-[#0f4c92] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#0d3f78]">Go to the schedule grid</Link>
+          <div className="rounded-lg border border-dashed border-field-line bg-sheet px-6 py-16 text-center">
+            <h2 className="text-[16px] font-bold text-ink">No schedule open</h2>
+            <Link to="/schedule" className="mt-4 inline-flex rounded-md bg-brand px-3 py-1.5 text-[12px] font-semibold text-on-solid hover:bg-brand-hover">Go to the schedule grid</Link>
           </div>
         ) : project.resources.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center text-[13px] text-[#a39d8d]">This project has no resources. Load the sample, or import a project whose activities carry resource assignments and per-day availability, to see the loading.</div>
+          <div className="rounded-lg border border-dashed border-field-line bg-sheet px-6 py-16 text-center text-[13px] text-faint">This project has no resources. Load the sample, or import a project whose activities carry resource assignments and per-day availability, to see the loading.</div>
         ) : !solve.ok ? (
-          <div className="rounded-lg border border-[#efd9cc] bg-[#fdf3ee] px-4 py-2.5 text-[12px] text-[#8f4a2f]">The schedule has {solve.errorCount} blocking issue(s); fix them in the grid to compute resource loading.</div>
+          <div className="rounded-lg border border-fail-line bg-fail-tint px-4 py-2.5 text-[12px] text-fail">The schedule has {solve.errorCount} blocking issue(s); fix them in the grid to compute resource loading.</div>
         ) : (
           <>
-            <div className={`rounded-lg border px-4 py-2.5 text-[12px] ${anyOver ? 'border-[#efd4cc] bg-[#fbeeea] text-[#8f2f1e]' : 'border-[#d3e8da] bg-[#ecf6ef] text-[#14603a]'}`}>
+            <div className={`rounded-lg border px-4 py-2.5 text-[12px] ${anyOver ? 'border-fail-line bg-fail-tint text-fail' : 'border-ok-line bg-ok-tint text-ok'}`}>
               {anyOver
                 ? <><b>Over-allocation detected.</b> {loads.filter((l) => l.overDays > 0).length} resource(s) exceed their daily availability on one or more days (shown in red below). Re-sequence or level to resolve.</>
                 : <>No over-allocation — every resource stays within its daily availability across the schedule.</>}
             </div>
 
             {/* Summary table */}
-            <div className="overflow-x-auto rounded-lg border border-[#e3e1da] bg-white">
+            <div className="overflow-x-auto rounded-lg border border-hairline bg-sheet">
               <table className="w-full min-w-[640px] border-collapse text-[12.5px]">
                 <thead>
-                  <tr className="border-b-[1.5px] border-[#0f1b2a] bg-[#f9f8f4]">
+                  <tr className="border-b-[1.5px] border-ink bg-sheet-2">
                     <th className={th}>Resource</th><th className={th}>Type</th>
                     <th className={`${th} text-right`}>Peak/day</th><th className={`${th} text-right`}>Avail/day</th>
                     <th className={`${th} text-right`}>Over days</th><th className={`${th} text-right`}>Total</th><th className={th}>Unit</th>
@@ -99,14 +99,14 @@ export default function ScheduleResources() {
                 </thead>
                 <tbody>
                   {loads.map((l) => (
-                    <tr key={l.resource.id} className={`border-b border-[#f1efe8] ${l.overDays > 0 ? 'bg-[#fdf3f0]' : ''}`}>
-                      <td className={`${td} font-semibold text-[#0f1b2a]`}>{l.resource.name}</td>
+                    <tr key={l.resource.id} className={`border-b border-hairline-2 ${l.overDays > 0 ? 'bg-fail-tint' : ''}`}>
+                      <td className={`${td} font-semibold text-ink`}>{l.resource.name}</td>
                       <td className={td}><span className="rounded px-1.5 py-px text-[10px] font-semibold text-white" style={{ background: TYPE_COLOR[l.resource.type] ?? '#5c6675' }}>{l.resource.type}</span></td>
-                      <td className={`${td} text-right font-mono ${l.overDays > 0 ? 'font-semibold text-[#c2402a]' : 'text-[#0f1b2a]'}`}>{n1(l.peak)}</td>
-                      <td className={`${td} text-right font-mono text-[#5c6675]`}>{l.available ?? '—'}</td>
-                      <td className={`${td} text-right font-mono ${l.overDays > 0 ? 'font-semibold text-[#c2402a]' : 'text-[#a39d8d]'}`}>{l.overDays}</td>
-                      <td className={`${td} text-right font-mono text-[#5c6675]`}>{n1(l.total)}</td>
-                      <td className={`${td} text-[11px] text-[#a39d8d]`}>{l.resource.unit}</td>
+                      <td className={`${td} text-right font-mono ${l.overDays > 0 ? 'font-semibold text-fail' : 'text-ink'}`}>{n1(l.peak)}</td>
+                      <td className={`${td} text-right font-mono text-muted`}>{l.available ?? '—'}</td>
+                      <td className={`${td} text-right font-mono ${l.overDays > 0 ? 'font-semibold text-fail' : 'text-faint'}`}>{l.overDays}</td>
+                      <td className={`${td} text-right font-mono text-muted`}>{n1(l.total)}</td>
+                      <td className={`${td} text-[11px] text-faint`}>{l.resource.unit}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -116,16 +116,16 @@ export default function ScheduleResources() {
             {/* Per-resource histograms */}
             <div className="grid gap-4 lg:grid-cols-2">
               {loads.map((l) => (
-                <section key={l.resource.id} className="rounded-lg border border-[#e3e1da] bg-white">
-                  <div className="flex items-center justify-between border-b border-[#eeece5] px-4 py-2.5">
-                    <h2 className="text-[13px] font-bold text-[#0f1b2a]">{l.resource.name}</h2>
-                    <span className="font-mono text-[10.5px] text-[#a39d8d]">peak {n1(l.peak)} / {l.available ?? '∞'} {l.resource.unit}{l.overDays > 0 && <span className="ml-2 text-[#c2402a]">· {l.overDays}d over</span>}</span>
+                <section key={l.resource.id} className="rounded-lg border border-hairline bg-sheet">
+                  <div className="flex items-center justify-between border-b border-hairline-2 px-4 py-2.5">
+                    <h2 className="text-[13px] font-bold text-ink">{l.resource.name}</h2>
+                    <span className="font-mono text-[10.5px] text-faint">peak {n1(l.peak)} / {l.available ?? '∞'} {l.resource.unit}{l.overDays > 0 && <span className="ml-2 text-fail">· {l.overDays}d over</span>}</span>
                   </div>
                   <div className="p-4"><Histogram load={l} /></div>
                 </section>
               ))}
             </div>
-            <p className="text-[11px] text-[#a39d8d]">Daily load spreads each activity's assigned quantity evenly over its scheduled working days; bars above the dashed availability line (red) are over-allocated. Assignments and per-day availability are set on the project.</p>
+            <p className="text-[11px] text-faint">Daily load spreads each activity's assigned quantity evenly over its scheduled working days; bars above the dashed availability line (red) are over-allocated. Assignments and per-day availability are set on the project.</p>
           </>
         )}
       </div>

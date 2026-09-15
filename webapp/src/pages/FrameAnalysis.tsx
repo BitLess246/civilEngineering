@@ -111,7 +111,7 @@ export default function FrameAnalysis() {
 
           <Card title="Nodes" grid={false}>
             <button type="button" onClick={() => setNodes((ns) => [...ns, { uid: uid++, id: `N${ns.length + 1}`, x: 0, y: 0 }])}
-              className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Node</button>
+              className="no-print mb-3 rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">+ Node</button>
             <div className="space-y-3">
               {nodes.map((n) => (
                 <Shell key={n.uid} title={n.id} onRemove={() => setNodes((ns) => ns.filter((q) => q.uid !== n.uid))}>
@@ -129,7 +129,7 @@ export default function FrameAnalysis() {
 
           <Card title="Members" grid={false}>
             <button type="button" onClick={() => setMembers((ms) => [...ms, { uid: uid++, id: `m${ms.length + 1}`, i: nodeIds[0] ?? '', j: nodeIds[1] ?? '' }])}
-              className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Member</button>
+              className="no-print mb-3 rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">+ Member</button>
             <div className="space-y-3">
               {members.map((m) => (
                 <Shell key={m.uid} title={m.id} onRemove={() => setMembers((ms) => ms.filter((q) => q.uid !== m.uid))}>
@@ -147,7 +147,7 @@ export default function FrameAnalysis() {
 
           <Card title="Supports" grid={false}>
             <button type="button" onClick={() => setSupports((ss) => [...ss, { uid: uid++, node: nodeIds[0] ?? '', type: 'pin' }])}
-              className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Support</button>
+              className="no-print mb-3 rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">+ Support</button>
             <div className="space-y-3">
               {supports.map((s) => (
                 <Shell key={s.uid} title={s.type} onRemove={() => setSupports((ss) => ss.filter((q) => q.uid !== s.uid))}>
@@ -162,11 +162,11 @@ export default function FrameAnalysis() {
           <Card title="Loads" grid={false}>
             <div className="no-print mb-3 flex flex-wrap gap-2">
               <button type="button" onClick={() => setLoads((ls) => [...ls, { uid: uid++, kind: 'node', node: nodeIds[0] ?? '', Fx: 0, Fy: -50, Mz: 0, cat: 'D' }])}
-                className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Node load</button>
+                className="rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">+ Node load</button>
               <button type="button" onClick={() => setLoads((ls) => [...ls, { uid: uid++, kind: 'member-udl', member: memberIds[0] ?? '', w: 10, cat: 'D' }])}
-                className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Member UDL</button>
+                className="rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">+ Member UDL</button>
               <button type="button" onClick={() => setLoads((ls) => [...ls, { uid: uid++, kind: 'member-point', member: memberIds[0] ?? '', a: 1, P: 50, cat: 'D' }])}
-                className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Member point</button>
+                className="rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">+ Member point</button>
             </div>
             <div className="space-y-3">
               {loads.map((ld) => (
@@ -216,7 +216,7 @@ export default function FrameAnalysis() {
                     {res.perCombo.map((pc, i) => (
                       <tr key={pc.combo.name} onClick={() => pc.result && setSelCombo(i)}
                         className={`border-t border-slate-100 ${pc.result ? 'cursor-pointer hover:bg-blue-50' : 'text-slate-300'} ${
-                          i === res.govIdx ? 'bg-amber-50 font-semibold' : ''} ${i === shownIdx ? 'outline outline-1 outline-[#0056b3]' : ''}`}>
+                          i === res.govIdx ? 'bg-amber-50 font-semibold' : ''} ${i === shownIdx ? 'outline outline-1 outline-brand' : ''}`}>
                         <td className="py-1 pr-2">{pc.combo.name}{i === res.govIdx ? ' ★' : ''}</td>
                         <td className="py-1 pr-2 text-right">{pc.result ? f1(pc.result.Nmax) : '—'}</td>
                         <td className="py-1 pr-2 text-right">{pc.result ? f1(pc.result.Vmax) : '—'}</td>
@@ -244,7 +244,7 @@ export default function FrameAnalysis() {
       {r && mem && (
         <div className="mt-6">
           <div className="mb-2 flex flex-wrap items-center gap-3">
-            <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Member diagrams</h2>
+            <h2 className="text-[13.5px] font-bold text-ink">Member diagrams</h2>
             <select value={selMember} onChange={(e) => setSelMember(e.target.value)}
               className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm">
               {r.members.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
@@ -252,13 +252,13 @@ export default function FrameAnalysis() {
             <span className="text-xs text-slate-500">local x from node i · N &gt; 0 tension</span>
           </div>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+            <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
               <Diagram xs={mem.xs} ys={mem.N} title={`AXIAL — ${mem.id}`} unit="kN" color="#7c3aed" decimals={1} />
             </div>
-            <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+            <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
               <Diagram xs={mem.xs} ys={mem.V} title="SHEAR" unit="kN" color="#1f77b4" decimals={1} />
             </div>
-            <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+            <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
               <Diagram xs={mem.xs} ys={mem.M} title="MOMENT" unit="kN·m" color="#d62728" decimals={1} />
             </div>
           </div>

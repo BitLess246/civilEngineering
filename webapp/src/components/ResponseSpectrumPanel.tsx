@@ -133,8 +133,8 @@ export function ResponseSpectrumPanel({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">
+    <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+      <h2 className="mb-1 text-[1.02rem] font-bold text-brand">
         Response Spectrum Analysis — NSCP §208.6
       </h2>
       <p className="mb-2 text-[11px] text-slate-500">

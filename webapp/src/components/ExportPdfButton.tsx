@@ -54,7 +54,7 @@ export function ExportPdfButton({
   return (
     <button
       type="button" onClick={() => void run()} disabled={busy}
-      className={className ?? 'ml-1.5 inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78] disabled:opacity-50'}
+      className={className ?? 'ml-1.5 inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-hover disabled:opacity-50'}
       title={failed ? 'The export failed — see the browser console' : 'Download this calculation as a PDF'}
     >
       {busy ? '⏳ Building PDF…' : failed ? '⚠ Export failed — retry' : label}

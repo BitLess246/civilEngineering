@@ -45,8 +45,8 @@ export function CodeHint({ spec }: { spec: CodeHintSpec }) {
         onClick={() => setOpen((v) => !v)}
         className={`ml-1 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full border text-[10px] font-bold leading-none transition-colors ${
           open
-            ? 'border-[#0f4c92] bg-[#0f4c92] text-white'
-            : 'border-[#c9c4b6] bg-white text-[#a39d8d] hover:border-[#0f4c92] hover:text-[#0f4c92]'
+            ? 'border-brand bg-brand text-on-solid'
+            : 'border-faint bg-sheet text-faint hover:border-brand-hover hover:text-brand'
         }`}
       >?</button>
 
@@ -55,14 +55,14 @@ export function CodeHint({ spec }: { spec: CodeHintSpec }) {
           // Anchored to the button but allowed to spill left near the right
           // edge of a card; the width is capped so a long clause statement
           // wraps instead of stretching the column.
-          className="absolute left-0 top-[20px] z-50 block w-[min(21rem,78vw)] rounded-lg border border-[#d6d3c9] bg-white p-3 text-left shadow-[0_8px_24px_rgba(15,27,42,.16)]">
+          className="absolute left-0 top-[20px] z-50 block w-[min(21rem,78vw)] rounded-lg border border-field-line bg-sheet p-3 text-left shadow-[0_8px_24px_rgba(15,27,42,.16)]">
           <span className="mb-1 flex items-baseline gap-2">
-            <span className="text-[12px] font-bold text-[#0f1b2a]">{spec.title}</span>
+            <span className="text-[12px] font-bold text-ink">{spec.title}</span>
             <button type="button" onClick={() => setOpen(false)}
-              aria-label="Close" className="ml-auto text-[13px] leading-none text-[#a39d8d] hover:text-[#5c6675]">×</button>
+              aria-label="Close" className="ml-auto text-[13px] leading-none text-faint hover:text-muted">×</button>
           </span>
-          <span className="mb-2 block font-mono text-[10px] font-semibold text-[#0f4c92]">{spec.clause}</span>
-          <span className="block text-[11.5px] leading-relaxed text-[#5c6675]">{spec.statement}</span>
+          <span className="mb-2 block font-mono text-[10px] font-semibold text-brand">{spec.clause}</span>
+          <span className="block text-[11.5px] leading-relaxed text-muted">{spec.statement}</span>
 
           {spec.table && (
             <span className="mt-2 block overflow-x-auto">
@@ -70,7 +70,7 @@ export function CodeHint({ spec }: { spec: CodeHintSpec }) {
                 <thead>
                   <tr>
                     {spec.table.head.map((h) => (
-                      <th key={h} className="border-b border-[#d6d3c9] px-1.5 py-1 text-left font-semibold text-[#0f1b2a]">{h}</th>
+                      <th key={h} className="border-b border-field-line px-1.5 py-1 text-left font-semibold text-ink">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -78,8 +78,8 @@ export function CodeHint({ spec }: { spec: CodeHintSpec }) {
                   {spec.table.rows.map((row, i) => (
                     <tr key={i}>
                       {row.map((cell, j) => (
-                        <td key={j} className={`border-b border-[#f3f1ea] px-1.5 py-1 align-top ${
-                          j === row.length - 1 ? 'font-mono font-semibold text-[#0f1b2a]' : 'text-[#5c6675]'}`}>{cell}</td>
+                        <td key={j} className={`border-b border-hairline-2 px-1.5 py-1 align-top ${
+                          j === row.length - 1 ? 'font-mono font-semibold text-ink' : 'text-muted'}`}>{cell}</td>
                       ))}
                     </tr>
                   ))}
@@ -89,7 +89,7 @@ export function CodeHint({ spec }: { spec: CodeHintSpec }) {
           )}
 
           {spec.why && (
-            <span className="mt-2 block border-t border-[#f3f1ea] pt-2 text-[10.5px] leading-relaxed text-[#a39d8d]">
+            <span className="mt-2 block border-t border-hairline-2 pt-2 text-[10.5px] leading-relaxed text-faint">
               {spec.why}
             </span>
           )}

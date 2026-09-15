@@ -19,7 +19,7 @@ const ROW_H = 26
 const BAR_H = 13
 const BASE_H = 4
 
-const btn = 'inline-flex items-center gap-1.5 rounded-md border border-[#d6d3c9] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]'
+const btn = 'inline-flex items-center gap-1.5 rounded-md border border-field-line bg-sheet px-2.5 py-1.5 text-[12px] font-semibold text-ink-2 hover:border-brand-hover hover:text-brand'
 
 /** Progress status for colouring (explicit status wins, else from %). */
 function statusOf(a: Activity): ActivityStatus {
@@ -52,7 +52,7 @@ function Legend() {
   const item = (c: string, label: string, ring = false) => (
     <span className="inline-flex items-center gap-1.5">
       <span className="h-3 w-4 rounded-[2px]" style={{ background: c, boxShadow: ring ? `0 0 0 1.5px ${CRITICAL}` : undefined }} />
-      <span className="text-[11px] text-[#5c6675]">{label}</span>
+      <span className="text-[11px] text-muted">{label}</span>
     </span>
   )
   return (
@@ -62,8 +62,8 @@ function Legend() {
       {item(STATUS_COLOR.delayed, 'Delayed')}
       {item(STATUS_COLOR['not-started'], 'Upcoming')}
       {item('#c9c3b4', 'Critical', true)}
-      <span className="inline-flex items-center gap-1.5"><span className="text-[#0f1b2a]">◆</span><span className="text-[11px] text-[#5c6675]">Milestone</span></span>
-      <span className="inline-flex items-center gap-1.5"><span className="h-3 w-4 rounded-[2px] bg-[#c9c3b4]" /><span className="text-[11px] text-[#5c6675]">Baseline</span></span>
+      <span className="inline-flex items-center gap-1.5"><span className="text-ink">◆</span><span className="text-[11px] text-muted">Milestone</span></span>
+      <span className="inline-flex items-center gap-1.5"><span className="h-3 w-4 rounded-[2px] bg-faint" /><span className="text-[11px] text-muted">Baseline</span></span>
     </div>
   )
 }
@@ -124,20 +124,20 @@ function GanttChart({ project, solve, zoom, baselineId }: {
   ))
 
   return (
-    <div className="flex overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
+    <div className="flex overflow-hidden rounded-lg border border-hairline bg-sheet">
       {/* Left: activity names */}
-      <div className="flex-none border-r border-[#e3e1da]" style={{ width: LEFT_W }}>
-        <div className="flex items-end border-b border-[#eeece5] bg-[#f9f8f4] px-3 pb-1.5 text-[9.5px] font-bold uppercase tracking-widest text-[#5c6675]" style={{ height: HEADER_H }}>Activity</div>
+      <div className="flex-none border-r border-hairline" style={{ width: LEFT_W }}>
+        <div className="flex items-end border-b border-hairline-2 bg-sheet-2 px-3 pb-1.5 text-[9.5px] font-bold uppercase tracking-widest text-muted" style={{ height: HEADER_H }}>Activity</div>
         <div className="relative" style={{ height: bodyHeight }}>
           {rows.map((r, i) => r.kind === 'group' ? (
-            <div key={i} className="absolute flex w-full items-center gap-1.5 bg-[#f4f3ef] px-3 text-[11.5px] font-bold text-[#0f1b2a]" style={{ top: r.y, height: GROUP_H }}>
-              <span className="font-mono text-[10px] text-[#a39d8d]">{r.code}</span>{r.label}
+            <div key={i} className="absolute flex w-full items-center gap-1.5 bg-paper px-3 text-[11.5px] font-bold text-ink" style={{ top: r.y, height: GROUP_H }}>
+              <span className="font-mono text-[10px] text-faint">{r.code}</span>{r.label}
             </div>
           ) : (
             <div key={i} className="absolute flex w-full items-center gap-1.5 px-3" style={{ top: r.y, height: ROW_H }}>
-              <span className="truncate text-[12px] text-[#0f1b2a]">{r.a.name}</span>
-              {solve.cpm?.activities.get(r.a.id)?.critical && <span className="flex-none rounded bg-[#c2402a] px-1 font-mono text-[8px] font-bold text-white">C</span>}
-              <span className="ml-auto flex-none font-mono text-[10px] text-[#a39d8d]">{r.a.milestone ? '◆' : `${r.a.percentComplete ?? 0}%`}</span>
+              <span className="truncate text-[12px] text-ink">{r.a.name}</span>
+              {solve.cpm?.activities.get(r.a.id)?.critical && <span className="flex-none rounded bg-fail px-1 font-mono text-[8px] font-bold text-on-solid">C</span>}
+              <span className="ml-auto flex-none font-mono text-[10px] text-faint">{r.a.milestone ? '◆' : `${r.a.percentComplete ?? 0}%`}</span>
             </div>
           ))}
         </div>
@@ -147,10 +147,10 @@ function GanttChart({ project, solve, zoom, baselineId }: {
       <div className="flex-1 overflow-x-auto">
         <div style={{ width: scale.totalWidth }}>
           {/* tick header */}
-          <div className="relative border-b border-[#eeece5] bg-[#f9f8f4]" style={{ height: HEADER_H }}>
+          <div className="relative border-b border-hairline-2 bg-sheet-2" style={{ height: HEADER_H }}>
             {ticks.map((t, i) => (
-              <div key={i} className={`absolute top-0 h-full border-l ${t.major ? 'border-[#d6d3c9]' : 'border-[#eeece5]'}`} style={{ left: t.x }}>
-                <span className={`ml-1 text-[10px] ${t.major ? 'font-semibold text-[#3d4a5c]' : 'text-[#a39d8d]'}`}>{t.label}</span>
+              <div key={i} className={`absolute top-0 h-full border-l ${t.major ? 'border-field-line' : 'border-hairline-2'}`} style={{ left: t.x }}>
+                <span className={`ml-1 text-[10px] ${t.major ? 'font-semibold text-ink-2' : 'text-faint'}`}>{t.label}</span>
               </div>
             ))}
           </div>
@@ -182,7 +182,7 @@ function GanttChart({ project, solve, zoom, baselineId }: {
               return (
                 <div key={r.a.id}>
                   {baseline?.activities[r.a.id] && (
-                    <div className="absolute rounded-[2px] bg-[#c9c3b4]" title="Baseline"
+                    <div className="absolute rounded-[2px] bg-faint" title="Baseline"
                       style={{ left: scale.x(baseline.activities[r.a.id].start), top: cy + BAR_H, width: scale.barWidth(baseline.activities[r.a.id].start, baseline.activities[r.a.id].finish), height: BASE_H }} />
                   )}
                   <div className="absolute overflow-hidden rounded-[3px]" title={`${r.a.name}  ${d.start} → ${d.finish}  ${pct}%`}
@@ -210,15 +210,15 @@ export default function ScheduleGantt() {
     <div className="flex flex-wrap items-center gap-2">
       {project.baselines.length > 0 && (
         <select value={baselineId ?? ''} onChange={(e) => setBaselineId(e.target.value || null)}
-          className="rounded-md border border-[#d6d3c9] bg-white px-2 py-1.5 text-[12px]">
+          className="rounded-md border border-field-line bg-sheet px-2 py-1.5 text-[12px]">
           <option value="">No baseline</option>
           {project.baselines.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
       )}
-      <div className="flex overflow-hidden rounded-md border border-[#d6d3c9]">
+      <div className="flex overflow-hidden rounded-md border border-field-line">
         {ZOOM_LEVELS.map((z) => (
           <button key={z} type="button" onClick={() => setZoom(z)}
-            className={`px-2 py-1.5 text-[11.5px] font-semibold capitalize ${z === zoom ? 'bg-[#0f4c92] text-white' : 'bg-white text-[#3d4a5c] hover:bg-[#f1efe8]'}`}>{z}</button>
+            className={`px-2 py-1.5 text-[11.5px] font-semibold capitalize ${z === zoom ? 'bg-brand text-on-solid' : 'bg-sheet text-ink-2 hover:bg-sheet-2'}`}>{z}</button>
         ))}
       </div>
       <Link to="/schedule" className={btn}>Grid</Link>
@@ -233,19 +233,19 @@ export default function ScheduleGantt() {
           conflict={api.conflict} reloadTheirs={api.reloadTheirs}
           overwriteWithMine={api.overwriteWithMine} />
         {!project ? (
-          <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
-            <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>
-            <p className="mt-1 text-[13px] text-[#7a7568]">Open or create a project in the grid first.</p>
-            <Link to="/schedule" className="mt-4 inline-flex rounded-md bg-[#0f4c92] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#0d3f78]">Go to the schedule grid</Link>
+          <div className="rounded-lg border border-dashed border-field-line bg-sheet px-6 py-16 text-center">
+            <h2 className="text-[16px] font-bold text-ink">No schedule open</h2>
+            <p className="mt-1 text-[13px] text-faint">Open or create a project in the grid first.</p>
+            <Link to="/schedule" className="mt-4 inline-flex rounded-md bg-brand px-3 py-1.5 text-[12px] font-semibold text-on-solid hover:bg-brand-hover">Go to the schedule grid</Link>
           </div>
         ) : project.activities.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center text-[13px] text-[#a39d8d]">No activities to chart — add some in the grid.</div>
+          <div className="rounded-lg border border-dashed border-field-line bg-sheet px-6 py-16 text-center text-[13px] text-faint">No activities to chart — add some in the grid.</div>
         ) : (
           <>
             <Legend />
-            {!solve.ok && <div className="rounded-lg border border-[#efd9cc] bg-[#fdf3ee] px-4 py-2.5 text-[12px] text-[#8f4a2f]">The schedule has {solve.errorCount} blocking issue(s); fix them in the grid to chart the timeline.</div>}
+            {!solve.ok && <div className="rounded-lg border border-fail-line bg-fail-tint px-4 py-2.5 text-[12px] text-fail">The schedule has {solve.errorCount} blocking issue(s); fix them in the grid to chart the timeline.</div>}
             {solve.ok && <GanttChart project={project} solve={solve} zoom={zoom} baselineId={baselineId} />}
-            <p className="text-[11px] text-[#a39d8d]">Bars run start → finish on the working calendar; the darker fill is % complete. Critical bars carry a red outline; the dashed blue line is today. Connectors show predecessor links.</p>
+            <p className="text-[11px] text-faint">Bars run start → finish on the working calendar; the darker fill is % complete. Critical bars carry a red outline; the dashed blue line is today. Connectors show predecessor links.</p>
           </>
         )}
       </div>

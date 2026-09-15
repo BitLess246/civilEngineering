@@ -48,7 +48,7 @@ export default function LoadCombinations() {
 
         {/* ── RESULTS TABLE ── */}
         {r ? (
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet shadow-sm">
             <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5">
               <span className="text-sm font-semibold text-slate-700">Factored Load Combinations</span>
               <span className="ml-3 text-xs text-slate-500">NSCP 2015 §203.3</span>
@@ -102,7 +102,7 @@ export default function LoadCombinations() {
             </div>
           </div>
         ) : (
-          <p className="self-start rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-slate-500">
             Fill in load values to see factored combinations.
           </p>
         )}

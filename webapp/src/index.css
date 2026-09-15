@@ -7,27 +7,109 @@
 
    Drawing-sheet workbench theme (docs/design/uiux-2026-07): warm paper,
    ink navy, drafting blue; Archivo for UI, IBM Plex Mono for numbers. */
+@import "./styles/themes.css";
+
 @theme {
   --font-sans: 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* The 30 roles, as Tailwind colours: `bg-brand`, `text-faint`,
+     `border-hairline`. Each points at a `--t-*` indirection rather than a
+     literal, and that indirection is the whole trick — `@theme` resolves at
+     BUILD time, so a literal here could never be re-themed, while `var(--t-*)`
+     resolves in the browser and follows whatever `[data-theme]` is on <html>.
+     Values live in styles/themes.css; this block only names the roles.
+
+     Tailwind's own palette (`text-slate-500`, ~2 400 uses) already compiles to
+     `var(--color-slate-*)`, so those follow a theme for free. */
+  --color-paper: var(--t-paper);
+  --color-sheet: var(--t-sheet);
+  --color-sheet-2: var(--t-sheet-2);
+  --color-field: var(--t-field);
+
+  --color-rail: var(--t-rail);
+  --color-rail-ink: var(--t-rail-ink);
+  --color-rail-muted: var(--t-rail-muted);
+  --color-rail-accent: var(--t-rail-accent);
+
+  --color-ink: var(--t-ink);
+  --color-ink-2: var(--t-ink-2);
+  --color-muted: var(--t-muted);
+  --color-faint: var(--t-faint);
+
+  --color-hairline: var(--t-hairline);
+  --color-hairline-2: var(--t-hairline-2);
+  --color-field-line: var(--t-field-line);
+
+  --color-brand: var(--t-brand);
+  --color-brand-hover: var(--t-brand-hover);
+  --color-brand-tint: var(--t-brand-tint);
+  --color-brand-line: var(--t-brand-line);
+  --color-on-solid: var(--t-on-solid);
+  --color-focus: var(--t-focus);
+
+  --color-ok: var(--t-ok);
+  --color-ok-tint: var(--t-ok-tint);
+  --color-ok-line: var(--t-ok-line);
+  --color-warn: var(--t-warn);
+  --color-warn-tint: var(--t-warn-tint);
+  --color-warn-line: var(--t-warn-line);
+  --color-fail: var(--t-fail);
+  --color-fail-tint: var(--t-fail-tint);
+  --color-fail-line: var(--t-fail-line);
 }
 
 :root {
-  --brand: #0f4c92;        /* drafting blue — actions & links only */
-  --brand-dark: #0d3f78;
-  --ink: #0f1b2a;          /* ink navy — headings, sidebar */
-  --paper: #f4f3ef;        /* warm paper background */
-  --sheet: #ffffff;        /* card surface */
-  --hairline: #e3e1da;     /* card border */
-  --hairline-soft: #eeece5;
-  --field: #fcfbf8;        /* input background */
-  --field-border: #d6d3c9;
-  --ok: #1a7f4b;           /* semantic status — reserved for checks */
-  --warn: #b97d10;
-  --fail: #c2402a;
-  --muted: #5c6675;
-  --faint: #a39d8d;
+  /* Legacy aliases. These drove the global rules below (body, form fields,
+     rail hairlines) and nothing else — no component ever read them, which is
+     how 78 literal hexes grew up beside them. They now forward to the theme
+     tokens, so those global rules follow the chosen theme instead of pinning
+     the app to Drafting. */
+  --brand: var(--t-brand);
+  --brand-dark: var(--t-brand-hover);
+  --ink: var(--t-ink);
+  --paper: var(--t-paper);
+  --sheet: var(--t-sheet);
+  --hairline: var(--t-hairline);
+  --hairline-soft: var(--t-hairline-2);
+  --field: var(--t-field);
+  --field-border: var(--t-field-line);
+  --ok: var(--t-ok);
+  --warn: var(--t-warn);
+  --fail: var(--t-fail);
+  --muted: var(--t-muted);
+  --faint: var(--t-faint);
 }
+
+/* ── Browser surfaces ──────────────────────────────────────────
+   The parts nobody draws still carry the design: selection, the caret, the
+   scrollbar, the focus ring. They ship with browser defaults belonging to no
+   design system, and on a dark theme they are what makes an app look broken
+   — a light scrollbar and a blue-on-navy selection are the tell.
+
+   `color-scheme` (set per theme in themes.css) is doing the heavy lifting:
+   it re-tints native scrollbars, form controls and the caret without custom
+   widget CSS, which is the standard-affordance way rather than reinventing a
+   scrollbar. The rules here are the parts it does not cover. */
+::selection { background: var(--t-brand-tint); color: var(--t-ink); }
+html { scrollbar-color: var(--t-field-line) transparent; }
+body { caret-color: var(--t-brand); }
+
+/* One authored focus ring, themed. The app had ZERO `focus:` utilities, so
+   every focused control wore the Chromium default — never checked against the
+   navy rail, and different in every engine. `:focus-visible` keeps it off
+   mouse clicks. 2px at a 2px offset clears WCAG 2.4.11's thickness floor. */
+:focus-visible {
+  outline: 2px solid var(--t-focus);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+/* On the rail the ring sits on near-black, where the brand blue is too dark
+   to see; the rail's own ink is the only value guaranteed to read there. */
+[data-rail] :focus-visible { outline-color: var(--t-rail-ink); }
+
+/* Numbers in a column line up. The app is full of them. */
+table, .tabular { font-variant-numeric: tabular-nums; }
 
 body {
   margin: 0;

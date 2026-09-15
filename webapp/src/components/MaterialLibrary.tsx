@@ -111,7 +111,7 @@ export function MaterialLibrary({ materials, selectedId, onSelect, onChange }: {
           {errors.length > 0 && <p className="mt-2 text-[11px] text-red-600">{errors.join(' · ')}</p>}
           <p className="mt-2 text-[10px] text-amber-600">User-defined values are unverified — you are responsible for their source and validity.</p>
           <div className="mt-2 flex gap-2">
-            <button type="button" className="rounded-md bg-[#0056b3] px-3 py-1 text-[11px] font-semibold text-white disabled:opacity-40"
+            <button type="button" className="rounded-md bg-brand px-3 py-1 text-[11px] font-semibold text-on-solid disabled:opacity-40"
               onClick={save} disabled={errors.length > 0 || !draft.name.trim()}>Save</button>
             <button type="button" className={btn} onClick={() => setDraft(null)}>Cancel</button>
           </div>

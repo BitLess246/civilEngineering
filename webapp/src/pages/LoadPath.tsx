@@ -71,7 +71,7 @@ export default function LoadPath() {
 
           <Card title="Area loads" grid={false}>
             <button type="button" onClick={() => setAreaLoads((ls) => [...ls, { id: uid++, q: 2, cat: 'L' }])}
-              className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Area load</button>
+              className="no-print mb-3 rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">+ Area load</button>
             <div className="space-y-3">
               {areaLoads.map((l) => (
                 <div key={l.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -121,7 +121,7 @@ export default function LoadPath() {
                       {e.edge} ({e.kind}, {f2(e.length)} m)
                       {e.loads.length > 0 && (
                         <button type="button" onClick={() => sendToBeam(i)}
-                          className="no-print rounded border border-[#0056b3] px-1.5 py-0.5 text-[10px] font-semibold text-[#0056b3] hover:bg-blue-50">
+                          className="no-print rounded border border-brand px-1.5 py-0.5 text-[10px] font-semibold text-brand hover:bg-blue-50">
                           analyze →
                         </button>
                       )}

@@ -54,10 +54,10 @@ export function ModelSpacePreview() {
   return (
     <figure className="m-0">
       <div ref={boxRef}
-        className="relative w-full overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a]"
+        className="relative w-full overflow-hidden rounded-lg border border-hairline bg-rail"
         style={{ aspectRatio: `${INTRINSIC_W} / ${INTRINSIC_H}` }}>
         {!live && (
-          <div className="flex h-full items-center justify-center font-mono text-xs text-[#7d8ea3]">
+          <div className="flex h-full items-center justify-center font-mono text-xs text-rail-muted">
             Loading the workbench…
           </div>
         )}
@@ -70,7 +70,7 @@ export function ModelSpacePreview() {
       </div>
       {/* The page's own viewport hint, verbatim — it doubles as the promise
           that this picture is live and can be grabbed. */}
-      <figcaption className="mt-2 text-right font-mono text-[10.5px] text-[#a39d8d]">
+      <figcaption className="mt-2 text-right font-mono text-[10.5px] text-faint">
         live · orbit: drag · pan: ⇧drag · zoom: scroll
       </figcaption>
     </figure>

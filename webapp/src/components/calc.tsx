@@ -12,11 +12,11 @@ import { BRAND_MARK, BRAND_TAIL, COMPUTED_BY, docLabel } from '../lib/brand'
 
 export function PageHeader({ title, badges, actions }: { title: string; badges: string[]; actions?: ReactNode }) {
   return (
-    <div className="no-print flex flex-wrap items-center gap-3 border-b border-[#e3e1da] bg-white px-5 py-3.5 sm:px-7">
+    <div className="no-print flex flex-wrap items-center gap-3 border-b border-hairline bg-sheet px-5 py-3.5 sm:px-7">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <h1 className="text-[21px] font-extrabold tracking-tight text-[#0f1b2a]">{title}</h1>
+        <h1 className="text-[21px] font-extrabold tracking-tight text-ink">{title}</h1>
         {badges.map((b) => (
-          <span key={b} className="whitespace-nowrap rounded border border-[#cddcf0] bg-[#eaf1f9] px-1.5 py-px font-mono text-[10px] font-medium text-[#0f4c92]">{b}</span>
+          <span key={b} className="whitespace-nowrap rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[10px] font-medium text-brand">{b}</span>
         ))}
       </div>
       {actions && <div className="no-print ml-auto flex items-center gap-2">{actions}</div>}
@@ -53,11 +53,11 @@ export function CalcSection({ num, title, hint, children, grid = true }: {
   num: string; title: string; hint?: string; children: ReactNode; grid?: boolean
 }) {
   return (
-    <section className="rail-card rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
-      <div className="flex items-baseline gap-2.5 border-b border-[#eeece5] px-4 py-3">
-        <span className="font-mono text-[10.5px] font-semibold text-[#a39d8d]">{num}</span>
-        <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
-        {hint && <span className="ml-auto text-[11px] text-[#a39d8d]">{hint}</span>}
+    <section className="rail-card rounded-lg border border-hairline bg-sheet print-avoid-break">
+      <div className="flex items-baseline gap-2.5 border-b border-hairline-2 px-4 py-3">
+        <span className="font-mono text-[10.5px] font-semibold text-faint">{num}</span>
+        <h2 className="text-[13.5px] font-bold text-ink">{title}</h2>
+        {hint && <span className="ml-auto text-[11px] text-faint">{hint}</span>}
       </div>
       <div className={grid ? 'grid grid-cols-1 gap-3.5 p-4 sm:grid-cols-2 lg:grid-cols-3' : 'p-4'}>{children}</div>
     </section>
@@ -87,13 +87,13 @@ export function UtilBar({ c }: { c: VerdictCheck }) {
     return (
       <div>
         <div className="flex items-baseline justify-between gap-2">
-          <span className="text-[11.5px] font-semibold text-[#3d4a5c]">{c.name}</span>
-          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#8a6a1e]">not checked</span>
+          <span className="text-[11.5px] font-semibold text-ink-2">{c.name}</span>
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-warn">not checked</span>
         </div>
         {/* A dashed rail, not an empty one: a 0%-wide bar reads as "passing
             with room to spare", which is the opposite of what happened. */}
-        <div className="mt-1 h-[5px] rounded-[3px] border border-dashed border-[#d6d3c9]" />
-        {c.note && <p className="mt-1 text-[10.5px] text-[#736d5e]">{c.note}</p>}
+        <div className="mt-1 h-[5px] rounded-[3px] border border-dashed border-field-line" />
+        {c.note && <p className="mt-1 text-[10.5px] text-faint">{c.note}</p>}
       </div>
     )
   }
@@ -101,10 +101,10 @@ export function UtilBar({ c }: { c: VerdictCheck }) {
   return (
     <div>
       <div className="flex items-baseline justify-between">
-        <span className="text-[11.5px] font-semibold text-[#3d4a5c]">{c.name}</span>
+        <span className="text-[11.5px] font-semibold text-ink-2">{c.name}</span>
         <span className="font-mono text-[11px]" style={{ color }}>{c.ratio.toFixed(2)}</span>
       </div>
-      <div className="mt-1 h-[5px] overflow-hidden rounded-[3px] bg-[#eeece5]">
+      <div className="mt-1 h-[5px] overflow-hidden rounded-[3px] bg-hairline">
         <div className="h-full rounded-[3px]" style={{ background: color, width: `${Math.min(100, c.ratio * 100)}%` }} />
       </div>
     </div>
@@ -116,16 +116,16 @@ export function VerdictPanel({ ok, headline, governing, stats, checks, footnote 
   stats: VerdictStat[]; checks: VerdictCheck[]; footnote?: ReactNode
 }) {
   return (
-    <section className="rail-card overflow-hidden rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
-      <div className={`flex items-center gap-2.5 border-b px-4 py-3 ${ok ? 'border-[#d3e8da] bg-[#ecf6ef]' : 'border-[#efd4cc] bg-[#fbeeea]'}`}>
-        <span className={`flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full text-white ${ok ? 'bg-[#1a7f4b]' : 'bg-[#c2402a]'}`}>
+    <section className="rail-card overflow-hidden rounded-lg border border-hairline bg-sheet print-avoid-break">
+      <div className={`flex items-center gap-2.5 border-b px-4 py-3 ${ok ? 'border-ok-line bg-ok-tint' : 'border-fail-line bg-fail-tint'}`}>
+        <span className={`flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full text-on-solid ${ok ? 'bg-ok' : 'bg-fail'}`}>
           {ok
             ? <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
             : <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>}
         </span>
         <div className="min-w-0">
-          <p className={`text-[13px] font-extrabold tracking-wide ${ok ? 'text-[#14603a]' : 'text-[#8f2f1e]'}`}>{headline}{coverageSuffix(checks)}</p>
-          {governing && <p className={`mt-px truncate text-[11px] ${ok ? 'text-[#4d7a5f]' : 'text-[#a95b47]'}`}>{governing}</p>}
+          <p className={`text-[13px] font-extrabold tracking-wide ${ok ? 'text-ok' : 'text-fail'}`}>{headline}{coverageSuffix(checks)}</p>
+          {governing && <p className={`mt-px truncate text-[11px] ${ok ? 'text-ok' : 'text-fail'}`}>{governing}</p>}
         </div>
       </div>
       {/* WRAPS, rather than forcing one row.
@@ -139,10 +139,10 @@ export function VerdictPanel({ ok, headline, governing, stats, checks, footnote 
       {stats.length > 0 && (
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
           {stats.map((s, i) => (
-            <div key={s.label} className={`border-b border-[#eeece5] px-3.5 py-3 ${i < stats.length - 1 ? 'border-r border-[#eeece5]' : ''}`}>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a39d8d]">{s.label}</p>
-              <p className="mt-0.5 truncate font-mono text-[15px] font-semibold text-[#0f1b2a]">
-                {s.value}{s.unit && <span className="text-[11px] text-[#a39d8d]"> {s.unit}</span>}
+            <div key={s.label} className={`border-b border-hairline-2 px-3.5 py-3 ${i < stats.length - 1 ? 'border-r border-hairline-2' : ''}`}>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-faint">{s.label}</p>
+              <p className="mt-0.5 truncate font-mono text-[15px] font-semibold text-ink">
+                {s.value}{s.unit && <span className="text-[11px] text-faint"> {s.unit}</span>}
               </p>
             </div>
           ))}
@@ -150,7 +150,7 @@ export function VerdictPanel({ ok, headline, governing, stats, checks, footnote 
       )}
       <div className="flex flex-col gap-2.5 px-4 py-3.5">
         {checks.map((c) => <UtilBar key={c.name} c={c} />)}
-        {footnote && <p className="mt-0.5 text-[10.5px] text-[#a39d8d]">{footnote}</p>}
+        {footnote && <p className="mt-0.5 text-[10.5px] text-faint">{footnote}</p>}
       </div>
     </section>
   )
@@ -167,10 +167,10 @@ export function DrawingCard({ title, meta, children, pdfDrawing }: {
   title: string; meta?: string; children: ReactNode; pdfDrawing?: boolean
 }) {
   return (
-    <section className="rail-card rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
-      <div className="flex items-center justify-between border-b border-[#eeece5] px-4 py-3">
-        <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
-        {meta && <span className="font-mono text-[10px] text-[#a39d8d]">{meta}</span>}
+    <section className="rail-card rounded-lg border border-hairline bg-sheet print-avoid-break">
+      <div className="flex items-center justify-between border-b border-hairline-2 px-4 py-3">
+        <h2 className="text-[13.5px] font-bold text-ink">{title}</h2>
+        {meta && <span className="font-mono text-[10px] text-faint">{meta}</span>}
       </div>
       <div {...(pdfDrawing ? { 'data-pdf-drawing': '' } : {})}
         className="p-3 [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
@@ -192,26 +192,26 @@ export function LetterheadCard({ lh, onChange, action }: {
   const today = new Date().toISOString().slice(0, 10)
   const cell = (label: string, value: string, key: keyof LetterheadState, ph: string, mono = false) => (
     <div className="min-w-0">
-      <span className="text-[9.5px] font-semibold uppercase tracking-widest text-[#a39d8d]">{label}</span>
+      <span className="text-[9.5px] font-semibold uppercase tracking-widest text-faint">{label}</span>
       <input value={value} onChange={(e) => onChange({ [key]: e.target.value })} placeholder={ph}
-        className={`w-full !border-0 !bg-transparent !p-0 text-[12px] font-semibold leading-[1.35] text-[#0f1b2a] !shadow-none placeholder:text-[#c8c2b4] ${mono ? 'font-mono font-medium' : ''}`} />
+        className={`w-full !border-0 !bg-transparent !p-0 text-[12px] font-semibold leading-[1.35] text-ink !shadow-none placeholder:text-faint ${mono ? 'font-mono font-medium' : ''}`} />
     </div>
   )
   // Four fields on ONE row from `sm` up — the two-row grid was the whole of the
   // card's height, and none of these values is long enough to need half a card.
   return (
-    <section className="rail-card no-print rounded-lg border border-[#e3e1da] bg-white px-4 py-3">
+    <section className="rail-card no-print rounded-lg border border-hairline bg-sheet px-4 py-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[12.5px] font-bold text-[#0f1b2a]">Report letterhead</h2>
-        {action ?? <span className="font-mono text-[10px] text-[#a39d8d]">prints on the calc sheet</span>}
+        <h2 className="text-[12.5px] font-bold text-ink">Report letterhead</h2>
+        {action ?? <span className="font-mono text-[10px] text-faint">prints on the calc sheet</span>}
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-5 gap-y-1.5 sm:grid-cols-4">
         {cell('Project', lh.project, 'project', 'Lot 12 Residence')}
         {cell('Sheet', lh.sheet, 'sheet', 'F-01 · Rev A', true)}
         {cell('Prepared by', lh.preparedBy, 'preparedBy', 'Engineer, CE')}
         <div className="min-w-0">
-          <span className="text-[9.5px] font-semibold uppercase tracking-widest text-[#a39d8d]">Date</span>
-          <p className="font-mono text-[12px] font-medium leading-[1.35] text-[#0f1b2a]">{today}</p>
+          <span className="text-[9.5px] font-semibold uppercase tracking-widest text-faint">Date</span>
+          <p className="font-mono text-[12px] font-medium leading-[1.35] text-ink">{today}</p>
         </div>
       </div>
     </section>
@@ -223,7 +223,7 @@ export function LetterheadCard({ lh, onChange, action }: {
 /** A printed check row. `ratio: null` = not evaluated; see `VerdictCheck`. */
 export interface ReportCheckRow { name: string; ratio: number | null; ok: boolean; note?: string }
 const SectionRule = ({ n, title }: { n: number; title: string }) => (
-  <h2 className="mt-6 border-b-2 border-[#0f1b2a] pb-1.5 text-[12px] font-extrabold uppercase tracking-[.12em] text-[#0f1b2a]">{n} · {title}</h2>
+  <h2 className="mt-6 border-b-2 border-ink pb-1.5 text-[12px] font-extrabold uppercase tracking-[.12em] text-ink">{n} · {title}</h2>
 )
 export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLhChange, stats = [], checks = [], data = [], steps, drawing, drawingTitle }: {
   docTitle: string; docCode: string; badges: string[]
@@ -263,11 +263,11 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
         action={<ExportPdfButton
           docTitle={docTitle} docCode={docCode} badges={badges} ok={ok} governing={governing} lh={lh}
           stats={stats} checks={checks} data={data} steps={steps} drawingTitle={drawingTitle}
-          className="inline-flex flex-none items-center gap-2 rounded-md bg-[#0f4c92] px-3.5 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78] disabled:opacity-50"
+          className="inline-flex flex-none items-center gap-2 rounded-md bg-brand px-3.5 py-1.5 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-50"
         />} />
     </div>
     <div className="print-only">
-      <div className="flex items-baseline justify-between border-b border-[#eeece5] pb-1.5 font-mono text-[9px] text-[#a39d8d]">
+      <div className="flex items-baseline justify-between border-b border-hairline-2 pb-1.5 font-mono text-[9px] text-faint">
         <span>{docLabel(`${docTitle} — Calculation Report`)}</span>
         <span>{lh.sheet || docCode} · {today}</span>
       </div>
@@ -275,25 +275,25 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
         <div>
           <div className="flex items-baseline gap-2">
             <span className="text-[14px] font-extrabold tracking-[.14em]">{BRAND_MARK}</span>
-            <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-[#7a7568]">{BRAND_TAIL}</span>
+            <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>
           </div>
           <h1 className="mt-2 text-[24px] font-extrabold tracking-tight">{docTitle} — Design Calculation</h1>
           <div className="mt-2 flex gap-2">
-            {badges.map((b) => <span key={b} className="rounded border border-[#cddcf0] bg-[#eaf1f9] px-1.5 py-px font-mono text-[9.5px] font-medium text-[#0f4c92]">{b}</span>)}
+            {badges.map((b) => <span key={b} className="rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[9.5px] font-medium text-brand">{b}</span>)}
           </div>
         </div>
-        <div className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2.5 ${ok ? 'border-[#d3e8da] bg-[#ecf6ef]' : 'border-[#efd4cc] bg-[#fbeeea]'}`}>
+        <div className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2.5 ${ok ? 'border-ok-line bg-ok-tint' : 'border-fail-line bg-fail-tint'}`}>
           <div>
-            <p className={`text-[11.5px] font-extrabold tracking-wide ${ok ? 'text-[#14603a]' : 'text-[#8f2f1e]'}`}>{ok ? 'DESIGN OK' : 'CHECK FAILED'}{coverageSuffix(checks)}</p>
-            <p className={`mt-px text-[9.5px] ${ok ? 'text-[#4d7a5f]' : 'text-[#a95b47]'}`}>{governing}</p>
+            <p className={`text-[11.5px] font-extrabold tracking-wide ${ok ? 'text-ok' : 'text-fail'}`}>{ok ? 'DESIGN OK' : 'CHECK FAILED'}{coverageSuffix(checks)}</p>
+            <p className={`mt-px text-[9.5px] ${ok ? 'text-ok' : 'text-fail'}`}>{governing}</p>
           </div>
         </div>
       </div>
-      <div className="print-avoid-break mt-4 grid grid-cols-3 overflow-hidden rounded-lg border border-[#e3e1da]">
+      <div className="print-avoid-break mt-4 grid grid-cols-3 overflow-hidden rounded-lg border border-hairline">
         {lhCells.map(([k, v, mono]) => (
-          <div key={k} className="border-b border-r border-[#eeece5] px-3.5 py-2">
-            <p className="text-[8.5px] font-semibold uppercase tracking-widest text-[#a39d8d]">{k}</p>
-            <p className={`mt-0.5 text-[11px] font-semibold text-[#0f1b2a] ${mono ? 'font-mono font-medium' : ''}`}>{v}</p>
+          <div key={k} className="border-b border-r border-hairline-2 px-3.5 py-2">
+            <p className="text-[8.5px] font-semibold uppercase tracking-widest text-faint">{k}</p>
+            <p className={`mt-0.5 text-[11px] font-semibold text-ink ${mono ? 'font-mono font-medium' : ''}`}>{v}</p>
           </div>
         ))}
       </div>
@@ -301,29 +301,29 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
       {(stats.length > 0 || checks.length > 0) && <SectionRule n={1} title="Design Summary" />}
       {stats.length > 0 && <div className="print-avoid-break mt-3 grid grid-cols-3 gap-2.5">
         {stats.map((st) => (
-          <div key={st.label} className="rounded-lg border border-[#e3e1da] px-3.5 py-2.5">
-            <p className="text-[8.5px] font-semibold uppercase tracking-widest text-[#a39d8d]">{st.label}</p>
-            <p className="mt-0.5 font-mono text-[15px] font-semibold">{st.value}{st.unit && <span className="text-[10px] text-[#a39d8d]"> {st.unit}</span>}</p>
+          <div key={st.label} className="rounded-lg border border-hairline px-3.5 py-2.5">
+            <p className="text-[8.5px] font-semibold uppercase tracking-widest text-faint">{st.label}</p>
+            <p className="mt-0.5 font-mono text-[15px] font-semibold">{st.value}{st.unit && <span className="text-[10px] text-faint"> {st.unit}</span>}</p>
           </div>
         ))}
       </div>}
       {checks.length > 0 && <table className="mt-3 w-full border-collapse text-[10.5px]">
         <thead><tr>
-          <th className="border-b-[1.5px] border-[#0f1b2a] px-2.5 py-1.5 text-left text-[8.5px] font-bold uppercase tracking-widest text-[#5c6675]">Check</th>
-          <th className="border-b-[1.5px] border-[#0f1b2a] px-2.5 py-1.5 text-right text-[8.5px] font-bold uppercase tracking-widest text-[#5c6675]">Ratio</th>
-          <th className="border-b-[1.5px] border-[#0f1b2a] px-2.5 py-1.5 text-right text-[8.5px] font-bold uppercase tracking-widest text-[#5c6675]">Status</th>
+          <th className="border-b-[1.5px] border-ink px-2.5 py-1.5 text-left text-[8.5px] font-bold uppercase tracking-widest text-muted">Check</th>
+          <th className="border-b-[1.5px] border-ink px-2.5 py-1.5 text-right text-[8.5px] font-bold uppercase tracking-widest text-muted">Ratio</th>
+          <th className="border-b-[1.5px] border-ink px-2.5 py-1.5 text-right text-[8.5px] font-bold uppercase tracking-widest text-muted">Status</th>
         </tr></thead>
         <tbody>
           {checks.map((c) => (
             <tr key={c.name}>
-              <td className="border-b border-[#eeece5] px-2.5 py-1.5 font-semibold">{c.name}</td>
-              <td className="border-b border-[#eeece5] px-2.5 py-1.5 text-right font-mono"
+              <td className="border-b border-hairline-2 px-2.5 py-1.5 font-semibold">{c.name}</td>
+              <td className="border-b border-hairline-2 px-2.5 py-1.5 text-right font-mono"
                 style={c.ratio === null ? { color: '#8a6a1e' } : { color: c.ratio > 1.0001 ? '#c2402a' : c.ratio >= 0.95 ? '#b97d10' : '#1a7f4b' }}>
                 {c.ratio === null ? '\u2014' : c.ratio.toFixed(2)}
               </td>
-              <td className="border-b border-[#eeece5] px-2.5 py-1.5 text-right">
+              <td className="border-b border-hairline-2 px-2.5 py-1.5 text-right">
                 <span className={`inline-block rounded px-1.5 py-px font-mono text-[9px] font-semibold ${
-                  c.ratio === null ? 'bg-[#fdf6e9] text-[#8a6a1e]' : c.ok ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>
+                  c.ratio === null ? 'bg-warn-tint text-warn' : c.ok ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
                   {c.ratio === null ? 'NOT CHECKED' : c.ok ? 'PASS' : 'FAIL'}</span>
               </td>
             </tr>
@@ -334,8 +334,8 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
       {data.length > 0 && <SectionRule n={2} title="Design Data" />}
       {data.length > 0 && <div className="print-avoid-break mt-2 grid grid-cols-2 gap-x-7">
         {data.map(([k, v]) => (
-          <div key={k} className="flex items-baseline justify-between border-b border-[#f3f1ea] py-1 text-[10.5px]">
-            <span className="text-[#5c6675]">{k}</span><span className="font-mono font-medium">{v}</span>
+          <div key={k} className="flex items-baseline justify-between border-b border-hairline-2 py-1 text-[10.5px]">
+            <span className="text-muted">{k}</span><span className="font-mono font-medium">{v}</span>
           </div>
         ))}
       </div>}
@@ -346,29 +346,29 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
         // minimum is its content, so a long equation widens the column instead
         // of scrolling inside it, and on a printed page there is no scrolling
         // to fall back on.
-        <div key={i} className="print-avoid-break grid grid-cols-[minmax(0,1fr)_110px] gap-4 border-b border-[#f3f1ea] py-3">
+        <div key={i} className="print-avoid-break grid grid-cols-[minmax(0,1fr)_110px] gap-4 border-b border-hairline-2 py-3">
           <div className="min-w-0">
-            <h3 className="text-[11.5px] font-bold"><span className="mr-1.5 font-mono font-semibold text-[#a39d8d]">3.{i + 1}</span>{st.title}</h3>
+            <h3 className="text-[11.5px] font-bold"><span className="mr-1.5 font-mono font-semibold text-faint">3.{i + 1}</span>{st.title}</h3>
             <div className="mt-1 space-y-1">
               {st.lines.map((ln, j) => 'text' in ln
-                ? <p key={j} className="text-[10.5px] leading-relaxed text-[#5c6675]">{ln.text}</p>
-                : <div key={j} className="overflow-x-auto rounded-md border border-[#eeece5] bg-[#f9f8f4] px-2.5 py-1 text-[10.5px]"><KTex block tex={ln.tex} /></div>)}
+                ? <p key={j} className="text-[10.5px] leading-relaxed text-muted">{ln.text}</p>
+                : <div key={j} className="overflow-x-auto rounded-md border border-hairline-2 bg-sheet-2 px-2.5 py-1 text-[10.5px]"><KTex block tex={ln.tex} /></div>)}
             </div>
           </div>
           <div className="pt-0.5">
             {st.pass !== undefined && (
-              <span className={`inline-block rounded px-1.5 py-px font-mono text-[9px] font-semibold ${st.pass ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>{st.pass ? 'PASS' : 'FAIL'}</span>
+              <span className={`inline-block rounded px-1.5 py-px font-mono text-[9px] font-semibold ${st.pass ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>{st.pass ? 'PASS' : 'FAIL'}</span>
             )}
-            <p className="mt-1 text-[9px] leading-snug text-[#a39d8d]">{st.clause ?? st.note ?? ''}</p>
+            <p className="mt-1 text-[9px] leading-snug text-faint">{st.clause ?? st.note ?? ''}</p>
           </div>
         </div>
       ))}
 
       {drawing && <SectionRule n={4} title="Drawing" />}
-      {drawing && <div className="print-avoid-break mt-3 rounded-lg border border-[#e3e1da] p-3.5 [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
+      {drawing && <div className="print-avoid-break mt-3 rounded-lg border border-hairline p-3.5 [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] font-bold tracking-[.14em] text-[#5c6675]">{(lh.sheet || docCode).split('·')[0].trim()} · {(drawingTitle ?? docTitle).toUpperCase()}</span>
-          <span className="font-mono text-[9px] text-[#a39d8d]">to scale</span>
+          <span className="text-[10px] font-bold tracking-[.14em] text-muted">{(lh.sheet || docCode).split('·')[0].trim()} · {(drawingTitle ?? docTitle).toUpperCase()}</span>
+          <span className="font-mono text-[9px] text-faint">to scale</span>
         </div>
         <div className="mx-auto w-[46%]">{drawing}</div>
       </div>}
@@ -380,7 +380,7 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
           there is then nothing to disclose. */}
       {(checkCoverage(checks).run < checkCoverage(checks).total || !lh.project.trim() || !lh.preparedBy.trim()) && <>
         <SectionRule n={drawing ? 5 : 4} title="Assumptions \u0026 Scope" />
-        <div className="print-avoid-break mt-3 rounded-lg border border-[#e3e1da] px-3.5 py-3 text-[10px] leading-relaxed">
+        <div className="print-avoid-break mt-3 rounded-lg border border-hairline px-3.5 py-3 text-[10px] leading-relaxed">
           {checks.length > 0 && (
             <p><span className="font-semibold">Checks performed:</span>{' '}
               {checkCoverage(checks).run} of {checks.length}
@@ -388,22 +388,22 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
               {checks.filter((c) => c.ratio !== null).map((c) => c.name).join('; ') || 'none'}.</p>
           )}
           {checks.some((c) => c.ratio === null) && (
-            <p className="mt-1.5 font-semibold text-[#8a6a1e]">
+            <p className="mt-1.5 font-semibold text-warn">
               NOT evaluated: {checks.filter((c) => c.ratio === null)
                 .map((c) => c.name + (c.note ? ` (${c.note})` : '')).join('; ')}.
               {' '}This sheet makes no statement about {checks.some((c) => c.ratio === null) && checks.filter((c) => c.ratio === null).length > 1 ? 'those checks' : 'that check'}.
             </p>
           )}
-          {!lh.project.trim() && <p className="mt-1.5 text-[#8a6a1e]">Project not named on this sheet.</p>}
-          {!lh.preparedBy.trim() && <p className="mt-1.5 text-[#8a6a1e]">Preparer not named on this sheet.</p>}
+          {!lh.project.trim() && <p className="mt-1.5 text-warn">Project not named on this sheet.</p>}
+          {!lh.preparedBy.trim() && <p className="mt-1.5 text-warn">Preparer not named on this sheet.</p>}
         </div>
       </>}
 
       <div className="print-avoid-break mt-6 grid grid-cols-2 gap-7">
-        <div><div className="h-11 border-b border-[#0f1b2a]" /><p className="mt-1.5 text-[10px] font-bold">{lh.preparedBy || '\u00a0'}</p><p className="text-[9px] text-[#7a7568]">Prepared by</p></div>
-        <div><div className="h-11 border-b border-[#0f1b2a]" /><p className="mt-1.5 text-[10px] font-bold">{'\u00a0'}</p><p className="text-[9px] text-[#7a7568]">Reviewed by · Date</p></div>
+        <div><div className="h-11 border-b border-ink" /><p className="mt-1.5 text-[10px] font-bold">{lh.preparedBy || '\u00a0'}</p><p className="text-[9px] text-faint">Prepared by</p></div>
+        <div><div className="h-11 border-b border-ink" /><p className="mt-1.5 text-[10px] font-bold">{'\u00a0'}</p><p className="text-[9px] text-faint">Reviewed by · Date</p></div>
       </div>
-      <p className="mt-4 text-[8.5px] leading-relaxed text-[#a39d8d]">{COMPUTED_BY} Load factors per NSCP 2015 §203.3; strength reduction factors per ACI 318-14 Table 21.2.1. Project: {lh.project || '—'}.</p>
+      <p className="mt-4 text-[8.5px] leading-relaxed text-faint">{COMPUTED_BY} Load factors per NSCP 2015 §203.3; strength reduction factors per ACI 318-14 Table 21.2.1. Project: {lh.project || '—'}.</p>
     </div>
     </>
   )
@@ -423,18 +423,18 @@ export function ReportBar({ title, lh, onChange }: {
   }
   const field = (label: string, key: keyof LetterheadState, ph: string, mono = false) => (
     <label className="flex min-w-36 flex-1 flex-col text-sm">
-      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
+      <span className="mb-1 text-[11.5px] font-semibold text-muted">{label}</span>
       <input value={lh[key]} onChange={(e) => onChange({ [key]: e.target.value })} placeholder={ph}
         className={`text-[13px] ${mono ? 'font-mono' : ''}`} />
     </label>
   )
   return (
-    <div className="no-print mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-[#e3e1da] bg-white p-3">
+    <div className="no-print mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-hairline bg-sheet p-3">
       {field('Project / job', 'project', 'Lot 12 Residence')}
       {field('Sheet', 'sheet', 'S-01 · Rev A', true)}
       {field('Prepared by', 'preparedBy', 'Engineer, CE')}
       <button type="button" onClick={print}
-        className="ml-auto inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d3f78]">
+        className="ml-auto inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover">
         ⎙ Export report
       </button>
     </div>

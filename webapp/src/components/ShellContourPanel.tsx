@@ -79,7 +79,7 @@ export function ShellContourPanel({ nodes, elems, stresses }: Props) {
       {/* Quantity selector */}
       <div className="col-span-full mb-2">
         <select value={key} onChange={(e) => setKey(e.target.value as StressKey)}
-          className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-700">
+          className="rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-slate-700">
           {KEYS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
         </select>
       </div>

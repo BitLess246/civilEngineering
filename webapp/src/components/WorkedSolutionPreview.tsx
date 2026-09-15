@@ -26,26 +26,26 @@ const R = DEMO_RESULT
 
 function Line({ clause, children }: { clause: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-dashed border-[#ece9e1] py-1.5 last:border-0">
-      <span className="text-[13px] leading-6 text-[#2b3648]">{children}</span>
-      <span className="shrink-0 font-mono text-[10.5px] uppercase tracking-wide text-[#a39d8d]">{clause}</span>
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 border-b border-dashed border-hairline-2 py-1.5 last:border-0">
+      <span className="text-[13px] leading-6 text-ink-2">{children}</span>
+      <span className="shrink-0 font-mono text-[10.5px] uppercase tracking-wide text-faint">{clause}</span>
     </div>
   )
 }
 
 export function WorkedSolutionPreview() {
   return (
-    <div className="overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
+    <div className="overflow-hidden rounded-lg border border-hairline bg-sheet">
       {/* The row as it appears in the schedule, in its opened state. */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-[#e3e1da] bg-[#f7f5ef] px-5 py-3">
-        <span className="font-mono text-[12px] font-bold text-[#0f4c92]">B-201</span>
-        <span className="text-[12.5px] text-[#5c6675]">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-hairline bg-sheet-2 px-5 py-3">
+        <span className="font-mono text-[12px] font-bold text-brand">B-201</span>
+        <span className="text-[12.5px] text-muted">
           {DEMO_INPUT.b}×{DEMO_INPUT.h} · f′c {DEMO_INPUT.fc} · fy {DEMO_INPUT.fy}
         </span>
-        <span className="text-[12.5px] text-[#5c6675]">
+        <span className="text-[12.5px] text-muted">
           Mu {DEMO_INPUT.Mu} kN·m · Vu {DEMO_INPUT.Vu} kN
         </span>
-        <span className="ml-auto rounded bg-[#e6f2e8] px-2 py-0.5 text-[11px] font-bold text-[#1f6b34]">PASS</span>
+        <span className="ml-auto rounded bg-ok-tint px-2 py-0.5 text-[11px] font-bold text-ok">PASS</span>
       </div>
 
       <div className="px-5 py-3">
@@ -72,7 +72,7 @@ export function WorkedSolutionPreview() {
         </Line>
       </div>
 
-      <p className="border-t border-[#e3e1da] bg-[#fbfaf7] px-5 py-2.5 text-[12px] leading-relaxed text-[#5c6675]">
+      <p className="border-t border-hairline bg-sheet-2 px-5 py-2.5 text-[12px] leading-relaxed text-muted">
         Every row in every schedule opens like this — beams, columns, slabs, footings,
         steel members and connections. The same derivation prints in the PDF report.
       </p>

@@ -68,8 +68,8 @@ function PlanChangeDialog({ plan, priceId, onClose }: {
   return (
     <div role="dialog" aria-modal="true" aria-label={`Switch to ${plan.name}`}
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-lg">
-        <h2 className="text-[1.05rem] font-bold text-[#0056b3]">
+      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-sheet p-5 shadow-lg">
+        <h2 className="text-[1.05rem] font-bold text-brand">
           {state === 'done' ? 'Switch confirmed' : `Switch to ${plan.name}`}
         </h2>
 
@@ -99,12 +99,12 @@ function PlanChangeDialog({ plan, priceId, onClose }: {
 
         <div className="mt-5 flex flex-wrap justify-end gap-3">
           <button type="button" onClick={onClose}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-[13px] font-semibold text-slate-700 hover:border-[#0056b3] hover:text-[#0056b3]">
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-[13px] font-semibold text-slate-700 hover:border-brand hover:text-brand">
             {state === 'done' ? 'Close' : 'Cancel'}
           </button>
           {state !== 'done' && change && (
             <button type="button" onClick={confirm} disabled={state !== 'ready'}
-              className="rounded-md bg-[#0056b3] px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-[#0f4c92] disabled:opacity-60">
+              className="rounded-md bg-brand px-4 py-1.5 text-[13px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-60">
               {state === 'working' ? 'Switching…' : `Confirm switch to ${plan.name}`}
             </button>
           )}
@@ -138,7 +138,7 @@ function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeri
   const [error, setError] = useState<string | null>(null)
   const [switching, setSwitching] = useState(false)
 
-  const btn = 'block w-full rounded-md bg-[#0056b3] px-4 py-2 text-center text-sm font-semibold text-white hover:bg-[#0f4c92] disabled:opacity-60'
+  const btn = 'block w-full rounded-md bg-brand px-4 py-2 text-center text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60'
 
   if (plan.id === 'guest') return <p className="text-center text-[12px] text-slate-500">No sign-up needed</p>
   if (plan.priceMonthly === 0) {
@@ -173,7 +173,7 @@ function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeri
         */}
         {user?.hasSubscription && (
           <button type="button" onClick={() => setSwitching(true)}
-            className="mt-2 block w-full text-center text-[12px] font-semibold text-[#0056b3] underline">
+            className="mt-2 block w-full text-center text-[12px] font-semibold text-brand underline">
             Switch to {period === 'annual' ? 'annual' : 'monthly'} billing
           </button>
         )}
@@ -275,10 +275,10 @@ function PlanCard({ plan, current, period, prices }: {
   const featured = plan.id === 'pro'
   const isCurrent = current === plan.id
   return (
-    <div className={`flex flex-col rounded-xl border bg-white p-5 shadow-sm ${
-      featured ? 'border-[#0056b3] ring-1 ring-[#0056b3]/20' : 'border-slate-200'}`}>
+    <div className={`flex flex-col rounded-xl border bg-sheet p-5 shadow-sm ${
+      featured ? 'border-brand ring-1 ring-brand/20' : 'border-slate-200'}`}>
       <div className="flex items-baseline justify-between">
-        <h2 className="text-[1.05rem] font-bold text-[#0056b3]">{plan.name}</h2>
+        <h2 className="text-[1.05rem] font-bold text-brand">{plan.name}</h2>
         {isCurrent && (
           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
             Your plan
@@ -307,7 +307,7 @@ function PeriodToggle({ period, onChange }: { period: BillingPeriod; onChange: (
     <button key={p} type="button" onClick={() => onChange(p)}
       aria-pressed={period === p}
       className={`rounded-md px-4 py-1.5 text-[13px] font-semibold transition ${
-        period === p ? 'bg-white text-[#0056b3] shadow-sm' : 'text-slate-600 hover:text-[#0056b3]'}`}>
+        period === p ? 'bg-sheet text-brand shadow-sm' : 'text-slate-600 hover:text-brand'}`}>
       {label}
     </button>
   )
@@ -371,7 +371,7 @@ export default function Pricing() {
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Plans</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Pricing</h1>
+      <h1 className="mt-1 text-2xl font-bold text-brand">Pricing</h1>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
         Every calculator is free, with or without an account — a free account only removes the trial counter and
         lets you save work. The paid tiers are for project-scale tools: Pro opens the 3D Model Space and everything
@@ -413,7 +413,7 @@ export default function Pricing() {
         Annual billing saves {savingText('pro')} on Pro and {savingText('max')} on Max over a year.
       </p>
 
-      <h2 className="mt-10 text-[1.05rem] font-bold text-[#0056b3]">What counts as a &ldquo;calculator&rdquo;</h2>
+      <h2 className="mt-10 text-[1.05rem] font-bold text-brand">What counts as a &ldquo;calculator&rdquo;</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
         The single-purpose pages — beam, column, footing, retaining wall, settlement, lateral pile, connections,
         slope stability and the rest. Each gives one answer from one set of inputs, and every one of them stays
@@ -422,7 +422,7 @@ export default function Pricing() {
       </p>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
         Documentation and the{' '}
-        <Link to="/validation" className="text-[#0056b3] underline">validation page</Link>{' '}
+        <Link to="/validation" className="text-brand underline">validation page</Link>{' '}
         are open to everyone, always. Being able to check the engine against hand calculations should never be
         behind a paywall.
       </p>

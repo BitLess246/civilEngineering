@@ -87,7 +87,7 @@ export default function ShotcreteFacing() {
       <ReportControls title="Shotcrete Facing" badges={['FHWA GEC-7']} report={report} />
       <CalcBody>
         <div className="space-y-5">
-          <p className="text-[13px] text-[#5c6675]">
+          <p className="text-[13px] text-muted">
             FHWA GEC-7 facing check. The thin shotcrete panel spans <b>between</b> the nail heads, so earth
             pressure bends it like a two-way slab on point supports — hogging over each nail, sagging at
             midspan. This checks the facing flexural nail-head strength R<sub>FF</sub> and the punching-shear

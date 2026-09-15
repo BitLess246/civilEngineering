@@ -88,7 +88,7 @@ export default function Micropile() {
       <ReportControls title="Micropile" badges={['FHWA-NHI-05-039']} report={report} />
       <CalcBody>
         <div className="space-y-5">
-          <p className="text-[13px] text-[#5c6675]">
+          <p className="text-[13px] text-muted">
             FHWA-NHI-05-039 allowable-stress check: structural capacity of the bar/casing/grout vs the
             grout-ground bond capacity of the bonded zone. Governing allowable = the smaller of the two.
           </p>
@@ -109,7 +109,7 @@ export default function Micropile() {
 
           <Card title="Bond zone & demand">
             <label className="flex flex-col text-sm">
-              <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">Load mode</span>
+              <span className="mb-1 text-[11.5px] font-semibold text-muted">Load mode</span>
               <select value={mode} onChange={(e) => setMode(e.target.value as 'compression' | 'tension')}
                 className="text-[13px]">
                 <option value="compression">Compression</option>
@@ -131,7 +131,7 @@ export default function Micropile() {
           <Out label={`Governing allowable (${r.governs})`} value={`${f0(r.allowable)} kN`} />
           <Out label="FS (allowable / demand)" value={f2(r.fs)} ok={r.ok} />
           <Out label="Bond length for FS = 2" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
-          <p className="mt-2 text-[10px] text-[#a39d8d]">
+          <p className="mt-2 text-[10px] text-faint">
             Structural: 0.40·f′c·Agrout + 0.47·Fy·As (compression), 0.55·Fy·As (tension). Bond:
             π·Dbond·Lbond·αbond / FS. Verify buckling in very soft soils and group/settlement effects separately.
           </p>

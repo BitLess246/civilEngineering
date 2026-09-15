@@ -14,12 +14,12 @@ export function SiteFooter() {
   const addr = addressLines()
   const incomplete = missingSiteFields().length > 0
   return (
-    <footer className="no-print mt-12 border-t border-[#e3e1da] bg-white">
+    <footer className="no-print mt-12 border-t border-hairline bg-sheet">
       <div className="mx-auto grid max-w-[1200px] gap-6 px-6 py-8 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <div className="flex items-baseline gap-2">
-            <span className="text-[13px] font-extrabold tracking-[.14em] text-[#0f1b2a]">{BRAND_MARK}</span>
-            <span className="text-[8.5px] font-semibold uppercase tracking-[.22em] text-[#7a7568]">{BRAND_TAIL}</span>
+            <span className="text-[13px] font-extrabold tracking-[.14em] text-ink">{BRAND_MARK}</span>
+            <span className="text-[8.5px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>
           </div>
           <p className="mt-2 text-[12px] leading-5 text-slate-500">
             Structural and geotechnical calculation software to NSCP 2015, ACI 318-14 and AISC 360-16.
@@ -29,19 +29,19 @@ export function SiteFooter() {
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Product</p>
           <ul className="mt-2 space-y-1 text-[12.5px]">
-            <li><Link to="/pricing" className="text-slate-600 hover:text-[#0056b3]">Plans and pricing</Link></li>
-            <li><Link to="/docs" className="text-slate-600 hover:text-[#0056b3]">Documentation</Link></li>
-            <li><Link to="/validation" className="text-slate-600 hover:text-[#0056b3]">Validation</Link></li>
+            <li><Link to="/pricing" className="text-slate-600 hover:text-brand">Plans and pricing</Link></li>
+            <li><Link to="/docs" className="text-slate-600 hover:text-brand">Documentation</Link></li>
+            <li><Link to="/validation" className="text-slate-600 hover:text-brand">Validation</Link></li>
           </ul>
         </div>
 
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Legal</p>
           <ul className="mt-2 space-y-1 text-[12.5px]">
-            <li><Link to="/terms" className="text-slate-600 hover:text-[#0056b3]">Terms and Conditions</Link></li>
-            <li><Link to="/privacy" className="text-slate-600 hover:text-[#0056b3]">Privacy Policy</Link></li>
-            <li><Link to="/refunds" className="text-slate-600 hover:text-[#0056b3]">Refund Policy</Link></li>
-            <li><Link to="/contact" className="text-slate-600 hover:text-[#0056b3]">Contact</Link></li>
+            <li><Link to="/terms" className="text-slate-600 hover:text-brand">Terms and Conditions</Link></li>
+            <li><Link to="/privacy" className="text-slate-600 hover:text-brand">Privacy Policy</Link></li>
+            <li><Link to="/refunds" className="text-slate-600 hover:text-brand">Refund Policy</Link></li>
+            <li><Link to="/contact" className="text-slate-600 hover:text-brand">Contact</Link></li>
           </ul>
         </div>
 
@@ -51,13 +51,13 @@ export function SiteFooter() {
             {SITE.legalName.trim() && <div className="font-semibold text-slate-700">{SITE.legalName}</div>}
             {addr.map((l) => <div key={l}>{l}</div>)}
             <div>
-              <a href={`mailto:${SITE.supportEmail}`} className="hover:text-[#0056b3]">{SITE.supportEmail}</a>
+              <a href={`mailto:${SITE.supportEmail}`} className="hover:text-brand">{SITE.supportEmail}</a>
             </div>
           </address>
         </div>
       </div>
 
-      <div className="border-t border-[#eeece5]">
+      <div className="border-t border-hairline-2">
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-4 gap-y-1 px-6 py-3 text-[11.5px] text-slate-500">
           <span>© {new Date().getFullYear()} {businessName()}. All rights reserved.</span>
           <span className="hidden sm:inline">·</span>

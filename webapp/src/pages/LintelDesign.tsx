@@ -111,15 +111,15 @@ export default function LintelDesign() {
           geometry rather than left to be remembered.
         </p>
 
-        <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Opening &amp; lintel</h2>
+        <section className="mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+          <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Opening &amp; lintel</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label="Clear opening" unit="m" value={opening} onChange={setOpening} />
             <Field label="Bearing each end" unit="mm" value={bearing} onChange={setBearing} />
             <Field label="Width b" unit="mm" value={b} onChange={setB} />
             <Field label="Depth h" unit="mm" value={h} onChange={setH} />
           </div>
-          <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">The wall it carries</h2>
+          <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-brand">The wall it carries</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label="Wall thickness" unit="mm" value={wallThickness} onChange={setWallThickness} />
             <Field label="Wall height above" unit="m" value={wallHeightAbove} onChange={setWallHeightAbove} />
@@ -128,7 +128,7 @@ export default function LintelDesign() {
             <Field label="Other dead line load" unit="kN/m" value={udlAbove} onChange={setUdlAbove} />
             <Field label="Live line load" unit="kN/m" value={live} onChange={setLive} />
           </div>
-          <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Materials</h2>
+          <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-brand">Materials</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label="f′c" unit="MPa" value={fc} onChange={setFc} />
             <Field label="fy" unit="MPa" value={fy} onChange={setFy} />
@@ -138,24 +138,24 @@ export default function LintelDesign() {
           </div>
         </section>
 
-        <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm
+        <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm
           [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
-          <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Elevation — what reaches the lintel</h2>
+          <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Elevation — what reaches the lintel</h2>
           <LintelElevation
             opening={opening} span={r.span} bearing={bearing} b={b} h={h}
             wallHeightAbove={wallHeightAbove} triangleHeight={r.loads.triangleHeight}
             arching={r.loads.arching} masonry={r.loads.masonry}
             bars={d.sAdopt > 0 ? `${bars} · ⌀${stirrupDia} @${f0(d.sAdopt)}` : bars} />
           <div className="mt-3 border-t border-slate-100 pt-3">
-            <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">SECTION</p>
+            <p className="mb-1 text-[11px] font-semibold text-brand">SECTION</p>
             <BeamSchematic b={b} h={h} cover={cover} barDia={barDia} stirrupDia={stirrupDia}
               bars={d.bars} d={d.d} layers={d.layers} comprLayers={d.comprLayers}
               comprBars={d.comprBars} comprBarDia={16} naDepth={d.cNA} flexOK={d.flexOK} flexReason={d.flexNotes[0]} />
           </div>
         </section>
 
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
+        <section className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+          <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Results</h2>
           <Out label="Effective span (§6.3.2.1)" value={`${f2(r.span)} m`} />
           <Out label="Arch forms" value={r.loads.arching ? `yes — ${f2(r.loads.triangleHeight)} m triangle` : 'no — whole rectangle bears'}
             ok={r.loads.arching} />

@@ -51,7 +51,7 @@ export class ErrorBoundary extends Component<Props, State> {
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
           This page stopped
         </p>
-        <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Something broke while drawing this page</h1>
+        <h1 className="mt-1 text-2xl font-bold text-brand">Something broke while drawing this page</h1>
         <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-600">
           Your saved work is not affected — everything is stored separately from
           the screen that failed. Try the page again, or go somewhere else and
@@ -60,11 +60,11 @@ export class ErrorBoundary extends Component<Props, State> {
 
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <button type="button" onClick={() => this.setState({ error: null })}
-            className="rounded-md bg-[#0056b3] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0f4c92]">
+            className="rounded-md bg-brand px-5 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover">
             Try again
           </button>
           <Link to="/"
-            className="rounded-md border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:border-[#0056b3] hover:text-[#0056b3]">
+            className="rounded-md border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:border-brand hover:text-brand">
             Go to the tools
           </Link>
         </div>
