@@ -507,7 +507,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     else if (pr.kind === 'circle') { acc(pr.cx - pr.r, pr.cy - pr.r); acc(pr.cx + pr.r, pr.cy + pr.r) }
     else if (pr.kind === 'path') { for (const cmd of pr.cmds) acc(cmd.x, cmd.y) }
     else if (pr.kind === 'text' && !pr.rotate) {   // include rendered width so long titles aren't clipped
-      const w = pr.text.length * pr.size * 0.58, a = pr.anchor ?? 'start'
+      const w = textWidth(pr.text, pr.size), a = pr.anchor ?? 'start'
       acc(a === 'start' ? pr.x : a === 'end' ? pr.x - w : pr.x - w / 2, pr.y)
       acc(a === 'start' ? pr.x + w : a === 'end' ? pr.x : pr.x + w / 2, pr.y)
     } else acc(pr.x, pr.y)
@@ -522,6 +522,22 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     slabSchedule,
   }
 }
+
+/**
+ * Rendered width of a text primitive in WORLD units, estimated from its
+ * character count.
+ *
+ * A drawing's bounds become its viewBox, so any text the bounds do not cover is
+ * cropped by the raster — `sectionDetail` sized `maxX` from the outline and the
+ * dimension line alone, and a long note ran off the right edge mid-word ("...
+ * — BA"), which reads as a broken renderer rather than a long note.
+ *
+ * 0.58 em per character is the average advance of Arial's uppercase-and-digits
+ * range, which is what these notes are. It over-estimates lowercase and
+ * under-estimates nothing that matters; an estimate that is slightly wide costs
+ * white space, while one that is short costs a clipped word.
+ */
+export const textWidth = (text: string, size: number): number => text.length * size * 0.58
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 

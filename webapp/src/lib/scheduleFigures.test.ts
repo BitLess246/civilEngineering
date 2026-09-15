@@ -58,7 +58,13 @@ describe('the drawings', () => {
       const d = beamSectionDrawing(model, cages, bm, s, rect)!
       expect(d).not.toBeNull()
       expect(d.title).toBe(`SECTION — ${s.label}`)
-      for (const n of beamSectionNotes(s, rect)) expect(texts(d)).toContain(n)
+      // Joined, not per-primitive: a long note WRAPS to several text
+      // primitives (see sectionDetail.wrapText), and the claim here is that
+      // the row's callout is printed under the section — not that it survives
+      // as one unbroken run. Collapsing the join to single spaces is what
+      // makes that claim insensitive to where the break lands.
+      const printed = texts(d).join(' ').replace(/\s+/g, ' ')
+      for (const n of beamSectionNotes(s, rect)) expect(printed).toContain(n.replace(/\s+/g, ' '))
       expect(d.result.bars.length).toBeGreaterThan(0)     // the plane passed through steel
     }
   })

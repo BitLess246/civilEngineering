@@ -1,3 +1,4 @@
+import { lineText } from '../lib/solution'
 import { describe, it, expect } from 'vitest'
 import { designWoodSlab, woodSlabSolution, woodSlabTimberSizes, BAMBOO_SLAT_REF, type WoodSlabInput } from './woodSlab'
 import { getWoodRef, woodSectionProps, woodAdjusted } from './woodDesign'
@@ -138,7 +139,7 @@ describe('woodSlabSolution — the printed report', () => {
   // silently interpolating `undefined` into an equation. Both are tested.
   const stepsFor = (i: WoodSlabInput) => woodSlabSolution(i, designWoodSlab(i))
   const allText = (s: ReturnType<typeof stepsFor>) =>
-    s.flatMap((st) => st.lines.map((ln) => ('tex' in ln ? ln.tex : ln.text))).join('\n')
+    s.flatMap((st) => st.lines.map((ln) => lineText(ln))).join('\n')
 
   it('covers loads, both members and the governing ratio', () => {
     const s = stepsFor(base)

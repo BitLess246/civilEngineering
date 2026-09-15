@@ -365,7 +365,9 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
             <div className="mt-1 space-y-1">
               {st.lines.map((ln, j) => 'text' in ln
                 ? <p key={j} className="text-[10.5px] leading-relaxed text-muted">{ln.text}</p>
-                : <div key={j} className="overflow-x-auto rounded-md border border-hairline-2 bg-sheet-2 px-2.5 py-1 text-[10.5px]"><KTex block tex={ln.tex} /></div>)}
+                : 'item' in ln
+                  ? <p key={j} className="relative pl-4 text-[10.5px] leading-relaxed text-muted before:absolute before:left-0 before:text-ok before:content-['\2713']">{ln.item}</p>
+                  : <div key={j} className="overflow-x-auto rounded-md border border-hairline-2 bg-sheet-2 px-2.5 py-1 text-[10.5px]"><KTex block tex={ln.tex} /></div>)}
             </div>
           </div>
           <div className="pt-0.5">

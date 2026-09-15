@@ -40,7 +40,12 @@ export function WorkedSolution({ steps, title = 'Calculation report — worked s
                   {s.lines.map((ln, j) => (
                     'text' in ln
                       ? <p key={j} className="text-[12px] leading-relaxed text-muted">{ln.text}</p>
-                      : <div key={j} className="overflow-x-auto rounded-md border border-hairline-2 bg-sheet-2 px-3 py-1 text-[0.92rem] text-ink-2"><Math block tex={ln.tex} /></div>
+                      : 'item' in ln
+                        // An enumerated item, so it looks enumerated: a marker
+                        // in the gutter and a hanging indent, not another
+                        // paragraph in a stack of them.
+                        ? <p key={j} className="relative pl-4 text-[12px] leading-relaxed text-muted before:absolute before:left-0 before:text-ok before:content-['\2713']">{ln.item}</p>
+                        : <div key={j} className="overflow-x-auto rounded-md border border-hairline-2 bg-sheet-2 px-3 py-1 text-[0.92rem] text-ink-2"><Math block tex={ln.tex} /></div>
                   ))}
                 </div>
               )}

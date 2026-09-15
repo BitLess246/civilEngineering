@@ -1,3 +1,4 @@
+import { lineText } from '../lib/solution'
 import { describe, it, expect } from 'vitest'
 import { solveWeldedConnection, weldedConnectionSolution, type WeldSegment } from './weldedConnection'
 
@@ -88,7 +89,7 @@ describe('weldedConnectionSolution — the printed report', () => {
     // a drifted format string is a real defect, not cosmetics.
     const r = solveWeldedConnection(P)
     const s = weldedConnectionSolution(P, r)
-    const tex = s.flatMap((st) => st.lines.map((ln) => ('tex' in ln ? ln.tex : ln.text))).join('\n')
+    const tex = s.flatMap((st) => st.lines.map((ln) => lineText(ln))).join('\n')
     expect(tex).not.toMatch(/undefined|NaN/)
     expect(tex).toContain('300.0')                     // Lw
     expect(tex).toContain(r.fMax.toFixed(2))           // governing resultant

@@ -1,3 +1,4 @@
+import { lineText } from '../lib/solution'
 import { describe, it, expect } from 'vitest';
 import { designPileCap, pileCapSolution, pileCentres, type PileCapInput } from './pileCap';
 
@@ -171,7 +172,7 @@ describe('pileCapSolution — the printed report', () => {
   it('prints the solver’s own dimensions, steel and no undefined', () => {
     const r = designPileCap(BASE);
     const text = pileCapSolution(BASE, r)
-      .flatMap(st => st.lines.map(ln => ('tex' in ln ? ln.tex : ln.text))).join('\n');
+      .flatMap(st => st.lines.map(ln => lineText(ln))).join('\n');
     expect(text).not.toMatch(/undefined|NaN/);
     expect(text).toContain(String(r.capBx));
     expect(text).toContain(String(r.Dc));

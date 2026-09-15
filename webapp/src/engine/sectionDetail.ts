@@ -23,10 +23,41 @@
 //
 // Units: geometry m, sections mm.
 // ─────────────────────────────────────────────────────────────────────────
-import type { Drawing, PlanPrimitive } from './planRenderer'
+import { textWidth, type Drawing, type PlanPrimitive } from './planRenderer'
 import { cutCages, cutPrimitives, type CageCut, type CageCutResult } from './cageSection'
 import type { RebarCage } from './rebarModel'
 import { SHEET_CONCRETE, SHEET_GRID, SHEET_INK, SHEET_NOTE, STEEL, STEEL_LIGHT } from './sheetInk'
+
+/**
+ * Characters a note line may use before it wraps, from the width the drawing
+ * itself occupies.
+ *
+ * Floored at 44 so a narrow section (a 200 mm-wide column) does not shred every
+ * note into two-word fragments, and capped at 72 so a wide one does not let a
+ * long callout run the frame out to a letterbox.
+ */
+export function noteColumns(availWidth: number, size: number): number {
+  const chars = Math.floor(availWidth / Math.max(1e-9, textWidth('x', size)))
+  return Math.min(72, Math.max(44, chars))
+}
+
+/**
+ * Greedy word wrap to `cols` characters. A word longer than `cols` gets its own
+ * line rather than being broken — these notes carry clause references like
+ * `(§409.7.3.8)` and bar callouts like `4-⌀2001`, and a hyphenated break
+ * through one of those changes what it says.
+ */
+export function wrapText(text: string, cols: number): string[] {
+  const out: string[] = []
+  let line = ''
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (!line) { line = word; continue }
+    if (line.length + 1 + word.length <= cols) line += ' ' + word
+    else { out.push(line); line = word }
+  }
+  if (line) out.push(line)
+  return out.length ? out : ['']
+}
 
 /** The concrete, in the cut plane's own coordinates, m. */
 export interface SectionOutline { u0: number; v0: number; u1: number; v1: number }
@@ -113,20 +144,37 @@ export function buildSectionDetail(i: SectionDetailInput): SectionDetailDrawing 
   }
 
   P.push({ kind: 'text', x: u0, y: v0 - size * 1.5, text: i.title, size, anchor: 'start', color: SHEET_INK, weight: 700 })
-  const notes = i.notes ?? []
+  // Notes WRAP to roughly the drawing's own width. The bounds become the
+  // viewBox, so an unwrapped note sets the drawing's aspect: one 100-character
+  // callout made the 300x500 section it annotates a third of the frame wide,
+  // because the caption had taken the rest. Wrapped, the note block stays
+  // beside the section instead of displacing it.
+  const noteSize = size * 0.82
+  const geomMaxX = u1 + off + size * 1.4
+  const noteCols = noteColumns(geomMaxX - u0, noteSize)
+  const notes = (i.notes ?? []).flatMap((t) => wrapText(t, noteCols))
   const note0 = v1 + off + size * 2.2
   const noteStep = size * 1.45
   notes.forEach((t, k) => P.push({
     kind: 'text', x: u0, y: note0 + k * noteStep,
-    text: t, size: size * 0.82, anchor: 'start', color: SHEET_NOTE,
+    text: t, size: noteSize, anchor: 'start', color: SHEET_NOTE,
   }))
 
   return {
     title: i.title,
     result: res,
     primitives: P,
+    // The bounds become the viewBox, so anything they do not cover is CROPPED.
+    // They were sized from the outline and the dimension line alone, and the
+    // notes — which start at u0 and run right, unmeasured — were cut off mid-
+    // word on the printed sheet. Title and notes now set `maxX` too.
     bounds: {
-      minX: u0 - span * 0.06, maxX: u1 + off + size * 1.4,
+      minX: u0 - span * 0.06,
+      maxX: Math.max(
+        geomMaxX,
+        u0 + textWidth(i.title, size),
+        ...notes.map((t) => u0 + textWidth(t, noteSize)),
+      ),
       minY: v0 - size * 2.4,
       maxY: notes.length ? note0 + (notes.length - 1) * noteStep + size : v1 + off + size,
     },
