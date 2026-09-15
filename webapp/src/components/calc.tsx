@@ -1,3 +1,4 @@
+import { checkCoverage, coverageSuffix } from '../lib/checkCoverage'
 import type { ReactNode } from 'react'
 import { ExportPdfButton } from './ExportPdfButton'
 import type { SolutionStep } from '../lib/solution'
@@ -64,11 +65,38 @@ export function CalcSection({ num, title, hint, children, grid = true }: {
 }
 
 export interface VerdictStat { label: string; value: string; unit?: string }
-export interface VerdictCheck { name: string; ratio: number }
+
+/**
+ * One row of the verdict panel.
+ *
+ * `ratio: null` means NOT EVALUATED — the check exists for this design but its
+ * inputs were not supplied, so no number was produced. It is a THIRD state,
+ * distinct from pass and fail, and it must stay distinct all the way to the
+ * printed sheet: a report headed `DESIGN OK` that silently omits a check the
+ * code requires is the one output an engineer signs and is liable for.
+ *
+ * `note` says what would make it run ("enter span and service loads"), because
+ * "NOT CHECKED" without a remedy is a dead end.
+ */
+export interface VerdictCheck { name: string; ratio: number | null; note?: string }
 
 const barColor = (r: number) => (r > 1.0001 ? '#c2402a' : r >= 0.95 ? '#b97d10' : '#1a7f4b')
 
 export function UtilBar({ c }: { c: VerdictCheck }) {
+  if (c.ratio === null) {
+    return (
+      <div>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[11.5px] font-semibold text-[#3d4a5c]">{c.name}</span>
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-[#8a6a1e]">not checked</span>
+        </div>
+        {/* A dashed rail, not an empty one: a 0%-wide bar reads as "passing
+            with room to spare", which is the opposite of what happened. */}
+        <div className="mt-1 h-[5px] rounded-[3px] border border-dashed border-[#d6d3c9]" />
+        {c.note && <p className="mt-1 text-[10.5px] text-[#736d5e]">{c.note}</p>}
+      </div>
+    )
+  }
   const color = barColor(c.ratio)
   return (
     <div>
@@ -96,7 +124,7 @@ export function VerdictPanel({ ok, headline, governing, stats, checks, footnote 
             : <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>}
         </span>
         <div className="min-w-0">
-          <p className={`text-[13px] font-extrabold tracking-wide ${ok ? 'text-[#14603a]' : 'text-[#8f2f1e]'}`}>{headline}</p>
+          <p className={`text-[13px] font-extrabold tracking-wide ${ok ? 'text-[#14603a]' : 'text-[#8f2f1e]'}`}>{headline}{coverageSuffix(checks)}</p>
           {governing && <p className={`mt-px truncate text-[11px] ${ok ? 'text-[#4d7a5f]' : 'text-[#a95b47]'}`}>{governing}</p>}
         </div>
       </div>
@@ -192,7 +220,8 @@ export function LetterheadCard({ lh, onChange, action }: {
 
 // ── Print calc-sheet (docs/design/uiux-2026-07/Redesign - Report Print) ────
 // Rendered print-only; the browser Print → Save as PDF path stays the export.
-export interface ReportCheckRow { name: string; ratio: number; ok: boolean }
+/** A printed check row. `ratio: null` = not evaluated; see `VerdictCheck`. */
+export interface ReportCheckRow { name: string; ratio: number | null; ok: boolean; note?: string }
 const SectionRule = ({ n, title }: { n: number; title: string }) => (
   <h2 className="mt-6 border-b-2 border-[#0f1b2a] pb-1.5 text-[12px] font-extrabold uppercase tracking-[.12em] text-[#0f1b2a]">{n} · {title}</h2>
 )
@@ -255,7 +284,7 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
         </div>
         <div className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2.5 ${ok ? 'border-[#d3e8da] bg-[#ecf6ef]' : 'border-[#efd4cc] bg-[#fbeeea]'}`}>
           <div>
-            <p className={`text-[11.5px] font-extrabold tracking-wide ${ok ? 'text-[#14603a]' : 'text-[#8f2f1e]'}`}>{ok ? 'DESIGN OK' : 'CHECK FAILED'}</p>
+            <p className={`text-[11.5px] font-extrabold tracking-wide ${ok ? 'text-[#14603a]' : 'text-[#8f2f1e]'}`}>{ok ? 'DESIGN OK' : 'CHECK FAILED'}{coverageSuffix(checks)}</p>
             <p className={`mt-px text-[9.5px] ${ok ? 'text-[#4d7a5f]' : 'text-[#a95b47]'}`}>{governing}</p>
           </div>
         </div>
@@ -288,9 +317,14 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
           {checks.map((c) => (
             <tr key={c.name}>
               <td className="border-b border-[#eeece5] px-2.5 py-1.5 font-semibold">{c.name}</td>
-              <td className="border-b border-[#eeece5] px-2.5 py-1.5 text-right font-mono" style={{ color: c.ratio > 1.0001 ? '#c2402a' : c.ratio >= 0.95 ? '#b97d10' : '#1a7f4b' }}>{c.ratio.toFixed(2)}</td>
+              <td className="border-b border-[#eeece5] px-2.5 py-1.5 text-right font-mono"
+                style={c.ratio === null ? { color: '#8a6a1e' } : { color: c.ratio > 1.0001 ? '#c2402a' : c.ratio >= 0.95 ? '#b97d10' : '#1a7f4b' }}>
+                {c.ratio === null ? '\u2014' : c.ratio.toFixed(2)}
+              </td>
               <td className="border-b border-[#eeece5] px-2.5 py-1.5 text-right">
-                <span className={`inline-block rounded px-1.5 py-px font-mono text-[9px] font-semibold ${c.ok ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>{c.ok ? 'PASS' : 'FAIL'}</span>
+                <span className={`inline-block rounded px-1.5 py-px font-mono text-[9px] font-semibold ${
+                  c.ratio === null ? 'bg-[#fdf6e9] text-[#8a6a1e]' : c.ok ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>
+                  {c.ratio === null ? 'NOT CHECKED' : c.ok ? 'PASS' : 'FAIL'}</span>
               </td>
             </tr>
           ))}
@@ -338,6 +372,32 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
         </div>
         <div className="mx-auto w-[46%]">{drawing}</div>
       </div>}
+
+      {/* SCOPE. The sheet is signed, so it states its own boundaries: which
+          checks ran, and which did not and why. Printed immediately before the
+          signature block, because that is the last thing read before signing.
+          Suppressed only when every check ran AND the letterhead is complete —
+          there is then nothing to disclose. */}
+      {(checkCoverage(checks).run < checkCoverage(checks).total || !lh.project.trim() || !lh.preparedBy.trim()) && <>
+        <SectionRule n={drawing ? 5 : 4} title="Assumptions \u0026 Scope" />
+        <div className="print-avoid-break mt-3 rounded-lg border border-[#e3e1da] px-3.5 py-3 text-[10px] leading-relaxed">
+          {checks.length > 0 && (
+            <p><span className="font-semibold">Checks performed:</span>{' '}
+              {checkCoverage(checks).run} of {checks.length}
+              {' \u2014 '}
+              {checks.filter((c) => c.ratio !== null).map((c) => c.name).join('; ') || 'none'}.</p>
+          )}
+          {checks.some((c) => c.ratio === null) && (
+            <p className="mt-1.5 font-semibold text-[#8a6a1e]">
+              NOT evaluated: {checks.filter((c) => c.ratio === null)
+                .map((c) => c.name + (c.note ? ` (${c.note})` : '')).join('; ')}.
+              {' '}This sheet makes no statement about {checks.some((c) => c.ratio === null) && checks.filter((c) => c.ratio === null).length > 1 ? 'those checks' : 'that check'}.
+            </p>
+          )}
+          {!lh.project.trim() && <p className="mt-1.5 text-[#8a6a1e]">Project not named on this sheet.</p>}
+          {!lh.preparedBy.trim() && <p className="mt-1.5 text-[#8a6a1e]">Preparer not named on this sheet.</p>}
+        </div>
+      </>}
 
       <div className="print-avoid-break mt-6 grid grid-cols-2 gap-7">
         <div><div className="h-11 border-b border-[#0f1b2a]" /><p className="mt-1.5 text-[10px] font-bold">{lh.preparedBy || '\u00a0'}</p><p className="text-[9px] text-[#7a7568]">Prepared by</p></div>
