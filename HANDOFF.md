@@ -783,11 +783,57 @@ complete**; Tier 3 items #10–13 are the remaining backlog.
     Triangle) plate bending + θz drilling penalty; validated against Timoshenko
     plate theory (SS 0.991×, clamped 1.034× at 8×8, converging). Integrated into
     `frame3d` (`F3Shell`/`ShellGeom`, assembled into the global solve, reactions +
-    serialization). Bridge meshes each `Plate` into two triangles on its corner
-    nodes (`StructuralModel.shellElements`); area loads lump to those nodes and the
-    tributary path is skipped for shell panels. `BridgeOpts.useShells` keeps the
-    NSCP design pipeline on the tributary model (shells are analysis-path for now).
+    serialization).
+    **Superseded in the plate-mesh series (#743–#748)** — the bridge no longer
+    meshes a panel into two triangles on its corner nodes. See below.
     UI: Analysis-tab toggle + teal triangulated 3D panels (with the mesh diagonal).
+
+#### Plate mesh — #743–#748 (September 2026)
+
+The element was always benchmarked; it was never given a mesh. `modelBridge`
+cut every panel into **two triangles on its four corner nodes**, and that is
+what the analysis solved. On a 6 × 6 m panel that mesh has no node between the
+supports, so its centre deflection is **exactly zero** — the state every shipped
+shell analysis was in.
+
+- **`plateMesh.ts`** (#744) meshes each panel n×n through `subdivideQuadPlates`.
+  `StructuralModel.shellSubdiv` (1–6) carries the density, because a saved model
+  must reproduce its own mesh. **n = 1 is bit-identical** to the old two
+  triangles — checked against the pre-change bridge itself, loads/nodes/members
+  byte-for-byte. Mesh nodes are **appended** after `model.nodes`, never inserted:
+  `driftCheck`, `assessIrregularities`, `displacedNodes`, `DisplacementTable` and
+  the deflection scan all index the DOF vector by array position.
+- **`memberSplit.ts`** (#745) is what makes the mesh worth having. A mesh node on
+  a beam shares no DOF with it until the beam is **cut** there, so an unattached
+  fine mesh is *softer* than two triangles (measured: 3× on a 6 × 6 m panel).
+  A linear constraint was rejected on evidence — `postprocessMember` builds the
+  diagram from end forces plus the member's own load list, so a constraint gives
+  right end forces and a **wrong span moment**, which is the number beam design
+  reads. Results are stitched back onto the parent id before anything downstream
+  sees them.
+- **Openings** (#746) cut whole cells whose centre falls in a `SlabOpening`, and
+  every node left unreferenced goes with them — an orphan carries six
+  zero-stiffness DOFs and `symFactor` then returns null, killing the solve
+  silently.
+- **`AnalyzeOptions.useShells`** (#747) is opt-in, **default OFF**: a slab
+  modelled as a plate sheds moment from its beams (−15% … +18% measured), and
+  that is the user's call. The design mesh is **floored at 2**: at subdivision 1
+  the panel's whole load lands on its corner columns and the beams come out
+  **80–90% under-loaded**.
+- Converges monotonically **from above** toward Timoshenko's clamped
+  0.00126·q·a⁴/D — 1.175× → 1.046× at n = 2→8 — with Σ reactions exact at every
+  density.
+
+**The open blocker: `Kff_raw` is dense.** `frame3d` assembles the free block as
+an `nf × nf` array, retains it on the precomp and structured-clones it into
+every pool worker — `8·nf²` bytes per copy, so 4 000 DOF is 128 MB and 8 000 is
+512 MB. `meshValidation`'s `MESH_DOF_BUDGET` hard-stops past 4 000 with a
+message naming a subdivision that fits, which is why **n > 2 is not usable on a
+real building yet**. Sparse assembly is the unlock and is an L3 change with six
+consumers (`symFactor`, `applyTtoK`, the P-Δ tangent copy, `buckling`'s
+`matVec`, `directTimeHistory`'s `C = αM + βK`, and the worker serialization) —
+it needs its own justification, not a drive-by.
+
 
 **Tier 3 complete — the full STAAD-parity roadmap (Tiers 1–3) is shipped.**
 
