@@ -138,7 +138,7 @@ function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeri
   const [error, setError] = useState<string | null>(null)
   const [switching, setSwitching] = useState(false)
 
-  const btn = 'block w-full rounded-md bg-brand px-4 py-2 text-center text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60'
+  const btn = 'block w-full rounded-md bg-brand px-4 py-2 text-center text-sm font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-60'
 
   if (plan.id === 'guest') return <p className="text-center text-[12px] text-muted">No sign-up needed</p>
   if (plan.priceMonthly === 0) {

@@ -2823,3 +2823,103 @@ beyond the shared `DisciplinePicker`; the picker is the guard. And the
 preference is per browser, like the letterhead — a second machine starts with
 the full catalog and asks again. If it should follow the login instead,
 `user_metadata` is now a safe home for it (see `auth/profile.ts` for why).
+
+---
+
+# UI/UX: the Impeccable pass (PRs #754–#761, September 2026)
+
+A design review (the `impeccable` skill, a UI/UX design system) shipped in six
+PRs, then re-audited itself. **Read this before touching styling, the theme
+layer, the PDF reports, or anything below `lg`.**
+
+## What exists now that did not before
+
+**A 30-role token layer, five themes.** `src/styles/themes.css` defines
+`--t-*` for paper/sheet/rail/ink/hairline/field-line/brand/ok/warn/fail and the
+rest; `index.css` maps each to a Tailwind `--color-*` **through the indirection**
+`--color-brand: var(--t-brand)`, because `@theme` resolves at BUILD time and a
+direct value cannot be re-themed at runtime. Themes: `drafting` (default),
+`daylight`, `blueprint` (dark), `mono`, `minimal`, selectable under
+**Appearance** on the profile page, applied pre-hydration by an inline script in
+`index.html` so there is no flash.
+
+**Blueprint inverts Tailwind's whole stock palette** (step N takes step
+1000−N), because ~2,400 utilities still name `slate-*`/`red-*`/… directly and
+those compile to `var(--color-slate-N)` which nothing else redefines. The ramps
+are **complete at all 11 steps for all six families** — see below for why that
+matters more than it sounds.
+
+**The mobile drawer.** Below `lg` there was no route to the 53 tools at all.
+`NavDrawer` in `AppShell` reuses `<Sidebar>`, traps focus via the new
+`useFocusTrap`, and is the first of the app's eight `aria-modal` overlays to do
+so. The other seven still do not — the hook is deliberately general so they can
+adopt it.
+
+**The PDF reports were read, not just generated.** `pdfKit`/`calcPdf` carry
+`spacedWidth`, wrapped drawing notes, a bottom-anchored approval block and a
+`NOT CHECKED` third status. `SolutionLine` gained an `{item}` member so an
+enumeration is set as one on both surfaces.
+
+## Rules that are now load-bearing
+
+1. **The PDF is white in every theme, and that is enforced.** The PDF layer
+   takes no colour from the running theme — no `var(--`, no `getComputedStyle`,
+   no `data-theme`. Its palette is literal RGB. The Blueprint drawing invert
+   lives in a **stylesheet**, which `XMLSerializer` does not serialise, so it
+   cannot reach `svgToPng`'s raster. `pdfLayout.test.ts` pins all of it. If you
+   add a report, do not reach for a token.
+2. **`text-on-solid` may never sit on an opacity-modified fill.**
+   `bg-brand/55` composites to a colour no token names, so the pair test cannot
+   see it. That shipped at 3.48:1 on every tool route under a green suite.
+   `themeUsage.test.ts` forbids it.
+3. **A ramp with a hole is a defect waiting for a utility.** The inversion was
+   originally generated from the steps in use *at the time*, leaving
+   `slate-50` undefined — so `bg-slate-50` stayed light while its text
+   inverted, and one card came out at **1.17:1**. Ramps are complete and a test
+   checks each step against `tailwindcss/theme.css` itself.
+4. **Verify in a browser, not in the source.** Screenshots and axe found what
+   6,000+ tests did not: a duplicate wordmark in the drawer, a 40px header
+   collision at 390px, a clipped drawing note, an orphaned signature page, a
+   masthead overlap. Playwright + `axe-core` is the tool; Chromium is
+   pre-installed in the cloud container (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`,
+   never run `playwright install`). To read a generated PDF back, render it
+   through pdf.js **inside Chromium** — pdf.js in bare Node cannot paint the
+   embedded images.
+
+## Audit state, September 2026
+
+Re-audit after everything landed: **17/20 (Good)**. axe across 12 routes × 5
+themes at 1440 and × 2 themes at 390 — **0 violations**, no horizontal overflow
+anywhere. The Impeccable detector reports 2 anti-patterns, both verified as
+state encoding (an active-route marker, a selected-tab underline) rather than
+decoration, and deliberately left.
+
+**Open, in priority order:**
+
+1. **P1 — no route-level code splitting.** `App.tsx` statically imports 62 of
+   64 pages; the entry chunk is **2,428 kB raw / 758 kB gzipped**. The heavy
+   *libraries* are already split well (exceljs, pdfKit, autotable, html2canvas,
+   solverWorker all load on demand) — this is application code. Biggest
+   remaining user-visible win.
+2. **P2 — 140 stock status colours across 33 of 65 pages.** Not broken (the
+   inverted ramp catches them) but they invert by accident, not by design; a
+   sixth theme that is not an inversion breaks all 140 at once. Ratcheted at the
+   measured count in `themeUsage.test.ts` — lower it as you migrate.
+3. **P2 — field borders at 1.43–1.70:1 against WCAG 1.4.11's 3:1.** Inherited,
+   affects every input, wants its own visual pass. axe does not check 1.4.11,
+   which is why it is not in the 0.
+4. **P3 — 84 scroll containers keyboard-scrollable but unnamed.** `role="region"`
+   without an accessible name would be worse than none, so this is per-container
+   content work.
+
+## The pattern worth remembering
+
+**A guard is only as good as its model of the thing it guards.** Three defects
+this pass sat under green tests: the token pair test that could not see a
+composite; `hoverStates.test.ts` splitting source on every quote, so one
+`'none'` inside a JSX expression paired two elements 17 lines apart; and a
+figure test asserting each note survives as one verbatim primitive, true only
+because nothing wrapped yet. Each was found by measuring the running app and
+fixed at the model, not the symptom. When you add a guard here, **sabotage it
+first** and confirm it fails — several in this codebase now carry the
+sabotage they were checked against in their comments.

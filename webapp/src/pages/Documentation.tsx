@@ -18,7 +18,7 @@ function ControlTable({ controls }: { controls: DocControl[] }) {
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="text-left uppercase tracking-wide text-muted">
-            <th className="w-8 py-1 pr-2 font-semibold" />
+            <th className="w-8 py-1 pr-2 font-semibold"><span className="sr-only">Kind</span></th>
             <th className="py-1 pr-3 font-semibold">Control</th>
             <th className="py-1 pr-3 font-semibold">Unit</th>
             <th className="py-1 font-semibold">What it does</th>
@@ -118,7 +118,7 @@ export default function Documentation() {
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
         {/* ── contents ── */}
-        <nav className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
+        <nav aria-label="On this page" className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-faint">Contents</p>
           {DOC_GROUPS.map((g) => {
             const tools = shown.filter((t) => t.group === g)
