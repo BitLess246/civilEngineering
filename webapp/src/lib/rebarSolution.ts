@@ -86,8 +86,12 @@ export function buildRebarSelectionSolution(
             `${checks.length} of them; ${sel.rejected.length} of the ${total} layouts ` +
             `generated did not and were discarded.`,
         },
+        // One item per check, not one paragraph per check — see SolutionLine.
+        // 'Satisfied' is dropped from each line: the step's own PASS chip
+        // already says every one of them passed, and repeating the word ten
+        // times buried the labels that differ.
         ...checks.map((c) => ({
-          text: `Satisfied — ${c.label} per ${c.clause}${c.detail ? `, ${c.detail}` : ''}.`,
+          item: `${c.label} per ${c.clause}${c.detail ? `, ${c.detail}` : ''}.`,
         })),
       ],
     })

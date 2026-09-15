@@ -1,10 +1,11 @@
+import { lineText } from './solution'
 import { describe, it, expect } from 'vitest'
 import { designBeam, type BeamDesignInput } from '../engine/beamDesign'
 import { buildBeamSolution, beamProvidedCapacities } from './beamSolution'
 
 const texOf = (steps: ReturnType<typeof buildBeamSolution>, title: string) =>
   steps.find((s) => s.title.includes(title))!.lines
-    .map((l) => ('tex' in l ? l.tex : l.text)).join(' | ')
+    .map((l) => lineText(l)).join(' | ')
 
 describe('beam worked solution — transverse legs & Aᵥ (§418.6.4.3 · §422.5)', () => {
   it('width-driven: a wide beam step reports the design count and uses it in Aᵥ', () => {

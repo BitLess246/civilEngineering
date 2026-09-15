@@ -1,3 +1,4 @@
+import type { SolutionLine } from './solution'
 import { describe, it, expect } from 'vitest'
 import { designSquareFooting, type SquareFootingInput } from '../engine/isolatedFooting'
 import { oneWayVc, twoWayVc, criticalSection } from '../engine/shear'
@@ -25,7 +26,7 @@ function squareCtx(over: Partial<SquareFootingInput> = {}): SolutionCtx {
   }
 }
 
-const texOf = (s: { lines: ({ tex: string } | { text: string })[] }) =>
+const texOf = (s: { lines: readonly SolutionLine[] }) =>
   s.lines.filter((l): l is { tex: string } => 'tex' in l).map((l) => l.tex).join(' ')
 
 describe('foundation worked solution', () => {

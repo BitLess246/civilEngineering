@@ -42,6 +42,13 @@ const OK_EDGE: RGB = [211, 232, 218]
 const FAIL_EDGE: RGB = [239, 212, 204]
 const SUBTLE: RGB = [122, 117, 104]
 
+/**
+ * Status printed for a check that was NOT EVALUATED — the third state the
+ * verdict carries (see `CalcCheckRow.ratio: null`). Exported so the reports
+ * and the cell styling cannot drift apart on a string literal.
+ */
+export const NOT_CHECKED = 'NOT CHECKED'
+
 export const PAGE_W = 210, PAGE_H = 297, M = 14      // mm
 export const CONTENT_W = PAGE_W - 2 * M
 export const FOOT_Y = PAGE_H - 12                     // keep-clear line for the footer
@@ -103,6 +110,24 @@ export function fitFigure(w: number, h: number, maxH: number): { drawW: number; 
   let drawW = CONTENT_W, drawH = drawW * aspect
   if (drawH > maxH) { drawH = maxH; drawW = drawH / aspect }
   return { drawW, drawH, x: M + (CONTENT_W - drawW) / 2 }
+}
+
+/**
+ * Width a run of text actually occupies when drawn with letter-spacing, mm.
+ *
+ * jsPDF's `getTextWidth` reports the width at the CURRENTLY SET font size and
+ * knows nothing about the `charSpace` the text was drawn with, so it under-
+ * reports a spaced run by one gap per inter-character space. The masthead was
+ * laid out from a measurement taken AFTER the font had already been switched
+ * down to the tail's 5.4 pt — the 11.5 pt wordmark was measured at less than
+ * half its drawn size — and the two words overlapped on every sheet the app
+ * has ever produced.
+ *
+ * Pure, so the arithmetic is checked without inspecting jsPDF's font state
+ * after the fact (which reports whatever was set last, not what the text used).
+ */
+export function spacedWidth(width: number, text: string, charSpace: number): number {
+  return width + Math.max(0, text.length - 1) * charSpace
 }
 
 /** Natural pixel size of a data-URL image (for aspect-correct placement). */
@@ -228,6 +253,15 @@ export function createSheet(): Sheet {
             d.cell.styles.font = 'mono'; d.cell.styles.fontStyle = 'bold'; d.cell.styles.fontSize = 6.2
             d.cell.styles.textColor = d.cell.raw === 'PASS' ? OK_FG : FAIL_FG
           }
+          // The third state. It is NOT a verdict, so it does not get a
+          // verdict's weight or colour — it reads as the absence of one. It
+          // was printing in the body face at body weight, indistinguishable
+          // from the check's own name, and wrapping to two lines in a column
+          // sized for 'PASS'.
+          if (d.section === 'body' && d.cell.raw === NOT_CHECKED) {
+            d.cell.styles.font = 'mono'; d.cell.styles.fontStyle = 'normal'; d.cell.styles.fontSize = 6.2
+            d.cell.styles.textColor = FAINT
+          }
         },
       }
     },
@@ -243,10 +277,14 @@ export function createSheet(): Sheet {
       doc.setDrawColor(...HAIR_SOFT); doc.setLineWidth(0.2)
       doc.line(M, s.y, M + CONTENT_W, s.y)
       s.y += 7
+      // Measure the mark while ITS font is still set, and count the letter-
+      // spacing it is drawn with — see `spacedWidth`. Measuring afterwards read
+      // the 11.5 pt wordmark at 5.4 pt and lapped TOOLKIT over CIVENGG.
       s.setF('sans', 'bold', 11.5, INK)
+      const markW = spacedWidth(doc.getTextWidth(BRAND_MARK), BRAND_MARK, 0.9)
       doc.text(BRAND_MARK, M, s.y, { charSpace: 0.9 })
       s.setF('sans', 'bold', 5.4, SUBTLE)
-      doc.text(BRAND_TAIL, M + doc.getTextWidth(BRAND_MARK) + 13, s.y, { charSpace: 0.7 })
+      doc.text(BRAND_TAIL, M + markW + 2.4, s.y, { charSpace: 0.7 })
       s.y += 8
       // The verdict chip occupies the top-right 52 mm, so the title has to fit
       // in what is left or it runs underneath it. Model Space's title is short
@@ -323,10 +361,16 @@ export function createSheet(): Sheet {
         doc.text(st.label.toUpperCase(), cx + 2.5, s.y + 3.6, { charSpace: 0.35 })
         s.setF('mono', 'bold', 8.4, INK)
         const shown = doc.splitTextToSize(st.value, cw - (st.unit ? 12 : 5))[0] ?? ''
+        // Measure the VALUE while the value's font is set. The old line took
+        // its width after switching to the 6 pt unit face and scaled the
+        // result by 8.4/6 to compensate — the same mistake as the masthead,
+        // with a hand-applied correction instead of a fix, which held only
+        // while both sizes stayed exactly where they were.
+        const shownW = doc.getTextWidth(shown)
         doc.text(shown, cx + 2.5, s.y + 8.2)
         if (st.unit) {
           s.setF('mono', 'normal', 6, FAINT)
-          doc.text(st.unit, cx + 3.5 + doc.getTextWidth(shown) * 8.4 / 6, s.y + 8.2)
+          doc.text(st.unit, cx + 2.5 + shownW + 1.2, s.y + 8.2)
         }
         if (i % 3 === 2 || i === stats.length - 1) s.y += ch + 2.5
       })
@@ -384,6 +428,20 @@ export function createSheet(): Sheet {
             s.setF('sans', 'normal', 6.6, MUTED)
             for (const w of doc.splitTextToSize(ln.text, LEFT_W - 6)) { s.ensure(3.2); doc.text(w, M + 6, s.y); s.y += 3.1 }
             s.y += 0.4
+          } else if ('item' in ln) {
+            // An enumeration, set as one. The rebar compliance gate emits ten
+            // of these, and as prose they printed as ten wrapped paragraphs —
+            // the reader cannot count what was checked in a wall of text. Tick
+            // in the gutter, hanging indent, so continuation lines align under
+            // the item rather than under the marker.
+            const TICK_W = 3.4
+            const wrapped = doc.splitTextToSize(ln.item, LEFT_W - 6 - TICK_W)
+            s.ensure(wrapped.length * 3.1)
+            s.setF('mono', 'bold', 5.6, OK_FG)
+            doc.text('\u2713', M + 6, s.y)
+            s.setF('sans', 'normal', 6.6, MUTED)
+            for (const w of wrapped) { s.ensure(3.2); doc.text(w, M + 6 + TICK_W, s.y); s.y += 3.1 }
+            s.y += 0.5
           } else {
             s.setF('mono', 'normal', 6.4, INK)
             const wrapped = doc.splitTextToSize(texToPlain(ln.tex), LEFT_W - 10)
@@ -404,7 +462,24 @@ export function createSheet(): Sheet {
     },
 
     signatures(preparedBy) {
-      s.ensure(34)
+      // A calc sheet whose approval block spilled onto a fresh page printed
+      // two ruled lines four centimetres down an otherwise blank sheet, with
+      // 85% of the page empty under them — the beam report's page 4. The block
+      // is what an engineer signs, so it cannot look like content that ran
+      // out. When it has to start a page, it goes to the FOOT of that page,
+      // where an approval block belongs, and the emptiness above reads as the
+      // margin of a signature sheet rather than a layout failure.
+      // 40 = the 28 mm this block advances, plus the 12 the `disclaimer` that
+      // all three reports print under it reserves for itself. It is that
+      // second `ensure`, not the block's ink, that binds: at 38 the block fit
+      // at the foot of the page and then pushed the disclaimer onto a page of
+      // its OWN, taking the beam report from four sheets to five. Measured on
+      // four reports — this is the largest reservation that adds no page.
+      const need = 40
+      if (s.y + need > FOOT_Y) {
+        doc.addPage()
+        s.y = FOOT_Y - need
+      }
       s.y += 6
       const half = (CONTENT_W - 10) / 2
       doc.setDrawColor(...INK); doc.setLineWidth(0.3)

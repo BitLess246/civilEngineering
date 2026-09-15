@@ -1,3 +1,4 @@
+import { lineText } from './solution'
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure, type StructureDesign } from '../engine/pipeline'
@@ -67,7 +68,7 @@ describe('memberSolution — the schedule\'s own worked solution', () => {
     const steps = memberSolution(model, design, 'beam', worst.id, soil)
     expect(steps.length).toBeGreaterThan(0)
     // the bar layout step is the schedule's own — bars, diameter, spacing
-    const text = steps.map((s) => `${s.title} ${s.lines.map((l) => ('text' in l ? l.text : l.tex)).join(' ')}`).join(' ')
+    const text = steps.map((s) => `${s.title} ${s.lines.map((l) => lineText(l)).join(' ')}`).join(' ')
     expect(text).toMatch(/⌀/)
     expect(text).toContain('Bar layout')
   })

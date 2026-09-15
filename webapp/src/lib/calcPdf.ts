@@ -21,7 +21,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { LetterheadState, VerdictStat } from '../components/calc'
 import type { SolutionStep } from './solution'
-import { createSheet, autoTable, MUTED } from './pdfKit'
+import { createSheet, autoTable, MUTED, NOT_CHECKED } from './pdfKit'
 import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
 
 /**
@@ -91,8 +91,11 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
         ...s.tableTheme([1]),
         startY: s.y,
         head: [['Check', 'Ratio', 'Status']],
-        body: checks.map((c) => [c.name, c.ratio === null ? '\u2014' : c.ratio.toFixed(2), c.ratio === null ? 'NOT CHECKED' : c.ok ? 'PASS' : 'FAIL']),
-        columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', font: 'mono', cellWidth: 18 }, 2: { halign: 'right', cellWidth: 18 } },
+        body: checks.map((c) => [c.name, c.ratio === null ? '\u2014' : c.ratio.toFixed(2), c.ratio === null ? NOT_CHECKED : c.ok ? 'PASS' : 'FAIL']),
+        // 26 mm, not 18: 'NOT CHECKED' wrapped to two ragged lines in a column
+        // sized for 'PASS', and a two-line cell among one-line ones reads as
+        // damage rather than as a third state.
+        columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', font: 'mono', cellWidth: 18 }, 2: { halign: 'right', cellWidth: 26 } },
       })
       s.y = (s.lastY() ?? s.y) + 4
     }

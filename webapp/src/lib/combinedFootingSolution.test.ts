@@ -1,3 +1,4 @@
+import { lineText } from './solution'
 import { describe, it, expect } from 'vitest'
 import { designCombinedFooting, type CombinedFootingInput } from '../engine/combinedFooting'
 import { buildCombinedFootingSolution } from './combinedFootingSolution'
@@ -21,7 +22,7 @@ describe('combined footing worked solution', () => {
     expect(titles.some((t) => /Longitudinal flexure/i.test(t))).toBe(true)
     expect(titles.some((t) => /Transverse/i.test(t))).toBe(true)
     // the rendered numbers reference the engine's governing results
-    const flat = steps.flatMap((s) => s.lines).map((l) => ('tex' in l ? l.tex : l.text)).join(' ')
+    const flat = steps.flatMap((s) => s.lines).map((l) => lineText(l)).join(' ')
     expect(flat).toContain(r.Bx.toFixed(2))
     expect(flat).toContain(String(Math.round(r.Dc)))
     expect(flat).toContain(r.Pu.toFixed(1))
@@ -32,7 +33,7 @@ describe('combined footing worked solution', () => {
     expect(r.shape[0]).toBe('T')
     const steps = buildCombinedFootingSolution({ ...base, leftRestrict: true, rightRestrict: true, leftOverhang: 300, rightOverhang: 300 }, r)
     expect(steps.some((s) => /trapezoidal combined footing/i.test(s.title))).toBe(true)
-    const flat = steps.flatMap((s) => s.lines).map((l) => ('tex' in l ? l.tex : l.text)).join(' ')
+    const flat = steps.flatMap((s) => s.lines).map((l) => lineText(l)).join(' ')
     expect(flat).toContain(r.By1.toFixed(2))
     expect(flat).toContain(r.By2.toFixed(2))
   })
