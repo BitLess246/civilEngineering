@@ -17,7 +17,7 @@ export default function Privacy() {
         </p>
         <p>
           For any privacy question or request, write to{' '}
-          <a href={`mailto:${SITE.supportEmail}`} className="text-[#0056b3] underline">{SITE.supportEmail}</a>.
+          <a href={`mailto:${SITE.supportEmail}`} className="text-brand underline">{SITE.supportEmail}</a>.
         </p>
       </Clause>
 
@@ -92,7 +92,7 @@ export default function Privacy() {
           <li>lodge a complaint with the <strong>National Privacy Commission</strong>.</li>
         </ul>
         <p>
-          Write to <a href={`mailto:${SITE.supportEmail}`} className="text-[#0056b3] underline">{SITE.supportEmail}</a>{' '}
+          Write to <a href={`mailto:${SITE.supportEmail}`} className="text-brand underline">{SITE.supportEmail}</a>{' '}
           to exercise any of these. We will respond within the period the Act allows.
         </p>
       </Clause>
@@ -127,7 +127,7 @@ export default function Privacy() {
         <p>
           We will post any update here and change the date at the top. Material changes will also be
           sent by email. See also our{' '}
-          <Link to="/terms" className="text-[#0056b3] underline">Terms</Link>.
+          <Link to="/terms" className="text-brand underline">Terms</Link>.
         </p>
       </Clause>
     </LegalLayout>

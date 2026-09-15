@@ -128,7 +128,7 @@ function Select<T extends string>({ label, value, onChange, options }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
+      <span className="mb-1 text-[11.5px] font-semibold text-muted">{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value as T)} className="text-[13px]">
         {options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
       </select>
@@ -149,10 +149,10 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 
 function Row({ label, value, check }: { label: ReactNode; value: ReactNode; check?: ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-[#f3f1ea] py-1.5 last:border-0">
-      <span className="text-[12px] text-[#5c6675]">{label}</span>
-      <span className="text-right font-mono text-[12.5px] font-semibold text-[#0f1b2a]">{value}</span>
-      {check ? <span className="w-32 text-right text-[10.5px] text-[#a39d8d]">{check}</span> : null}
+    <div className="flex items-baseline justify-between gap-3 border-b border-hairline-2 py-1.5 last:border-0">
+      <span className="text-[12px] text-muted">{label}</span>
+      <span className="text-right font-mono text-[12.5px] font-semibold text-ink">{value}</span>
+      {check ? <span className="w-32 text-right text-[10.5px] text-faint">{check}</span> : null}
     </div>
   )
 }
@@ -369,7 +369,7 @@ export default function FoundationDesign() {
         actions={
           <button type="button" onClick={() =>
             { const prev = document.title; document.title = `Foundation Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
-            className="inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">
+            className="inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover">
             ⎙ Export report
           </button>
         } />
@@ -418,9 +418,9 @@ export default function FoundationDesign() {
       <div className="no-print"><ExcelImport onResult={setBatch} /></div>
 
       {batch && (
-        <div className="no-print mt-4 overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
+        <div className="no-print mt-4 overflow-hidden rounded-lg border border-hairline bg-sheet">
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
-            <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">
+            <h2 className="text-[13.5px] font-bold text-ink">
               Batch schedule <span className="text-sm font-normal text-slate-500">({batch.designed}/{batch.rows.length} designed)</span>
             </h2>
             <button type="button" onClick={() => setBatch(null)} className="no-print text-xs text-slate-500 hover:text-slate-700 hover:underline">Clear</button>
@@ -550,9 +550,9 @@ export default function FoundationDesign() {
 
           <Card title="Materials">
             {(
-              <label className="col-span-full flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[#5c6675]">
+              <label className="col-span-full flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-muted">
                 <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-[#0f4c92]" />
+                  className="h-3.5 w-3.5 accent-brand" />
                 Auto-select bar ⌀ and spacing
               </label>
             )}
@@ -620,13 +620,13 @@ export default function FoundationDesign() {
               <FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H}
                 position={form.position} d={view.dProvided} pressure={view.offset ?? view.ecc} />
             ) : (
-              <p className="py-8 text-center text-sm text-[#a39d8d]">Enter valid inputs — net bearing must be positive.</p>
+              <p className="py-8 text-center text-sm text-faint">Enter valid inputs — net bearing must be positive.</p>
             )}
           </DrawingCard>
 
           {view && (
-            <div className="rounded-lg border border-[#e3e1da] bg-white p-4">
-              <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Results</h2>
+            <div className="rounded-lg border border-hairline bg-sheet p-4">
+              <h2 className="mb-2 text-[13.5px] font-bold text-ink">Results</h2>
               {view.analysis === 'analyze' && (
                 <Row label="Adequacy" value={view.punchOK && view.beamOK ? '✓ section OK' : '✗ inadequate in shear'}
                   check={`punching ${view.punchOK ? '✓' : '✗'} · beam ${view.beamOK ? '✓' : '✗'}`} />

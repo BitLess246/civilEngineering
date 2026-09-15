@@ -71,7 +71,7 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
   return (
     <div className="flex w-full flex-wrap items-start gap-4 [&>svg]:min-w-[260px] [&>svg]:flex-1">
       {/* ELEVATION */}
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full rounded-lg border border-slate-200 bg-white" style={{ maxWidth: W * sc }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full rounded-lg border border-slate-200 bg-sheet" style={{ maxWidth: W * sc }}>
         <text x={W / 2} y={16} textAnchor="middle" fontSize={13} fontWeight={700} fill="#0f172a">ELEVATION</text>
         <text x={W / 2} y={30} textAnchor="middle" fontSize={9} fill="#64748b">
           single plate — welded to the {hostKind === 'girder' ? 'girder web' : `column ${faceType}`}, bolted to the beam web (mm)
@@ -160,7 +160,7 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
       </svg>
 
       {/* END SECTION */}
-      <svg viewBox={`0 0 ${W2} ${H2}`} className="h-auto w-full rounded-lg border border-slate-200 bg-white" style={{ maxWidth: W2 * sc }}>
+      <svg viewBox={`0 0 ${W2} ${H2}`} className="h-auto w-full rounded-lg border border-slate-200 bg-sheet" style={{ maxWidth: W2 * sc }}>
         <text x={W2 / 2} y={16} textAnchor="middle" fontSize={13} fontWeight={700} fill="#0f172a">SECTION</text>
         {/* support face behind: column flange (or girder web edge-band) */}
         <rect x={cx2 - supW / 2} y={cy2 - dB / 2 - 34} width={supW} height={dB + 68}

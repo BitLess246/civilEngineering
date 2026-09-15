@@ -69,12 +69,12 @@ export function DisplacementTable({
 
   const tabCls = (on: boolean) =>
     `rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
-      on ? 'bg-[#0056b3] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+      on ? 'bg-brand text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
     }`
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">Nodal Displacements</h2>
+    <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+      <h2 className="mb-1 text-[1.02rem] font-bold text-brand">Nodal Displacements</h2>
       <p className="mb-3 text-[11px] text-slate-500">Translations in mm, rotations in mrad. Envelope shows the signed extreme across combinations.</p>
 
       <div className="mb-3 flex flex-wrap gap-1">
@@ -86,7 +86,7 @@ export function DisplacementTable({
             key={i}
             type="button"
             onClick={() => setActive(i)}
-            className={`${tabCls(active === i)} ${i === analysis.govIdx ? 'ring-1 ring-[#0056b3] ring-offset-1' : ''}`}
+            className={`${tabCls(active === i)} ${i === analysis.govIdx ? 'ring-1 ring-brand ring-offset-1' : ''}`}
           >
             {run.combo.name}{i === analysis.govIdx ? ' ★' : ''}
           </button>
@@ -122,12 +122,12 @@ export function DisplacementTable({
             ))}
             <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
               <td className="py-1.5 pr-3 text-slate-700" colSpan={2}>MAX |·|</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-[#0056b3]">{mm(gmax.ux)}</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-[#0056b3]">{mm(gmax.uy)}</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-[#0056b3]">{mm(gmax.uz)}</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-[#0056b3]">{mr(gmax.rx)}</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-[#0056b3]">{mr(gmax.ry)}</td>
-              <td className="py-1.5 text-right tabular-nums text-[#0056b3]">{mr(gmax.rz)}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{mm(gmax.ux)}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{mm(gmax.uy)}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{mm(gmax.uz)}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{mr(gmax.rx)}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{mr(gmax.ry)}</td>
+              <td className="py-1.5 text-right tabular-nums text-brand">{mr(gmax.rz)}</td>
             </tr>
           </tbody>
         </table>

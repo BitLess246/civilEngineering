@@ -31,7 +31,7 @@ export function ZoneBadge({ zone }: { zone: string }) {
 }
 
 export function Spinner() {
-  return <div className="flex h-80 items-center justify-center rounded-lg border border-[#e3e1da] bg-white text-sm text-slate-400">Loading 3D…</div>
+  return <div className="flex h-80 items-center justify-center rounded-lg border border-hairline bg-sheet text-sm text-slate-400">Loading 3D…</div>
 }
 
 /** In-flight / failed state of the calc API call, shown beside a card title. */
@@ -77,9 +77,9 @@ export function TrialWall({ cause }: { cause: unknown }) {
 export function ShapePick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <label className="col-span-full flex flex-col text-sm">
-      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">W-shape</span>
+      <span className="mb-1 text-[11.5px] font-semibold text-muted">W-shape</span>
       <select value={value} onChange={e => onChange(e.target.value)}
-        className="rounded-md border border-[#d6d3c9] px-2.5 py-1.5 text-[13px] text-slate-800 focus:border-[#0f4c92] focus:outline-none">
+        className="rounded-md border border-field-line px-2.5 py-1.5 text-[13px] text-slate-800 focus:border-brand focus:outline-none">
         {W_SHAPES.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
       </select>
     </label>
@@ -97,9 +97,9 @@ export function ShapePick({ value, onChange }: { value: string; onChange: (v: st
 export function BasisPick({ value, onChange }: { value: DesignBasis; onChange: (v: DesignBasis) => void }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">Design basis</span>
+      <span className="mb-1 text-[11.5px] font-semibold text-muted">Design basis</span>
       <select value={value} onChange={e => onChange(e.target.value as DesignBasis)}
-        className="rounded-md border border-[#d6d3c9] px-2.5 py-1.5 text-[13px] text-slate-800 focus:border-[#0f4c92] focus:outline-none">
+        className="rounded-md border border-field-line px-2.5 py-1.5 text-[13px] text-slate-800 focus:border-brand focus:outline-none">
         <option value="LRFD">LRFD — φRn vs 1.2D + 1.6L</option>
         <option value="ASD">ASD — Rn/Ω vs D + L</option>
       </select>

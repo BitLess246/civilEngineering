@@ -13,9 +13,9 @@ export default function Refunds() {
         <p>
           Every single-purpose calculator is free to use — permanently, with an account, and for a
           number of trial runs without one. The{' '}
-          <Link to="/validation" className="text-[#0056b3] underline">validation page</Link> shows our
+          <Link to="/validation" className="text-brand underline">validation page</Link> shows our
           engine checked against hand calculations, and the{' '}
-          <Link to="/docs" className="text-[#0056b3] underline">documentation</Link> covers every
+          <Link to="/docs" className="text-brand underline">documentation</Link> covers every
           control.
         </p>
         <p>
@@ -76,7 +76,7 @@ export default function Refunds() {
         <ul className="list-inside list-disc space-y-1">
           <li>Periods you have already used, outside the cases above.</li>
           <li>Accounts closed for a breach of the{' '}
-            <Link to="/terms" className="text-[#0056b3] underline">Terms</Link>.</li>
+            <Link to="/terms" className="text-brand underline">Terms</Link>.</li>
           <li>Disappointment with a calculation result that the software produced correctly from the
             inputs given. Checking the inputs and the result is the engineer&rsquo;s responsibility —
             see clause 3 of the Terms.</li>
@@ -85,7 +85,7 @@ export default function Refunds() {
 
       <Clause n="7" title="How to request a refund">
         <p>
-          Email <a href={`mailto:${SITE.supportEmail}`} className="text-[#0056b3] underline">{SITE.supportEmail}</a>{' '}
+          Email <a href={`mailto:${SITE.supportEmail}`} className="text-brand underline">{SITE.supportEmail}</a>{' '}
           from the address on the account, saying which payment you mean. You do not need a form or a
           reference number — the date and amount is enough.
         </p>

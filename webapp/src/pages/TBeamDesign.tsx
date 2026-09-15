@@ -78,7 +78,7 @@ export default function TBeamDesign() {
           drawingTitle={kind === 'edge' ? 'Edge (L) beam section' : 'T-beam section'} />
       )}
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <p className="no-print text-[13px] text-[#5c6675]">
+        <p className="no-print text-[13px] text-muted">
           Flanged-beam flexure, both ways. <b>Design</b> solves the compression block from the moment
           (§22.2.2.4.1) and the steel from C = T — the block grows with Mu and fills the flange before it
           enters the web. <b>Analysis</b> takes the steel as given and solves C(c) = T(c) for the neutral

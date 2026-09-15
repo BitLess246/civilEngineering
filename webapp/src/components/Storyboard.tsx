@@ -15,7 +15,7 @@ import { PANELS, COMPARISON, COMPARISON_NOTE, type Panel } from './storyboardDat
 
 function Tile({ p, ratio }: { p: Panel; ratio: string }) {
   return (
-    <figure className="m-0 overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
+    <figure className="m-0 overflow-hidden rounded-lg border border-hairline bg-sheet">
       <img
         src={p.src}
         alt={p.alt}
@@ -23,11 +23,11 @@ function Tile({ p, ratio }: { p: Panel; ratio: string }) {
         height={800}
         loading="lazy"
         decoding="async"
-        className={`block w-full bg-[#f7f5ef] ${ratio}`}
+        className={`block w-full bg-sheet-2 ${ratio}`}
       />
-      <figcaption className="border-t border-[#e3e1da] px-4 py-2.5">
-        <p className="text-[13px] font-bold text-[#0f1b2a]">{p.label}</p>
-        <p className="mt-0.5 text-[12.5px] leading-relaxed text-[#5c6675]">{p.caption}</p>
+      <figcaption className="border-t border-hairline px-4 py-2.5">
+        <p className="text-[13px] font-bold text-ink">{p.label}</p>
+        <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted">{p.caption}</p>
       </figcaption>
     </figure>
   )
@@ -58,7 +58,7 @@ export function ReportComparison() {
       <div className="grid gap-3.5 sm:grid-cols-2">
         {COMPARISON.map((p) => <Tile key={p.src} p={p} ratio="aspect-[3/4] object-contain" />)}
       </div>
-      <p className="mt-3.5 rounded-lg border border-[#e3e1da] bg-[#f7f5ef] px-5 py-3.5 text-[12.5px] leading-relaxed text-[#5c6675]">
+      <p className="mt-3.5 rounded-lg border border-hairline bg-sheet-2 px-5 py-3.5 text-[12.5px] leading-relaxed text-muted">
         {COMPARISON_NOTE}
       </p>
     </>

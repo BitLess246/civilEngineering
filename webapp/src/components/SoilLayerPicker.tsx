@@ -147,7 +147,7 @@ export function SoilLayerPicker({
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-[13px] font-bold text-[#0056b3]">{title}</h3>
+        <h3 className="text-[13px] font-bold text-brand">{title}</h3>
         <button onClick={() => setOpen(false)}
           className="rounded px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-200">close</button>
       </div>
@@ -155,7 +155,7 @@ export function SoilLayerPicker({
       {!investigations.length ? (
         <p className="text-[12px] text-slate-600">
           No saved investigations in this browser.{' '}
-          <Link to="/soils" className="font-medium text-[#0056b3] underline">Create one</Link> to enter boreholes,
+          <Link to="/soils" className="font-medium text-brand underline">Create one</Link> to enter boreholes,
           laboratory tests and parameters once and reuse them here.
         </p>
       ) : (
@@ -175,7 +175,7 @@ export function SoilLayerPicker({
 
           <div className="space-y-2">
             {rows.map(({ bh, layer, fill, resolved, missing }) => (
-              <div key={`${bh.id}-${layer.id}`} className="rounded-lg border border-slate-200 bg-white p-2.5">
+              <div key={`${bh.id}-${layer.id}`} className="rounded-lg border border-slate-200 bg-sheet p-2.5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="text-[12px] font-semibold text-slate-800">
                     {bh.name} · {layer.name}
@@ -190,7 +190,7 @@ export function SoilLayerPicker({
                     onClick={() => { onApply(fill); setApplied(`${bh.name} · ${layer.name}`); setOpen(false) }}
                     className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
                       resolved.length
-                        ? 'bg-[#0056b3] text-white hover:bg-[#004a99]'
+                        ? 'bg-brand text-white hover:bg-brand'
                         : 'cursor-not-allowed bg-slate-200 text-slate-500'
                     }`}>
                     {resolved.length ? 'Use this layer' : 'nothing to apply'}

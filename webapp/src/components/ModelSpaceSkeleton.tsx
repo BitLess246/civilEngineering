@@ -21,13 +21,13 @@
 /** One shimmering block. `animate-pulse` is Tailwind's, and it already stops
  *  under `prefers-reduced-motion`. */
 function Bar({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse rounded bg-[#e7e5de] ${className}`} />
+  return <div className={`animate-pulse rounded bg-hairline-2 ${className}`} />
 }
 
 /** A rail section: a short title bar and a couple of field-shaped rows. */
 function RailSection({ rows = 2 }: { rows?: number }) {
   return (
-    <div className="border-b border-[#eeece5] py-3.5">
+    <div className="border-b border-hairline-2 py-3.5">
       <Bar className="h-2 w-24" />
       <div className="mt-2.5 grid grid-cols-2 gap-2.5">
         {Array.from({ length: rows * 2 }, (_, i) => <Bar key={i} className="h-7" />)}
@@ -60,7 +60,7 @@ export function ModelSpaceSkeleton() {
           would drift from the first the day either changes — and drift there
           is silent, where a wrong number here is one measurement away from
           being caught again. */}
-      <div aria-hidden className="flex min-h-[76px] items-center gap-2 border-b border-[#e3e1da] bg-white px-3 py-2">
+      <div aria-hidden className="flex min-h-[76px] items-center gap-2 border-b border-hairline bg-sheet px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           <Bar className="h-6 w-16" />
           <Bar className="h-6 w-20" />
@@ -80,17 +80,17 @@ export function ModelSpaceSkeleton() {
           the whole point: the footer lands where it will finally sit. */}
       <div aria-hidden className="grid grid-cols-1 gap-4 p-4 lg:h-[calc(100vh-6.5rem)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="lg:flex lg:min-h-0 lg:flex-col">
-          <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a] lg:h-full lg:min-h-0">
+          <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-hairline bg-rail lg:h-full lg:min-h-0">
             {/* The viewport is dark, so its own shimmer has to be light — the
                 grey used everywhere else would be invisible on it. */}
-            <div className="absolute left-4 top-4 h-6 w-44 animate-pulse rounded bg-white/10" />
+            <div className="absolute left-4 top-4 h-6 w-44 animate-pulse rounded bg-sheet/10" />
             <div className="absolute inset-0 flex items-center justify-center">
               <span className="text-[12px] tracking-wide text-white/35">Loading the 3D model space…</span>
             </div>
           </div>
         </div>
 
-        <div className="rounded-lg border border-[#e3e1da] bg-white px-4 py-1">
+        <div className="rounded-lg border border-hairline bg-sheet px-4 py-1">
           <RailSection rows={2} />
           <RailSection rows={3} />
           <RailSection rows={1} />

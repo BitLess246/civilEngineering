@@ -91,12 +91,12 @@ export function MemberForcesTable({
 
   const tabCls = (on: boolean) =>
     `rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
-      on ? 'bg-[#0056b3] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+      on ? 'bg-brand text-on-solid' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
     }`
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="mb-3 text-[1.02rem] font-bold text-[#0056b3]">Member Forces (max absolute per member)</h2>
+    <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+      <h2 className="mb-3 text-[1.02rem] font-bold text-brand">Member Forces (max absolute per member)</h2>
 
       <div className="mb-3 flex flex-wrap gap-1">
         <button type="button" onClick={() => setActive('envelope')} className={tabCls(active === 'envelope')}>
@@ -107,7 +107,7 @@ export function MemberForcesTable({
             key={i}
             type="button"
             onClick={() => setActive(i)}
-            className={`${tabCls(active === i)} ${i === analysis.govIdx ? 'ring-1 ring-[#0056b3] ring-offset-1' : ''}`}
+            className={`${tabCls(active === i)} ${i === analysis.govIdx ? 'ring-1 ring-brand ring-offset-1' : ''}`}
           >
             {run.combo.name}{i === analysis.govIdx ? ' ★' : ''}
           </button>
@@ -145,12 +145,12 @@ export function MemberForcesTable({
             ))}
             <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
               <td className="py-1.5 pr-3 text-slate-700" colSpan={3}>MAX</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-[#0056b3]">{f1(globalMax.N)}</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-[#0056b3]">{f1(globalMax.Vy)}</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-[#0056b3]">{f1(globalMax.Vz)}</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-[#0056b3]">{f1(globalMax.T)}</td>
-              <td className="py-1.5 pr-3 text-right tabular-nums text-[#0056b3]">{f1(globalMax.My)}</td>
-              <td className="py-1.5 text-right tabular-nums text-[#0056b3]">{f1(globalMax.Mz)}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{f1(globalMax.N)}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{f1(globalMax.Vy)}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{f1(globalMax.Vz)}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{f1(globalMax.T)}</td>
+              <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{f1(globalMax.My)}</td>
+              <td className="py-1.5 text-right tabular-nums text-brand">{f1(globalMax.Mz)}</td>
             </tr>
           </tbody>
         </table>

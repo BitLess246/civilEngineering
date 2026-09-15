@@ -17,8 +17,8 @@ import { useTour } from '../lib/useTour'
 
 const REL: RelationType[] = ['FS', 'SS', 'FF', 'SF']
 
-const btn = 'inline-flex items-center gap-1.5 rounded-md border border-[#d6d3c9] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]'
-const btnPrimary = 'inline-flex items-center gap-1.5 rounded-md bg-[#0f4c92] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#0d3f78]'
+const btn = 'inline-flex items-center gap-1.5 rounded-md border border-field-line bg-sheet px-2.5 py-1.5 text-[12px] font-semibold text-ink-2 hover:border-brand-hover hover:text-brand'
+const btnPrimary = 'inline-flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-[12px] font-semibold text-on-solid hover:bg-brand-hover'
 
 function fmtLag(lag: number): string {
   return lag === 0 ? '' : lag > 0 ? `+${lag}` : `${lag}`
@@ -30,7 +30,7 @@ function TextInput({ value, onChange, placeholder, mono }: {
 }) {
   return (
     <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-      className={`w-full rounded border border-transparent bg-transparent px-1.5 py-1 text-[12.5px] text-[#0f1b2a] hover:border-[#e3e1da] focus:border-[#0f4c92] focus:bg-white ${mono ? 'font-mono' : ''}`} />
+      className={`w-full rounded border border-transparent bg-transparent px-1.5 py-1 text-[12.5px] text-ink hover:border-hairline focus:border-brand focus:bg-sheet ${mono ? 'font-mono' : ''}`} />
   )
 }
 function NumInput({ value, onChange, min = 0, step = 1, w = 'w-16' }: {
@@ -39,7 +39,7 @@ function NumInput({ value, onChange, min = 0, step = 1, w = 'w-16' }: {
   return (
     <input type="number" min={min} step={step} value={value}
       onChange={(e) => { const n = parseFloat(e.target.value); onChange(Number.isFinite(n) ? n : 0) }}
-      className={`${w} rounded border border-[#e3e1da] px-1.5 py-1 text-right font-mono text-[12px] text-[#0f1b2a] focus:border-[#0f4c92]`} />
+      className={`${w} rounded border border-hairline px-1.5 py-1 text-right font-mono text-[12px] text-ink focus:border-brand`} />
   )
 }
 
@@ -74,29 +74,29 @@ function DependencyEditor({ project, activity, update }: {
 
   return (
     <div data-tour="dep-editor">
-      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#a39d8d]">Predecessors</p>
+      <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-faint">Predecessors</p>
       <div className="flex flex-wrap items-center gap-1.5">
-        {activity.predecessors.length === 0 && <span className="text-[11.5px] text-[#a39d8d]">None — starts at project start.</span>}
+        {activity.predecessors.length === 0 && <span className="text-[11.5px] text-faint">None — starts at project start.</span>}
         {activity.predecessors.map((p) => (
-          <span key={p.predecessor} className="inline-flex items-center gap-1 rounded border border-[#cddcf0] bg-[#eaf1f9] px-1.5 py-0.5 text-[11px] text-[#0f4c92]">
+          <span key={p.predecessor} className="inline-flex items-center gap-1 rounded border border-brand-line bg-brand-tint px-1.5 py-0.5 text-[11px] text-brand">
             <span className="font-semibold">{nameOf(p.predecessor)}</span>
             <span className="font-mono">{p.type}{fmtLag(p.lag)}</span>
-            <button type="button" onClick={() => remove(p.predecessor)} className="ml-0.5 text-[#0f4c92]/60 hover:text-[#c2402a]" aria-label="remove">×</button>
+            <button type="button" onClick={() => remove(p.predecessor)} className="ml-0.5 text-brand/60 hover:text-fail" aria-label="remove">×</button>
           </span>
         ))}
       </div>
       {candidates.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <select value={pred} onChange={(e) => setPred(e.target.value)}
-            className="rounded border border-[#e3e1da] px-1.5 py-1 text-[12px]">
+            className="rounded border border-hairline px-1.5 py-1 text-[12px]">
             <option value="">+ add predecessor…</option>
             {candidates.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
           <select value={type} onChange={(e) => setType(e.target.value as RelationType)}
-            className="rounded border border-[#e3e1da] px-1.5 py-1 font-mono text-[12px]">
+            className="rounded border border-hairline px-1.5 py-1 font-mono text-[12px]">
             {REL.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
-          <label className="flex items-center gap-1 text-[11px] text-[#5c6675]">lag <NumInput value={lag} onChange={setLag} min={-999} w="w-14" /></label>
+          <label className="flex items-center gap-1 text-[11px] text-muted">lag <NumInput value={lag} onChange={setLag} min={-999} w="w-14" /></label>
           <button type="button" onClick={add} disabled={!pred} className={`${btn} disabled:opacity-40`}>Add</button>
         </div>
       )}
@@ -114,48 +114,48 @@ function ActivityDetail({ project, activity, solve, update }: {
     if (act) Object.assign(act, patch)
   })
   const cpmCell = (label: string, v: number | undefined) => (
-    <div className="rounded border border-[#eeece5] bg-[#f9f8f4] px-2 py-1">
-      <p className="text-[9px] font-semibold uppercase tracking-widest text-[#a39d8d]">{label}</p>
-      <p className="font-mono text-[12.5px] font-semibold text-[#0f1b2a]">{v ?? '—'}</p>
+    <div className="rounded border border-hairline-2 bg-sheet-2 px-2 py-1">
+      <p className="text-[9px] font-semibold uppercase tracking-widest text-faint">{label}</p>
+      <p className="font-mono text-[12.5px] font-semibold text-ink">{v ?? '—'}</p>
     </div>
   )
   return (
-    <div className="grid gap-4 border-t border-[#eeece5] bg-[#fcfbf8] px-4 py-3.5 lg:grid-cols-[1.1fr_1fr]">
+    <div className="grid gap-4 border-t border-hairline-2 bg-field px-4 py-3.5 lg:grid-cols-[1.1fr_1fr]">
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" data-tour="detail-fields">
-          <label className="flex flex-col text-[11px] text-[#5c6675]">WBS
+          <label className="flex flex-col text-[11px] text-muted">WBS
             <select value={activity.wbsId ?? ''} onChange={(e) => set({ wbsId: e.target.value || undefined })}
-              className="mt-0.5 rounded border border-[#e3e1da] px-1.5 py-1 text-[12px] text-[#0f1b2a]">
+              className="mt-0.5 rounded border border-hairline px-1.5 py-1 text-[12px] text-ink">
               <option value="">— none —</option>
               {project.wbs.map((w) => <option key={w.id} value={w.id}>{w.code ? `${w.code} ` : ''}{w.name}</option>)}
             </select>
           </label>
-          <label className="flex flex-col text-[11px] text-[#5c6675]">Responsible
+          <label className="flex flex-col text-[11px] text-muted">Responsible
             <TextInput value={activity.responsible ?? ''} onChange={(v) => set({ responsible: v || undefined })} placeholder="Engineer" />
           </label>
-          <label className="flex flex-col text-[11px] text-[#5c6675]">Milestone
+          <label className="flex flex-col text-[11px] text-muted">Milestone
             <select value={activity.milestone ? 'yes' : 'no'} onChange={(e) => set({ milestone: e.target.value === 'yes', duration: e.target.value === 'yes' ? 0 : activity.duration || 1 })}
-              className="mt-0.5 rounded border border-[#e3e1da] px-1.5 py-1 text-[12px] text-[#0f1b2a]">
+              className="mt-0.5 rounded border border-hairline px-1.5 py-1 text-[12px] text-ink">
               <option value="no">No</option><option value="yes">Yes (0 d)</option>
             </select>
           </label>
         </div>
-        <label className="flex flex-col text-[11px] text-[#5c6675]">Remarks
+        <label className="flex flex-col text-[11px] text-muted">Remarks
           <TextInput value={activity.remarks ?? ''} onChange={(v) => set({ remarks: v || undefined })} placeholder="Notes…" />
         </label>
         <div className="grid grid-cols-3 gap-3">
-          <label className="flex flex-col text-[11px] text-[#5c6675]">Optimistic (O)
+          <label className="flex flex-col text-[11px] text-muted">Optimistic (O)
             <NumInput value={activity.optimistic ?? activity.duration} onChange={(v) => set({ optimistic: v })} w="w-full" /></label>
-          <label className="flex flex-col text-[11px] text-[#5c6675]">Most likely (M)
+          <label className="flex flex-col text-[11px] text-muted">Most likely (M)
             <NumInput value={activity.mostLikely ?? activity.duration} onChange={(v) => set({ mostLikely: v })} w="w-full" /></label>
-          <label className="flex flex-col text-[11px] text-[#5c6675]">Pessimistic (P)
+          <label className="flex flex-col text-[11px] text-muted">Pessimistic (P)
             <NumInput value={activity.pessimistic ?? activity.duration} onChange={(v) => set({ pessimistic: v })} w="w-full" /></label>
         </div>
       </div>
       <div className="space-y-3">
         <DependencyEditor project={project} activity={activity} update={update} />
         <div data-tour="cpm-cells">
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#a39d8d]">CPM (working days)</p>
+          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-faint">CPM (working days)</p>
           <div className="grid grid-cols-3 gap-1.5">
             {cpmCell('ES', c?.es)}{cpmCell('EF', c?.ef)}{cpmCell('LS', c?.ls)}
             {cpmCell('LF', c?.lf)}{cpmCell('Total float', c?.totalFloat)}{cpmCell('Free float', c?.freeFloat)}
@@ -208,14 +208,14 @@ function ActivityGrid({ project, solve, update, open, setOpen, collapsed, setCol
   // which is the top group and its first activity — the same element a
   // conditional attribute would have produced — and a literal attribute is what
   // `tours.test.ts` can actually verify, since it reads this file as text.
-  const th = 'px-2.5 py-2 text-left text-[9.5px] font-bold uppercase tracking-widest text-[#5c6675]'
+  const th = 'px-2.5 py-2 text-left text-[9.5px] font-bold uppercase tracking-widest text-muted'
   const td = 'px-2.5 py-1.5 align-middle'
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-[#e3e1da] bg-white" data-tour="activity-grid">
+    <div className="overflow-x-auto rounded-lg border border-hairline bg-sheet" data-tour="activity-grid">
       <table className="w-full min-w-[860px] border-collapse text-[12.5px]">
         <thead>
-          <tr className="border-b-[1.5px] border-[#0f1b2a] bg-[#f9f8f4]">
+          <tr className="border-b-[1.5px] border-ink bg-sheet-2">
             <th className={th} style={{ width: 28 }}></th>
             <th className={th}>ID</th>
             <th className={`${th} min-w-[200px]`}>Activity</th>
@@ -234,7 +234,7 @@ function ActivityGrid({ project, solve, update, open, setOpen, collapsed, setCol
             const isCollapsed = collapsed.has(key)
             return (
               <FragmentGroup key={key || 'unassigned'}>
-                <tr className="border-b border-[#eeece5] bg-[#f4f3ef]">
+                <tr className="border-b border-hairline-2 bg-paper">
                   <td className={td}>
                     {/* A bare grey glyph read as decoration. It is a control:
                         give it a border, a hit area and a title. */}
@@ -242,12 +242,12 @@ function ActivityGrid({ project, solve, update, open, setOpen, collapsed, setCol
                       data-tour="wbs-group"
                       title={isCollapsed ? 'Expand this WBS group' : 'Collapse this WBS group'}
                       aria-expanded={!isCollapsed}
-                      className="flex h-[18px] w-[18px] items-center justify-center rounded border border-[#d6d3c9] bg-white text-[10px] leading-none text-[#5b5648] hover:border-[#0056b3] hover:text-[#0056b3]">
+                      className="flex h-[18px] w-[18px] items-center justify-center rounded border border-field-line bg-sheet text-[10px] leading-none text-faint hover:border-brand hover:text-brand">
                       {isCollapsed ? '▸' : '▾'}
                     </button>
                   </td>
-                  <td className={`${td} font-mono text-[11px] text-[#a39d8d]`}>{g.code}</td>
-                  <td className={`${td} font-bold text-[#0f1b2a]`} colSpan={8}>{g.label} <span className="ml-1 font-normal text-[#a39d8d]">({g.acts.length})</span></td>
+                  <td className={`${td} font-mono text-[11px] text-faint`}>{g.code}</td>
+                  <td className={`${td} font-bold text-ink`} colSpan={8}>{g.label} <span className="ml-1 font-normal text-faint">({g.acts.length})</span></td>
                 </tr>
                 {!isCollapsed && g.acts.map((a) => {
                   const c = solve.cpm?.activities.get(a.id)
@@ -256,39 +256,39 @@ function ActivityGrid({ project, solve, update, open, setOpen, collapsed, setCol
                   const isOpen = open === a.id
                   return (
                     <FragmentGroup key={a.id}>
-                      <tr className={`border-b border-[#f1efe8] ${critical ? 'bg-[#fdf3f0]' : 'hover:bg-[#faf9f5]'}`}>
+                      <tr className={`border-b border-hairline-2 ${critical ? 'bg-fail-tint' : 'hover:bg-sheet-2'}`}>
                         <td className={td}>
                           <button type="button" onClick={() => setOpen(isOpen ? null : a.id)}
                             data-tour="activity-row"
                             title={isOpen ? 'Hide activity detail' : 'Show activity detail'}
                             aria-expanded={isOpen}
-                            className="flex h-[18px] w-[18px] items-center justify-center rounded border border-[#d6d3c9] bg-white text-[10px] leading-none text-[#5b5648] hover:border-[#0056b3] hover:text-[#0056b3]">{isOpen ? '▾' : '▸'}</button>
+                            className="flex h-[18px] w-[18px] items-center justify-center rounded border border-field-line bg-sheet text-[10px] leading-none text-faint hover:border-brand hover:text-brand">{isOpen ? '▾' : '▸'}</button>
                         </td>
-                        <td className={`${td} font-mono text-[11px] text-[#5c6675]`}>{a.id}</td>
+                        <td className={`${td} font-mono text-[11px] text-muted`}>{a.id}</td>
                         <td className={td}>
                           <div className="flex items-center gap-1.5">
                             <TextInput value={a.name} onChange={(v) => update((d) => { const x = d.activities.find((y) => y.id === a.id); if (x) x.name = v })} />
-                            {critical && <span className="flex-none rounded bg-[#c2402a] px-1 py-px font-mono text-[9px] font-semibold text-white">CRIT</span>}
-                            {a.milestone && <span className="flex-none rounded bg-[#0f1b2a] px-1 py-px font-mono text-[9px] font-semibold text-white">◆</span>}
+                            {critical && <span className="flex-none rounded bg-fail px-1 py-px font-mono text-[9px] font-semibold text-on-solid">CRIT</span>}
+                            {a.milestone && <span className="flex-none rounded bg-rail px-1 py-px font-mono text-[9px] font-semibold text-rail-ink">◆</span>}
                           </div>
                         </td>
                         <td className={`${td} text-right`}><NumInput value={a.duration} onChange={(v) => update((d) => { const x = d.activities.find((y) => y.id === a.id); if (x) x.duration = v })} /></td>
-                        <td className={`${td} font-mono text-[10.5px] text-[#5c6675]`}>
-                          {a.predecessors.length === 0 ? <span className="text-[#c8c2b4]">—</span>
+                        <td className={`${td} font-mono text-[10.5px] text-muted`}>
+                          {a.predecessors.length === 0 ? <span className="text-faint">—</span>
                             : a.predecessors.map((p) => `${p.predecessor}${p.type !== 'FS' || p.lag ? ` ${p.type}${fmtLag(p.lag)}` : ''}`).join(', ')}
                         </td>
                         <td className={`${td} text-right`}>
                           <input type="number" min={0} max={100} value={a.percentComplete ?? 0}
                             onChange={(e) => { const n = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)); update((d) => { const x = d.activities.find((y) => y.id === a.id); if (x) x.percentComplete = n }) }}
-                            className="w-14 rounded border border-[#e3e1da] px-1 py-1 text-right font-mono text-[12px]" />
+                            className="w-14 rounded border border-hairline px-1 py-1 text-right font-mono text-[12px]" />
                         </td>
-                        <td className={`${td} whitespace-nowrap font-mono text-[11px] text-[#5c6675]`}>{dates?.start ?? '—'}</td>
-                        <td className={`${td} whitespace-nowrap font-mono text-[11px] text-[#5c6675]`}>{dates?.finish ?? '—'}</td>
-                        <td className={`${td} text-right font-mono text-[11.5px] ${critical ? 'font-semibold text-[#c2402a]' : 'text-[#5c6675]'}`}>{c ? c.totalFloat : '—'}</td>
+                        <td className={`${td} whitespace-nowrap font-mono text-[11px] text-muted`}>{dates?.start ?? '—'}</td>
+                        <td className={`${td} whitespace-nowrap font-mono text-[11px] text-muted`}>{dates?.finish ?? '—'}</td>
+                        <td className={`${td} text-right font-mono text-[11.5px] ${critical ? 'font-semibold text-fail' : 'text-muted'}`}>{c ? c.totalFloat : '—'}</td>
                         <td className={`${td} whitespace-nowrap text-right`}>
-                          <button type="button" onClick={() => move(a.id, -1)} className="px-1 text-[#a39d8d] hover:text-[#0f1b2a]" aria-label="up">▲</button>
-                          <button type="button" onClick={() => move(a.id, 1)} className="px-1 text-[#a39d8d] hover:text-[#0f1b2a]" aria-label="down">▼</button>
-                          <button type="button" onClick={() => del(a.id)} className="px-1 text-[#a39d8d] hover:text-[#c2402a]" aria-label="delete">✕</button>
+                          <button type="button" onClick={() => move(a.id, -1)} className="px-1 text-faint hover:text-ink" aria-label="up">▲</button>
+                          <button type="button" onClick={() => move(a.id, 1)} className="px-1 text-faint hover:text-ink" aria-label="down">▼</button>
+                          <button type="button" onClick={() => del(a.id)} className="px-1 text-faint hover:text-fail" aria-label="delete">✕</button>
                         </td>
                       </tr>
                       {isOpen && <tr><td colSpan={10} className="p-0"><ActivityDetail project={project} activity={a} solve={solve} update={update} /></td></tr>}
@@ -299,7 +299,7 @@ function ActivityGrid({ project, solve, update, open, setOpen, collapsed, setCol
             )
           })}
           {project.activities.length === 0 && (
-            <tr><td colSpan={10} className="px-4 py-8 text-center text-[13px] text-[#a39d8d]">No activities yet — add one to start scheduling.</td></tr>
+            <tr><td colSpan={10} className="px-4 py-8 text-center text-[13px] text-faint">No activities yet — add one to start scheduling.</td></tr>
           )}
         </tbody>
       </table>
@@ -313,9 +313,9 @@ function FragmentGroup({ children }: { children: React.ReactNode }) { return <>{
 // ── Summary + validation ────────────────────────────────────────────────────
 function Summary({ project, solve }: { project: ScheduleProject; solve: ScheduleSolve }) {
   const stat = (label: string, value: string, tone?: 'ok' | 'bad') => (
-    <div className="rounded-lg border border-[#e3e1da] bg-white px-3.5 py-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a39d8d]">{label}</p>
-      <p className={`mt-0.5 font-mono text-[16px] font-semibold ${tone === 'bad' ? 'text-[#c2402a]' : tone === 'ok' ? 'text-[#14603a]' : 'text-[#0f1b2a]'}`}>{value}</p>
+    <div className="rounded-lg border border-hairline bg-sheet px-3.5 py-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-faint">{label}</p>
+      <p className={`mt-0.5 font-mono text-[16px] font-semibold ${tone === 'bad' ? 'text-fail' : tone === 'ok' ? 'text-ok' : 'text-ink'}`}>{value}</p>
     </div>
   )
   const criticalCount = solve.cpm ? solve.cpm.criticalPath.length : 0
@@ -336,13 +336,13 @@ function Summary({ project, solve }: { project: ScheduleProject; solve: Schedule
 function ValidationPanel({ solve }: { solve: ScheduleSolve }) {
   if (solve.issues.length === 0) return null
   return (
-    <div className="rounded-lg border border-[#efd9cc] bg-[#fdf3ee] px-4 py-3">
-      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-widest text-[#8f4a2f]">Validation</p>
+    <div className="rounded-lg border border-fail-line bg-fail-tint px-4 py-3">
+      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-widest text-fail">Validation</p>
       <ul className="space-y-1">
         {solve.issues.map((i, k) => (
           <li key={k} className="flex items-start gap-2 text-[12px]">
-            <span className={`mt-px flex-none rounded px-1 py-px font-mono text-[9px] font-semibold ${i.severity === 'error' ? 'bg-[#fbeeea] text-[#c2402a]' : 'bg-[#fdf0d8] text-[#b97d10]'}`}>{i.severity === 'error' ? 'ERR' : 'WARN'}</span>
-            <span className="text-[#5c6675]">{i.message}</span>
+            <span className={`mt-px flex-none rounded px-1 py-px font-mono text-[9px] font-semibold ${i.severity === 'error' ? 'bg-fail-tint text-fail' : 'bg-warn-tint text-warn'}`}>{i.severity === 'error' ? 'ERR' : 'WARN'}</span>
+            <span className="text-muted">{i.message}</span>
           </li>
         ))}
       </ul>
@@ -377,7 +377,7 @@ function ProjectBar({ api }: { api: ReturnType<typeof useScheduleProject> }) {
     <div className="flex flex-wrap items-center gap-2" data-tour="project-bar">
       {api.projects.length > 0 && (
         <select value={api.activeId ?? ''} onChange={(e) => api.open(e.target.value)}
-          className="rounded-md border border-[#d6d3c9] bg-white px-2 py-1.5 text-[12px] text-[#0f1b2a]">
+          className="rounded-md border border-field-line bg-sheet px-2 py-1.5 text-[12px] text-ink">
           {api.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       )}
@@ -402,7 +402,7 @@ function ProjectBar({ api }: { api: ReturnType<typeof useScheduleProject> }) {
       <button type="button" onClick={onExport} className={btn}>Export</button>
       <input ref={fileRef} type="file" accept=".json,application/json" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); e.target.value = '' }} />
-      {err && <span className="text-[11px] text-[#c2402a]">{err}</span>}
+      {err && <span className="text-[11px] text-fail">{err}</span>}
     </div>
   )
 }
@@ -496,9 +496,9 @@ export default function Schedule() {
           conflict={api.conflict} reloadTheirs={api.reloadTheirs}
           overwriteWithMine={api.overwriteWithMine} />
         {!project ? (
-          <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
-            <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>
-            <p className="mt-1 text-[13px] text-[#7a7568]">Start a new project, load the worked sample, or import a JSON file.</p>
+          <div className="rounded-lg border border-dashed border-field-line bg-sheet px-6 py-16 text-center">
+            <h2 className="text-[16px] font-bold text-ink">No schedule open</h2>
+            <p className="mt-1 text-[13px] text-faint">Start a new project, load the worked sample, or import a JSON file.</p>
             <div className="mt-4 flex justify-center gap-2">
               <button type="button" onClick={() => api.loadSample()} className={btnPrimary}>Load sample project</button>
               <button type="button" onClick={() => api.newProject()} className={btn}>New blank project</button>
@@ -506,21 +506,21 @@ export default function Schedule() {
           </div>
         ) : (
           <>
-            <section className="rounded-lg border border-[#e3e1da] bg-white p-4" data-tour="project-card">
+            <section className="rounded-lg border border-hairline bg-sheet p-4" data-tour="project-card">
               <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-                <label className="flex min-w-[220px] flex-1 flex-col text-[11px] font-semibold uppercase tracking-widest text-[#a39d8d]">Project
+                <label className="flex min-w-[220px] flex-1 flex-col text-[11px] font-semibold uppercase tracking-widest text-faint">Project
                   <input value={project.meta.name} onChange={(e) => api.rename(e.target.value)}
-                    className="mt-0.5 border-0 bg-transparent p-0 text-[18px] font-extrabold tracking-tight text-[#0f1b2a] shadow-none focus:ring-0" />
+                    className="mt-0.5 border-0 bg-transparent p-0 text-[18px] font-extrabold tracking-tight text-ink shadow-none focus:ring-0" />
                 </label>
                 {(['client', 'contractor', 'engineer'] as const).map((k) => (
-                  <label key={k} className="flex flex-col text-[10px] font-semibold uppercase tracking-widest text-[#a39d8d]">{k}
+                  <label key={k} className="flex flex-col text-[10px] font-semibold uppercase tracking-widest text-faint">{k}
                     <input value={project.meta[k] ?? ''} onChange={(e) => update((d) => { d.meta[k] = e.target.value || undefined })}
-                      placeholder="—" className="mt-0.5 w-40 rounded border border-[#e3e1da] px-2 py-1 text-[12.5px] font-normal normal-case tracking-normal text-[#0f1b2a]" />
+                      placeholder="—" className="mt-0.5 w-40 rounded border border-hairline px-2 py-1 text-[12.5px] font-normal normal-case tracking-normal text-ink" />
                   </label>
                 ))}
-                <label className="flex flex-col text-[10px] font-semibold uppercase tracking-widest text-[#a39d8d]">Start date
+                <label className="flex flex-col text-[10px] font-semibold uppercase tracking-widest text-faint">Start date
                   <input type="date" value={project.meta.start} onChange={(e) => update((d) => { d.meta.start = e.target.value })}
-                    className="mt-0.5 rounded border border-[#e3e1da] px-2 py-1 font-mono text-[12.5px] font-normal tracking-normal text-[#0f1b2a]" />
+                    className="mt-0.5 rounded border border-hairline px-2 py-1 font-mono text-[12.5px] font-normal tracking-normal text-ink" />
                 </label>
               </div>
             </section>
@@ -529,14 +529,14 @@ export default function Schedule() {
             <ValidationPanel solve={solve} />
 
             <div className="flex items-center justify-between">
-              <h2 className="text-[14px] font-bold text-[#0f1b2a]">Activities &amp; WBS</h2>
+              <h2 className="text-[14px] font-bold text-ink">Activities &amp; WBS</h2>
               <button type="button" onClick={addActivity} className={btnPrimary} data-tour="add-activity">＋ Add activity</button>
             </div>
             <ActivityGrid project={project} solve={solve} update={update}
               open={open} setOpen={setOpen} collapsed={collapsed} setCollapsed={setCollapsed} />
 
-            <p className="text-[11px] text-[#a39d8d]">
-              Critical activities (zero total float) are tinted and tagged <span className="rounded bg-[#c2402a] px-1 py-px font-mono text-[9px] font-semibold text-white">CRIT</span>.
+            <p className="text-[11px] text-faint">
+              Critical activities (zero total float) are tinted and tagged <span className="rounded bg-fail px-1 py-px font-mono text-[9px] font-semibold text-on-solid">CRIT</span>.
               Expand a row for the dependency editor and full CPM (ES/EF/LS/LF, floats). Edits auto-save and recompute live.
             </p>
           </>

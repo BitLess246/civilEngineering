@@ -22,7 +22,7 @@ export default function Contact() {
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Support</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Contact us</h1>
+      <h1 className="mt-1 text-2xl font-bold text-brand">Contact us</h1>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
         A real person reads these. If something is wrong with a calculation, tell us what you entered
         and what you expected — that is usually enough to reproduce it.
@@ -31,11 +31,11 @@ export default function Contact() {
       {missing.length > 0 && (
         <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-900">
           <strong>Contact details incomplete.</strong> Missing: {missing.join(', ')}. Set them in{' '}
-          <code className="rounded bg-white/70 px-1">webapp/src/lib/siteConfig.ts</code>.
+          <code className="rounded bg-sheet/70 px-1">webapp/src/lib/siteConfig.ts</code>.
         </div>
       )}
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
         <dl>
           <Row label="Business name">
             {SITE.legalName.trim()
@@ -48,13 +48,13 @@ export default function Contact() {
               : <Unset what="registered business address" />}
           </Row>
           <Row label="Email">
-            <a href={`mailto:${SITE.supportEmail}`} className="text-[#0056b3] underline">{SITE.supportEmail}</a>
+            <a href={`mailto:${SITE.supportEmail}`} className="text-brand underline">{SITE.supportEmail}</a>
           </Row>
           <Row label="Support hours">{SITE.supportHours}</Row>
         </dl>
       </section>
 
-      <h2 className="mt-8 text-[1.05rem] font-bold text-[#0056b3]">What to include</h2>
+      <h2 className="mt-8 text-[1.05rem] font-bold text-brand">What to include</h2>
       <div className="mt-2 space-y-3 text-sm leading-6 text-slate-700">
         <p>
           <strong>A wrong or surprising result:</strong> the tool name, the inputs you used, and the
@@ -63,30 +63,30 @@ export default function Contact() {
         </p>
         <p>
           <strong>Billing:</strong> write from the address on the account and give the date and
-          amount. See the <Link to="/refunds" className="text-[#0056b3] underline">Refund
+          amount. See the <Link to="/refunds" className="text-brand underline">Refund
           Policy</Link> for what we can do and how long it takes.
         </p>
         <p>
           <strong>Privacy requests</strong> — a copy of your data, a correction, or deletion — go to
           the same address. Your rights are set out in the{' '}
-          <Link to="/privacy" className="text-[#0056b3] underline">Privacy Policy</Link>.
+          <Link to="/privacy" className="text-brand underline">Privacy Policy</Link>.
         </p>
       </div>
 
-      <h2 className="mt-8 text-[1.05rem] font-bold text-[#0056b3]">Before you write</h2>
+      <h2 className="mt-8 text-[1.05rem] font-bold text-brand">Before you write</h2>
       <p className="mt-2 text-sm leading-6 text-slate-700">
-        The <Link to="/docs" className="text-[#0056b3] underline">documentation</Link> explains every
+        The <Link to="/docs" className="text-brand underline">documentation</Link> explains every
         control on every page, and the{' '}
-        <Link to="/validation" className="text-[#0056b3] underline">validation page</Link> shows the
+        <Link to="/validation" className="text-brand underline">validation page</Link> shows the
         engine checked against closed-form results. If you are asking &ldquo;is this number
         right?&rdquo;, that page may answer it faster than we can.
       </p>
 
       <p className="mt-8 border-t border-slate-200 pt-4 text-[13px] text-slate-500">
         {businessName()} is a Philippine business. Our{' '}
-        <Link to="/terms" className="text-[#0056b3] underline">Terms</Link>,{' '}
-        <Link to="/privacy" className="text-[#0056b3] underline">Privacy Policy</Link> and{' '}
-        <Link to="/refunds" className="text-[#0056b3] underline">Refund Policy</Link> apply to all
+        <Link to="/terms" className="text-brand underline">Terms</Link>,{' '}
+        <Link to="/privacy" className="text-brand underline">Privacy Policy</Link> and{' '}
+        <Link to="/refunds" className="text-brand underline">Refund Policy</Link> apply to all
         use of the service.
       </p>
     </main>

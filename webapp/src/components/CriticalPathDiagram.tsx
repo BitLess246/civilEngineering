@@ -53,7 +53,7 @@ export function CriticalPathDiagram({ activities, cpm, critical, onEditDuration 
     </div>
 
   return (
-    <div className="overflow-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="overflow-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
       <div className="relative" style={{ width: layout.width, height: layout.height }}>
         {/* arrows */}
         <svg className="pointer-events-none absolute inset-0" width={layout.width} height={layout.height}>
@@ -89,11 +89,11 @@ export function CriticalPathDiagram({ activities, cpm, critical, onEditDuration 
           const p = layout.pos.get(a.id)!
           const isCrit = critical.has(a.id)
           return (
-            <div key={a.id} className={`absolute rounded-md border-2 bg-white shadow-sm ${isCrit ? 'border-red-500' : 'border-slate-300'}`}
+            <div key={a.id} className={`absolute rounded-md border-2 bg-sheet shadow-sm ${isCrit ? 'border-red-500' : 'border-slate-300'}`}
               style={{ left: p.x, top: p.y, width: BOX_W, height: BOX_H }} title={a.name}>
               <div className="grid h-[22px] grid-cols-3 divide-x divide-white overflow-hidden rounded-t">
                 {cell(c.es, 'bg-[#a5d76e] text-[#1e3a0f]')}
-                <div className="flex items-center justify-center bg-[#3f9a3f]">
+                <div className="flex items-center justify-center bg-ok">
                   <input type="number" min={1} value={a.duration}
                     onChange={(e) => onEditDuration(a.id, Math.max(1, Math.round(+e.target.value || 1)))}
                     className="h-full w-full bg-transparent text-center text-[11px] font-bold text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />

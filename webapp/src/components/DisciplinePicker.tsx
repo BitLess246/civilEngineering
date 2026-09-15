@@ -34,11 +34,11 @@ export function DisciplinePicker({
         return (
           <label key={label}
             className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3.5 py-2.5 transition-colors ${
-              on ? 'border-[#0f4c92] bg-[#eaf1f9]' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+              on ? 'border-brand bg-brand-tint' : 'border-slate-200 bg-sheet hover:border-slate-300'}`}>
             <input type="checkbox" checked={on} onChange={() => onToggle(label)}
-              className="mt-0.5 h-4 w-4 flex-none accent-[#0f4c92]" />
+              className="mt-0.5 h-4 w-4 flex-none accent-brand" />
             <span className="min-w-0">
-              <span className={`block text-[13px] font-bold ${on ? 'text-[#0f4c92]' : 'text-slate-700'}`}>{label}</span>
+              <span className={`block text-[13px] font-bold ${on ? 'text-brand' : 'text-slate-700'}`}>{label}</span>
               <span className="mt-0.5 block font-mono text-[10.5px] leading-relaxed text-slate-500">{summarise(label)}</span>
             </span>
           </label>

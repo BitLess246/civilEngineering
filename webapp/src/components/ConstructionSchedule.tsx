@@ -96,13 +96,13 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
   return (
     <div className="mt-6 space-y-4 break-before-page">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-xl font-extrabold tracking-tight text-[#0f4c92]">Construction schedule — CPM / PERT</h2>
+        <h2 className="text-xl font-extrabold tracking-tight text-brand">Construction schedule — CPM / PERT</h2>
         <span className="flex items-center gap-3 text-sm text-slate-500">
           <span>auto-derived from the model · {base.frame} frame</span>
           {edited && <button type="button" onClick={resetAll}
-            className="no-print rounded border border-slate-300 px-2 py-0.5 text-xs font-semibold text-[#0f4c92] hover:bg-blue-50">↺ reset edits</button>}
+            className="no-print rounded border border-slate-300 px-2 py-0.5 text-xs font-semibold text-brand hover:bg-blue-50">↺ reset edits</button>}
           <button type="button" onClick={openInScheduler} title={linked ? 'Refresh the linked scheduler project (keeps calendar, resources, baselines & actuals)' : 'Create a scheduler project from this schedule'}
-            className="no-print rounded-md bg-[#0f4c92] px-3 py-1 text-xs font-bold text-white hover:bg-[#0d3f78]">{linked ? 'Update in Scheduler →' : 'Open in Scheduler →'}</button>
+            className="no-print rounded-md bg-brand px-3 py-1 text-xs font-bold text-on-solid hover:bg-brand-hover">{linked ? 'Update in Scheduler →' : 'Open in Scheduler →'}</button>
         </span>
       </div>
 
@@ -114,20 +114,20 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
           ['P80 finish', `${f1(solved.projectDays + 0.842 * solved.projectSd)} days`],
           ['Activities', `${activities.length} · ${solved.criticalPath.length} critical`],
         ].map(([k, v]) => (
-          <div key={k} className="rounded-lg border border-slate-200 bg-white p-3">
+          <div key={k} className="rounded-lg border border-slate-200 bg-sheet p-3">
             <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{k}</p>
-            <p className="mt-0.5 font-mono text-[15px] font-bold text-[#0f1b2a]">{v}</p>
+            <p className="mt-0.5 font-mono text-[15px] font-bold text-ink">{v}</p>
           </div>
         ))}
       </div>
 
       {/* Editable critical-path (Activity-on-Node) diagram */}
-      <h3 className="text-[1.02rem] font-bold text-[#0f4c92]">Critical-path diagram <span className="font-normal text-slate-400">— editable</span></h3>
+      <h3 className="text-[1.02rem] font-bold text-brand">Critical-path diagram <span className="font-normal text-slate-400">— editable</span></h3>
       <CriticalPathDiagram activities={activities} cpm={cpm} critical={crit} onEditDuration={setDuration} />
 
       {/* Mini-Gantt on the working-day axis */}
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h3 className="mb-3 text-[1.02rem] font-bold text-[#0f4c92]">Timeline (working days)</h3>
+      <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+        <h3 className="mb-3 text-[1.02rem] font-bold text-brand">Timeline (working days)</h3>
         <div className="space-y-1.5">
           {activities.map((a) => {
             const c = cpm.get(a.id); if (!c) return null
@@ -151,8 +151,8 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
       </div>
 
       {/* Activity table — editable duration */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Activity network (CPM / PERT)</h3>
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+        <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Activity network (CPM / PERT)</h3>
         {depErr && <p className="no-print mb-2 rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700">{depErr}</p>}
         <table className="w-full border-collapse text-xs">
           <thead>
@@ -205,7 +205,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
                   <td className="py-1 pr-1 text-right">
                     <input type="number" min={1} value={a.duration}
                       onChange={(e) => setDuration(a.id, Math.max(1, Math.round(+e.target.value || 1)))}
-                      className={`w-12 rounded border px-1 py-0.5 text-right ${durOverride[a.id] != null ? 'border-[#0f4c92] bg-blue-50 text-[#0f4c92]' : 'border-slate-200'}`} />
+                      className={`w-12 rounded border px-1 py-0.5 text-right ${durOverride[a.id] != null ? 'border-brand bg-blue-50 text-brand' : 'border-slate-200'}`} />
                   </td>
                   <td className="py-1 pr-2 text-right">{fmtDay(c.es)}</td>
                   <td className="py-1 pr-2 text-right">{fmtDay(c.ef)}</td>

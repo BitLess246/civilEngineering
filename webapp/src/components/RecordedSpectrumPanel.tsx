@@ -39,7 +39,7 @@ export function RecordedSpectrumPanel({ spec, design, recordName }: Props) {
 
   return (
     <ResultCard title="Response spectrum vs NSCP 208 design spectrum">
-      <div className="col-span-full mb-2 overflow-hidden rounded-lg border border-slate-200 bg-white">
+      <div className="col-span-full mb-2 overflow-hidden rounded-lg border border-slate-200 bg-sheet">
         <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg"
           preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: 'auto' }}>
           {/* grid + ticks */}

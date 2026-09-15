@@ -32,7 +32,7 @@ export default function SignIn() {
     <AuthCard
       title="Sign in"
       subtitle="Sign in to reach the 3D model space, the design pipeline and saved projects."
-      footer={<>No account? <Link to="/signup" className="font-medium text-[#0056b3] underline">Create one</Link></>}
+      footer={<>No account? <Link to="/signup" className="font-medium text-brand underline">Create one</Link></>}
     >
       {!configured ? <NotConfigured /> : (
         <form onSubmit={submit} noValidate>
@@ -42,7 +42,7 @@ export default function SignIn() {
           <PasswordField label="Password" value={password} onChange={setPassword}
             error={errs.password} autoComplete="current-password" disabled={busy} />
           <div className="mb-4 text-right">
-            <Link to="/forgot-password" className="text-[12px] text-slate-500 underline hover:text-[#0056b3]">
+            <Link to="/forgot-password" className="text-[12px] text-slate-500 underline hover:text-brand">
               Forgot your password?
             </Link>
           </div>

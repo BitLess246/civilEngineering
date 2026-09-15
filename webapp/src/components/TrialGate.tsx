@@ -84,7 +84,7 @@ export function TrialGate({ children }: { children: ReactNode }) {
     return (
       <main className="mx-auto max-w-2xl px-5 py-16 text-center">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Free trial used up</p>
-        <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Create a free account to keep going</h1>
+        <h1 className="mt-1 text-2xl font-bold text-brand">Create a free account to keep going</h1>
         <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-600">
           You have used all {GUEST_TRIAL_LIMIT} free runs of this calculator. A free
           account removes the counter from every single-purpose calculator — no card,
@@ -92,11 +92,11 @@ export function TrialGate({ children }: { children: ReactNode }) {
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link to="/signup"
-            className="rounded-md bg-[#0056b3] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0f4c92]">
+            className="rounded-md bg-brand px-5 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover">
             Create a free account
           </Link>
           <Link to="/signin"
-            className="rounded-md border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:border-[#0056b3] hover:text-[#0056b3]">
+            className="rounded-md border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:border-brand hover:text-brand">
             Sign in
           </Link>
         </div>

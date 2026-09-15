@@ -33,7 +33,7 @@ export default function SignUp() {
   if (sent) {
     return (
       <AuthCard title="Check your email"
-        footer={<Link to="/signin" className="font-medium text-[#0056b3] underline">Back to sign in</Link>}>
+        footer={<Link to="/signin" className="font-medium text-brand underline">Back to sign in</Link>}>
         <FormAlert tone="success">
           <p className="font-semibold">Almost there.</p>
           <p className="mt-1">
@@ -49,7 +49,7 @@ export default function SignUp() {
     <AuthCard
       title="Create an account"
       subtitle="Free. Removes the trial limits and opens the 3D Model Space, the design pipeline and saved projects."
-      footer={<>Already registered? <Link to="/signin" className="font-medium text-[#0056b3] underline">Sign in</Link>{' · '}<Link to="/pricing" className="font-medium text-[#0056b3] underline">Compare plans</Link></>}
+      footer={<>Already registered? <Link to="/signin" className="font-medium text-brand underline">Sign in</Link>{' · '}<Link to="/pricing" className="font-medium text-brand underline">Compare plans</Link></>}
     >
       {!configured ? <NotConfigured /> : (
         <form onSubmit={submit} noValidate>

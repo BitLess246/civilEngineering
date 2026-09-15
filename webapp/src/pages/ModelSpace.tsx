@@ -1642,7 +1642,7 @@ export default function ModelSpace() {
 
   // Panel action button (mockup "Regenerate grid model" style — flat light blue).
   const btn =
-    'rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-4 py-2 text-[12px] font-semibold text-[#0f4c92] transition hover:bg-[#dce9f7] disabled:opacity-40'
+    'rounded-md border border-brand-line bg-brand-tint px-4 py-2 text-[12px] font-semibold text-brand transition hover:bg-brand-tint disabled:opacity-40'
 
   /**
    * What this model IS, in a phrase: bays × bays · storeys, off the live model.
@@ -1704,7 +1704,7 @@ export default function ModelSpace() {
           own chrome and reads as a toolbar rather than a card floating under
           one. The two actions that were in that strip and are still global —
           undo/redo and the PDF — come with it. */}
-      <div className="no-print flex items-center gap-2 border-b border-[#e3e1da] bg-white px-3 py-2"
+      <div className="no-print flex items-center gap-2 border-b border-hairline bg-sheet px-3 py-2"
         data-tour="tab-bar">
         {/* The tabs wrap inside their OWN box. Wrapping them in the ribbon
             itself sent `ml-auto` Guide to a second row on its own as soon as
@@ -1719,7 +1719,7 @@ export default function ModelSpace() {
           {TAB_GROUPS.map((g) => (
             <div key={g.label} role="group" aria-label={g.label}
               className="flex flex-wrap items-center gap-0.5">
-              <span className="mr-0.5 text-[9.5px] font-bold uppercase tracking-[.14em] text-[#a39d8d]">{g.label}</span>
+              <span className="mr-0.5 text-[9.5px] font-bold uppercase tracking-[.14em] text-faint">{g.label}</span>
               {g.tabs.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
             </div>
           ))}
@@ -1733,7 +1733,7 @@ export default function ModelSpace() {
             <button key={label} type="button" onClick={run} disabled={depth === 0}
               title={`${label} (${label === 'Undo' ? '⌘Z' : '⌘⇧Z'}) — ${depth} step${depth === 1 ? '' : 's'}`}
               aria-label={label}
-              className={`border border-[#d6d3c9] bg-white px-2 py-1 text-[13px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92] disabled:opacity-35 ${i === 0 ? 'rounded-l-md' : '-ml-px rounded-r-md'}`}>
+              className={`border border-field-line bg-sheet px-2 py-1 text-[13px] font-semibold text-ink-2 hover:border-brand-hover hover:text-brand disabled:opacity-35 ${i === 0 ? 'rounded-l-md' : '-ml-px rounded-r-md'}`}>
               {glyph}
             </button>
           ))}
@@ -1741,7 +1741,7 @@ export default function ModelSpace() {
         <button type="button" onClick={openExport} disabled={!design || exporting || !reportsGate.allowed}
           title={!reportsGate.allowed ? reportsGate.message
             : design ? 'Download the calculation report as a PDF' : 'Run “Design structure” in the Design tab first'}
-          className="rounded-md border border-[#0f4c92] bg-white px-2.5 py-1 text-[11.5px] font-bold text-[#0f4c92] hover:bg-[#eaf1f9] disabled:opacity-40">
+          className="rounded-md border border-brand bg-sheet px-2.5 py-1 text-[11.5px] font-bold text-brand hover:bg-brand-tint disabled:opacity-40">
           {exporting ? '⏳ PDF…' : '⎙ PDF'}
         </button>
         {/* In embed the Guide is one of the two live controls, so it re-enables
@@ -1768,7 +1768,7 @@ export default function ModelSpace() {
           {/* The live half of the embed: this container re-enables pointer
               events under the page-wide lock, so orbit, pan, zoom and member
               selection keep working inside the preview. */}
-          <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a] lg:h-full lg:min-h-0"
+          <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-hairline bg-rail lg:h-full lg:min-h-0"
             style={EMBED ? { pointerEvents: 'auto' } : undefined}>
             {model ? (
               <Canvas camera={{ position: [14, 11, 14], fov: 45 }} gl={{ preserveDrawingBuffer: true }} onPointerMissed={() => setSelected(null)}>
@@ -1939,33 +1939,33 @@ export default function ModelSpace() {
                 </Suspense>
               </Canvas>
             ) : (
-              <div className="flex h-full items-center justify-center font-mono text-sm text-[#7d8ea3]">
+              <div className="flex h-full items-center justify-center font-mono text-sm text-rail-muted">
                 Set the grid and hit “Regenerate grid model”.
               </div>
             )}
             {/* The model's own name, in the corner of the model. */}
             <div className="no-print pointer-events-none absolute left-3 top-3 flex items-center gap-2">
-              <h1 className="rounded-md bg-white/85 px-2.5 py-1 text-[15px] font-extrabold tracking-tight text-[#0f1b2a] shadow-sm backdrop-blur">
+              <h1 className="rounded-md bg-sheet/85 px-2.5 py-1 text-[15px] font-extrabold tracking-tight text-ink shadow-sm backdrop-blur">
                 {modelName}
               </h1>
               {/* Embed persists nothing on purpose (see `EMBED`), so the
                   badge would be a promise the preview does not keep. */}
               {model && !EMBED && (
-                <span className="rounded border border-[#cddcf0] bg-[#eaf1f9]/90 px-1.5 py-px font-mono text-[10px] font-medium text-[#0f4c92] backdrop-blur">
+                <span className="rounded border border-brand-line bg-brand-tint/90 px-1.5 py-px font-mono text-[10px] font-medium text-brand backdrop-blur">
                   autosaved
                 </span>
               )}
             </div>
             {model && selInfo && (
-              <div className="no-print absolute left-3 top-12 flex items-center gap-2 rounded-md border border-[#0f4c92]/30 bg-white/95 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
-                <span className="font-semibold text-[#0f4c92]">▣ {selInfo.kind} {selInfo.id}</span>
+              <div className="no-print absolute left-3 top-12 flex items-center gap-2 rounded-md border border-brand/30 bg-sheet/95 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
+                <span className="font-semibold text-brand">▣ {selInfo.kind} {selInfo.id}</span>
                 {selInfo.extra && <span className="text-slate-500">{selInfo.extra}</span>}
                 <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-slate-500 hover:text-red-500" title="Deselect">✕</button>
               </div>
             )}
             {model && (
               <div aria-hidden={navHintDone}
-                className={`no-print pointer-events-none absolute bottom-3 left-3 rounded border border-white/15 bg-[#0f1b2a]/80 px-2 py-1 font-mono text-[10px] text-[#9db0c5] transition-opacity duration-700 ${navHintDone ? 'opacity-0' : 'opacity-100'}`}>
+                className={`no-print pointer-events-none absolute bottom-3 left-3 rounded border border-white/15 bg-rail/80 px-2 py-1 font-mono text-[10px] text-rail-muted transition-opacity duration-700 ${navHintDone ? 'opacity-0' : 'opacity-100'}`}>
                 orbit: drag · pan: ⇧drag · zoom: scroll
               </div>
             )}
@@ -1976,7 +1976,7 @@ export default function ModelSpace() {
             sections (mockup). The tab bar is NOT here: it is the ribbon under
             the header, so switching tabs does not depend on how wide this rail
             happens to be. */}
-        <div className="no-print overflow-hidden rounded-lg border border-[#e3e1da] bg-white lg:flex lg:min-h-0 lg:flex-col lg:overflow-y-auto">
+        <div className="no-print overflow-hidden rounded-lg border border-hairline bg-sheet lg:flex lg:min-h-0 lg:flex-col lg:overflow-y-auto">
           {/* ── SELECTION — what is picked, wherever you are ────────────────
               This detail already existed, at the BOTTOM of the Analysis tab.
               So clicking a member in the 3D view gave you a chip on the canvas
@@ -1985,7 +1985,7 @@ export default function ModelSpace() {
               concern — it is a mode, and the panel should say what is in it.
               MOVED here rather than copied, so there is still only one of it. */}
           {(selMember || selPlate) && (
-            <div className="divide-y divide-[#eeece5] border-b border-[#eeece5] bg-[#fbfaf7] px-4 py-1">
+            <div className="divide-y divide-hairline-2 border-b border-hairline-2 bg-sheet-2 px-4 py-1">
             {selMember && model && (
               <Sec id="sel-member" grid={false} title={`Member — ${selMember.id}`}>
                 <Row label="Role" value={selMember.role} />
@@ -2012,7 +2012,7 @@ export default function ModelSpace() {
                       <Row label="Forces (governing)" value={`M ${f1(mr.Mmax)} kN·m`}
                         sub={`V ${f1(mr.Vmax)} · N ${f1(mr.Nmax)} · T ${f1(mr.Tmax)} kN`} />
                       <button type="button" onClick={() => setSelDiagrams((v) => !v)}
-                        className="text-[11px] font-semibold text-[#0f4c92] hover:underline">
+                        className="text-[11px] font-semibold text-brand hover:underline">
                         {selDiagrams ? '▾ Hide force diagrams' : '▸ Show force diagrams'}
                       </button>
                       {selDiagrams && <>
@@ -2030,7 +2030,7 @@ export default function ModelSpace() {
                   const k = columnKs.get(selMember.id)!
                   return (
                     <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                      <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">Effective length K — AISC alignment chart (C-C2)</p>
+                      <p className="mb-1 text-[11px] font-semibold text-brand">Effective length K — AISC alignment chart (C-C2)</p>
                       <Row label="K — X-sway" value={`sway ${f2(k.Kx.sway)} · braced ${f2(k.Kx.braced)}`}
                         sub={`G: ${f2(k.Gi.x)} (i) · ${f2(k.Gj.x)} (j)`} />
                       <Row label="K — Z-sway" value={`sway ${f2(k.Kz.sway)} · braced ${f2(k.Kz.braced)}`}
@@ -2085,7 +2085,7 @@ export default function ModelSpace() {
 
           {/* ── GEOMETRY ── */}
           {tab === 'geometry' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1">
+            <div className="divide-y divide-hairline-2 px-4 py-1">
               <Sec title="Column grid">
                 <label className="flex flex-col text-sm">
                   <span className="mb-1 font-medium text-slate-600">Bays X (m, comma-sep)</span>
@@ -2120,7 +2120,7 @@ export default function ModelSpace() {
               {model && (
                 <Sec grid={false} title="Nodes" hint={<>
                     <button type="button" onClick={addNode}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">+ Add node</button>
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-brand hover:border-brand-hover hover:bg-blue-50">+ Add node</button>
                 </>}>
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
@@ -2246,7 +2246,7 @@ export default function ModelSpace() {
                       return (
                         <button type="button" onClick={addMember} disabled={!newI || !newJ || newI === newJ || dup}
                           title={dup ? 'A member already connects these two nodes' : undefined}
-                          className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">
+                          className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-brand hover:border-brand-hover hover:bg-blue-50 disabled:opacity-40">
                           {dup ? 'Member exists' : '+ Add member'}
                         </button>
                       )
@@ -2501,7 +2501,7 @@ export default function ModelSpace() {
                       return (
                         <button type="button" onClick={addWall} disabled={!wallMember || dup}
                           title={dup ? 'This beam already carries a wall' : undefined}
-                          className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">
+                          className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-brand hover:border-brand-hover hover:bg-blue-50 disabled:opacity-40">
                           {dup ? 'Wall exists' : '+ Add wall'}
                         </button>
                       )
@@ -2590,7 +2590,7 @@ export default function ModelSpace() {
                         <>
                           <button type="button" onClick={addStair} disabled={!trial}
                             title={why}
-                            className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">
+                            className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-brand hover:border-brand-hover hover:bg-blue-50 disabled:opacity-40">
                             + Add stair
                           </button>
                           {trial && (
@@ -2611,7 +2611,7 @@ export default function ModelSpace() {
 
           {/* ── PROPERTIES ── */}
           {tab === 'properties' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1" data-tour="properties-panel">
+            <div className="divide-y divide-hairline-2 px-4 py-1" data-tour="properties-panel">
               <Sec title="Frame material">
                 <Pick label="Members" value={material} onChange={(v) => {
                   const next = v as 'concrete' | 'steel' | 'wood'
@@ -2781,7 +2781,7 @@ export default function ModelSpace() {
 
           {/* ── SUPPORTS ── */}
           {tab === 'supports' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1" data-tour="supports-panel">
+            <div className="divide-y divide-hairline-2 px-4 py-1" data-tour="supports-panel">
               <Sec title="Soil (footing design)">
                 <Num label="Soil qa" unit="kPa" value={qa} onChange={setQa} />
                 <Num label="Footing depth H" unit="m" value={Hf} onChange={setHf} />
@@ -2860,7 +2860,7 @@ export default function ModelSpace() {
 
           {/* ── LOADING ── */}
           {tab === 'loading' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1" data-tour="loading-panel">
+            <div className="divide-y divide-hairline-2 px-4 py-1" data-tour="loading-panel">
               <Sec title="Slab loads">
                 <Num label="Default SDL" unit="kPa" value={qD} onChange={setQD} />
                 <Num label="Live load" unit="kPa" value={qL} onChange={setQL} />
@@ -2900,7 +2900,7 @@ export default function ModelSpace() {
                       <input type="number" value={sdlMatT} onChange={(e) => setSdlMatT(parseFloat(e.target.value))}
                         className="w-20 rounded-md border border-slate-300 px-2 py-1 text-xs" /> <span className="text-[11px] text-slate-500">mm</span>
                       <button type="button" onClick={addSdl204_2}
-                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">+ Add</button>
+                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-brand hover:border-brand-hover hover:bg-blue-50">+ Add</button>
                     </div>
                     <div className="mt-2 space-y-0.5">
                       {sdlDraft.length === 0 && <p className="text-[11px] text-slate-500">No components selected.</p>}
@@ -2912,16 +2912,16 @@ export default function ModelSpace() {
                         </div>
                       ))}
                       <div className="mt-1 border-t border-slate-100 pt-1 text-[11px] font-semibold">
-                        Composed SDL = <span className="text-[#0f4c92]">{sdlTotal(sdlDraft).toFixed(2)} kPa</span>
+                        Composed SDL = <span className="text-brand">{sdlTotal(sdlDraft).toFixed(2)} kPa</span>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button type="button" onClick={() => applySdl(true)} disabled={!model}
-                    className="rounded-md bg-[#0f4c92] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">Apply to all slabs</button>
+                    className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-on-solid disabled:opacity-40">Apply to all slabs</button>
                   <button type="button" onClick={() => applySdl(false)} disabled={!selPlate || selPlate.role === 'wall'}
-                    className="rounded-md border border-[#0f4c92] px-3 py-1.5 text-xs font-semibold text-[#0f4c92] disabled:opacity-40"
+                    className="rounded-md border border-brand px-3 py-1.5 text-xs font-semibold text-brand disabled:opacity-40"
                     title="Select a slab panel in the 3D view first">
                     Apply to selected slab{selPlate && selPlate.role !== 'wall' ? ` (${selPlate.id})` : ''}
                   </button>
@@ -2949,9 +2949,9 @@ export default function ModelSpace() {
                     </optgroup>
                   </select>
                   <button type="button" onClick={() => applyLive(true)} disabled={!model}
-                    className="rounded-md bg-[#0f4c92] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">Apply to all slabs</button>
+                    className="rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-on-solid disabled:opacity-40">Apply to all slabs</button>
                   <button type="button" onClick={() => applyLive(false)} disabled={!selPlate || selPlate.role === 'wall'}
-                    className="rounded-md border border-[#0f4c92] px-3 py-1.5 text-xs font-semibold text-[#0f4c92] disabled:opacity-40">
+                    className="rounded-md border border-brand px-3 py-1.5 text-xs font-semibold text-brand disabled:opacity-40">
                     Apply to selected{selPlate && selPlate.role !== 'wall' ? ` (${selPlate.id})` : ''}
                   </button>
                 </div>
@@ -2978,7 +2978,7 @@ export default function ModelSpace() {
                           const composed = !!(p.sdlItems && p.sdlItems.length > 0)
                           return (
                             <tr key={p.id} className={`border-t border-slate-100 ${selected === p.id ? 'bg-blue-50/60' : ''}`}>
-                              <td className="py-0.5 pr-2 font-medium cursor-pointer hover:text-[#0f4c92]" onClick={() => setSelected(p.id)}>{p.id}</td>
+                              <td className="py-0.5 pr-2 font-medium cursor-pointer hover:text-brand" onClick={() => setSelected(p.id)}>{p.id}</td>
                               <td className="py-0.5 pr-2 text-right">{(composed ? sdlTotal(p.sdlItems) : qD).toFixed(2)}</td>
                               <td className="py-0.5 pr-2 text-slate-500">{composed ? `204 (${p.sdlItems!.length})` : 'default'}</td>
                               <td className="py-0.5 pr-2 text-right">{(p.live ? p.live.kPa : qL).toFixed(2)}</td>
@@ -2992,13 +2992,13 @@ export default function ModelSpace() {
                               <td className="py-0.5 pr-2">
                                 <button type="button" onClick={() => setPlateDeck(p.id, p.deck ? undefined : DEFAULT_DECK)}
                                   title={p.deck ? 'Remove the timber deck (revert to RC slab)' : 'Make this a timber deck-on-joist floor (wood slab)'}
-                                  className={`rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${p.deck ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'text-[#0f4c92] hover:bg-blue-50'}`}>
+                                  className={`rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${p.deck ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'text-brand hover:bg-blue-50'}`}>
                                   {p.deck ? 'timber ✓' : '+ timber'}
                                 </button>
                               </td>
                               <td className="py-0.5 whitespace-nowrap text-right">
                                 <button type="button" onClick={() => setSlabSdl(p.id, false)} title="Apply the composed SDL above to this slab"
-                                  className="rounded px-1.5 text-[#0f4c92] hover:bg-blue-50">set SDL</button>
+                                  className="rounded px-1.5 text-brand hover:bg-blue-50">set SDL</button>
                                 <button type="button" onClick={() => setSlabSdl(p.id, true)} title="Clear to default SDL"
                                   className="rounded px-1.5 text-red-500 hover:bg-red-50">clear</button>
                               </td>
@@ -3068,7 +3068,7 @@ export default function ModelSpace() {
                 <Sec grid={false} title="Loads" hint={<>
                     <button type="button" onClick={rebuildGravity}
                       title="Regenerate dead (member self-weight + slab self-weight + SDL) and live loads from the inputs; keeps E loads"
-                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">↻ Rebuild D + L</button>
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-brand hover:border-brand-hover hover:bg-blue-50">↻ Rebuild D + L</button>
                 </>}>
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
@@ -3126,7 +3126,7 @@ export default function ModelSpace() {
                   <label className="flex flex-col text-sm">
                     <span className="mb-1 font-medium text-slate-600">Member</span>
                     <select value={thMember} onChange={(e) => setThMember(e.target.value)}
-                      className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0f4c92] focus:outline-none">
+                      className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none">
                       <option value="">— select member —</option>
                       {model.members.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
                     </select>
@@ -3136,7 +3136,7 @@ export default function ModelSpace() {
                   <label className="flex flex-col text-sm">
                     <span className="mb-1 font-medium text-slate-600">Expansion coeff. α</span>
                     <select value={thAlphaKey} onChange={(e) => setThAlphaKey(e.target.value as 'steel' | 'concrete' | 'custom')}
-                      className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0f4c92] focus:outline-none">
+                      className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none">
                       <option value="steel">Steel — 11.7×10⁻⁶ /°C (AISC)</option>
                       <option value="concrete">Concrete — 10×10⁻⁶ /°C (ACI 318)</option>
                       <option value="custom">Custom</option>
@@ -3144,7 +3144,7 @@ export default function ModelSpace() {
                     {thAlphaKey === 'custom' && (
                       <input type="number" step="1e-7" value={thAlphaCustom}
                         onChange={(e) => setThAlphaCustom(parseFloat(e.target.value))}
-                        className="mt-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0f4c92] focus:outline-none focus:ring-1 focus:ring-[#0f4c92]" />
+                        className="mt-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand" />
                     )}
                   </label>
                   <div className="col-span-full">
@@ -3154,7 +3154,7 @@ export default function ModelSpace() {
                         if (!model || !thMember) return
                         save({ ...model, loads: [...model.loads, { kind: 'member-thermal', member: thMember, deltaT: thDeltaT, alpha: thAlpha, cat: 'T' }] })
                       }}
-                      className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-brand hover:border-brand-hover hover:bg-blue-50 disabled:opacity-40">
                       + Add thermal load
                     </button>
                   </div>
@@ -3205,7 +3205,7 @@ export default function ModelSpace() {
                 </label>
                 <div className="col-span-full">
                   <button type="button" onClick={generateE} disabled={!model || eDirs.length === 0}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">⚡ Generate E cases</button>
+                    className="rounded-lg border border-slate-300 bg-sheet px-3 py-1.5 text-sm font-semibold text-brand hover:border-brand-hover hover:bg-blue-50 disabled:opacity-40">⚡ Generate E cases</button>
                   {seis && (() => {
                     const other = seisXZ ? seisXZ[primAxis === 'x' ? 'z' : 'x'] : null
                     const twoAxis = !!other && (Math.abs(other.V - seis.V) > 1e-6 || Math.abs(other.T - seis.T) > 1e-9)
@@ -3266,7 +3266,7 @@ export default function ModelSpace() {
                   <div className="flex flex-wrap items-center gap-3">
                     <button type="button" onClick={generateRsaE}
                       disabled={!model || eDirs.length === 0 || !modal || modal.modes.length === 0}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#7c3aed] hover:border-[#7c3aed] hover:bg-purple-50 disabled:opacity-40">〜 Generate E cases — RSA (§208.6.4)</button>
+                      className="rounded-lg border border-slate-300 bg-sheet px-3 py-1.5 text-sm font-semibold text-[#7c3aed] hover:border-[#7c3aed] hover:bg-purple-50 disabled:opacity-40">〜 Generate E cases — RSA (§208.6.4)</button>
                     <label className="flex items-center gap-1.5 text-xs text-slate-600">
                       <input type="checkbox" checked={rsaRegular} onChange={(e) => setRsaRegular(e.target.checked)} />
                       <span>regular structure — 0.9·V(T_B) &amp; 0.8·V(T_A) floors (unticked: irregular, 100%·V)</span>
@@ -3334,7 +3334,7 @@ export default function ModelSpace() {
                 <DirPicker value={wDirs} onChange={setWDirs} />
                 <div className="col-span-full">
                   <button type="button" onClick={generateW} disabled={!model || wDirs.length === 0}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">🌬 Generate W cases</button>
+                    className="rounded-lg border border-slate-300 bg-sheet px-3 py-1.5 text-sm font-semibold text-brand hover:border-brand-hover hover:bg-blue-50 disabled:opacity-40">🌬 Generate W cases</button>
                   {wind && (
                     <p className="mt-1 text-xs text-slate-500">
                       qh = {f2(wind.qh)} kPa · B×L = {f1(wind.B)}×{f1(wind.L)} m (L/B {f2(wind.LB)}) ·
@@ -3364,7 +3364,7 @@ export default function ModelSpace() {
                 </label>
                 <div className="col-span-full">
                   <button type="button" onClick={runCladding} disabled={!model}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">▦ Compute C&amp;C wall pressures</button>
+                    className="rounded-lg border border-slate-300 bg-sheet px-3 py-1.5 text-sm font-semibold text-brand hover:border-brand-hover hover:bg-blue-50 disabled:opacity-40">▦ Compute C&amp;C wall pressures</button>
                   {cladding && (
                     <table className="mt-2 w-full text-left text-xs">
                       <thead className="text-slate-500">
@@ -3398,7 +3398,7 @@ export default function ModelSpace() {
 
           {/* ── ANALYSIS ── */}
           {tab === 'analysis' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1" data-tour="analysis-panel">
+            <div className="divide-y divide-hairline-2 px-4 py-1" data-tour="analysis-panel">
               <Sec title="Analysis options" hint={<AnalysisOptionsHelp />}>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={assembly} onChange={(e) => setAssembly(e.target.checked)} />
@@ -3705,18 +3705,18 @@ export default function ModelSpace() {
 
           {/* ── MODAL ── */}
           {tab === 'modal' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1">
+            <div className="divide-y divide-hairline-2 px-4 py-1">
               <Sec title="Modal analysis options">
                 <label className="flex flex-col text-sm">
                   <span className="mb-1 font-medium text-slate-600">Number of modes</span>
                   <input type="number" min={1} max={50} step={1} value={nModes}
                     onChange={(e) => setNModes(Math.max(1, Math.min(50, Math.round(parseFloat(e.target.value) || 1))))}
-                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0f4c92] focus:outline-none focus:ring-1 focus:ring-[#0f4c92]" />
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand" />
                 </label>
                 <label className="flex flex-col text-sm">
                   <span className="mb-1 font-medium text-slate-600">Mass matrix</span>
                   <select value={massModel} onChange={(e) => setMassModel(e.target.value as MassModel)}
-                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0f4c92] focus:outline-none focus:ring-1 focus:ring-[#0f4c92]">
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand">
                     <option value="lumped">Lumped (translational only)</option>
                     <option value="consistent">Consistent (element mass matrices)</option>
                   </select>
@@ -3751,7 +3751,7 @@ export default function ModelSpace() {
               {modal && modeShapeIdx !== null && modal.modes[modeShapeIdx] && (
                 <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[.12em] text-faint">
                       Mode {modeShapeIdx + 1} shape — T = {modal.modes[modeShapeIdx].period.toFixed(3)} s
                     </h3>
                     <button type="button" onClick={() => setModeShapeIdx(null)}
@@ -3789,7 +3789,7 @@ export default function ModelSpace() {
                         className="text-[11px] text-slate-500 hover:text-red-500">✕ clear</button>
                     </div>
                   ) : (
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-slate-300 bg-sheet px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
                       <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
                         <path d="M8 2v8M5 7l3-3 3 3M2 12h12" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
@@ -3897,7 +3897,7 @@ export default function ModelSpace() {
 
           {/* ── PUSHOVER ── */}
           {tab === 'pushover' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1">
+            <div className="divide-y divide-hairline-2 px-4 py-1">
               <Sec title="Pushover — nonlinear static (plastic hinges)">
                 <Pick label="Push direction" value={poDir} onChange={setPoDir}
                   options={[['x', '+X'], ['z', '+Z']]} />
@@ -4006,7 +4006,7 @@ export default function ModelSpace() {
           )}
 
           {tab === 'nonlinear' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1">
+            <div className="divide-y divide-hairline-2 px-4 py-1">
               <Sec title="Nonlinear time-history (hysteretic, Newmark + Newton-Raphson)">
                 <Pick label="Plasticity model" value={nlKindModel} onChange={setNlKindModel}
                   options={[['hinges', 'Member-end plastic hinges'], ['shear', 'Shear building (storey springs)']]} />
@@ -4217,7 +4217,7 @@ export default function ModelSpace() {
 
           {/* ── DESIGN ── */}
           {tab === 'design' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1">
+            <div className="divide-y divide-hairline-2 px-4 py-1">
               <Sec title="Design & optimise">
                 <div className="col-span-full flex flex-wrap gap-2">
                   <button type="button" onClick={runPipeline} disabled={!model || !!busy || meshErrors} className={btn}
@@ -4238,7 +4238,7 @@ export default function ModelSpace() {
                 {busy && <SolverProgress p={progress} />}
                 {solveErr && !busy && <SolveError message={solveErr} />}
                 {busy && (
-                  <p className="col-span-full text-[11px] font-medium text-[#0f4c92]">
+                  <p className="col-span-full text-[11px] font-medium text-brand">
                     Running in the background — the page stays responsive; results appear when ready.
                   </p>
                 )}
@@ -4272,7 +4272,7 @@ export default function ModelSpace() {
               says what each toggle is WAITING for rather than offering a dead
               checkbox with no explanation. */}
           {tab === 'display' && (
-          <div className="divide-y divide-[#eeece5] px-4 py-1" data-tour="display-panel">
+          <div className="divide-y divide-hairline-2 px-4 py-1" data-tour="display-panel">
             <Sec title="Display" grid={false}>
               <div className="space-y-2.5 text-xs text-slate-600">
                 <p className="text-[11px] leading-snug text-slate-500">
@@ -4282,12 +4282,12 @@ export default function ModelSpace() {
                     the model is drawn, the rest is WHAT is drawn on it. */}
                 <div>
                   <p className="mb-1 font-medium">Model</p>
-                  <div className="inline-flex rounded-md border border-[#cddcf0] p-0.5">
+                  <div className="inline-flex rounded-md border border-brand-line p-0.5">
                     {(['solid', 'wireframe'] as ViewMode[]).map((v) => (
                       <button key={v} type="button" onClick={() => setViewMode(v)}
                         aria-pressed={viewMode === v}
                         className={`rounded px-2.5 py-0.5 text-[11.5px] font-semibold capitalize transition ${
-                          viewMode === v ? 'bg-[#0f4c92] text-white' : 'text-[#5c6675] hover:bg-[#eaf1f9]'}`}>
+                          viewMode === v ? 'bg-brand text-on-solid' : 'text-muted hover:bg-brand-tint'}`}>
                         {v}
                       </button>
                     ))}
@@ -4340,7 +4340,7 @@ export default function ModelSpace() {
                       <div className="flex flex-wrap gap-1.5">
                         {CAGE_KINDS.filter((k) => cagesByKind.has(k)).map((k) => (
                           <label key={k} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${
-                            cageKinds.includes(k) ? 'border-[#0f4c92] bg-blue-50 text-[#0f4c92]' : 'border-slate-200 text-slate-500'}`}>
+                            cageKinds.includes(k) ? 'border-brand bg-blue-50 text-brand' : 'border-slate-200 text-slate-500'}`}>
                             <input type="checkbox" className="sr-only" checked={cageKinds.includes(k)}
                               onChange={() => toggleCageKind(k)} />
                             {CAGE_KIND_LABEL[k]}
@@ -4380,7 +4380,7 @@ export default function ModelSpace() {
                   )}
                 </div>
                 {!design && (
-                  <p className="rounded border border-[#e3e1da] bg-[#faf9f6] px-2 py-1.5 text-[11px] leading-snug text-slate-500">
+                  <p className="rounded border border-hairline bg-sheet-2 px-2 py-1.5 text-[11px] leading-snug text-slate-500">
                     Footings, steel connections and the bar cages appear here once the
                     structure has been designed — they are drawn from the design, so
                     there is nothing to draw until it has run.
@@ -4400,7 +4400,7 @@ export default function ModelSpace() {
                     earlier run solved. Without that, the hint tells someone who
                     has just pressed Analyze that they have not — which is how
                     it read the first time it was measured. */}
-                <div className="border-t border-[#eeece5] pt-2.5">
+                <div className="border-t border-hairline-2 pt-2.5">
                   <p className="mb-1 font-medium">Force diagram</p>
                   <div className={`flex flex-wrap items-center gap-1 ${govRes ? '' : 'opacity-45'}`}>
                     <button type="button" onClick={() => setForceDiag(null)} disabled={!govRes}
@@ -4463,8 +4463,8 @@ export default function ModelSpace() {
         const steelOK         = opt.design.steelBeams.every((b) => b.ok) && opt.design.steelColumns.every((c) => c.ok)
         const steelKg         = opt.design.totals.steelKg
         return (
-          <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-1 text-[1.02rem] font-bold text-[#0f4c92]">
+          <div className="mt-6 rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+            <h3 className="mb-1 text-[1.02rem] font-bold text-brand">
               Optimization — {opt.converged
                 ? `converged in ${opt.steps.length} step${opt.steps.length === 1 ? '' : 's'}`
                 : 'did NOT converge'}
@@ -4525,7 +4525,7 @@ export default function ModelSpace() {
         return (
         <div className={`mt-6 space-y-6 ${tablesHidden ? 'report-no-tables' : ''}`}>
           {/* PAGE 1 — header + 3D model snapshot */}
-          <h2 className="text-xl font-extrabold tracking-tight text-[#0f4c92]">
+          <h2 className="text-xl font-extrabold tracking-tight text-brand">
             Structure design — {design.govName} governs
             <span className="ml-3 text-sm font-normal text-slate-500">
               concrete ≈ {f1(design.totals.concrete)} m³ ({f1(design.totals.concreteMembers)} members + {f1(design.totals.concreteSlabs)} slabs)
@@ -4564,13 +4564,13 @@ export default function ModelSpace() {
           <div className="no-print flex flex-wrap items-center gap-1.5 border-b border-slate-200" data-tour="results-tabs">
             {([['schedules', 'Schedules'], ['boq', 'Bill of Quantities'], ['schedule', 'Construction Schedule']] as const).map(([id, label]) => (
               <button key={id} type="button" onClick={() => setResultsTab(id)}
-                className={`rounded-t-md px-3.5 py-2 text-[13px] font-semibold ${resultsTab === id ? 'border-b-2 border-[#0f4c92] text-[#0f4c92]' : 'text-slate-500 hover:text-[#0f4c92]'}`}>
+                className={`rounded-t-md px-3.5 py-2 text-[13px] font-semibold ${resultsTab === id ? 'border-b-2 border-brand text-brand' : 'text-slate-500 hover:text-brand'}`}>
                 {label}
               </button>
             ))}
             <button type="button" onClick={openExport} disabled={exporting || !reportsGate.allowed}
               title={reportsGate.allowed ? 'Download the calculation report as a PDF' : reportsGate.message}
-              className="mb-1 ml-auto rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#0d3f78] disabled:opacity-40">
+              className="mb-1 ml-auto rounded-md bg-brand px-4 py-2 text-[12.5px] font-bold text-white hover:bg-brand-hover disabled:opacity-40">
               {exporting ? '⏳ Building PDF…' : '⎙ Export PDF report'}
             </button>
           </div>
@@ -4582,8 +4582,8 @@ export default function ModelSpace() {
           </p>
 
           {/* PAGE 2+ — project & design inputs (every template) */}
-          <div className="break-before-page rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Project &amp; design inputs</h3>
+          <div className="break-before-page rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Project &amp; design inputs</h3>
             <table className="w-full border-collapse text-xs">
               <tbody>
                 {props.map(([k, v]) => (
@@ -4597,8 +4597,8 @@ export default function ModelSpace() {
           </div>
 
           {/* Beam & girder schedule — RC only */}
-          {design.beams.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">RC beam & girder schedule<SchedChip items={design.beams} ok={(b) => b.ok} /></h3>
+          {design.beams.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-brand">RC beam & girder schedule<SchedChip items={design.beams} ok={(b) => b.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4655,7 +4655,7 @@ export default function ModelSpace() {
                             </div>
                           )}
                           {wantDraw && elevationOf.get(bm.id) && (
-                            <div className="mb-3 overflow-x-auto rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="mb-3 overflow-x-auto rounded-lg border border-slate-200 bg-sheet p-3">
                               <BeamElevationFigure
                                 bundle={elevationOf.get(bm.id)!}
                                 zone={beamZone(bm, k)}
@@ -4666,7 +4666,7 @@ export default function ModelSpace() {
                           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
                             {wantSol && <WorkedSolution steps={beamSectionSolution(sec, s)} title={`${bm.id} · ${s.label} — worked solution`} />}
                             {wantDraw && (
-                            <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-sheet p-3">
                               <div>
                                 <BeamCageSection model={model} cages={scheduleCages} beam={bm} sec={s} rect={sec} />
                               </div>
@@ -4683,8 +4683,8 @@ export default function ModelSpace() {
           </div>}
 
           {/* Prestressed member checks */}
-          {design.prestressed.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Prestressed member checks (§24.5 · PCI)<SchedChip items={design.prestressed} ok={(pr) => pr.ok} /></h3>
+          {design.prestressed.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Prestressed member checks (§24.5 · PCI)<SchedChip items={design.prestressed} ok={(pr) => pr.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4716,8 +4716,8 @@ export default function ModelSpace() {
           </div>}
 
           {/* Column schedule (full width) — RC only */}
-          {design.columns.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">RC column schedule<SchedChip items={design.columns} ok={(c) => c.ok} /></h3>
+          {design.columns.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-brand">RC column schedule<SchedChip items={design.columns} ok={(c) => c.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4755,7 +4755,7 @@ export default function ModelSpace() {
                           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
                             {wantSol && <WorkedSolution steps={columnRowSolution(cs, c)} title={`${c.id} — worked solution`} />}
                             {wantDraw && (
-                            <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-sheet p-3">
                               {columnStackOf.get(c.id) && (
                                 <ColumnElevationFigure
                                   bundle={columnStackOf.get(c.id)!}
@@ -4768,7 +4768,7 @@ export default function ModelSpace() {
                               </div>
                               {c.seismicSConf !== undefined && (
                                 <div className="border-t border-slate-100 pt-2 text-[11px] text-slate-600">
-                                  <p className="mb-0.5 font-semibold text-[#0f4c92]">Seismic confinement ({seismicSystem.toUpperCase()})</p>
+                                  <p className="mb-0.5 font-semibold text-brand">Seismic confinement ({seismicSystem.toUpperCase()})</p>
                                   <p>Confinement zone ℓo = {Math.round(c.seismicLoZone!)} mm</p>
                                   <p>Ties within ℓo @ {Math.round(c.seismicSConf)} mm <span className="text-slate-500">({c.tieSpacingLabel})</span></p>
                                   {c.seismicSOut !== undefined && c.seismicSOut !== c.tieSpacing && (
@@ -4791,8 +4791,8 @@ export default function ModelSpace() {
 
           {/* Beam moment-strength ratios — NSCP §418.6.3.2 (SMF) / §418.4.2.2 (IMF) */}
           {momentRatios.length > 0 && report !== 'draw-only' && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">
                 Beam moment-strength ratios — NSCP {momentRatios[0].ratios.clause}
                 <SchedChip items={momentRatios} ok={(r) => r.ratios.ok} />
               </h3>
@@ -4840,8 +4840,8 @@ export default function ModelSpace() {
 
           {/* Strong-column/weak-beam joint check — NSCP §418.7.3.2 (SMF only) */}
           {design.scwb.length > 0 && report !== 'draw-only' && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Strong-column / weak-beam — NSCP §418.7.3.2<SchedChip items={design.scwb} ok={(j) => j.ok} /></h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Strong-column / weak-beam — NSCP §418.7.3.2<SchedChip items={design.scwb} ok={(j) => j.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4876,8 +4876,8 @@ export default function ModelSpace() {
 
           {/* Slab schedule (full width) — two-way DDM */}
           {design.slabs.length > 0 && report !== 'draw-only' && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Slab schedule (two-way DDM)<SchedChip items={design.slabs} ok={(x) => x.ok} /></h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Slab schedule (two-way DDM)<SchedChip items={design.slabs} ok={(x) => x.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4907,14 +4907,14 @@ export default function ModelSpace() {
                         <tr key={`${key}:sol`}>
                           <td colSpan={6} className="bg-slate-50/60 px-3 pb-3">
                             {!sl.selection.best && (
-                              <div className="mb-3 rounded border border-[#efd4cc] bg-[#fbeeea] px-3 py-2 text-[11.5px] text-[#8f2f1e]">
+                              <div className="mb-3 rounded border border-fail-line bg-fail-tint px-3 py-2 text-[11.5px] text-fail">
                                 <b>No compliant mat.</b> {sl.selection.margin}
                               </div>
                             )}
                             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                               {[dd.x, dd.y].map((dr) => (
                                 <div key={dr.dir}>
-                                  <p className="mb-1 mt-2 text-[12px] font-bold text-[#0f4c92]">
+                                  <p className="mb-1 mt-2 text-[12px] font-bold text-brand">
                                     {dr.dir.toUpperCase()}-direction — ℓ1 = {f1(dr.l1)} m, ℓn = {f1(dr.ln)} m, Mo = {f1(dr.Mo)} kN·m
                                   </p>
                                   <table className="w-full border-collapse text-[11px]">
@@ -4935,11 +4935,11 @@ export default function ModelSpace() {
                                               fallback layout would present a §8.7.2.2 violation as a design. */}
                                           <td className="py-0.5 pr-2">{sl.selection.best
                                             ? `⌀${sl.barDia} @ ${Math.round(loc.column.spacing)}${loc.column.usedMin ? ' (min)' : ''}`
-                                            : <span className="text-[#c2402a]">no compliant mat</span>}</td>
+                                            : <span className="text-fail">no compliant mat</span>}</td>
                                           <td className="py-0.5">{loc.middle.b > 1
                                             ? (sl.selection.best
                                               ? `⌀${sl.barDia} @ ${Math.round(loc.middle.spacing)}${loc.middle.usedMin ? ' (min)' : ''}`
-                                              : <span className="text-[#c2402a]">no compliant mat</span>)
+                                              : <span className="text-fail">no compliant mat</span>)
                                             : '—'}</td>
                                         </tr>
                                       ))}
@@ -4949,8 +4949,8 @@ export default function ModelSpace() {
                               ))}
                             </div>
                             {/* Deflection (Branson Ie + crossing-strip) */}
-                            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-2">
-                              <p className="mb-1 text-[12px] font-bold text-[#0f4c92]">Deflection (NSCP §424.2)</p>
+                            <div className="mt-3 rounded-lg border border-slate-200 bg-sheet p-2">
+                              <p className="mb-1 text-[12px] font-bold text-brand">Deflection (NSCP §424.2)</p>
                               <table className="w-full border-collapse text-[11px]">
                                 <tbody>
                                   <tr className="border-t border-slate-100">
@@ -4997,8 +4997,8 @@ export default function ModelSpace() {
 
           {/* Shear-wall schedule (full width) — in-plane reinforcement */}
           {design.stairs.length > 0 && report !== 'draw-only' && (
-            <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Stair schedule<SchedChip items={design.stairs} ok={(st) => st.ok} /></h3>
+            <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Stair schedule<SchedChip items={design.stairs} ok={(st) => st.ok} /></h3>
               <table className="w-full border-collapse text-[13px]">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-slate-500">
@@ -5045,8 +5045,8 @@ export default function ModelSpace() {
           )}
 
           {design.walls.length > 0 && report !== 'draw-only' && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Shear-wall schedule (in-plane)<SchedChip items={design.walls} ok={(w) => w.ok} /></h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Shear-wall schedule (in-plane)<SchedChip items={design.walls} ok={(w) => w.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -5112,8 +5112,8 @@ export default function ModelSpace() {
           {/* Steel beam schedule (full width) — only when steel members exist */}
           {/* Timber beam / girder schedule */}
           {design.woodBeams.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber beam / girder schedule — NDS §3.3/§3.4 (NSCP §6, LRFD)<SchedChip items={design.woodBeams} ok={(b) => b.ok} /></h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Timber beam / girder schedule — NDS §3.3/§3.4 (NSCP §6, LRFD)<SchedChip items={design.woodBeams} ok={(b) => b.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -5163,8 +5163,8 @@ export default function ModelSpace() {
           )}
           {/* Timber column schedule */}
           {design.woodColumns.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber column schedule — NDS §3.7 + §3.9 (NSCP §6, LRFD)<SchedChip items={design.woodColumns} ok={(c) => c.ok} /></h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Timber column schedule — NDS §3.7 + §3.9 (NSCP §6, LRFD)<SchedChip items={design.woodColumns} ok={(c) => c.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -5215,8 +5215,8 @@ export default function ModelSpace() {
             </div>
           )}
           {design.steelBeams.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel beam / girder schedule — AISC 360-16 LRFD<SchedChip items={design.steelBeams} ok={(b) => b.ok} /></h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel beam / girder schedule — AISC 360-16 LRFD<SchedChip items={design.steelBeams} ok={(b) => b.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -5352,8 +5352,8 @@ export default function ModelSpace() {
 
           {/* Steel column schedule (full width) */}
           {design.steelColumns.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel column schedule — AISC §E3 + §H1-1<SchedChip items={design.steelColumns} ok={(c) => c.ok} /></h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel column schedule — AISC §E3 + §H1-1<SchedChip items={design.steelColumns} ok={(c) => c.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -5469,8 +5469,8 @@ export default function ModelSpace() {
 
           {/* Base-plate schedule (full width) */}
           {design.basePlates.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Base-plate schedule — AISC §J8 / Design Guide 1<SchedChip items={design.basePlates} ok={(pl) => pl.ok} /></h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Base-plate schedule — AISC §J8 / Design Guide 1<SchedChip items={design.basePlates} ok={(pl) => pl.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -5507,8 +5507,8 @@ export default function ModelSpace() {
 
           {/* Timber deck slab schedule — NDS §3 / NSCP §6 */}
           {design.woodSlabs.length > 0 && report !== 'draw-only' && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber deck slab schedule — NDS §3 / NSCP §6<SchedChip items={design.woodSlabs} ok={(s) => s.ok} /></h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Timber deck slab schedule — NDS §3 / NSCP §6<SchedChip items={design.woodSlabs} ok={(s) => s.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -5557,8 +5557,8 @@ export default function ModelSpace() {
 
           {/* Steel connection schedule — only for steel frames */}
           {(design.joints.length > 0 || design.beamJoints.length > 0) && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel connection schedule — AISC SCM<SchedChip items={[...design.joints.flatMap((j) => j.connections), ...design.beamJoints.flatMap((j) => j.connections)]} ok={(cn) => cn.ok} /></h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel connection schedule — AISC SCM<SchedChip items={[...design.joints.flatMap((j) => j.connections), ...design.beamJoints.flatMap((j) => j.connections)]} ok={(cn) => cn.ok} /></h3>
               <p className="mb-2 text-[11px] text-slate-500">
                 Columns oriented with depth <em>d</em> in X (flanges face ±X); X-direction girders land on the column <strong>flange</strong> face (strong-axis moment connection), Z-direction beams land on the column <strong>web</strong> face (shear tab). Bolts: M20 A325 single-shear (φRₙ = 116.5 kN/bolt). Welds: E70XX fillet, both sides of plate.
               </p>
@@ -5699,8 +5699,8 @@ export default function ModelSpace() {
           )}
 
           {/* Footing schedule (full width) */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Footing schedule<SchedChip items={design.footings} ok={(f) => f.ok} /></h3>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Footing schedule<SchedChip items={design.footings} ok={(f) => f.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -5732,7 +5732,7 @@ export default function ModelSpace() {
                           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
                             {wantSol && <WorkedSolution steps={footingRowSolution(cs ?? model.sections[0], soil, f)} title={`Footing ${f.node} — worked solution`} />}
                             {wantDraw && (
-                            <div className="rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="rounded-lg border border-slate-200 bg-sheet p-3">
                               <FootingSchematic Bx={f.design.B} By={f.design.B} Dc={f.design.Dc}
                                 columnWidth={cs ? Math.min(cs.b, cs.h) : 400} H={Hf} />
                             </div>
@@ -5749,8 +5749,8 @@ export default function ModelSpace() {
 
           {/* Combined footing schedule (full width) */}
           {design.combined.length > 0 && report !== 'draw-only' && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Combined footing schedule<SchedChip items={design.combined} ok={(c) => c.ok} /></h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Combined footing schedule<SchedChip items={design.combined} ok={(c) => c.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -5808,7 +5808,7 @@ export default function ModelSpace() {
       {design && takeoff && resultsTab === 'boq' && (
         <div className="mt-6 space-y-4 break-before-page">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xl font-extrabold tracking-tight text-[#0f4c92]">
+            <h2 className="text-xl font-extrabold tracking-tight text-brand">
               Material take-off — Bill of Quantities &amp; Materials
             </h2>
             <div className="no-print flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-sm">
@@ -5831,7 +5831,7 @@ export default function ModelSpace() {
                 </span>
               ) : (
                 <button type="button" onClick={() => setClassPin(null)}
-                  className="text-[11.5px] font-semibold text-[#0f4c92] underline underline-offset-2">
+                  className="text-[11.5px] font-semibold text-brand underline underline-offset-2">
                   overridden — match f′c ({fcClass.klass})
                 </button>
               )}
@@ -5859,19 +5859,19 @@ export default function ModelSpace() {
               takeoff.timberM3 > 0 && ['Timber', `${f2(takeoff.timberM3)} m³`],
               takeoff.timberM3 > 0 && ['Timber (bd·ft)', `${f0(takeoff.timberBoardFeet)}`],
             ].filter(Boolean as unknown as (v: unknown) => v is [string, string]).map(([k, v]) => (
-              <div key={k} className="rounded-lg border border-slate-200 bg-white p-2 text-center shadow-sm">
+              <div key={k} className="rounded-lg border border-slate-200 bg-sheet p-2 text-center shadow-sm">
                 <div className="text-[11px] uppercase tracking-wide text-slate-500">{k}</div>
-                <div className="text-sm font-bold text-[#0f4c92]">{v}</div>
+                <div className="text-sm font-bold text-brand">{v}</div>
               </div>
             ))}
           </div>
 
           {/* Priced Bill of Materials — unit prices make it an actual Bill */}
           {bill && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-[1.02rem] font-bold text-[#0f4c92]">Bill of Materials (priced)</h3>
-                <span className="text-sm font-bold text-[#0f4c92]">Grand total: {peso(bill.total)}</span>
+                <h3 className="text-[1.02rem] font-bold text-brand">Bill of Materials (priced)</h3>
+                <span className="text-sm font-bold text-brand">Grand total: {peso(bill.total)}</span>
               </div>
               <table className="w-full border-collapse text-xs">
                 <thead>
@@ -5906,7 +5906,7 @@ export default function ModelSpace() {
                       </tr>
                     )
                   })}
-                  <tr className="border-t border-slate-200 font-bold text-[#0f4c92]">
+                  <tr className="border-t border-slate-200 font-bold text-brand">
                     <td className="py-1 pr-2" colSpan={4}>Grand total</td>
                     <td className="py-1 text-right">{peso(bill.total)}</td>
                   </tr>
@@ -5921,8 +5921,8 @@ export default function ModelSpace() {
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* BOQ */}
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Bill of Quantities (by element)</h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Bill of Quantities (by element)</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -5944,8 +5944,8 @@ export default function ModelSpace() {
             </div>
 
             {/* Steel by diameter (BOM) — 6 m commercial bars with lap + waste */}
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Reinforcement by bar Ø (6 m bars)</h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Reinforcement by bar Ø (6 m bars)</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -5985,8 +5985,8 @@ export default function ModelSpace() {
 
           {/* Structural steel by shape — only when W-shapes are present */}
           {takeoff.structuralSteelKg > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Structural steel by shape</h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Structural steel by shape</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -6019,8 +6019,8 @@ export default function ModelSpace() {
 
           {/* Timber by section size — only when a wood frame is present */}
           {takeoff.timberM3 > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber by size</h3>
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Timber by size</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -6060,8 +6060,8 @@ export default function ModelSpace() {
 
           {/* Formwork + tie wire */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Formwork</h3>
+            <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Formwork</h3>
               <table className="w-full border-collapse text-xs">
                 <tbody>
                   {[
@@ -6077,8 +6077,8 @@ export default function ModelSpace() {
                 </tbody>
               </table>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Tie wire (#16 G.I.)</h3>
+            <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Tie wire (#16 G.I.)</h3>
               <table className="w-full border-collapse text-xs">
                 <tbody>
                   {[
@@ -6098,8 +6098,8 @@ export default function ModelSpace() {
           </div>
 
           {/* Detailed cut list */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Reinforcement cut list</h3>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Reinforcement cut list</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-slate-500">

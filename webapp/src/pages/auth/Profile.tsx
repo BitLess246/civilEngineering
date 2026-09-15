@@ -11,6 +11,8 @@ import {
 } from '../../lib/billing/history'
 import { DisciplinePicker } from '../../components/DisciplinePicker'
 import { useToolPrefs, setToolPrefs } from '../../lib/useToolPrefs'
+import { useTheme, setTheme } from '../../lib/useTheme'
+import { THEMES } from '../../lib/theme'
 import { chosenFromPrefs, prefsFromChosen, CHOOSABLE_GROUPS } from '../../lib/toolPrefs'
 
 /**
@@ -23,6 +25,63 @@ import { chosenFromPrefs, prefsFromChosen, CHOOSABLE_GROUPS } from '../../lib/to
  * The picker is the SAME component the first-run dialog uses, so the two lists
  * cannot drift apart — this page exists to change an answer that one took.
  */
+/**
+ * Appearance — the theme picker.
+ *
+ * No Save button, unlike Tool preferences below: a theme is judged by looking
+ * at it, so choosing one applies it immediately to the page you are standing
+ * on. A preview that needs a round trip through Save is a preview of nothing.
+ *
+ * The swatches are the theme's real paper / ink / accent values, so the choice
+ * is legible before it is made — and each card paints itself in its own theme
+ * via `data-theme`, which is the same mechanism the whole app uses. That makes
+ * the card an honest sample rather than a hand-drawn approximation that can
+ * drift from the stylesheet.
+ */
+function Appearance() {
+  const theme = useTheme()
+  return (
+    <section className="mt-5 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
+      <h2 className="text-[1.02rem] font-bold text-brand">Appearance</h2>
+      <p className="mt-1 text-[13px] leading-6 text-muted">
+        Applies straight away and is remembered on this device. Drawings and exported
+        PDFs are <strong>not</strong> themed — a report keeps its own ink whichever
+        theme you work in.
+      </p>
+
+      <fieldset className="mt-4">
+        <legend className="sr-only">Interface theme</legend>
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {THEMES.map((t) => {
+            const active = t.id === theme
+            return (
+              <label key={t.id} data-theme={t.id}
+                className={`flex cursor-pointer gap-3 rounded-lg border p-3 text-left transition-colors ${
+                  active ? 'border-brand ring-2 ring-brand' : 'border-hairline hover:border-brand-line'
+                } bg-sheet`}>
+                <input type="radio" name="theme" value={t.id} checked={active}
+                  onChange={() => setTheme(t.id)} className="sr-only" />
+                <span aria-hidden="true" className="mt-0.5 flex h-9 w-9 flex-none overflow-hidden rounded-md border border-hairline">
+                  {t.swatch.map((c) => (
+                    <span key={c} className="h-full flex-1" style={{ background: c }} />
+                  ))}
+                </span>
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5">
+                    <span className="text-[13px] font-bold text-ink">{t.name}</span>
+                    {active && <span className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-brand">current</span>}
+                  </span>
+                  <span className="mt-0.5 block text-[11.5px] leading-5 text-muted">{t.blurb}</span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
+      </fieldset>
+    </section>
+  )
+}
+
 function ToolPreferences() {
   const prefs = useToolPrefs()
   const [chosen, setChosen] = useState<ReadonlySet<string>>(() => chosenFromPrefs(prefs, CHOOSABLE_GROUPS))
@@ -47,8 +106,8 @@ function ToolPreferences() {
   const all = chosen.size === CHOOSABLE_GROUPS.length
 
   return (
-    <form onSubmit={submit} className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-[1.02rem] font-bold text-[#0056b3]">Tools you use</h2>
+    <form onSubmit={submit} className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <h2 className="text-[1.02rem] font-bold text-brand">Tools you use</h2>
       <p className="mt-1 text-[13px] leading-6 text-slate-600">
         The home page and the sidebar show the disciplines you tick. <strong>Nothing is removed</strong> —
         unticked tools keep working, stay reachable by link, and still turn up in ⌘K search.
@@ -60,7 +119,7 @@ function ToolPreferences() {
         </span>
         <button type="button"
           onClick={() => { setChosen(all ? new Set() : new Set(CHOOSABLE_GROUPS)); setSaved(false) }}
-          className="text-[12px] font-semibold text-[#0056b3] hover:underline">
+          className="text-[12px] font-semibold text-brand hover:underline">
           {all ? 'Clear all' : 'Select all'}
         </button>
       </div>
@@ -69,7 +128,7 @@ function ToolPreferences() {
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button type="submit" disabled={none}
-          className="rounded-md bg-[#0056b3] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f4c92] disabled:cursor-not-allowed disabled:opacity-50">
+          className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
           Save
         </button>
         {saved && <span role="status" className="text-[13px] font-medium text-emerald-700">Saved</span>}
@@ -121,7 +180,7 @@ function ManageSubscription() {
     <div className="mt-4 border-t border-slate-100 pt-4">
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={open} disabled={busy}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-[13px] font-semibold text-slate-700 hover:border-[#0056b3] hover:text-[#0056b3] disabled:opacity-60">
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-[13px] font-semibold text-slate-700 hover:border-brand hover:text-brand disabled:opacity-60">
           {busy ? 'Opening…' : 'Manage subscription'}
         </button>
         {cancelUrl && (
@@ -196,7 +255,7 @@ function BillingHistory() {
       </ul>
       {hasMore && (
         <button type="button" onClick={more} disabled={busy}
-          className="mt-2 text-[12px] font-semibold text-[#0056b3] underline disabled:opacity-60">
+          className="mt-2 text-[12px] font-semibold text-brand underline disabled:opacity-60">
           {busy ? 'Loading…' : 'Show earlier payments'}
         </button>
       )}
@@ -216,7 +275,7 @@ function Field({ label, value, onChange, placeholder, hint }: {
       <span className="mb-1 font-medium text-slate-700">{label}</span>
       <input id={id} value={value} placeholder={placeholder} maxLength={120}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-[#0f4c92]" />
+        className="rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-brand" />
       {hint && <span className="mt-1 text-[11.5px] text-slate-500">{hint}</span>}
     </label>
   )
@@ -244,11 +303,11 @@ export default function Profile() {
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Account</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Profile</h1>
+      <h1 className="mt-1 text-2xl font-bold text-brand">Profile</h1>
 
       {/* ── Account ── */}
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-[1.02rem] font-bold text-[#0056b3]">Account</h2>
+      <section className="mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="text-[1.02rem] font-bold text-brand">Account</h2>
         {!configured ? (
           <p className="mt-2 text-[13px] leading-6 text-slate-600">
             Sign-in is not set up on this deployment, so there is no account to show. The letterhead
@@ -278,8 +337,8 @@ export default function Profile() {
           </dl>
         ) : (
           <p className="mt-2 text-[13px] leading-6 text-slate-600">
-            You are not signed in. <Link to="/signin" className="text-[#0056b3] underline">Sign in</Link>{' '}
-            or <Link to="/signup" className="text-[#0056b3] underline">create an account</Link> to save
+            You are not signed in. <Link to="/signin" className="text-brand underline">Sign in</Link>{' '}
+            or <Link to="/signup" className="text-brand underline">create an account</Link> to save
             projects. The letterhead settings below work either way.
           </p>
         )}
@@ -296,17 +355,18 @@ export default function Profile() {
 
         <p className="mt-3 text-[12px] leading-5 text-slate-500">
           {CHECKOUT_ENABLED
-            ? <>Compare plans on the <Link to="/pricing" className="text-[#0056b3] underline">Plans page</Link>.</>
-            : <>Paid plans are not open for sign-up yet — see <Link to="/pricing" className="text-[#0056b3] underline">Plans</Link> for what they include.</>}
+            ? <>Compare plans on the <Link to="/pricing" className="text-brand underline">Plans page</Link>.</>
+            : <>Paid plans are not open for sign-up yet — see <Link to="/pricing" className="text-brand underline">Plans</Link> for what they include.</>}
         </p>
       </section>
 
       {/* ── Tools you use ── */}
+      <Appearance />
       <ToolPreferences />
 
       {/* ── Letterhead ── */}
-      <form onSubmit={submit} className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-[1.02rem] font-bold text-[#0056b3]">Calculation sheet letterhead</h2>
+      <form onSubmit={submit} className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <h2 className="text-[1.02rem] font-bold text-brand">Calculation sheet letterhead</h2>
         <p className="mt-1 text-[13px] leading-6 text-slate-600">
           These fill in the report letterhead on every calculator, so you stop retyping them on each
           sheet. You can still change them per sheet before exporting.
@@ -323,7 +383,7 @@ export default function Profile() {
             placeholder="Lot 12 Residence" hint="Starting value for the Project field." />
         </div>
 
-        <div className="mt-4 rounded-lg border border-slate-200 bg-[#f9f8f4] px-3.5 py-2.5">
+        <div className="mt-4 rounded-lg border border-slate-200 bg-sheet-2 px-3.5 py-2.5">
           <p className="text-[10.5px] font-semibold uppercase tracking-widest text-slate-500">Sheet preview</p>
           <p className="mt-1 font-mono text-[13px] text-slate-800">
             Prepared by: {preview || <span className="text-slate-400">(not set)</span>}
@@ -335,7 +395,7 @@ export default function Profile() {
 
         <div className="mt-4 flex items-center gap-3">
           <button type="submit"
-            className="rounded-md bg-[#0056b3] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f4c92]">
+            className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover">
             Save
           </button>
           {saved && <span role="status" className="text-[13px] font-medium text-emerald-700">Saved</span>}

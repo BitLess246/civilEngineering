@@ -128,7 +128,7 @@ export default function BeamAnalysis() {
             <div className="no-print mb-3 flex flex-wrap gap-2">
               {(['pin', 'roller', 'fixed', 'spring'] as SupportType[]).map((t) => (
                 <button key={t} type="button" onClick={() => addSupport(t)}
-                  className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">
+                  className="rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">
                   + {t[0].toUpperCase() + t.slice(1)}
                 </button>
               ))}
@@ -150,7 +150,7 @@ export default function BeamAnalysis() {
             <div className="no-print mb-3 flex flex-wrap gap-2">
               {([['point', '+ Point'], ['udl', '+ UDL'], ['vdl', '+ VDL'], ['moment', '+ Moment']] as const).map(([t, lbl]) => (
                 <button key={t} type="button" onClick={() => addLoad(t)}
-                  className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">
+                  className="rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">
                   {lbl}
                 </button>
               ))}
@@ -208,7 +208,7 @@ export default function BeamAnalysis() {
                       <tr key={pc.combo.name}
                         onClick={() => pc.result && setSelIdx(i)}
                         className={`border-t border-slate-100 ${pc.result ? 'cursor-pointer hover:bg-blue-50' : 'text-slate-300'} ${
-                          i === res.govIdx ? 'bg-amber-50 font-semibold' : ''} ${i === shownIdx ? 'outline outline-1 outline-[#0056b3]' : ''}`}>
+                          i === res.govIdx ? 'bg-amber-50 font-semibold' : ''} ${i === shownIdx ? 'outline outline-1 outline-brand' : ''}`}>
                         <td className="py-1 pr-2">{pc.combo.name}{i === res.govIdx ? ' ★' : ''}</td>
                         <td className="py-1 pr-2 text-right">{pc.result ? f1(pc.result.Vmax) : pc.skipped ? '—' : 'sing.'}</td>
                         <td className="py-1 pr-2 text-right">{pc.result ? f1(pc.result.Mmax) : '—'}</td>
@@ -234,7 +234,7 @@ export default function BeamAnalysis() {
                 sub={`${f2(r.Dmax)} ≤ ${f2(allowDefl)} mm`} />
               <div className="no-print mt-3 flex flex-wrap gap-2">
                 <Link to={`/beam-design?mu=${r.Mmax.toFixed(1)}&vu=${r.Vmax.toFixed(1)}`}
-                  className="inline-block rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-[#0056b3] transition hover:border-[#0056b3] hover:bg-blue-50">
+                  className="inline-block rounded-lg border border-slate-300 bg-sheet px-4 py-2 text-sm font-semibold text-brand transition hover:border-brand hover:bg-blue-50">
                   Use Mmax & Vmax →
                 </Link>
                 <button type="button"
@@ -245,7 +245,7 @@ export default function BeamAnalysis() {
                     sessionStorage.setItem(SECTIONS_HANDOFF_KEY, JSON.stringify(secs))
                     navigate('/beam-design?sections=auto')
                   }}
-                  className="inline-block rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-4 py-2 text-sm font-semibold text-[#0f4c92] transition hover:bg-[#dce9f7]">
+                  className="inline-block rounded-md border border-brand-line bg-brand-tint px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand-tint">
                   ⚡ Auto-detect critical sections → design
                 </button>
               </div>
@@ -256,21 +256,21 @@ export default function BeamAnalysis() {
 
       {r && shown && (
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
             <Diagram xs={r.xs} ys={r.V} title={`SHEAR — ${shown.combo.name}`} unit="kN" color="#1f77b4" vlines={vlines} decimals={1} />
           </div>
-          <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
             <Diagram xs={r.xs} ys={r.M} title="MOMENT" unit="kN·m" color="#d62728" vlines={vlines} decimals={1} />
           </div>
-          <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
             <Diagram xs={r.xs} ys={r.D} title="DEFLECTION" unit="mm" color="#2ca02c" vlines={vlines} decimals={2} />
           </div>
         </div>
       )}
 
       {res?.tmt && (
-        <div className="rail-card mt-6 rounded-lg border border-[#e3e1da] bg-white p-4 print-avoid-break">
-          <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">
+        <div className="rail-card mt-6 rounded-lg border border-hairline bg-sheet p-4 print-avoid-break">
+          <h2 className="mb-2 text-[1.02rem] font-bold text-brand">
             Three-moment theorem check <span className="text-xs font-normal text-slate-500">Clapeyron — governing combo, interior support moments</span>
           </h2>
           {res.tmt.positions.map((x, i) => (

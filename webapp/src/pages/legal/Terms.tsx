@@ -16,7 +16,7 @@ export default function Terms() {
           <Detail value={addressOneLine()} what="registered business address" />.
         </p>
         <p>
-          Contact: <a href={`mailto:${SITE.supportEmail}`} className="text-[#0056b3] underline">{SITE.supportEmail}</a>
+          Contact: <a href={`mailto:${SITE.supportEmail}`} className="text-brand underline">{SITE.supportEmail}</a>
         </p>
       </Clause>
 
@@ -49,7 +49,7 @@ export default function Terms() {
         </p>
         <p>
           We publish our engine benchmarks against hand calculations on the{' '}
-          <Link to="/validation" className="text-[#0056b3] underline">validation page</Link> so you can
+          <Link to="/validation" className="text-brand underline">validation page</Link> so you can
           judge the software for yourself. That page is open to everyone, and always will be.
         </p>
       </Clause>
@@ -62,14 +62,14 @@ export default function Terms() {
         </p>
         <p>
           You must give an email address you control. You may close your account at any time by
-          writing to us; see the <Link to="/privacy" className="text-[#0056b3] underline">Privacy
+          writing to us; see the <Link to="/privacy" className="text-brand underline">Privacy
           Policy</Link> for what happens to your data.
         </p>
       </Clause>
 
       <Clause n="5" title="Paid plans">
         <p>
-          Paid plans are described on the <Link to="/pricing" className="text-[#0056b3] underline">Plans
+          Paid plans are described on the <Link to="/pricing" className="text-brand underline">Plans
           page</Link>, in Philippine pesos. Prices shown include any applicable taxes unless stated
           otherwise on that page.
         </p>
@@ -77,7 +77,7 @@ export default function Terms() {
           Subscriptions renew automatically at the end of each billing period until cancelled. You
           may cancel at any time; cancellation stops the next renewal and does not shorten the
           period you have already paid for. Refunds are governed by our{' '}
-          <Link to="/refunds" className="text-[#0056b3] underline">Refund Policy</Link>.
+          <Link to="/refunds" className="text-brand underline">Refund Policy</Link>.
         </p>
         <p>
           We may change prices. If we do, the new price applies from your next renewal, and we will

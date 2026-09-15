@@ -21,7 +21,7 @@ import { useTour } from '../lib/useTour'
 // (BAC from resources + an actual-cost input), and critical/delayed/upcoming
 // lists. Drawing-sheet palette; reuses the store-backed project + solve.
 
-const btn = 'inline-flex items-center gap-1.5 rounded-md border border-[#d6d3c9] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]'
+const btn = 'inline-flex items-center gap-1.5 rounded-md border border-field-line bg-sheet px-2.5 py-1.5 text-[12px] font-semibold text-ink-2 hover:border-brand-hover hover:text-brand'
 const n1 = (v: number | null) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(1))
 const n2 = (v: number | null) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(2))
 const peso = (v: number) => '₱' + Math.round(v).toLocaleString('en-PH', { maximumFractionDigits: 0 })
@@ -31,12 +31,12 @@ function projectCalendar(p: ScheduleProject): WorkingCalendar {
 }
 
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'ok' | 'bad' | 'warn' }) {
-  const color = tone === 'bad' ? 'text-[#c2402a]' : tone === 'ok' ? 'text-[#14603a]' : tone === 'warn' ? 'text-[#b97d10]' : 'text-[#0f1b2a]'
+  const color = tone === 'bad' ? 'text-fail' : tone === 'ok' ? 'text-ok' : tone === 'warn' ? 'text-warn' : 'text-ink'
   return (
-    <div className="rounded-lg border border-[#e3e1da] bg-white px-3.5 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a39d8d]">{label}</p>
+    <div className="rounded-lg border border-hairline bg-sheet px-3.5 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-faint">{label}</p>
       <p className={`mt-0.5 font-mono text-[18px] font-semibold ${color}`}>{value}</p>
-      {sub && <p className="text-[10.5px] text-[#a39d8d]">{sub}</p>}
+      {sub && <p className="text-[10.5px] text-faint">{sub}</p>}
     </div>
   )
 }
@@ -49,10 +49,10 @@ function Card({ title, right, children, ...rest }: {
   title: string; right?: string; children: React.ReactNode; 'data-tour'?: string
 }) {
   return (
-    <section className="rounded-lg border border-[#e3e1da] bg-white" {...rest}>
-      <div className="flex items-center justify-between border-b border-[#eeece5] px-4 py-2.5">
-        <h2 className="text-[13px] font-bold text-[#0f1b2a]">{title}</h2>
-        {right && <span className="font-mono text-[10.5px] text-[#a39d8d]">{right}</span>}
+    <section className="rounded-lg border border-hairline bg-sheet" {...rest}>
+      <div className="flex items-center justify-between border-b border-hairline-2 px-4 py-2.5">
+        <h2 className="text-[13px] font-bold text-ink">{title}</h2>
+        {right && <span className="font-mono text-[10.5px] text-faint">{right}</span>}
       </div>
       <div className="p-4">{children}</div>
     </section>
@@ -129,12 +129,12 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
   const upcoming = prog.activities.filter((a) => a.status === 'not-started').sort((a, b) => a.es - b.es).slice(0, 6)
 
   const miniList = (rows: typeof prog.activities, empty: string) => (
-    rows.length === 0 ? <p className="text-[11.5px] text-[#a39d8d]">{empty}</p> : (
+    rows.length === 0 ? <p className="text-[11.5px] text-faint">{empty}</p> : (
       <ul className="space-y-1">
         {rows.slice(0, 6).map((a) => (
           <li key={a.id} className="flex items-center gap-2 text-[12px]">
-            <span className="truncate text-[#0f1b2a]">{nameOf.get(a.id)}</span>
-            <span className="ml-auto flex-none font-mono text-[10.5px] text-[#a39d8d]">{a.percentComplete}%</span>
+            <span className="truncate text-ink">{nameOf.get(a.id)}</span>
+            <span className="ml-auto flex-none font-mono text-[10.5px] text-faint">{a.percentComplete}%</span>
           </li>
         ))}
       </ul>
@@ -143,16 +143,16 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[#e3e1da] bg-white p-3" data-tour="data-date">
-        <label className="flex flex-col text-[10px] font-semibold uppercase tracking-widest text-[#a39d8d]">Data date
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-hairline bg-sheet p-3" data-tour="data-date">
+        <label className="flex flex-col text-[10px] font-semibold uppercase tracking-widest text-faint">Data date
           <input type="date" value={dataDate} min={start} max={finishIso} onChange={(e) => setDataDate(e.target.value || start)}
-            className="mt-0.5 rounded border border-[#e3e1da] px-2 py-1 font-mono text-[12.5px] font-normal tracking-normal text-[#0f1b2a]" />
+            className="mt-0.5 rounded border border-hairline px-2 py-1 font-mono text-[12.5px] font-normal tracking-normal text-ink" />
         </label>
-        <label className="flex flex-col text-[10px] font-semibold uppercase tracking-widest text-[#a39d8d]">Actual cost to date (₱)
+        <label className="flex flex-col text-[10px] font-semibold uppercase tracking-widest text-faint">Actual cost to date (₱)
           <input type="number" min={0} step={1000} value={acInput} onChange={(e) => setAcInput(Math.max(0, parseFloat(e.target.value) || 0))}
-            className="mt-0.5 w-40 rounded border border-[#e3e1da] px-2 py-1 text-right font-mono text-[12.5px] font-normal tracking-normal text-[#0f1b2a]" />
+            className="mt-0.5 w-40 rounded border border-hairline px-2 py-1 text-right font-mono text-[12.5px] font-normal tracking-normal text-ink" />
         </label>
-        <span className="ml-auto text-[11px] text-[#a39d8d]">Data date = working day {dataOffset} of {prog.plannedDuration}</span>
+        <span className="ml-auto text-[11px] text-faint">Data date = working day {dataOffset} of {prog.plannedDuration}</span>
       </div>
 
       {/* KPIs */}
@@ -181,19 +181,19 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
             {STATUS_BAR.map((s) => (
               <div key={s.key} className="flex items-center gap-1.5 text-[11.5px]">
                 <span className="h-2.5 w-2.5 rounded-[2px]" style={{ background: s.color }} />
-                <span className="text-[#5c6675]">{s.label}</span>
-                <span className="ml-auto font-mono text-[#0f1b2a]">{prog[s.key]}</span>
+                <span className="text-muted">{s.label}</span>
+                <span className="ml-auto font-mono text-ink">{prog[s.key]}</span>
               </div>
             ))}
           </div>
-          <p className="mt-3 border-t border-[#eeece5] pt-2 text-[11px] text-[#5c6675]">Remaining duration <span className="float-right font-mono text-[#0f1b2a]">{n1(prog.remainingDuration)} d</span></p>
+          <p className="mt-3 border-t border-hairline-2 pt-2 text-[11px] text-muted">Remaining duration <span className="float-right font-mono text-ink">{n1(prog.remainingDuration)} d</span></p>
         </Card>
       </div>
 
       {/* Earned value (cost) */}
       <Card title="Earned Value Management (cost)" right="BAC from resource rates · AC from input" data-tour="evm">
         {!evm.hasCost ? (
-          <p className="text-[12px] text-[#a39d8d]">No resource costs are defined on the activities — add resource assignments with rates in the project to see cost EVM. Schedule performance (SPI, days ahead/behind) above is duration-based and needs no cost.</p>
+          <p className="text-[12px] text-faint">No resource costs are defined on the activities — add resource assignments with rates in the project to see cost EVM. Schedule performance (SPI, days ahead/behind) above is duration-based and needs no cost.</p>
         ) : (
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
             <Stat label="PV" value={peso(evm.result.pv)} />
@@ -208,7 +208,7 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
             <Stat label="TCPI" value={n2(evm.result.tcpi)} />
           </div>
         )}
-        {evm.hasCost && <p className="mt-3 text-[10.5px] text-[#a39d8d]">AC is your entered cost to date; PV, EV and BAC are computed from the schedule and resource rates. CPI, EAC and VAC appear once AC &gt; 0.</p>}
+        {evm.hasCost && <p className="mt-3 text-[10.5px] text-faint">AC is your entered cost to date; PV, EV and BAC are computed from the schedule and resource rates. CPI, EAC and VAC appear once AC &gt; 0.</p>}
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -236,14 +236,14 @@ export default function ScheduleDashboard() {
           conflict={api.conflict} reloadTheirs={api.reloadTheirs}
           overwriteWithMine={api.overwriteWithMine} />
         {!project ? (
-          <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
-            <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>
-            <Link to="/schedule" className="mt-4 inline-flex rounded-md bg-[#0f4c92] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#0d3f78]">Go to the schedule grid</Link>
+          <div className="rounded-lg border border-dashed border-field-line bg-sheet px-6 py-16 text-center">
+            <h2 className="text-[16px] font-bold text-ink">No schedule open</h2>
+            <Link to="/schedule" className="mt-4 inline-flex rounded-md bg-brand px-3 py-1.5 text-[12px] font-semibold text-on-solid hover:bg-brand-hover">Go to the schedule grid</Link>
           </div>
         ) : project.activities.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center text-[13px] text-[#a39d8d]">No activities yet — add some in the grid.</div>
+          <div className="rounded-lg border border-dashed border-field-line bg-sheet px-6 py-16 text-center text-[13px] text-faint">No activities yet — add some in the grid.</div>
         ) : !solve.ok ? (
-          <div className="rounded-lg border border-[#efd9cc] bg-[#fdf3ee] px-4 py-2.5 text-[12px] text-[#8f4a2f]">The schedule has {solve.errorCount} blocking issue(s); fix them in the grid to see the dashboard.</div>
+          <div className="rounded-lg border border-fail-line bg-fail-tint px-4 py-2.5 text-[12px] text-fail">The schedule has {solve.errorCount} blocking issue(s); fix them in the grid to see the dashboard.</div>
         ) : (
           <Dashboard project={project} solve={solve} />
         )}

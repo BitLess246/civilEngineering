@@ -76,10 +76,10 @@ export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], re
           action={report ? (
             <ExportPdfButton {...report} docTitle={title} badges={badges}
               lh={{ project, sheet, preparedBy }}
-              className="inline-flex flex-none items-center gap-2 rounded-md bg-[#0f4c92] px-3.5 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78] disabled:opacity-50" />
+              className="inline-flex flex-none items-center gap-2 rounded-md bg-brand px-3.5 py-1.5 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-50" />
           ) : (
             <button type="button" onClick={print}
-              className="inline-flex flex-none items-center gap-2 rounded-md bg-[#0f4c92] px-3.5 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">
+              className="inline-flex flex-none items-center gap-2 rounded-md bg-brand px-3.5 py-1.5 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover">
               ⎙ Export report
             </button>
           )} />
@@ -87,23 +87,23 @@ export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], re
 
       {/* Print: calc-sheet letterhead header */}
       <div className="print-only mb-4">
-        <div className="flex items-baseline justify-between border-b border-[#eeece5] pb-1.5 font-mono text-[9px] text-[#a39d8d]">
+        <div className="flex items-baseline justify-between border-b border-hairline-2 pb-1.5 font-mono text-[9px] text-faint">
           <span>{docLabel(title)}</span>
           <span>{sheet || '—'} · {today}</span>
         </div>
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-[14px] font-extrabold tracking-[.14em]">{BRAND_MARK}</span>
-          <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-[#7a7568]">{BRAND_TAIL}</span>
+          <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>
         </div>
-        <h1 className="mt-2 text-[24px] font-extrabold tracking-tight text-[#0f1b2a]">{title}</h1>
+        <h1 className="mt-2 text-[24px] font-extrabold tracking-tight text-ink">{title}</h1>
         <div className="mt-2 flex gap-2">
-          {badges.map((b) => <span key={b} className="rounded border border-[#cddcf0] bg-[#eaf1f9] px-1.5 py-px font-mono text-[9.5px] font-medium text-[#0f4c92]">{b}</span>)}
+          {badges.map((b) => <span key={b} className="rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[9.5px] font-medium text-brand">{b}</span>)}
         </div>
-        <div className="mt-4 grid grid-cols-4 overflow-hidden rounded-lg border border-[#e3e1da]">
+        <div className="mt-4 grid grid-cols-4 overflow-hidden rounded-lg border border-hairline">
           {lhCells.map(([k, v, mono]) => (
-            <div key={k} className="border-r border-[#eeece5] px-3.5 py-2 last:border-r-0">
-              <p className="text-[8.5px] font-semibold uppercase tracking-widest text-[#a39d8d]">{k}</p>
-              <p className={`mt-0.5 text-[11px] font-semibold text-[#0f1b2a] ${mono ? 'font-mono font-medium' : ''}`}>{v}</p>
+            <div key={k} className="border-r border-hairline-2 px-3.5 py-2 last:border-r-0">
+              <p className="text-[8.5px] font-semibold uppercase tracking-widest text-faint">{k}</p>
+              <p className={`mt-0.5 text-[11px] font-semibold text-ink ${mono ? 'font-mono font-medium' : ''}`}>{v}</p>
             </div>
           ))}
         </div>

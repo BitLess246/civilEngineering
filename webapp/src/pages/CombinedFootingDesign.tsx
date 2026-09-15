@@ -73,7 +73,7 @@ function NumField({ label, unit, value, onChange, step = 'any' }: {
       <input
         type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none focus:ring-1 focus:ring-[#0056b3]"
+        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
       />
     </label>
   )
@@ -83,7 +83,7 @@ function Toggle({ label, value, onChange }: { label: ReactNode; value: boolean; 
   return (
     <label className="flex cursor-pointer items-center gap-2 text-sm">
       <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 rounded border-slate-300 text-[#0056b3] focus:ring-[#0056b3]" />
+        className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand" />
       <span className="font-medium text-slate-600">{label}</span>
     </label>
   )
@@ -96,7 +96,7 @@ function Select<T extends string>({ label, value, onChange, options }: {
     <label className="flex flex-col text-sm">
       <span className="mb-1 font-medium text-slate-600">{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value as T)}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none">
+        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none">
         {options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
       </select>
     </label>
@@ -107,10 +107,10 @@ function Select<T extends string>({ label, value, onChange, options }: {
  *  differs but the palette must not — this matches `components/qty`. */
 function Row({ label, value, check }: { label: ReactNode; value: ReactNode; check?: ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-[#f3f1ea] py-1.5 last:border-0">
-      <span className="text-[12px] text-[#5c6675]">{label}</span>
-      <span className="text-right font-mono text-[12.5px] font-semibold text-[#0f1b2a]">{value}</span>
-      {check ? <span className="w-32 text-right text-[10.5px] text-[#a39d8d]">{check}</span> : null}
+    <div className="flex items-baseline justify-between gap-3 border-b border-hairline-2 py-1.5 last:border-0">
+      <span className="text-[12px] text-muted">{label}</span>
+      <span className="text-right font-mono text-[12.5px] font-semibold text-ink">{value}</span>
+      {check ? <span className="w-32 text-right text-[10.5px] text-faint">{check}</span> : null}
     </div>
   )
 }
@@ -283,8 +283,8 @@ export default function CombinedFootingDesign() {
 
         {/* ── Results ── */}
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
-          <div data-pdf-drawing className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
-            <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Plan</h2>
+          <div data-pdf-drawing className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+            <h2 className="mb-2 text-[13.5px] font-bold text-ink">Plan</h2>
             {result ? (
               <CombinedFootingSchematic
                 shape={result.shape} Bx={result.Bx} By={result.By} By1={result.By1} By2={result.By2}
@@ -296,8 +296,8 @@ export default function CombinedFootingDesign() {
           </div>
 
           {result && (
-            <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
-              <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Results</h2>
+            <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+              <h2 className="mb-2 text-[13.5px] font-bold text-ink">Results</h2>
               <Row label="Shape" value={result.shape} />
               <Row label={<Math tex="q_{net}" />} value={`${f3(result.qNet)} kPa`} />
               <Row label="Plan size"
@@ -330,8 +330,8 @@ export default function CombinedFootingDesign() {
           )}
 
           {result && (
-            <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
-              <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">
+            <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+              <h2 className="mb-2 text-[13.5px] font-bold text-ink">
                 Longitudinal flexure {flexible && <span className="text-xs font-normal text-slate-500">(from BEF moments)</span>}
               </h2>
               {(longSections ?? result.longSections).map((s) => (
@@ -339,7 +339,7 @@ export default function CombinedFootingDesign() {
                   value={`${s.bars} ⌀${form.barDia} @ ${f0(s.spacing)} mm`}
                   check={`Mu=${f0(s.Mu)} kN·m · ${s.top ? 'top' : 'bottom'}`} />
               ))}
-              <h2 className="mb-2 mt-4 text-[13.5px] font-bold text-[#0f1b2a]">Transverse (under columns)</h2>
+              <h2 className="mb-2 mt-4 text-[13.5px] font-bold text-ink">Transverse (under columns)</h2>
               {result.transverse.map((t) => (
                 <Row key={t.label} label={t.label}
                   value={`⌀${form.barDia} @ ${f0(t.spacing)} mm`}
@@ -353,20 +353,20 @@ export default function CombinedFootingDesign() {
       {/* ── Diagrams (full width) ── */}
       {samples && (
         <div className={`mt-6 grid grid-cols-1 gap-6 ${flexible && flex ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
-          <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
             <Diagram xs={samples.x} ys={samples.w} title="SOIL REACTION (w)" unit="kN/m"
               color="#16a34a" vlines={vlines} markExtrema={!flexible} decimals={1} />
           </div>
-          <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
             <Diagram xs={samples.x} ys={samples.V} title="SHEAR (Vu)" unit="kN"
               color="#dc2626" vlines={vlines} decimals={0} />
           </div>
-          <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
             <Diagram xs={samples.x} ys={samples.M} title="MOMENT (Mu)" unit="kN·m"
               color="#0056b3" vlines={vlines} decimals={0} />
           </div>
           {flexible && flex && (
-            <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+            <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
               <Diagram xs={flex.samples.x} ys={flex.samples.y} title="SETTLEMENT (y, + down)" unit="mm"
                 color="#7c3aed" vlines={vlines} decimals={2} />
             </div>
@@ -374,8 +374,8 @@ export default function CombinedFootingDesign() {
         </div>
       )}
 
-      <div className="mt-6 rail-card rounded-lg border border-[#e3e1da] bg-white p-4 text-sm text-[#5c6675]">
-        <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Basis</h2>
+      <div className="mt-6 rail-card rounded-lg border border-hairline bg-sheet p-4 text-sm text-muted">
+        <h2 className="mb-2 text-[13.5px] font-bold text-ink">Basis</h2>
         <Math block tex={String.raw`q_{net} = q_a - \gamma_s D_s - \gamma_c D_c - q,\qquad P_u = \max(1.4D,\ 1.2D + 1.6L)`} />
         {flexible ? (
           <p className="mt-1 text-xs text-slate-500">

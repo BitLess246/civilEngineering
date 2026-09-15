@@ -28,8 +28,8 @@ const when = (iso: string): string => {
 // (`lib/modelSpaceSession`), which means it never holds a second copy of the
 // sixty design fields Model Space keeps in component state.
 
-const BTN = 'rounded border border-[#cddcf0] bg-[#eaf1f9] px-2.5 py-1 text-[11.5px] font-semibold text-[#0f4c92] hover:bg-[#dbe8f5] disabled:cursor-not-allowed disabled:opacity-50'
-const BTN_QUIET = 'rounded border border-[#d6d3c9] px-2 py-1 text-[11px] font-semibold text-[#5b5648] hover:border-[#0056b3] hover:text-[#0056b3]'
+const BTN = 'rounded border border-brand-line bg-brand-tint px-2.5 py-1 text-[11.5px] font-semibold text-brand hover:bg-brand-tint disabled:cursor-not-allowed disabled:opacity-50'
+const BTN_QUIET = 'rounded border border-field-line px-2 py-1 text-[11px] font-semibold text-faint hover:border-brand hover:text-brand'
 
 export function ProjectsPanel() {
   const api = useProjects()
@@ -106,13 +106,13 @@ export function ProjectsPanel() {
       <SaveAlert message={api.saveError} onDismiss={api.clearSaveError} />
       {/* ── Save the open model ─────────────────────────────────────── */}
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7a7568]">Save this project</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-faint">Save this project</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Project name"
-            className="min-w-[180px] flex-1 rounded border border-[#d6d3c9] px-2 py-1 text-[12.5px]"
+            className="min-w-[180px] flex-1 rounded border border-field-line px-2 py-1 text-[12.5px]"
           />
           <button type="button" onClick={saveCurrent} className={BTN}
             disabled={!target && !api.canCreate.ok}>
@@ -125,7 +125,7 @@ export function ProjectsPanel() {
           )}
         </div>
         {target && target.id !== openId && (
-          <p className="mt-1.5 text-[11.5px] leading-5 text-[#7a7568]">
+          <p className="mt-1.5 text-[11.5px] leading-5 text-faint">
             A project named “{target.name}” already exists — saving overwrites it.
           </p>
         )}
@@ -136,7 +136,7 @@ export function ProjectsPanel() {
           </p>
         )}
         {!readSession().model && (
-          <p className="mt-1.5 text-[11.5px] text-[#7a7568]">
+          <p className="mt-1.5 text-[11.5px] text-faint">
             No model yet — saving now keeps the name and the design inputs, and the
             model joins it the next time you save.
           </p>
@@ -145,22 +145,22 @@ export function ProjectsPanel() {
 
       {/* ── The listing ─────────────────────────────────────────────── */}
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7a7568]">
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-faint">
           Saved projects ({api.list.length})
         </p>
         {api.list.length === 0 ? (
-          <p className="mt-2 text-[12px] text-[#7a7568]">Nothing saved on this browser yet.</p>
+          <p className="mt-2 text-[12px] text-faint">Nothing saved on this browser yet.</p>
         ) : (
-          <ul className="mt-2 divide-y divide-[#eeece5] border-y border-[#eeece5]">
+          <ul className="mt-2 divide-y divide-hairline-2 border-y border-hairline-2">
             {api.list.map((p) => (
               <li key={p.id} className="py-2">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-[13px] font-semibold text-[#0f1b2a]">
+                    <p className="truncate text-[13px] font-semibold text-ink">
                       {p.name}
-                      {p.id === openId && <span className="ml-2 rounded bg-[#eaf1f9] px-1.5 py-px text-[9.5px] font-bold uppercase tracking-wider text-[#0f4c92]">Open</span>}
+                      {p.id === openId && <span className="ml-2 rounded bg-brand-tint px-1.5 py-px text-[9.5px] font-bold uppercase tracking-wider text-brand">Open</span>}
                     </p>
-                    <p className="text-[11px] text-[#7a7568]">
+                    <p className="text-[11px] text-faint">
                       {p.memberCount} member{p.memberCount === 1 ? '' : 's'} · {p.nodeCount} node{p.nodeCount === 1 ? '' : 's'} · saved {when(p.updatedAt)}
                       {p.client && ` · ${p.client}`}
                     </p>
@@ -180,7 +180,7 @@ export function ProjectsPanel() {
                 {renaming === p.id && (
                   <div className="mt-2 flex gap-1.5">
                     <input value={renameTo} onChange={(e) => setRenameTo(e.target.value)} autoFocus
-                      className="flex-1 rounded border border-[#d6d3c9] px-2 py-1 text-[12px]" />
+                      className="flex-1 rounded border border-field-line px-2 py-1 text-[12px]" />
                     <button type="button" className={BTN}
                       onClick={() => { api.rename(p.id, renameTo); setRenaming(null) }}>Save</button>
                     <button type="button" className={BTN_QUIET} onClick={() => setRenaming(null)}>Cancel</button>
@@ -213,14 +213,14 @@ export function ProjectsPanel() {
 
       {/* ── Cloud ───────────────────────────────────────────────────── */}
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7a7568]">Your account</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-faint">Your account</p>
         {api.cloud === 'not-configured' && (
-          <p className="mt-2 text-[12px] text-[#7a7568]">
+          <p className="mt-2 text-[12px] text-faint">
             Sign-in is not set up on this deployment, so projects stay on this browser.
           </p>
         )}
         {api.cloud === 'signed-out' && (
-          <p className="mt-2 text-[12px] text-[#7a7568]">
+          <p className="mt-2 text-[12px] text-faint">
             <Link to="/signin" className="font-semibold underline">Sign in</Link> to keep projects
             on your account and open them on another machine.
           </p>
@@ -231,10 +231,10 @@ export function ProjectsPanel() {
               <button type="button" onClick={() => void api.sync()} disabled={api.busy} className={BTN}>
                 {api.busy ? 'Syncing…' : 'Sync with my account'}
               </button>
-              <span className="text-[11px] text-[#7a7568]">Manual — nothing uploads on its own.</span>
+              <span className="text-[11px] text-faint">Manual — nothing uploads on its own.</span>
             </div>
             {api.report && conflicts.length === 0 && (
-              <p className="mt-1.5 text-[11.5px] text-[#7a7568]">
+              <p className="mt-1.5 text-[11.5px] text-faint">
                 {summarise(api.report.outcomes.map((o) => o.kind))}
               </p>
             )}
@@ -260,9 +260,9 @@ export function ProjectsPanel() {
           </p>
           <ul className="mt-2 space-y-2">
             {conflicts.map((c) => (
-              <li key={c.id} className="rounded border border-amber-200 bg-white px-2.5 py-2">
-                <p className="text-[12px] font-semibold text-[#0f1b2a]">{c.local.meta.name}</p>
-                <p className="text-[11px] text-[#7a7568]">
+              <li key={c.id} className="rounded border border-amber-200 bg-sheet px-2.5 py-2">
+                <p className="text-[12px] font-semibold text-ink">{c.local.meta.name}</p>
+                <p className="text-[11px] text-faint">
                   This browser: saved {when(c.local.meta.updatedAt)}, {c.local.model?.members.length ?? 0} members ·
                   {' '}Your account: saved {when(c.remote.updatedAt)}, {c.remote.project.model?.members.length ?? 0} members
                 </p>

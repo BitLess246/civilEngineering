@@ -53,10 +53,10 @@ export function PlanViewer({ sheets, index, onNavigate, onClose }: {
   // the white sheet hugs its drawing and the dark around it is truly backdrop.
   const vb = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(at.svg)
   const ratio = vb ? `${vb[1]} / ${vb[2]}` : undefined
-  const zone = 'absolute inset-y-0 z-10 flex w-14 items-center justify-center text-3xl text-white/70 transition hover:bg-white/10 hover:text-white disabled:pointer-events-none disabled:opacity-20 md:w-24 md:text-4xl'
+  const zone = 'absolute inset-y-0 z-10 flex w-14 items-center justify-center text-3xl text-white/70 transition hover:bg-sheet/10 hover:text-white disabled:pointer-events-none disabled:opacity-20 md:w-24 md:text-4xl'
 
   return (
-    <div className="fixed inset-0 z-[110] flex flex-col bg-[#0f1b2a]/[.92]"
+    <div className="fixed inset-0 z-[110] flex flex-col bg-rail/[.92]"
       onMouseDown={onClose} role="dialog" aria-modal="true" aria-label={`${s.title}, full screen`}>
 
       {/* Title bar: what sheet, which of how many, save it, leave. */}
@@ -71,11 +71,11 @@ export function PlanViewer({ sheets, index, onNavigate, onClose }: {
         <div className="flex shrink-0 items-center gap-2">
           <span className="text-[11px] tabular-nums text-white/50">{i + 1} / {count}</span>
           <button type="button" onClick={() => downloadSvg(`${s.key}.svg`, at.svg)}
-            className="rounded-md border border-white/20 px-2.5 py-1 text-[11px] font-medium text-white/80 hover:bg-white/10">
+            className="rounded-md border border-white/20 px-2.5 py-1 text-[11px] font-medium text-white/80 hover:bg-sheet/10">
             ↓ SVG
           </button>
           <button type="button" onClick={onClose} aria-label="Close full screen view"
-            className="rounded-md border border-white/20 px-2.5 py-1 text-[11px] font-medium text-white/80 hover:bg-white/10">
+            className="rounded-md border border-white/20 px-2.5 py-1 text-[11px] font-medium text-white/80 hover:bg-sheet/10">
             ✕ Close
           </button>
         </div>

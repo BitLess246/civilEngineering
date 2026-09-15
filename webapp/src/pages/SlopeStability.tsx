@@ -83,7 +83,7 @@ function SlopeSvg({ ground, res, water }: { ground: Pt[]; res: CircleResult | nu
     ? water.map((p, i) => `${i ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ') : ''
 
   return (
-    <svg viewBox={`0 0 ${W} ${Hpx}`} className="w-full rounded-lg border border-slate-200 bg-white" style={{ maxHeight: 340 }}>
+    <svg viewBox={`0 0 ${W} ${Hpx}`} className="w-full rounded-lg border border-slate-200 bg-sheet" style={{ maxHeight: 340 }}>
       <rect x={0} y={0} width={W} height={Hpx} fill="#fff" />
       {massPath && <path d={massPath} fill="#fca5a5" fillOpacity={0.28} stroke="none" />}
       {slicePts.map((d, i) => <path key={i} d={d} stroke="#94a3b8" strokeWidth={0.5} fill="none" />)}
@@ -208,9 +208,9 @@ export default function SlopeStability() {
         </div>
       </Card>
 
-      <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+      <section className="rail-card rounded-lg border border-hairline bg-sheet p-4">
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Critical circle</h2>
+          <h2 className="text-[13.5px] font-bold text-ink">Critical circle</h2>
           <label className="flex items-center gap-2 text-sm">
             <span className="text-slate-500">Governing method</span>
             <select value={method} onChange={(e) => setMethod(e.target.value as typeof method)}
@@ -271,8 +271,8 @@ export default function SlopeStability() {
       )}
 
       {/* ── Infinite slope — the OTHER failure mode ────────────────────── */}
-      <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
-        <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Infinite slope — planar failure</h2>
+      <section className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+        <h2 className="text-[13.5px] font-bold text-ink">Infinite slope — planar failure</h2>
         <p className="mb-3 text-[11px] text-slate-500">
           A shallow soil mantle sliding on a plane parallel to the ground — over rock, or a firm
           stratum. Uses the same c, φ, γ and slope angle β entered above.

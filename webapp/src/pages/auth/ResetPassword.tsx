@@ -35,7 +35,7 @@ export default function ResetPassword() {
 
   return (
     <AuthCard title="Choose a new password"
-      footer={<Link to="/forgot-password" className="font-medium text-[#0056b3] underline">Request a new link</Link>}>
+      footer={<Link to="/forgot-password" className="font-medium text-brand underline">Request a new link</Link>}>
       {!configured ? <NotConfigured /> : (
         <form onSubmit={submit} noValidate>
           {alert && <FormAlert tone="error">{alert}</FormAlert>}

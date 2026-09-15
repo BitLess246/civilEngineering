@@ -19,7 +19,7 @@ import page from '../pages/ModelSpace.tsx?raw'
 const GRID = 'grid grid-cols-1 gap-4 p-4 lg:h-[calc(100vh-6.5rem)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_380px]'
 
 /** The dark viewport panel inside it. */
-const VIEWPORT = 'relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a] lg:h-full lg:min-h-0'
+const VIEWPORT = 'relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-hairline bg-rail lg:h-full lg:min-h-0'
 
 describe('the model-space skeleton is the size of the hole it fills', () => {
   it('uses the page\'s own workspace grid, verbatim', () => {

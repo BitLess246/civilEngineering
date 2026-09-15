@@ -11,7 +11,7 @@ const KINDS: ChordKind[] = ['top', 'bottom', 'vertical', 'diagonal']
 const numCls = 'w-16 rounded border border-slate-300 px-1 py-0.5 text-right text-xs'
 const selCls = 'rounded border border-slate-300 px-1 py-0.5 text-xs'
 const delBtn = 'rounded px-1.5 text-red-500 hover:bg-red-50'
-const addBtn = 'mt-1 rounded-md border border-[#0056b3]/40 bg-[#0056b3]/5 px-2 py-0.5 text-xs font-semibold text-[#0056b3] hover:bg-[#0056b3]/10'
+const addBtn = 'mt-1 rounded-md border border-brand/40 bg-brand/5 px-2 py-0.5 text-xs font-semibold text-brand hover:bg-brand/10'
 
 export function TrussEditor({ model, onChange, onReset }: {
   model: TrussModel; onChange: (m: TrussModel) => void; onReset: () => void
@@ -50,9 +50,9 @@ export function TrussEditor({ model, onChange, onReset }: {
 
   return (
     <fieldset className="no-print rounded-xl border border-amber-300 bg-amber-50/40 p-4 shadow-sm">
-      <legend className="flex items-center gap-2 px-2 text-[1.02rem] font-bold text-[#0056b3]">
+      <legend className="flex items-center gap-2 px-2 text-[1.02rem] font-bold text-brand">
         ✎ Free-form editor
-        <button type="button" onClick={onReset} className="rounded-md border border-slate-300 bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">↺ Back to parametric</button>
+        <button type="button" onClick={onReset} className="rounded-md border border-slate-300 bg-sheet px-2 py-0.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">↺ Back to parametric</button>
       </legend>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

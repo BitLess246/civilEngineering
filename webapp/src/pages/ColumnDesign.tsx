@@ -280,9 +280,9 @@ export default function ColumnDesign() {
         <div className="space-y-5">
           <Card title="Column"
             hint={!eccentric && barMode === 'design' ? (
-              <label className="no-print flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[#5c6675]">
+              <label className="no-print flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-muted">
                 <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-[#0f4c92]" />
+                  className="h-3.5 w-3.5 accent-brand" />
                 Auto-select cage
               </label>
             ) : undefined}>
@@ -446,7 +446,7 @@ export default function ColumnDesign() {
           )}
 
           {eccentric && inter && (
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
               <InteractionDiagram r={inter} Pu={Pu} Mu={MuEff} />
             </div>
           )}
@@ -454,8 +454,8 @@ export default function ColumnDesign() {
       </div>
 
       {eccentric && inter && tableRows.length > 0 && (
-        <div className="mt-6 print-avoid-break rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="mb-3 text-[1.02rem] font-bold text-[#0056b3]">P–M Interaction Table — Design Envelope (φP<sub>n</sub>, φM<sub>n</sub>)</h2>
+        <div className="mt-6 print-avoid-break rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+          <h2 className="mb-3 text-[1.02rem] font-bold text-brand">P–M Interaction Table — Design Envelope (φP<sub>n</sub>, φM<sub>n</sub>)</h2>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-xs">
               <thead>

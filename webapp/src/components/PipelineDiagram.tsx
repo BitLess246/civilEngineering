@@ -47,31 +47,34 @@ export function PipelineDiagram({ className = '' }: { className?: string }) {
               x={x} y={14} width={BOX_W} height={BOX_H} rx={8}
               // The last box is the deliverable, so it is the filled one — the
               // eye should land on what you walk away with.
-              fill={last ? '#0f4c92' : '#ffffff'}
-              stroke={last ? '#0f4c92' : '#d6d3c9'}
+              // Tailwind fill-/stroke- utilities rather than hex attributes:
+              // an SVG presentation attribute cannot take `var()`, so a literal
+              // here is a colour no theme can reach — which is exactly how this
+              // diagram stayed white on the dark ground.
+              className={last ? 'fill-brand stroke-brand' : 'fill-sheet stroke-field-line'}
               strokeWidth={1.5}
             />
             <text
               x={x + BOX_W / 2} y={41}
               textAnchor="middle"
               fontSize={15} fontWeight={700}
-              fill={last ? '#ffffff' : '#0f1b2a'}
+              className={last ? 'fill-on-solid' : 'fill-ink'}
             >{s.top}</text>
             <text
               x={x + BOX_W / 2} y={60}
               textAnchor="middle"
               fontSize={12}
-              fill={last ? '#c7d8ef' : '#7a7568'}
+              className={last ? 'fill-brand-line' : 'fill-faint'}
             >{s.bot}</text>
 
             {/* Connector, drawn from THIS box to the next one. Sitting in the
                 gap rather than under the boxes means no overlap at any width. */}
             {!last && (
-              <g stroke="#c9c5ba" strokeWidth={1.5} fill="none">
+              <g className="stroke-field-line" strokeWidth={1.5} fill="none">
                 <line x1={x + BOX_W + 6} y1={47} x2={x + BOX_W + GAP - 12} y2={47} />
                 <path
                   d={`M ${x + BOX_W + GAP - 14} 42.5 L ${x + BOX_W + GAP - 6} 47 L ${x + BOX_W + GAP - 14} 51.5 Z`}
-                  fill="#c9c5ba" stroke="none"
+                  className="fill-field-line" stroke="none"
                 />
               </g>
             )}

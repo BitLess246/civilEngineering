@@ -119,9 +119,9 @@ export default function TorsionDesign() {
         {/* ── RESULTS ── */}
         {r ? (
           <div className="flex flex-col gap-6">
-            <section data-pdf-drawing className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm
+            <section data-pdf-drawing className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm
               [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
-              <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Section — torsion tube</h2>
+              <h2 className="mb-2 text-[1.02rem] font-bold text-brand">Section — torsion tube</h2>
               <TorsionSection b={f.b} h={f.h} x1={r.x1} y1={r.y1} barDia={f.barDia}
                 stirrupDia={f.stirrupDia} Aoh={r.Aoh} ph={r.ph} Ao={r.Ao} Al={r.Al_design}
                 stirrupNote={`closed ⌀${f.stirrupDia} @ ${Math.round(r.sAdopt)} mm`} />
@@ -188,7 +188,7 @@ export default function TorsionDesign() {
             </ResultCard>
           </div>
         ) : (
-          <p className="self-start rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-500">
+          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-slate-500">
             Fill in all inputs to see results.
           </p>
         )}

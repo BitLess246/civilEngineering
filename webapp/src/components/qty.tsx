@@ -22,17 +22,17 @@ export function Num({ label, unit, value, onChange, step = 'any', hint, disabled
 
   return (
     <label className={`flex flex-col text-sm ${disabled ? 'opacity-70' : ''}`}>
-      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
-      <span className={`flex overflow-hidden rounded-md border border-[#d6d3c9] ${
-        disabled ? 'bg-[#f2f0ea]' : 'bg-[#fcfbf8]'
-      } focus-within:border-[#0f4c92] focus-within:shadow-[0_0_0_3px_rgba(15,76,146,.14)]`}>
+      <span className="mb-1 text-[11.5px] font-semibold text-muted">{label}</span>
+      <span className={`flex overflow-hidden rounded-md border border-field-line ${
+        disabled ? 'bg-sheet-2' : 'bg-field'
+      } focus-within:border-brand focus-within:shadow-[0_0_0_3px_rgba(15,76,146,.14)]`}>
         <input type="number" inputMode="decimal" step={step} min={min} max={max}
           value={Number.isFinite(value) ? value : ''}
           disabled={disabled} onChange={(e) => onChange(clampTo(parseFloat(e.target.value), min, max))}
           className="min-w-0 flex-1 !rounded-none !border-0 !bg-transparent text-[13px] !shadow-none disabled:cursor-not-allowed" />
-        {unit && <span className="flex items-center border-l border-[#eeece5] bg-[#f7f6f1] px-2.5 font-mono text-[10.5px] text-[#a39d8d]">{unit}</span>}
+        {unit && <span className="flex items-center border-l border-hairline-2 bg-sheet-2 px-2.5 font-mono text-[10.5px] text-faint">{unit}</span>}
       </span>
-      {hint ? <span className="mt-0.5 text-[10px] text-[#a39d8d]">{hint}</span> : null}
+      {hint ? <span className="mt-0.5 text-[10px] text-faint">{hint}</span> : null}
     </label>
   )
 }
@@ -44,7 +44,7 @@ export function Pick<T extends string>({ label, value, onChange, options }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
+      <span className="mb-1 text-[11.5px] font-semibold text-muted">{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value as T)} className="text-[13px]">
         {options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
       </select>
@@ -75,11 +75,11 @@ export function Card({ title, hint, grid = true, children }: {
   children: ReactNode
 }) {
   return (
-    <section className="calc-card rail-card print-avoid-break rounded-lg border border-[#e3e1da] bg-white">
-      <div className="flex items-baseline gap-2.5 border-b border-[#eeece5] px-4 py-3">
-        <span aria-hidden className="calc-card-num font-mono text-[10.5px] font-semibold text-[#a39d8d]" />
-        <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
-        {hint && <span className="ml-auto text-[11px] text-[#a39d8d]">{hint}</span>}
+    <section className="calc-card rail-card print-avoid-break rounded-lg border border-hairline bg-sheet">
+      <div className="flex items-baseline gap-2.5 border-b border-hairline-2 px-4 py-3">
+        <span aria-hidden className="calc-card-num font-mono text-[10.5px] font-semibold text-faint" />
+        <h2 className="text-[13.5px] font-bold text-ink">{title}</h2>
+        {hint && <span className="ml-auto text-[11px] text-faint">{hint}</span>}
       </div>
       <div className={grid ? 'grid grid-cols-1 gap-3.5 p-4 sm:grid-cols-2 lg:grid-cols-3' : 'p-4'}>{children}</div>
     </section>
@@ -88,8 +88,8 @@ export function Card({ title, hint, grid = true, children }: {
 
 export function ResultCard({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
-    <div className="rail-card print-avoid-break rounded-lg border border-[#e3e1da] bg-white p-4">
-      <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
+    <div className="rail-card print-avoid-break rounded-lg border border-hairline bg-sheet p-4">
+      <h2 className="mb-2 text-[13.5px] font-bold text-ink">{title}</h2>
       {children}
     </div>
   )
@@ -100,13 +100,13 @@ export function Row({ label, value, sub, alert }: {
 }) {
   return (
     <div className={`flex items-baseline justify-between gap-3 border-b py-1.5 last:border-0 ${
-      alert ? 'border-[#efd4cc] bg-[#fbeeea] px-2 -mx-2 rounded' : 'border-[#f3f1ea]'}`}>
-      <span className={`text-[12px] ${alert ? 'text-[#8f2f1e]' : 'text-[#5c6675]'}`}>{label}</span>
-      <span className={`min-w-0 text-right font-mono text-[12.5px] font-semibold ${alert ? 'text-[#c2402a]' : 'text-[#0f1b2a]'}`}>{value}</span>
+      alert ? 'border-fail-line bg-fail-tint px-2 -mx-2 rounded' : 'border-hairline-2'}`}>
+      <span className={`text-[12px] ${alert ? 'text-fail' : 'text-muted'}`}>{label}</span>
+      <span className={`min-w-0 text-right font-mono text-[12.5px] font-semibold ${alert ? 'text-fail' : 'text-ink'}`}>{value}</span>
       {/* w-32 + truncate: the sub is secondary info (joined elevations, clause
           notes) — a long one must ellipsize, not push the row wide and shove
           the value out of the card. */}
-      {sub ? <span className={`w-32 shrink-0 truncate text-right text-[10.5px] ${alert ? 'text-[#c2402a]' : 'text-[#a39d8d]'}`}>{sub}</span> : null}
+      {sub ? <span className={`w-32 shrink-0 truncate text-right text-[10.5px] ${alert ? 'text-fail' : 'text-faint'}`}>{sub}</span> : null}
     </div>
   )
 }
@@ -117,8 +117,8 @@ export function QtyPage({ title, reportTitle, intro, children }: {
 }) {
   return (
     <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <h1 className="text-[21px] font-extrabold tracking-tight text-[#0f1b2a]">{title}</h1>
-      <p className="no-print mt-1 text-[13px] text-[#5c6675]">{intro}</p>
+      <h1 className="text-[21px] font-extrabold tracking-tight text-ink">{title}</h1>
+      <p className="no-print mt-1 text-[13px] text-muted">{intro}</p>
       <ReportControls title={reportTitle} />
       <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">{children}</div>
     </div>

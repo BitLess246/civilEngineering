@@ -90,7 +90,7 @@ export default function Validation() {
   return (
     <main className="mx-auto max-w-[1400px] px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Reference</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Validation</h1>
+      <h1 className="mt-1 text-2xl font-bold text-brand">Validation</h1>
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Each calculation engine is checked against an independent closed-form hand calculation from a
         textbook or the governing code clause. The <b>Software</b> column is produced by the same engine
@@ -99,7 +99,7 @@ export default function Validation() {
       </p>
 
       {/* Per-module pass-count summary */}
-      <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mt-5 rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-md px-3 py-1.5 text-sm font-bold ${allOK ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
             {allOK ? '✓' : '✗'} {passing}/{total} benchmarks passing
@@ -122,7 +122,7 @@ export default function Validation() {
         return (
           <section key={cat} className="mt-8">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">{cat}</h2>
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -145,7 +145,7 @@ export default function Validation() {
       {/* ── Solver-engine test coverage ── */}
       <section className="mt-10">
         <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Solver engine coverage</h2>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
           <p className="max-w-3xl text-xs text-slate-600">
             The benchmarks above pin a number against a hand calculation. The <b>solvers</b> — the modules that
             actually compute a structural response — are additionally covered by{' '}
@@ -176,7 +176,7 @@ export default function Validation() {
             if (!mods.length) return null
             return (
               <div key={g} className="mt-4">
-                <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#0f4c92]">{g}</p>
+                <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-brand">{g}</p>
                 <div className="rounded-lg border border-slate-200">
                   {mods.map((m) => <SolverModuleRow key={m.module} m={m} />)}
                 </div>
@@ -188,7 +188,7 @@ export default function Validation() {
 
       <p className="mt-8 text-[11px] text-slate-500">
         Codes: NSCP 2015 · ACI 318-14 · AISC 360. See the{' '}
-        <Link to="/docs" className="text-[#0056b3] underline">documentation</Link> for the full toolkit guide.
+        <Link to="/docs" className="text-brand underline">documentation</Link> for the full toolkit guide.
       </p>
     </main>
   )

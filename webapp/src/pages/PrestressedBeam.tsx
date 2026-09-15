@@ -102,7 +102,7 @@ export default function PrestressedBeam() {
           drawingTitle="Prestressed beam" />
       )}
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <p className="no-print text-[13px] text-[#5c6675]">
+        <p className="no-print text-[13px] text-muted">
           Pretensioned bonded beam: PCI losses
           (ES/CR/SH/RE), §24.5 transfer & service stress limits, fps per §20.3.2.3.1, φMn ≥ 1.2Mcr, Vci/Vcw, camber.
         </p>

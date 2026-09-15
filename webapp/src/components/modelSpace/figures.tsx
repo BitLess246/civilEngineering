@@ -38,7 +38,7 @@ export type { BeamRowSection, SectionRect, SectionRowDesign } from '../../lib/sc
 export function BeamServiceability({ r, id, L }: { r: MemberDeflectionResult; id: string; L: number }) {
   const serviceOK = r.liveOK && r.totalOK
   const cell = (label: string, value: string, sub?: string, alert?: boolean) => (
-    <div className={`rounded border px-2 py-1 ${alert ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
+    <div className={`rounded border px-2 py-1 ${alert ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-sheet'}`}>
       <div className="text-[9px] uppercase tracking-wide text-slate-500">{label}</div>
       <div className={`font-mono text-[11px] font-semibold ${alert ? 'text-red-700' : 'text-slate-800'}`}>{value}</div>
       {sub && <div className="text-[9px] text-slate-500">{sub}</div>}
@@ -46,10 +46,10 @@ export function BeamServiceability({ r, id, L }: { r: MemberDeflectionResult; id
   )
   return (
     <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/70 p-2">
-      <p className="mb-1.5 text-[11px] font-semibold text-[#0f4c92]">
+      <p className="mb-1.5 text-[11px] font-semibold text-brand">
         Serviceability — NSCP §424.2 computed deflection · {id} ({f2(L)} m, {r.support})
         <span className={`ml-2 rounded px-1.5 py-px font-mono text-[10px] ${
-          serviceOK ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>
+          serviceOK ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
           {serviceOK ? 'within limits' : 'exceeds limit'}
         </span>
       </p>
