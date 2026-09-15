@@ -24,7 +24,7 @@ const REQUIRED: (keyof FormState)[] = [
 
 function Status({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+    <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${ok ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
       {ok ? '✓' : '✗'} {label}
     </span>
   )

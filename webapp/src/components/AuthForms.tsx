@@ -32,9 +32,9 @@ export function TextField({ label, type = 'text', value, onChange, error, autoCo
         aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined}
         onChange={(e) => onChange(e.target.value)}
         className={`rounded-md border px-3 py-2 outline-none disabled:bg-slate-50 ${
-          error ? 'border-red-400 focus:border-red-500' : 'border-slate-300 focus:border-brand'}`}
+          error ? 'border-fail-line focus:border-fail-line' : 'border-slate-300 focus:border-brand'}`}
       />
-      {error && <span id={`${id}-err`} role="alert" className="mt-1 text-[12px] text-red-600">{error}</span>}
+      {error && <span id={`${id}-err`} role="alert" className="mt-1 text-[12px] text-fail">{error}</span>}
     </label>
   )
 }

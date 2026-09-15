@@ -176,10 +176,10 @@ function BaselinePicker({ project, activeId, onSelect, update }: {
 
   if (confirmDel) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded border border-red-200 bg-red-50 px-2 py-1">
-        <span className="text-[11.5px] text-red-900">Delete “{active.name}”? Delay figures measured against it go with it.</span>
+      <span className="inline-flex items-center gap-1.5 rounded border border-fail-line bg-fail-tint px-2 py-1">
+        <span className="text-[11.5px] text-fail">Delete “{active.name}”? Delay figures measured against it go with it.</span>
         <button type="button" onClick={remove}
-          className="rounded bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-red-700">Delete</button>
+          className="rounded bg-fail px-2 py-0.5 text-[11px] font-semibold text-on-solid hover:bg-fail-hover">Delete</button>
         <button type="button" onClick={() => setConfirmDel(false)} className={btn}>Keep</button>
       </span>
     )
@@ -193,7 +193,7 @@ function BaselinePicker({ project, activeId, onSelect, update }: {
       </select>
       <button type="button" onClick={startEdit} className={btn} title="Rename this baseline">Rename</button>
       <button type="button" onClick={() => setConfirmDel(true)}
-        className="rounded-md border border-red-200 px-2 py-1.5 text-[12px] font-semibold text-red-700 hover:bg-red-50"
+        className="rounded-md border border-fail-line px-2 py-1.5 text-[12px] font-semibold text-fail hover:bg-fail-tint"
         title="Delete this baseline">Delete</button>
     </span>
   )

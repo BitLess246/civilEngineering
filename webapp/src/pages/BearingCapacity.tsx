@@ -108,7 +108,7 @@ export default function BearingCapacity() {
 
         <div className="flex flex-col gap-5">
           {solved.error && (
-            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{solved.error}</p>
+            <p className="rounded-md border border-fail-line bg-fail-tint px-3 py-2 text-[12px] text-fail">{solved.error}</p>
           )}
           {r && (
             <>
@@ -144,8 +144,8 @@ export default function BearingCapacity() {
               )}
 
               {r.notes.length > 0 && (
-                <ul className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                  {r.notes.map((n, k) => <li key={k} className="text-[11px] text-amber-900">{n}</li>)}
+                <ul className="space-y-1 rounded-lg border border-warn-line bg-warn-tint p-3">
+                  {r.notes.map((n, k) => <li key={k} className="text-[11px] text-warn">{n}</li>)}
                 </ul>
               )}
             </>

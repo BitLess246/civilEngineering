@@ -39,7 +39,7 @@ function ItemShell({ title, onRemove, children }: {
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-wide text-muted">{title}</span>
-        <button type="button" onClick={onRemove} className="text-xs text-red-500 hover:underline">remove</button>
+        <button type="button" onClick={onRemove} className="text-xs text-fail hover:underline">remove</button>
       </div>
       {/* fields take only the width they need — no wide blank area on
           one-field cards like pin/roller */}
@@ -188,7 +188,7 @@ export default function BeamAnalysis() {
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
           <ResultCard title="Model">
             <BeamElevation L={L} supports={supports} loads={loads} />
-            {!stable && <p className="mt-1 text-sm text-red-600">⚠ Unstable — add at least 2 supports (or one Fixed).</p>}
+            {!stable && <p className="mt-1 text-sm text-fail">⚠ Unstable — add at least 2 supports (or one Fixed).</p>}
           </ResultCard>
 
           {res && (
@@ -208,7 +208,7 @@ export default function BeamAnalysis() {
                       <tr key={pc.combo.name}
                         onClick={() => pc.result && setSelIdx(i)}
                         className={`border-t border-slate-100 ${pc.result ? 'cursor-pointer hover:bg-blue-50' : 'text-slate-300'} ${
-                          i === res.govIdx ? 'bg-amber-50 font-semibold' : ''} ${i === shownIdx ? 'outline outline-1 outline-brand' : ''}`}>
+                          i === res.govIdx ? 'bg-warn-tint font-semibold' : ''} ${i === shownIdx ? 'outline outline-1 outline-brand' : ''}`}>
                         <td className="py-1 pr-2">{pc.combo.name}{i === res.govIdx ? ' ★' : ''}</td>
                         <td className="py-1 pr-2 text-right">{pc.result ? f1(pc.result.Vmax) : pc.skipped ? '—' : 'sing.'}</td>
                         <td className="py-1 pr-2 text-right">{pc.result ? f1(pc.result.Mmax) : '—'}</td>

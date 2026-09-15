@@ -88,12 +88,27 @@
 
   /* Status — each carries solid / tint / line */
   --t-ok: #14603a;
+  --t-ok-hover: #125735;
   --t-ok-tint: #ddefe3;
   --t-ok-line: #c2ddcb;
-  --t-warn: #8a6a1e;  /* was #b97d10 — 3.50:1, below AA */
+  --t-warn: #8a6a1e;
+  --t-warn-hover: #7e601b;  /* was #b97d10 — 3.50:1, below AA */
   --t-warn-tint: #fdf6e9;
   --t-warn-line: #ead9b0;
+  /* Hover shades for the three status roles. Buttons and chips carried
+     TWO stock steps — `bg-amber-600 hover:bg-amber-700`, `text-red-500
+     hover:text-red-700` — and one role cannot absorb two steps without
+     collapsing the hover onto its own rest value, which is the dead
+     hover #758 exists to prevent. Destructive buttons were the case
+     that surfaced it: `bg-red-600 ...
+     hover:bg-red-700` — stock colours that do not follow the theme. There
+     was no fail-hover to migrate them onto, and `bg-fail hover:bg-fail`
+     would be the dead hover #758 exists to prevent. Same direction as
+     brand-hover in each theme: darker on the light ones, LIGHTER on
+     Blueprint where lift reads as interactive. on-solid clears 4.5:1 on
+     the hovered fill as well as the resting one. */
   --t-fail: #c2402a;
+  --t-fail-hover: #b13a26;
   --t-fail-tint: #fbeeea;
   --t-fail-line: #eec6bc;
 }
@@ -137,12 +152,15 @@
 
   /* Status — each carries solid / tint / line */
   --t-ok: #14713f;
+  --t-ok-hover: #126639;
   --t-ok-tint: #e2f3e9;
   --t-ok-line: #c4e0cf;
   --t-warn: #8a5b0b;
+  --t-warn-hover: #7c520a;
   --t-warn-tint: #fdf4e3;
   --t-warn-line: #ecdcb4;
   --t-fail: #b03523;
+  --t-fail-hover: #a03020;
   --t-fail-tint: #fceeeb;
   --t-fail-line: #f0c8bf;
 }
@@ -186,12 +204,15 @@
 
   /* Status — each carries solid / tint / line */
   --t-ok: #5fd9a2;
+  --t-ok-hover: #8ce4bc;
   --t-ok-tint: #0f2b21;
   --t-ok-line: #1d4436;
   --t-warn: #f0c765;
+  --t-warn-hover: #f5d996;
   --t-warn-tint: #2b2312;
   --t-warn-line: #413418;
   --t-fail: #ff8d84;
+  --t-fail-hover: #ffa39b;
   --t-fail-tint: #2e1715;
   --t-fail-line: #4a2521;
 
@@ -324,12 +345,15 @@
 
   /* Status — each carries solid / tint / line */
   --t-ok: #0f6b3a;
+  --t-ok-hover: #0e6135;
   --t-ok-tint: #eaf4ee;
   --t-ok-line: #bcd3c3;
   --t-warn: #6b4e00;
+  --t-warn-hover: #604600;
   --t-warn-tint: #f7f1e2;
   --t-warn-line: #d6c9a6;
   --t-fail: #a21b12;
+  --t-fail-hover: #931910;
   --t-fail-tint: #f9ecea;
   --t-fail-line: #dcb9b4;
 }
@@ -373,12 +397,15 @@
 
   /* Status — each carries solid / tint / line */
   --t-ok: #3a6b4a;
+  --t-ok-hover: #356143;
   --t-ok-tint: #f0f4f1;
   --t-ok-line: #d2ded6;
   --t-warn: #7a6320;
+  --t-warn-hover: #6f5a1d;
   --t-warn-tint: #f6f3ea;
   --t-warn-line: #ded4bb;
   --t-fail: #93392f;
+  --t-fail-hover: #84332a;
   --t-fail-tint: #f7efee;
   --t-fail-line: #e0c8c3;
 }

@@ -10,18 +10,18 @@ import { Link } from 'react-router-dom'
 export function UpgradeNotice({ message, compact }: { message: string; compact?: boolean }) {
   if (compact) {
     return (
-      <p className="mt-1 text-[11.5px] leading-5 text-amber-800">
+      <p className="mt-1 text-[11.5px] leading-5 text-warn">
         🔒 {message}{' '}
         <Link to="/pricing" className="font-semibold underline">See plans</Link>
       </p>
     )
   }
   return (
-    <div className="col-span-full rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-      <p className="text-[13px] font-semibold text-amber-900">🔒 Not on your plan</p>
-      <p className="mt-1 text-[12.5px] leading-6 text-amber-900">{message}</p>
+    <div className="col-span-full rounded-lg border border-warn-line bg-warn-tint px-4 py-3">
+      <p className="text-[13px] font-semibold text-warn">🔒 Not on your plan</p>
+      <p className="mt-1 text-[12.5px] leading-6 text-warn">{message}</p>
       <Link to="/pricing"
-        className="mt-2 inline-block rounded-md bg-amber-600 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-amber-700">
+        className="mt-2 inline-block rounded-md bg-warn px-3 py-1.5 text-[12px] font-semibold text-on-solid hover:bg-warn-hover">
         Compare plans
       </Link>
     </div>

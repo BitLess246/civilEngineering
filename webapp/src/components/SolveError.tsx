@@ -12,10 +12,10 @@
  */
 export function SolveError({ message }: { message: string }) {
   return (
-    <div role="alert" className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2">
-      <p className="text-[11.5px] font-semibold text-red-800">The solver could not finish this run</p>
-      <p className="mt-0.5 font-mono text-[10.5px] leading-snug text-red-700">{message}</p>
-      <p className="mt-1 text-[10.5px] text-red-700/80">
+    <div role="alert" className="mt-2 rounded-md border border-fail-line bg-fail-tint px-3 py-2">
+      <p className="text-[11.5px] font-semibold text-fail">The solver could not finish this run</p>
+      <p className="mt-0.5 font-mono text-[10.5px] leading-snug text-fail">{message}</p>
+      <p className="mt-1 text-[10.5px] text-fail/80">
         The model is unchanged. Check the mesh warnings and the section properties, then run it again.
       </p>
     </div>

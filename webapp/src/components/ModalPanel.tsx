@@ -80,7 +80,7 @@ export function ModalPanel({ result, selectedMode, onSelectMode }: {
       </div>
 
       {(cumRatio[0] < 0.9 || cumRatio[2] < 0.9) && (
-        <p className="mt-2 text-[11px] text-amber-600">
+        <p className="mt-2 text-[11px] text-warn">
           ⚠ Cumulative lateral mass is below 90% (X {pct(cumRatio[0])}, Z {pct(cumRatio[2])}) — request more modes for a code-compliant response-spectrum base.
         </p>
       )}

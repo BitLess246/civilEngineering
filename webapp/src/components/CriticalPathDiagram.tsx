@@ -89,7 +89,7 @@ export function CriticalPathDiagram({ activities, cpm, critical, onEditDuration 
           const p = layout.pos.get(a.id)!
           const isCrit = critical.has(a.id)
           return (
-            <div key={a.id} className={`absolute rounded-md border-2 bg-sheet shadow-sm ${isCrit ? 'border-red-500' : 'border-slate-300'}`}
+            <div key={a.id} className={`absolute rounded-md border-2 bg-sheet shadow-sm ${isCrit ? 'border-fail-line' : 'border-slate-300'}`}
               style={{ left: p.x, top: p.y, width: BOX_W, height: BOX_H }} title={a.name}>
               <div className="grid h-[22px] grid-cols-3 divide-x divide-white overflow-hidden rounded-t">
                 {cell(c.es, 'bg-[#a5d76e] text-[#1e3a0f]')}
@@ -114,7 +114,7 @@ export function CriticalPathDiagram({ activities, cpm, critical, onEditDuration 
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-muted">
         <span><b>ES</b>·<b>DUR</b>·<b>EF</b> top, <b>LS</b>·<b>TF</b>·<b>LF</b> bottom</span>
-        <span className="text-red-600">red = critical path (TF = 0)</span>
+        <span className="text-fail">red = critical path (TF = 0)</span>
         <span>edit any <b>DUR</b> — the diagram, Gantt and table update together</span>
       </div>
     </div>

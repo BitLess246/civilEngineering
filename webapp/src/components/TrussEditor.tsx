@@ -49,7 +49,7 @@ export function TrussEditor({ model, onChange, onReset }: {
   )
 
   return (
-    <fieldset className="no-print rounded-xl border border-amber-300 bg-amber-50/40 p-4 shadow-sm">
+    <fieldset className="no-print rounded-xl border border-warn-line bg-warn-tint/40 p-4 shadow-sm">
       <legend className="flex items-center gap-2 px-2 text-[1.02rem] font-bold text-brand">
         ✎ Free-form editor
         <button type="button" onClick={onReset} className="rounded-md border border-slate-300 bg-sheet px-2 py-0.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">↺ Back to parametric</button>

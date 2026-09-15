@@ -231,12 +231,12 @@ export function ResponseSpectrumPanel({
               <td className="py-0.5 pr-4 text-right tabular-nums font-semibold text-slate-900">{f0(cqc[0])}</td>
               <td className="py-0.5 pr-4 text-right tabular-nums font-semibold text-slate-900">{f0(cqc[2])}</td>
               {staticV && (
-                <td className={`py-0.5 pr-4 text-right tabular-nums text-xs ${cqcRatio[0] !== null ? (cqcRatio[0]! < 0.9 ? 'text-red-600 font-semibold' : 'text-emerald-600') : 'text-muted'}`}>
+                <td className={`py-0.5 pr-4 text-right tabular-nums text-xs ${cqcRatio[0] !== null ? (cqcRatio[0]! < 0.9 ? 'text-fail font-semibold' : 'text-ok') : 'text-muted'}`}>
                   {cqcRatio[0] !== null ? pct(cqcRatio[0]!) : '—'}
                 </td>
               )}
               {staticV && (
-                <td className={`py-0.5 text-right tabular-nums text-xs ${cqcRatio[2] !== null ? (cqcRatio[2]! < 0.9 ? 'text-red-600 font-semibold' : 'text-emerald-600') : 'text-muted'}`}>
+                <td className={`py-0.5 text-right tabular-nums text-xs ${cqcRatio[2] !== null ? (cqcRatio[2]! < 0.9 ? 'text-fail font-semibold' : 'text-ok') : 'text-muted'}`}>
                   {cqcRatio[2] !== null ? pct(cqcRatio[2]!) : '—'}
                 </td>
               )}
@@ -256,7 +256,7 @@ export function ResponseSpectrumPanel({
 
       {/* §208.6.4.2 scaling warnings */}
       {(needsScale(0) || needsScale(2)) && (
-        <p className="mt-2 text-[11px] text-red-600">
+        <p className="mt-2 text-[11px] text-fail">
           ⚠ §208.6.4.2 — CQC base shear is below 90% of the static V
           {needsScale(0) && cqcRatio[0] !== null && ` (X: scale ×${f2(0.9 / cqcRatio[0]!)})`}
           {needsScale(2) && cqcRatio[2] !== null && ` (Z: scale ×${f2(0.9 / cqcRatio[2]!)})`}.

@@ -25,7 +25,7 @@ function Out({ label, value, ok }: { label: string; value: string; ok?: boolean 
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }

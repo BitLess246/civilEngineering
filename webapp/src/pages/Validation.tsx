@@ -25,7 +25,7 @@ function Row({ c }: { c: ValidationCase }) {
       <td className="py-2 pr-3 text-right font-mono">{fmt(c.software)}</td>
       <td className="py-2 pr-3 text-right text-muted">{c.unit}</td>
       <td className="py-2 pr-3 text-right font-mono">{d < 1e-9 ? '0' : d.toFixed(4)}%</td>
-      <td className={`py-2 text-right font-semibold ${ok ? 'text-emerald-600' : 'text-red-600'}`}>{ok ? '✓' : '✗'}</td>
+      <td className={`py-2 text-right font-semibold ${ok ? 'text-ok' : 'text-fail'}`}>{ok ? '✓' : '✗'}</td>
     </tr>
   )
 }
@@ -101,11 +101,11 @@ export default function Validation() {
       {/* Per-module pass-count summary */}
       <div className="mt-5 rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-md px-3 py-1.5 text-sm font-bold ${allOK ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+          <span className={`rounded-md px-3 py-1.5 text-sm font-bold ${allOK ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
             {allOK ? '✓' : '✗'} {passing}/{total} benchmarks passing
           </span>
           {perCat.map((g) => (
-            <span key={g.cat} className={`rounded-md px-2.5 py-1.5 text-xs font-medium ${g.ok === g.n ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            <span key={g.cat} className={`rounded-md px-2.5 py-1.5 text-xs font-medium ${g.ok === g.n ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
               {g.cat} {g.ok}/{g.n}
             </span>
           ))}

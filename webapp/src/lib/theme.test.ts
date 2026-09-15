@@ -81,8 +81,16 @@ const palettes = parseThemes(themesCss)
 describe('themes — every palette is legible, by measurement', () => {
   it('parses one block per registered theme', () => {
     // Guards the sweep below against passing vacuously on an empty parse.
+    //
+    // 33, not the original 30: `ok-hover`, `warn-hover` and `fail-hover` joined
+    // when the stock status colours were retired. A button carrying
+    // `bg-amber-600 hover:bg-amber-700` has TWO steps and one role cannot
+    // absorb both without collapsing the hover onto the rest. This count is
+    // deliberately exact — it is what catches a role added to one theme and
+    // forgotten in another, which is a hole the contrast sweep cannot see
+    // because it only measures the pairs it is given.
     expect(Object.keys(palettes).sort()).toEqual(THEMES.map((t) => t.id).slice().sort())
-    for (const id of Object.keys(palettes)) expect(Object.keys(palettes[id]).length).toBe(30)
+    for (const id of Object.keys(palettes)) expect(Object.keys(palettes[id]).length, id).toBe(33)
   })
 
   for (const { id, name } of THEMES) {

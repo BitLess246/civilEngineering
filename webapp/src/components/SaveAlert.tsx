@@ -26,14 +26,14 @@ export function SaveAlert({ message, onDismiss }: Props) {
   if (!message) return null
   return (
     <div role="alert"
-      className="no-print mb-3 flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
-      <span aria-hidden className="mt-px flex-none rounded bg-amber-200 px-1.5 py-px font-mono text-[9px] font-bold text-amber-900">
+      className="no-print mb-3 flex items-start gap-3 rounded-md border border-warn-line bg-warn-tint px-3 py-2">
+      <span aria-hidden className="mt-px flex-none rounded bg-warn-tint px-1.5 py-px font-mono text-[9px] font-bold text-warn">
         NOT SAVED
       </span>
-      <p className="flex-1 text-[12.5px] leading-5 text-amber-950">{message}</p>
+      <p className="flex-1 text-[12.5px] leading-5 text-warn">{message}</p>
       <button type="button" onClick={onDismiss}
         aria-label="Dismiss"
-        className="flex-none rounded px-1.5 text-[13px] font-semibold text-amber-900 hover:bg-amber-100">
+        className="flex-none rounded px-1.5 text-[13px] font-semibold text-warn hover:bg-warn-tint">
         ×
       </button>
     </div>

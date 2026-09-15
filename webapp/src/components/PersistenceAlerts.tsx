@@ -43,12 +43,12 @@ export function PersistenceAlerts({
       <SaveAlert message={saveError} onDismiss={clearSaveError} />
       {conflict && (
         <div role="alert"
-          className="no-print mb-3 rounded-md border border-red-300 bg-red-50 px-3 py-2.5">
+          className="no-print mb-3 rounded-md border border-fail-line bg-fail-tint px-3 py-2.5">
           <div className="flex items-start gap-3">
-            <span aria-hidden className="mt-px flex-none rounded bg-red-200 px-1.5 py-px font-mono text-[9px] font-bold text-red-900">
+            <span aria-hidden className="mt-px flex-none rounded bg-fail-tint px-1.5 py-px font-mono text-[9px] font-bold text-fail">
               NOT SAVED
             </span>
-            <p className="flex-1 text-[12.5px] leading-5 text-red-950">
+            <p className="flex-1 text-[12.5px] leading-5 text-fail">
               This schedule was changed in another tab
               {conflict.theirSavedAt ? ` at ${new Date(conflict.theirSavedAt).toLocaleTimeString()}` : ''}.
               Your change here is <strong>not being saved</strong>, because storing it
@@ -57,18 +57,18 @@ export function PersistenceAlerts({
           </div>
           <div className="mt-2 flex flex-wrap gap-2 pl-[68px]">
             <button type="button" onClick={reloadTheirs}
-              className="rounded-md border border-red-300 bg-sheet px-2.5 py-1 text-[11.5px] font-semibold text-red-800 hover:bg-red-100">
+              className="rounded-md border border-fail-line bg-sheet px-2.5 py-1 text-[11.5px] font-semibold text-fail hover:bg-fail-tint">
               Load their version
             </button>
             <button type="button" onClick={overwriteWithMine}
-              className="rounded-md bg-red-600 px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-red-700">
+              className="rounded-md bg-fail px-2.5 py-1 text-[11.5px] font-semibold text-on-solid hover:bg-fail-hover">
               Keep mine and overwrite
             </button>
           </div>
           {/* Say what each button costs BEFORE it is pressed. Neither is
               recoverable, and "Load their version" in particular throws away
               whatever the user just typed. */}
-          <p className="mt-1.5 pl-[68px] text-[11px] text-red-800">
+          <p className="mt-1.5 pl-[68px] text-[11px] text-fail">
             Loading theirs discards your change here. Overwriting discards
             theirs. Export first if you need both.
           </p>

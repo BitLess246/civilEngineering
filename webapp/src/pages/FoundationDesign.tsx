@@ -439,7 +439,7 @@ export default function FoundationDesign() {
               </thead>
               <tbody>
                 {batch.rows.map((r, i) => (
-                  <tr key={i} className={`border-t border-slate-100 ${r.ok ? '' : 'bg-red-50/60'}`}>
+                  <tr key={i} className={`border-t border-slate-100 ${r.ok ? '' : 'bg-fail-tint/60'}`}>
                     <td className="px-4 py-2 font-medium text-slate-700">{r.ok ? '✓' : '✗'} {r.label}</td>
                     <td className="px-4 py-2 text-slate-600">{r.type}</td>
                     <td className="px-4 py-2 text-slate-800">{r.size}</td>

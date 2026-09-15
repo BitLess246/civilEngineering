@@ -112,7 +112,7 @@ export function TrialGate({ children }: { children: ReactNode }) {
   return (
     <>
       {notice && (
-        <div className="no-print border-b border-amber-200 bg-amber-50 px-5 py-2 text-center text-[12.5px] text-amber-900">
+        <div className="no-print border-b border-warn-line bg-warn-tint px-5 py-2 text-center text-[12.5px] text-warn">
           {notice}{' '}
           <Link to="/signup" className="font-semibold underline">Create a free account</Link>
         </div>

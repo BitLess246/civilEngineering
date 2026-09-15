@@ -30,7 +30,7 @@ function Out({ label, value, ok, sub }: { label: string; value: string; ok?: boo
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
       <span className="text-muted">{label}{sub && <span className="ml-1 text-[11px] text-faint">{sub}</span>}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -219,7 +219,7 @@ export default function LateralPile() {
           )}
         </div>
         {head === 'fixed' && (
-          <p className="mt-2 text-[11px] text-amber-700">
+          <p className="mt-2 text-[11px] text-warn">
             A fixed head has no free rotation, so the load height e is not used by either method.
           </p>
         )}
