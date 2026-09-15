@@ -69,7 +69,14 @@
   /* Lines */
   --t-hairline: #e3e1da;
   --t-hairline-2: #eeece5;
-  --t-field-line: #d6d3c9;
+  /* WCAG 1.4.11 wants 3:1 for the visual information that identifies a UI
+     component, and the border of an input is exactly that. All five themes
+     were between 1.35 and 2.30:1 — the boundary of every field in the app was
+     hard to locate. Each line is solved along its OWN hue against the worst of
+     the three grounds a field sits on (paper, sheet, its own fill), so the
+     warm greys stay warm and Blueprint's stays blue. axe does not check 1.4.11,
+     which is why this survived a clean axe run; theme.test.ts does. */
+  --t-field-line: #8d8b85;
 
   /* Brand */
   --t-brand: #0f4c92;
@@ -118,7 +125,7 @@
   /* Lines */
   --t-hairline: #e4e2dc;
   --t-hairline-2: #efeeea;
-  --t-field-line: #d8d6d0;
+  --t-field-line: #91908c;
 
   /* Brand */
   --t-brand: #0b4a8f;
@@ -167,7 +174,7 @@
   /* Lines */
   --t-hairline: #24374d;
   --t-hairline-2: #1c2d42;
-  --t-field-line: #2f4463;
+  --t-field-line: #596a83;
 
   /* Brand */
   --t-brand: #7cb8ff;
@@ -305,7 +312,7 @@
   /* Lines */
   --t-hairline: #c9c9c9;
   --t-hairline-2: #e0e0e0;
-  --t-field-line: #a8a8a8;
+  --t-field-line: #919191;
 
   /* Brand */
   --t-brand: #00429b;
@@ -354,7 +361,7 @@
   /* Lines */
   --t-hairline: #e7e7e7;
   --t-hairline-2: #f1f1f1;
-  --t-field-line: #d8d8d8;
+  --t-field-line: #919191;
 
   /* Brand */
   --t-brand: #2b2b2b;  /* the action IS ink — minimal means no accent */
