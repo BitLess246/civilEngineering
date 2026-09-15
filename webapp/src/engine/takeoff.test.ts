@@ -315,3 +315,165 @@ describe('the pedestal is bought — once', () => {
     for (const c of bottom) expect(c.L).toBeGreaterThan(3 + 1e-6)
   })
 })
+
+// ── Phase 6b — the detail steel the BOM never counted ───────────────────────
+
+describe('detail steel — opening trimmers and wall curtains', () => {
+  /** The gravity fixture, plus a hole in the slab and a shear wall on a beam. */
+  function withDetails() {
+    const m = makeModel()
+    // 1.2 × 0.9 m opening, clear of every edge of the 6 × 5 panel.
+    m.plates[0].openings = [{ id: 'O1', kind: 'rect', x: 2.0, y: 1.5, w: 1.2, h: 0.9 }]
+    // Two shear walls on members that MEET at a node and are not collinear —
+    // a corner. A third on a collinear neighbour would be the same wall in two
+    // panels and must NOT be charged a corner bar.
+    const beams = m.members.filter((x) => x.role !== 'column')
+    const nodeAt = new Map(m.nodes.map((n) => [n.id, n]))
+    const dir = (mm: typeof beams[0]) => {
+      const a = nodeAt.get(mm.i)!, b = nodeAt.get(mm.j)!
+      const v = [b.x - a.x, b.y - a.y, b.z - a.z]
+      const L = Math.hypot(...v)
+      return v.map((c) => c / L)
+    }
+    const first = beams[0]
+    const perp = beams.find((b2) => {
+      if (b2.id === first.id) return false
+      if (![b2.i, b2.j].some((n) => n === first.i || n === first.j)) return false
+      const [p, q] = [dir(first), dir(b2)]
+      return Math.abs(p[0] * q[0] + p[1] * q[1] + p[2] * q[2]) < 0.99
+    })!
+    m.walls = [
+      { id: 'W1', member: first.id, height: 3, thickness: 200, shearWall: true },
+      { id: 'W2', member: perp.id, height: 3, thickness: 200, shearWall: true },
+    ]
+    const d = designStructure(m, soil)!
+    return { m, d, t: estimateTakeoff(m, d, { concreteClass: 'A' }) }
+  }
+  const { d, t } = withDetails()
+  const cut = (mark: string) => t.cutList.find((c) => c.mark === mark)
+
+  it('counts the trimmer bars the opening detail draws', () => {
+    // Not re-derived here: the take-off reads `slabOpeningBundles`, the same
+    // derivation buildSheetSet uses, so the bill and the drawing cannot
+    // disagree about which openings exist or what mat they interrupt.
+    const x = cut('Trimmer X (O1)'), y = cut('Trimmer Y (O1)')
+    expect(x, 'trimmer X missing from the cut list').toBeTruthy()
+    expect(y, 'trimmer Y missing from the cut list').toBeTruthy()
+
+    // `total` is 2 sides × 2 faces × eachSide (§408.5.4.2 replaces the
+    // interrupted bars top AND bottom), so it is divisible by four.
+    expect(x!.count % 4).toBe(0)
+    expect(y!.count % 4).toBe(0)
+
+    // One bar spans the opening plus ℓd beyond each face (§425.4.2), so the
+    // X bars — which cross the 1.2 m dimension — are exactly 0.3 m longer than
+    // the Y bars, which cross 0.9 m. The ℓd is the same for both, so the
+    // difference IS the difference in opening size.
+    expect(x!.cutLengthM - y!.cutLengthM).toBeCloseTo(1.2 - 0.9, 9)
+    expect(x!.cutLengthM).toBeGreaterThan(1.2)   // ℓd really is added
+  })
+
+  it('trims all four re-entrant corners, both faces', () => {
+    const diag = cut('Corner diagonal (O1)')
+    expect(diag).toBeTruthy()
+    // 4 corners × 2 faces × 1 bar (§424.3), and the bar is floored at 1 m.
+    expect(diag!.count).toBe(8)
+    expect(diag!.cutLengthM).toBeGreaterThanOrEqual(1)
+  })
+
+  it('puts the opening steel on the panel it is cast in', () => {
+    // An estimator looks for it under the slab, not in a category of its own.
+    const slab = t.byElement.find((e) => e.kind === 'Slab')!
+    const trimmerKg = t.cutList
+      .filter((c) => /Trimmer|diagonal/.test(c.mark))
+      .reduce((n, c) => n + c.weightKg, 0)
+    expect(trimmerKg).toBeGreaterThan(0)
+    expect(slab.steelKg).toBeGreaterThan(trimmerKg)   // mat + trimmers
+  })
+
+  it('counts the wall curtains, which read ZERO before', () => {
+    // `steelKg: 0` with the note "in-plane reinforcement in the schedule" was
+    // true of the schedule and false of the bill. A shear wall's curtains are
+    // the largest single item of reinforcement in a core.
+    const w = d.walls[0]
+    const row = t.byElement.find((e) => e.kind === 'Wall')!
+    expect(row.steelKg).toBeGreaterThan(0)
+
+    // Hand check, ⌊run/s⌋ + 1 — the bar at each end is real, so the count is
+    // not run/s. lw = 6 m, hw = 3 m, one curtain, s = 226.19 mm both ways:
+    //   horizontals step up the HEIGHT: ⌊3000/226.19⌋ + 1 = 13 + 1 = 14, each 6 m
+    //   verticals step along the LENGTH: ⌊6000/226.19⌋ + 1 = 26 + 1 = 27, each 3 m
+    const curtains = w.design.twoCurtains ? 2 : 1
+    const nH = (Math.floor((w.hw * 1000) / w.design.horiz.spacing) + 1) * curtains
+    const nV = (Math.floor((w.lw * 1000) / w.design.vert.spacing) + 1) * curtains
+    expect(cut('Horizontal curtain')!.count).toBe(nH)
+    expect(cut('Vertical curtain')!.count).toBe(nV)
+    // …and they run the dimension they span, not the one they step along.
+    expect(cut('Horizontal curtain')!.cutLengthM).toBeCloseTo(w.lw, 9)
+    expect(cut('Vertical curtain')!.cutLengthM).toBeCloseTo(w.hw, 9)
+    // Every horizontal crosses every vertical, per curtain.
+    expect(row.intersections).toBe(nH * nV / curtains)
+  })
+
+  it('turns the horizontal curtains round a real corner, and charges it once', () => {
+    // Ending the horizontals at the corner face is what OPENS the corner
+    // (#599), so each one continues round as an L with two Class B legs.
+    const corner = cut('Corner bar (L)')
+    expect(corner, 'no corner bar — is the junction geometry being derived?').toBeTruthy()
+
+    const w = d.walls.find((x) => x.id === 'W1')!
+    const curtains = w.design.twoCurtains ? 2 : 1
+    const perCorner = (Math.floor((w.hw * 1000) / w.design.horiz.spacing) + 1) * curtains
+    // ONE corner, shared by the two walls that meet there — so each wall is
+    // charged half. Counting it on both buys the corner twice.
+    expect(corner!.count).toBe(Math.round(perCorner / 2))
+    // Two legs, each a Class B lap on the bar it continues (§425.5.2).
+    expect(corner!.cutLengthM).toBeGreaterThan(0)
+    const rows = t.cutList.filter((c) => c.mark === 'Corner bar (L)')
+    expect(rows.length, 'both walls at the corner should carry their half').toBe(2)
+    expect(rows[0].count + rows[1].count).toBe(perCorner)
+  })
+
+  it('does not invent a corner where the walls run straight through', () => {
+    // A wall carried on two COLLINEAR members is one wall in two panels: the
+    // curtains run on and there is nothing to turn. The |cos| > 0.99 test is
+    // what separates that from a real junction.
+    // TWO bays, so collinear neighbours exist at all — the single-bay fixture
+    // has one beam per grid line and could never exercise this.
+    const m2 = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section })
+    m2.loads = buildGravityLoads(m2, 4.8, 2.4)
+    const beams = m2.members.filter((x) => x.role !== 'column')
+    const nodeAt = new Map(m2.nodes.map((n) => [n.id, n]))
+    const dir = (mm: typeof beams[0]) => {
+      const a = nodeAt.get(mm.i)!, b = nodeAt.get(mm.j)!
+      const v = [b.x - a.x, b.y - a.y, b.z - a.z]
+      const L = Math.hypot(...v)
+      return v.map((c) => c / L)
+    }
+    const first = beams[0]
+    const collinear = beams.find((b2) => {
+      if (b2.id === first.id) return false
+      if (![b2.i, b2.j].some((n) => n === first.i || n === first.j)) return false
+      const [p, q] = [dir(first), dir(b2)]
+      return Math.abs(p[0] * q[0] + p[1] * q[1] + p[2] * q[2]) > 0.99
+    })
+    // Not a soft skip: if this is undefined the test is asserting nothing, and
+    // an always-passing guard is worse than no guard.
+    expect(collinear, 'the two-bay grid must contain a collinear pair').toBeTruthy()
+    m2.walls = [
+      { id: 'A', member: first.id, height: 3, thickness: 200, shearWall: true },
+      { id: 'B', member: collinear!.id, height: 3, thickness: 200, shearWall: true },
+    ]
+    const t2 = estimateTakeoff(m2, designStructure(m2, soil)!, { concreteClass: 'A' })
+    expect(t2.cutList.filter((c) => c.mark === 'Corner bar (L)')).toEqual([])
+  })
+
+  it('carries the detail steel into the purchased totals', () => {
+    // The point of the phase: not a new report, a bigger number in the one
+    // that already exists.
+    const plain = estimateTakeoff(makeModel(), designStructure(makeModel(), soil)!, { concreteClass: 'A' })
+    expect(t.totalSteelNetKg).toBeGreaterThan(plain.totalSteelNetKg)
+    expect(t.totalSteelPurchasedKg).toBeGreaterThan(plain.totalSteelPurchasedKg)
+    expect(t.steelByDia.reduce((n, r) => n + r.weightKg, 0)).toBeCloseTo(t.totalSteelPurchasedKg, 6)
+  })
+})
