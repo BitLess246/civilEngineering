@@ -64,7 +64,7 @@ export default function LoadPath() {
           <Card title="Panel">
             <Num label="Side a" unit="m" value={a} onChange={setA} />
             <Num label="Side b" unit="m" value={b} onChange={setB} />
-            <p className="col-span-full text-xs text-slate-500">
+            <p className="col-span-full text-xs text-muted">
               ℓx = short span, ℓy = long span — assigned automatically.
             </p>
           </Card>
@@ -76,7 +76,7 @@ export default function LoadPath() {
               {areaLoads.map((l) => (
                 <div key={l.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{l.cat} load</span>
+                    <span className="text-xs font-bold uppercase tracking-wide text-muted">{l.cat} load</span>
                     <button type="button" onClick={() => setAreaLoads((ls) => ls.filter((q) => q.id !== l.id))}
                       className="text-xs text-red-500 hover:underline">remove</button>
                   </div>
@@ -98,7 +98,7 @@ export default function LoadPath() {
             {wallOn && <>
               <Num label="Thickness" unit="mm" value={wallT} onChange={setWallT} />
               <Num label="Height" unit="m" value={wallH} onChange={setWallH} />
-              <p className="col-span-full text-xs text-slate-500">
+              <p className="col-span-full text-xs text-muted">
                 w = t·h·24 = {f2(wWall)} kN/m (dead) — added to whichever edge you send to Beam Analysis.
               </p>
             </>}

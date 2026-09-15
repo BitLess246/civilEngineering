@@ -28,7 +28,7 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-muted">{label}</span>
       <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
     </div>
   )
@@ -47,7 +47,7 @@ function CheckCard({ title, sub, c }: {
           {c.ok ? 'PASS' : 'FAIL'} · {f2(c.ratio)}
         </span>
       </div>
-      <p className="mb-1 text-[11px] text-slate-500">{sub}</p>
+      <p className="mb-1 text-[11px] text-muted">{sub}</p>
       <Out label="Line load w" value={`${f2(c.w)} kN/m`} />
       <Out label="Moment M / Shear V" value={`${f3(c.M)} kN·m / ${f2(c.V)} kN`} />
       <Out label="Bending f_b / F′b" value={`${f2(c.fb)} / ${f2(c.FbPrime)} MPa`} ok={c.bendingRatio <= 1} />
@@ -220,8 +220,8 @@ export default function WoodSlab() {
           </div>
 
           <div className="mb-1 mt-5 flex items-baseline justify-between">
-            <h3 className="text-sm font-bold text-slate-700">Bill of materials <span className="font-normal text-slate-400">— wood-frame timber costing</span></h3>
-            <label className="no-print flex items-center gap-1 text-xs text-slate-500">
+            <h3 className="text-sm font-bold text-slate-700">Bill of materials <span className="font-normal text-faint">— wood-frame timber costing</span></h3>
+            <label className="no-print flex items-center gap-1 text-xs text-muted">
               ₱/bd·ft
               <input type="number" step="any" value={timberRate} onChange={(e) => setTimberRate(num(e.target.value, 55))}
                 className="w-16 rounded border border-slate-300 px-1.5 py-0.5 text-right font-mono" />
@@ -238,7 +238,7 @@ export default function WoodSlab() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 text-left text-slate-500">
+                    <tr className="border-b border-slate-200 text-left text-muted">
                       <th className="py-1 pr-3 font-medium">Item</th>
                       <th className="py-1 pr-3 text-right font-medium">Board feet</th>
                       <th className="py-1 text-right font-medium">Amount (₱)</th>
@@ -249,7 +249,7 @@ export default function WoodSlab() {
                       <tr key={k} className="border-b border-slate-100">
                         <td className="py-1 pr-3">
                           {row.item}
-                          <span className="ml-1 text-[11px] text-slate-400">
+                          <span className="ml-1 text-[11px] text-faint">
                             {k === 0
                               ? `${f0(sizes[0].count)} pc · ${f2(sizes[0].L)} m · ${f3(sizes[0].m3)} m³`
                               : `${f2(r.takeoff.deckAreaM2)} m² · ${f3(sizes[1].m3)} m³${r.takeoff.bambooSlatCount != null ? ` · ${f0(r.takeoff.bambooSlatCount)} slats` : ''}`}
@@ -269,7 +269,7 @@ export default function WoodSlab() {
               </div>
             )
           })()}
-          <p className="mt-2 text-[10px] text-slate-500">
+          <p className="mt-2 text-[10px] text-muted">
             Demands wL²/8 (simple) or wL²/10 (continuous ≥3 spans); deflection on the service modulus E′.
             Board feet = m³ × 423.776, priced with the same <code>costTimberRows</code> (₱/board-foot) as the
             wood-frame model bill of materials. Verify joist-to-support bearing, fastener schedule and

@@ -47,14 +47,14 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
           className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-br from-brand to-brand px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:shadow disabled:opacity-60">
           <UploadIcon />{busy ? 'Reading…' : 'Choose file'}
         </button>
-        <span className="text-[0.83rem] text-slate-500">{fileName}</span>
+        <span className="text-[0.83rem] text-muted">{fileName}</span>
 
         <button type="button" onClick={() => void downloadFoundationTemplate()}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-sheet px-3.5 py-2 text-sm font-semibold text-brand transition hover:border-brand hover:bg-blue-50">
           <DownloadIcon />Blank template
         </button>
 
-        <span className="ml-auto inline-flex items-center gap-2 text-[0.83rem] text-slate-500">
+        <span className="ml-auto inline-flex items-center gap-2 text-[0.83rem] text-muted">
           One row = one foundation.
           <button type="button" onClick={() => setShowHelp(true)}
             className="inline-flex items-center gap-1 font-semibold text-brand hover:underline">
@@ -72,7 +72,7 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
               <h3 className="text-base font-bold text-brand">Excel upload format</h3>
               <button type="button" onClick={() => setShowHelp(false)} aria-label="Close"
-                className="text-2xl leading-none text-slate-500 hover:text-slate-700">×</button>
+                className="text-2xl leading-none text-muted hover:text-slate-700">×</button>
             </div>
             <div className="px-5 py-4 text-sm text-slate-600">
               <p>
@@ -87,7 +87,7 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
               </p>
               <table className="mt-3 w-full border-collapse text-[0.82rem]">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-slate-500">
+                  <tr className="border-b border-slate-200 text-left text-muted">
                     <th className="py-1.5 pr-3 font-semibold">Header</th>
                     <th className="py-1.5 pr-3 font-semibold">Req</th>
                     <th className="py-1.5 font-semibold">Notes</th>
@@ -97,8 +97,8 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
                   {TEMPLATE_GUIDE.map((g) => (
                     <tr key={g.header} className="border-b border-slate-100 align-top">
                       <td className="py-1.5 pr-3 font-medium text-slate-700">{g.header}</td>
-                      <td className="py-1.5 pr-3 text-slate-500">{g.required ? '✓' : ''}</td>
-                      <td className="py-1.5 text-slate-500">{g.note}</td>
+                      <td className="py-1.5 pr-3 text-muted">{g.required ? '✓' : ''}</td>
+                      <td className="py-1.5 text-muted">{g.note}</td>
                     </tr>
                   ))}
                 </tbody>

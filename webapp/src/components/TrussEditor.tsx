@@ -58,10 +58,10 @@ export function TrussEditor({ model, onChange, onReset }: {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Nodes */}
         <div>
-          <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Nodes (m)</h4>
+          <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Nodes (m)</h4>
           <div className="max-h-48 overflow-y-auto pr-1">
             <table className="w-full text-xs">
-              <thead><tr className="text-left text-slate-500"><th className="pr-2">id</th><th className="pr-2">x</th><th className="pr-2">y</th><th /></tr></thead>
+              <thead><tr className="text-left text-muted"><th className="pr-2">id</th><th className="pr-2">x</th><th className="pr-2">y</th><th /></tr></thead>
               <tbody>
                 {model.nodes.map((n, i) => (
                   <tr key={n.id}>
@@ -79,10 +79,10 @@ export function TrussEditor({ model, onChange, onReset }: {
 
         {/* Members */}
         <div>
-          <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Members</h4>
+          <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Members</h4>
           <div className="max-h-48 overflow-y-auto pr-1">
             <table className="w-full text-xs">
-              <thead><tr className="text-left text-slate-500"><th className="pr-2">id</th><th className="pr-2">i</th><th className="pr-2">j</th><th className="pr-2">kind</th><th /></tr></thead>
+              <thead><tr className="text-left text-muted"><th className="pr-2">id</th><th className="pr-2">i</th><th className="pr-2">j</th><th className="pr-2">kind</th><th /></tr></thead>
               <tbody>
                 {model.members.map((m, i) => (
                   <tr key={m.id}>
@@ -105,9 +105,9 @@ export function TrussEditor({ model, onChange, onReset }: {
 
         {/* Supports */}
         <div>
-          <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Supports</h4>
+          <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Supports</h4>
           <table className="w-full text-xs">
-            <thead><tr className="text-left text-slate-500"><th className="pr-2">node</th><th className="pr-2">ux</th><th className="pr-2">uy</th><th /></tr></thead>
+            <thead><tr className="text-left text-muted"><th className="pr-2">node</th><th className="pr-2">ux</th><th className="pr-2">uy</th><th /></tr></thead>
             <tbody>
               {model.supports.map((s, i) => (
                 <tr key={i}>
@@ -124,9 +124,9 @@ export function TrussEditor({ model, onChange, onReset }: {
 
         {/* Loaded joints */}
         <div>
-          <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Loaded joints</h4>
+          <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Loaded joints</h4>
           <table className="w-full text-xs">
-            <thead><tr className="text-left text-slate-500"><th className="pr-2">node</th><th /></tr></thead>
+            <thead><tr className="text-left text-muted"><th className="pr-2">node</th><th /></tr></thead>
             <tbody>
               {model.loads.map((l, i) => (
                 <tr key={i}>
@@ -137,10 +137,10 @@ export function TrussEditor({ model, onChange, onReset }: {
             </tbody>
           </table>
           <button type="button" className={addBtn} onClick={addLoad}>+ loaded joint</button>
-          <p className="mt-1 text-[10px] text-slate-500">Magnitudes come from the Dead / Live joint-load fields above.</p>
+          <p className="mt-1 text-[10px] text-muted">Magnitudes come from the Dead / Live joint-load fields above.</p>
         </div>
       </div>
-      <p className="mt-2 text-[11px] text-slate-500">
+      <p className="mt-2 text-[11px] text-muted">
         Pin = both ux &amp; uy; roller = uy only. Keep the truss statically stable (m + r = 2j) — the analysis card flags an
         unstable layout. Switch back to parametric anytime; your edits are discarded.
       </p>

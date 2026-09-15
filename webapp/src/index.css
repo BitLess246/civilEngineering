@@ -130,11 +130,21 @@ select {
   padding: 0.5rem 0.75rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):focus,
-select:focus {
-  outline: none;
-  border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(15, 76, 146, 0.14);
+/* ONE focus affordance, app-wide. This used to set `outline: none` and replace
+   it with a border colour plus a 3px halo of `rgba(15,76,146,.14)` — which
+   composited to 1.25:1 against the field, i.e. invisible, and which any field
+   carrying `!border-0 !shadow-none` (the letterhead title block) removed
+   entirely, leaving a WCAG 2.4.7 failure on the input where an engineer types
+   their own name. It also outranked `:focus-visible`, so the themed ring below
+   never reached a single input in the app.
+
+   Now the ring is the affordance everywhere and the border shift is a second,
+   quieter cue. `:focus-visible` keeps it off mouse clicks. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--t-focus);
+  outline-offset: 2px;
+  border-color: var(--t-brand);
 }
 /* numeric entry reads like a title block */
 input[type="number"] { font-family: var(--font-mono); }

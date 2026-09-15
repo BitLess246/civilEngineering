@@ -21,13 +21,13 @@ export function SiteFooter() {
             <span className="text-[13px] font-extrabold tracking-[.14em] text-ink">{BRAND_MARK}</span>
             <span className="text-[8.5px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>
           </div>
-          <p className="mt-2 text-[12px] leading-5 text-slate-500">
+          <p className="mt-2 text-[12px] leading-5 text-muted">
             Structural and geotechnical calculation software to NSCP 2015, ACI 318-14 and AISC 360-16.
           </p>
         </div>
 
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Product</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Product</p>
           <ul className="mt-2 space-y-1 text-[12.5px]">
             <li><Link to="/pricing" className="text-slate-600 hover:text-brand">Plans and pricing</Link></li>
             <li><Link to="/docs" className="text-slate-600 hover:text-brand">Documentation</Link></li>
@@ -36,7 +36,7 @@ export function SiteFooter() {
         </div>
 
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Legal</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Legal</p>
           <ul className="mt-2 space-y-1 text-[12.5px]">
             <li><Link to="/terms" className="text-slate-600 hover:text-brand">Terms and Conditions</Link></li>
             <li><Link to="/privacy" className="text-slate-600 hover:text-brand">Privacy Policy</Link></li>
@@ -46,7 +46,7 @@ export function SiteFooter() {
         </div>
 
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Contact</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Contact</p>
           <address className="mt-2 space-y-0.5 text-[12.5px] not-italic leading-5 text-slate-600">
             {SITE.legalName.trim() && <div className="font-semibold text-slate-700">{SITE.legalName}</div>}
             {addr.map((l) => <div key={l}>{l}</div>)}
@@ -58,7 +58,7 @@ export function SiteFooter() {
       </div>
 
       <div className="border-t border-hairline-2">
-        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-4 gap-y-1 px-6 py-3 text-[11.5px] text-slate-500">
+        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-4 gap-y-1 px-6 py-3 text-[11.5px] text-muted">
           <span>© {new Date().getFullYear()} {businessName()}. All rights reserved.</span>
           <span className="hidden sm:inline">·</span>
           <span>Prices in Philippine pesos.</span>

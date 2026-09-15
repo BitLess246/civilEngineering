@@ -81,7 +81,7 @@ export function BiaxialPushoverPanel({ res }: { res: BiaxialPushoverResult }) {
             Most-utilised hinges — moments are about the member’s own local axes
           </p>
           <table className="w-full text-left text-xs">
-            <thead className="text-slate-500">
+            <thead className="text-muted">
               <tr className="border-b border-slate-200">
                 <th className="py-1 pr-2">Member</th>
                 <th className="py-1 pr-2">End</th>
@@ -96,11 +96,11 @@ export function BiaxialPushoverPanel({ res }: { res: BiaxialPushoverResult }) {
               {s.worst.map((h) => (
                 <tr key={`${h.member}-${h.end}`} className="border-b border-slate-100 last:border-0">
                   <td className="py-1 pr-2">{h.member}</td>
-                  <td className="py-1 pr-2 text-slate-500">{h.end}</td>
+                  <td className="py-1 pr-2 text-muted">{h.end}</td>
                   <td className="py-1 pr-2">{h.My.toFixed(1)}</td>
                   <td className="py-1 pr-2">{h.Mz.toFixed(1)}</td>
-                  <td className="py-1 pr-2 text-slate-500">{h.axial.toFixed(1)}</td>
-                  <td className="py-1 pr-2 text-slate-500">
+                  <td className="py-1 pr-2 text-muted">{h.axial.toFixed(1)}</td>
+                  <td className="py-1 pr-2 text-muted">
                     {(Math.hypot(h.plasticY, h.plasticZ) * 1000).toFixed(2)}
                   </td>
                   <td className={`py-1 pr-2 font-semibold ${h.yielded ? 'text-red-600' : 'text-slate-700'}`}>

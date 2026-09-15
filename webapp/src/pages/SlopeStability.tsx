@@ -31,7 +31,7 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-muted">{label}</span>
       <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
     </div>
   )
@@ -212,7 +212,7 @@ export default function SlopeStability() {
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-[13.5px] font-bold text-ink">Critical circle</h2>
           <label className="flex items-center gap-2 text-sm">
-            <span className="text-slate-500">Governing method</span>
+            <span className="text-muted">Governing method</span>
             <select value={method} onChange={(e) => setMethod(e.target.value as typeof method)}
               className="rounded-md border border-slate-300 px-2 py-1">
               <option value="bishop">Bishop simplified</option>
@@ -229,13 +229,13 @@ export default function SlopeStability() {
             <Out label="Critical circle (xc, yc, R)" value={`(${f2(crit.circle.xc)}, ${f2(crit.circle.yc)}, ${f2(crit.circle.R)}) m`} />
             <Out label="Janbu correction f₀ · slices" value={`${f2(crit.f0)} · ${crit.slices.length}`} />
             <Out label="Σ driving / Σ resisting (Bishop)" value={`${f0(crit.bishop.driving)} / ${f0(crit.bishop.resisting)} kN·m/m`} />
-            <p className="mt-2 text-[11px] text-slate-500">
+            <p className="mt-2 text-[11px] text-muted">
               FS &lt; 1.5 (static) is generally inadequate for a permanent slope; check the target FS for your load
               case. Search covers a centre/radius grid — refine the geometry for site-specific circles.
             </p>
           </div>
         ) : (
-          <p className="mt-3 rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400">
+          <p className="mt-3 rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-faint">
             No valid slip circle found for this geometry — check the slope height, angle and plateau widths.
           </p>
         )}
@@ -245,7 +245,7 @@ export default function SlopeStability() {
         <ResultCard title="Slices (critical circle)">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-[12px]">
-              <thead className="text-slate-500">
+              <thead className="text-muted">
                 <tr className="border-b border-slate-200">
                   <th className="py-1 pr-3 text-left">#</th><th className="py-1 pr-3">x (m)</th><th className="py-1 pr-3">b (m)</th>
                   <th className="py-1 pr-3">h (m)</th><th className="py-1 pr-3">α (°)</th><th className="py-1 pr-3">W (kN/m)</th><th className="py-1 pr-3">u (kPa)</th>
@@ -263,7 +263,7 @@ export default function SlopeStability() {
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-[10px] text-slate-500">
+          <p className="mt-2 text-[10px] text-muted">
             Bishop: FS = Σ[(c·b + (W − u·b)·tanφ)/mα] / Σ[W·sinα], mα = cosα + sinα·tanφ/FS (iterated).
             Fellenius drops the inter-slice terms; Janbu uses force equilibrium × f₀.
           </p>
@@ -273,7 +273,7 @@ export default function SlopeStability() {
       {/* ── Infinite slope — the OTHER failure mode ────────────────────── */}
       <section className="rail-card rounded-lg border border-hairline bg-sheet p-4">
         <h2 className="text-[13.5px] font-bold text-ink">Infinite slope — planar failure</h2>
-        <p className="mb-3 text-[11px] text-slate-500">
+        <p className="mb-3 text-[11px] text-muted">
           A shallow soil mantle sliding on a plane parallel to the ground — over rock, or a firm
           stratum. Uses the same c, φ, γ and slope angle β entered above.
         </p>
@@ -298,7 +298,7 @@ export default function SlopeStability() {
           <span>Seepage parallel to the slope (water table at the surface)</span>
         </label>
         <div className="mt-3 flex items-baseline justify-between border-t border-slate-100 pt-2">
-          <span className="text-sm text-slate-500">Factor of safety</span>
+          <span className="text-sm text-muted">Factor of safety</span>
           <span className={`font-mono text-lg font-bold ${infFS >= 1.5 ? 'text-green-700' : infFS >= 1 ? 'text-amber-700' : 'text-red-700'}`}>
             {Number.isFinite(infFS) ? infFS.toFixed(2) : '—'}
             <span className="ml-2 text-[11px] font-normal">

@@ -38,7 +38,7 @@ function ItemShell({ title, onRemove, children }: {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{title}</span>
+        <span className="text-xs font-bold uppercase tracking-wide text-muted">{title}</span>
         <button type="button" onClick={onRemove} className="text-xs text-red-500 hover:underline">remove</button>
       </div>
       {/* fields take only the width they need — no wide blank area on
@@ -134,7 +134,7 @@ export default function BeamAnalysis() {
               ))}
             </div>
             <div className="space-y-3">
-              {supports.length === 0 && <p className="text-sm text-slate-500">No supports — add at least 2 (or a single Fixed).</p>}
+              {supports.length === 0 && <p className="text-sm text-muted">No supports — add at least 2 (or a single Fixed).</p>}
               {supports.map((s) => (
                 <ItemShell key={s.id} title={s.type} onRemove={() => setSupports((ss) => ss.filter((q) => q.id !== s.id))}>
                   <Num label="x" unit="m" value={s.x} onChange={(v) => setSup(s.id, { x: v })} />
@@ -156,7 +156,7 @@ export default function BeamAnalysis() {
               ))}
             </div>
             <div className="space-y-3">
-              {loads.length === 0 && <p className="text-sm text-slate-500">No loads yet.</p>}
+              {loads.length === 0 && <p className="text-sm text-muted">No loads yet.</p>}
               {loads.map((ld) => (
                 <ItemShell key={ld.id} title={ld.type.toUpperCase()} onRemove={() => setLoads((ls) => ls.filter((q) => q.id !== ld.id))}>
                   {ld.type === 'point' && <>
@@ -196,7 +196,7 @@ export default function BeamAnalysis() {
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-xs">
                   <thead>
-                    <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <tr className="text-left uppercase tracking-wide text-muted">
                       <th className="py-1 pr-2 font-semibold">Combination</th>
                       <th className="py-1 pr-2 text-right font-semibold">Vmax</th>
                       <th className="py-1 pr-2 text-right font-semibold">Mmax</th>
@@ -218,7 +218,7 @@ export default function BeamAnalysis() {
                   </tbody>
                 </table>
               </div>
-              <p className="mt-1 text-[11px] text-slate-500">★ governing (largest |M|). Click a row to view its reactions & diagrams.</p>
+              <p className="mt-1 text-[11px] text-muted">★ governing (largest |M|). Click a row to view its reactions & diagrams.</p>
             </ResultCard>
           )}
 
@@ -271,14 +271,14 @@ export default function BeamAnalysis() {
       {res?.tmt && (
         <div className="rail-card mt-6 rounded-lg border border-hairline bg-sheet p-4 print-avoid-break">
           <h2 className="mb-2 text-[1.02rem] font-bold text-brand">
-            Three-moment theorem check <span className="text-xs font-normal text-slate-500">Clapeyron — governing combo, interior support moments</span>
+            Three-moment theorem check <span className="text-xs font-normal text-muted">Clapeyron — governing combo, interior support moments</span>
           </h2>
           {res.tmt.positions.map((x, i) => (
             <Row key={i} label={`Support @ x = ${f2(x)} m`}
               value={`M = ${f2(res.tmt!.supportMoments[i])} kN·m`}
               sub={`R = ${f2(res.tmt!.reactions[i])} kN`} />
           ))}
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-muted">
             M₍ᵢ₋₁₎Lᵢ + 2Mᵢ(Lᵢ+Lᵢ₊₁) + Mᵢ₊₁Lᵢ₊₁ = −6(Q/L)ᵢ − 6(Q/L)ᵢ₊₁ — end moments 0, interior solved from the
             tri-diagonal system. Compare with the FEM reactions above as an independent hand-method check.
           </p>

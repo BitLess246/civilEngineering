@@ -52,7 +52,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
     [base, durOverride, depOverride])
   const solved = useMemo(() => (activities.length ? solveModelSchedule(activities) : null), [activities])
 
-  if (!base || !solved) return <p className="text-sm text-slate-500">Add members to the model to generate a construction schedule.</p>
+  if (!base || !solved) return <p className="text-sm text-muted">Add members to the model to generate a construction schedule.</p>
 
   const cpm = solved.cpm.activities
   const span = Math.max(1, solved.cpm.duration)
@@ -97,7 +97,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
     <div className="mt-6 space-y-4 break-before-page">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-xl font-extrabold tracking-tight text-brand">Construction schedule — CPM / PERT</h2>
-        <span className="flex items-center gap-3 text-sm text-slate-500">
+        <span className="flex items-center gap-3 text-sm text-muted">
           <span>auto-derived from the model · {base.frame} frame</span>
           {edited && <button type="button" onClick={resetAll}
             className="no-print rounded border border-slate-300 px-2 py-0.5 text-xs font-semibold text-brand hover:bg-blue-50">↺ reset edits</button>}
@@ -115,14 +115,14 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
           ['Activities', `${activities.length} · ${solved.criticalPath.length} critical`],
         ].map(([k, v]) => (
           <div key={k} className="rounded-lg border border-slate-200 bg-sheet p-3">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{k}</p>
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{k}</p>
             <p className="mt-0.5 font-mono text-[15px] font-bold text-ink">{v}</p>
           </div>
         ))}
       </div>
 
       {/* Editable critical-path (Activity-on-Node) diagram */}
-      <h3 className="text-[1.02rem] font-bold text-brand">Critical-path diagram <span className="font-normal text-slate-400">— editable</span></h3>
+      <h3 className="text-[1.02rem] font-bold text-brand">Critical-path diagram <span className="font-normal text-faint">— editable</span></h3>
       <CriticalPathDiagram activities={activities} cpm={cpm} critical={crit} onEditDuration={setDuration} />
 
       {/* Mini-Gantt on the working-day axis */}
@@ -142,12 +142,12 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
                     background: isCrit ? '#c2402a' : TRADE_COLOR[a.trade], opacity: isCrit ? 0.95 : 0.8,
                   }} title={`${a.name}: day ${fmtDay(c.es)}–${fmtDay(c.ef)}`} />
                 </div>
-                <span className="w-14 shrink-0 text-right font-mono text-slate-500">{fmtDay(c.es)}–{fmtDay(c.ef)}</span>
+                <span className="w-14 shrink-0 text-right font-mono text-muted">{fmtDay(c.es)}–{fmtDay(c.ef)}</span>
               </div>
             )
           })}
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">Red = critical path (zero float). Bars run early-start → early-finish; overlaps show parallel work.</p>
+        <p className="mt-2 text-[11px] text-muted">Red = critical path (zero float). Bars run early-start → early-finish; overlaps show parallel work.</p>
       </div>
 
       {/* Activity table — editable duration */}
@@ -156,7 +156,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
         {depErr && <p className="no-print mb-2 rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700">{depErr}</p>}
         <table className="w-full border-collapse text-xs">
           <thead>
-            <tr className="text-left uppercase tracking-wide text-slate-500">
+            <tr className="text-left uppercase tracking-wide text-muted">
               <th className="py-1 pr-2 font-semibold">ID</th>
               <th className="py-1 pr-2 font-semibold">Activity</th>
               <th className="py-1 pr-2 font-semibold">Quantity</th>
@@ -178,7 +178,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
                 <tr key={a.id} className={`border-t border-slate-100 ${isCrit ? 'bg-red-50/60' : ''}`}>
                   <td className="py-1 pr-2 font-semibold">{a.id}</td>
                   <td className="py-1 pr-2 font-sans text-slate-700">{a.name}</td>
-                  <td className="py-1 pr-2 text-slate-500">{a.quantity} {a.unit}</td>
+                  <td className="py-1 pr-2 text-muted">{a.quantity} {a.unit}</td>
                   <td className="py-1 pr-2 align-top">
                     <div className="flex flex-col gap-0.5">
                       {a.predecessors.map((l) => (
@@ -196,7 +196,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
                         </div>
                       ))}
                       <select value="" onChange={(e) => { if (e.target.value) addLink(a.id, e.target.value) }}
-                        className="no-print w-24 rounded border border-dashed border-slate-300 px-0.5 py-px text-[10px] text-slate-500">
+                        className="no-print w-24 rounded border border-dashed border-slate-300 px-0.5 py-px text-[10px] text-muted">
                         <option value="">+ add…</option>
                         {activities.filter((x) => x.id !== a.id && !a.predecessors.some((l) => l.id === x.id)).map((x) => <option key={x.id} value={x.id}>{x.id}</option>)}
                       </select>
@@ -212,13 +212,13 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
                   <td className="py-1 pr-2 text-right">{fmtDay(c.ls)}</td>
                   <td className="py-1 pr-2 text-right">{fmtDay(c.lf)}</td>
                   <td className="py-1 pr-2 text-right">{fmtDay(c.totalFloat)}</td>
-                  <td className={`py-1 font-semibold ${isCrit ? 'text-red-600' : 'text-slate-400'}`}>{isCrit ? '● yes' : 'no'}</td>
+                  <td className={`py-1 font-semibold ${isCrit ? 'text-red-600' : 'text-faint'}`}>{isCrit ? '● yes' : 'no'}</td>
                 </tr>
               )
             })}
           </tbody>
         </table>
-        <p className="mt-2 text-[11px] text-slate-500">
+        <p className="mt-2 text-[11px] text-muted">
           Durations start from crew-productivity rates on the model quantities; edit any <b>Dur</b> (here or on the
           diagram), or add/remove <b>predecessors</b> and change their <b>relation (FS/SS/FF/SF)</b> and <b>lag</b> to
           re-solve the network. ES/EF/LS/LF/float come from the same CPM solve the Schedule module runs, so this

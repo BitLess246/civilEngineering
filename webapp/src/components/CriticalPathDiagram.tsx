@@ -112,7 +112,7 @@ export function CriticalPathDiagram({ activities, cpm, critical, onEditDuration 
           )
         })}
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-slate-500">
+      <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-muted">
         <span><b>ES</b>·<b>DUR</b>·<b>EF</b> top, <b>LS</b>·<b>TF</b>·<b>LF</b> bottom</span>
         <span className="text-red-600">red = critical path (TF = 0)</span>
         <span>edit any <b>DUR</b> — the diagram, Gantt and table update together</span>

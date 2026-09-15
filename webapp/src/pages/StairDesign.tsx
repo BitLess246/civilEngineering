@@ -31,7 +31,7 @@ function Field({ label, value, onChange, unit, step = 'any', min, max }: {
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-muted">{label}</span>
       <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
     </div>
   )
@@ -87,7 +87,7 @@ export default function StairDesign() {
   return (
         <div>
       <PageHeader title="RC stair flight — waist slab" badges={['NSCP 2015', 'ACI 318-14']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
+      <div className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Stair Design" badges={['NSCP 2015', 'ACI 318-14']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         One-way waist-slab stair to NSCP 2015 / ACI 318-14. Self-weight of the inclined waist plus
@@ -138,7 +138,7 @@ export default function StairDesign() {
         <Out label="Main bars" value={`⌀${barDia} @ ${f0(r.mainSpacing)} mm`} />
         <Out label="Distribution steel" value={`${f0(r.AsDist)} mm²/m — ⌀10 @ ${f0(r.distSpacing)} mm`} />
         <Out label="Min. waist (ℓ/20…ℓ/28)" value={`${f0(r.tMin)} mm`} ok={r.tMinOK} />
-        <p className="mt-2 text-[10px] text-slate-500">
+        <p className="mt-2 text-[10px] text-muted">
           Mu = wu·ℓ²/k (k = 8/9/11 by support). Distribution steel 0.0018·b·t (§424.4.3.2); spacing capped
           at min(3t, 450). Verify the landing and support detailing separately.
         </p>
@@ -148,7 +148,7 @@ export default function StairDesign() {
       <div className="mt-5">
         <WorkedSolution steps={solution} title="Calculation report — worked solution" />
       </div>
-    </main>
+    </div>
     </div>
   )
 }

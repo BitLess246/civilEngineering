@@ -39,9 +39,9 @@ export function BeamServiceability({ r, id, L }: { r: MemberDeflectionResult; id
   const serviceOK = r.liveOK && r.totalOK
   const cell = (label: string, value: string, sub?: string, alert?: boolean) => (
     <div className={`rounded border px-2 py-1 ${alert ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-sheet'}`}>
-      <div className="text-[9px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="text-[9px] uppercase tracking-wide text-muted">{label}</div>
       <div className={`font-mono text-[11px] font-semibold ${alert ? 'text-red-700' : 'text-slate-800'}`}>{value}</div>
-      {sub && <div className="text-[9px] text-slate-500">{sub}</div>}
+      {sub && <div className="text-[9px] text-muted">{sub}</div>}
     </div>
   )
   return (
@@ -64,7 +64,7 @@ export function BeamServiceability({ r, id, L }: { r: MemberDeflectionResult; id
         {cell('peak at', `${f2(r.xMax)} m`, 'from the i-end')}
         {cell('h min (Table 409.3.1.1)', `${f0(r.hMin)} mm`, r.hMinOK ? 'satisfied — deflections need not be computed' : 'not satisfied — computed check governs', !r.hMinOK && !serviceOK)}
       </div>
-      <p className="mt-1 text-[10px] text-slate-500">
+      <p className="mt-1 text-[10px] text-muted">
         Ie from Branson (§424.2.3.5) at the peak service D+L moment; δ obtained by integrating this member's own
         moment diagram (M/EcIe, twice) with the model's end restraint, not an assumed uniform load. Total = λΔ·δD + δL
         (§424.2.2). §409.3.1.1 permits skipping the calculation when h ≥ hMin, so the member passes on either route.

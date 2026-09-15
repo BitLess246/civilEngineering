@@ -80,7 +80,7 @@ export function PushoverPanel({ res, dirLabel }: { res: PushoverModelResult; dir
       {nHinges > 0 && (
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="text-slate-500">
+            <thead className="text-muted">
               <tr className="border-b border-slate-200">
                 <th className="py-1 pr-2">Event</th>
                 <th className="py-1 pr-2">V (kN)</th>
@@ -98,11 +98,11 @@ export function PushoverPanel({ res, dirLabel }: { res: PushoverModelResult; dir
                   <td className="py-1 pr-2">{p.event}</td>
                   <td className="py-1 pr-2 font-semibold">{Math.abs(p.baseShear).toFixed(1)}</td>
                   <td className="py-1 pr-2">{(Math.abs(p.roofDisp) * 1000).toFixed(1)}</td>
-                  <td className="py-1 pr-2 text-slate-500">
+                  <td className="py-1 pr-2 text-muted">
                     {p.newHinge ? hingeLabel(p.newHinge) : '—'}
                   </td>
-                  {res.pmInteraction && <td className="py-1 pr-2 text-slate-500">{h?.axial !== undefined ? h.axial.toFixed(1) : '—'}</td>}
-                  {res.pmInteraction && <td className="py-1 pr-2 text-slate-500">{h?.Mpc !== undefined ? h.Mpc.toFixed(1) : '—'}</td>}
+                  {res.pmInteraction && <td className="py-1 pr-2 text-muted">{h?.axial !== undefined ? h.axial.toFixed(1) : '—'}</td>}
+                  {res.pmInteraction && <td className="py-1 pr-2 text-muted">{h?.Mpc !== undefined ? h.Mpc.toFixed(1) : '—'}</td>}
                 </tr>
                 )
               })}

@@ -60,6 +60,6 @@ describe('the shell keeps the footer at the bottom', () => {
     expect(shell).toContain('flex min-w-0 flex-1 flex-col')
     // The classes are the contract; an inline style alongside them (the embed
     // preview's pointer lock) does not touch it.
-    expect(shell).toMatch(/<main className="min-h-0 flex-1"[^>]*>/)
+    expect(shell).toMatch(/<main id="content" className="min-h-0 flex-1"[^>]*>/)
   })
 })

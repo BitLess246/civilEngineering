@@ -19,7 +19,7 @@ function Choice<T extends string | number>({ value, set, options }: {
           className={`rounded-lg border px-3 py-2 text-left text-sm transition ${value === o.v
             ? 'border-brand bg-blue-50 font-semibold text-brand'
             : 'border-slate-200 bg-sheet text-slate-700 hover:border-slate-300'}`}>
-          {o.label}{o.sub ? <span className="block text-[11px] font-normal text-slate-500">{o.sub}</span> : null}
+          {o.label}{o.sub ? <span className="block text-[11px] font-normal text-muted">{o.sub}</span> : null}
         </button>
       ))}
     </div>
@@ -73,7 +73,7 @@ export default function SeismicWizard() {
         {steps.map((s, i) => (
           <button key={s.key} type="button" onClick={() => setStep(i)}
             className={`rounded-full px-3 py-1 text-[11px] font-medium ${i === step
-              ? 'bg-brand text-on-solid' : i < step ? 'bg-blue-100 text-brand' : 'bg-slate-100 text-slate-500'}`}>
+              ? 'bg-brand text-on-solid' : i < step ? 'bg-blue-100 text-brand' : 'bg-slate-100 text-muted'}`}>
             {i + 1}. {s.label}
           </button>
         ))}
@@ -115,7 +115,7 @@ export default function SeismicWizard() {
                 onChange={(e) => setDistance(parseFloat(e.target.value) || 0)}
                 className="w-40 rounded-md border border-slate-300 px-2.5 py-1.5" />
             </label>
-            <p className="mt-2 text-[11px] text-slate-500">Na = {f3(params.Na)}, Nv = {f3(params.Nv)}</p>
+            <p className="mt-2 text-[11px] text-muted">Na = {f3(params.Na)}, Nv = {f3(params.Nv)}</p>
           </>
         )}
         {cur.key === 'occupancy' && (
@@ -164,7 +164,7 @@ export default function SeismicWizard() {
           {[['Z', params.Z], ['Na', params.Na], ['Nv', params.Nv], ['Ca', params.Ca],
             ['Cv', params.Cv], ['I', params.I], ['R', params.R], ['T (s)', T]].map(([k, v]) => (
             <div key={k as string} className="flex justify-between border-b border-slate-100 py-1">
-              <span className="text-slate-500">{k}</span><span className="font-mono font-medium">{f3(v as number)}</span>
+              <span className="text-muted">{k}</span><span className="font-mono font-medium">{f3(v as number)}</span>
             </div>
           ))}
         </div>
@@ -173,12 +173,12 @@ export default function SeismicWizard() {
             <span className="text-sm font-semibold text-brand">Design base-shear coefficient Cs = V/W</span>
             <span className="font-mono text-lg font-bold text-brand">{f3(cs.Cs)}</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-500">
+          <p className="mt-1 text-[11px] text-muted">
             Governing: <b>{cs.governs}</b> · basic {f3(cs.Csraw)} · cap 2.5Ca·I/R {f3(cs.Csmax)} ·
             floor 0.11Ca·I {f3(cs.Csmin)}{params.Z >= 0.4 ? ` · Zone-4 0.8Z·Nv·I/R ${f3(cs.Cszone4)}` : ''}
           </p>
         </div>
-        <p className="mt-2 text-[10px] text-slate-500">
+        <p className="mt-2 text-[10px] text-muted">
           V = Cs·W (§208.5.2.1). Feed Ca, Cv, I, R into the 3D model space seismic generator for the
           full storey-force distribution. Verify the soil profile with a geotechnical investigation.
         </p>

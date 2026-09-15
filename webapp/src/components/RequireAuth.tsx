@@ -37,7 +37,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (!configured) return <>{children}</>
   if (loading) {
     return (
-      <div className="mx-auto max-w-md px-5 py-20 text-center text-sm text-slate-500">Checking your session…</div>
+      <div className="mx-auto max-w-md px-5 py-20 text-center text-sm text-muted">Checking your session…</div>
     )
   }
   const verdict = access(loc.pathname)

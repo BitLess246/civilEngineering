@@ -1959,8 +1959,8 @@ export default function ModelSpace() {
             {model && selInfo && (
               <div className="no-print absolute left-3 top-12 flex items-center gap-2 rounded-md border border-brand/30 bg-sheet/95 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
                 <span className="font-semibold text-brand">▣ {selInfo.kind} {selInfo.id}</span>
-                {selInfo.extra && <span className="text-slate-500">{selInfo.extra}</span>}
-                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-slate-500 hover:text-red-500" title="Deselect">✕</button>
+                {selInfo.extra && <span className="text-muted">{selInfo.extra}</span>}
+                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-muted hover:text-red-500" title="Deselect">✕</button>
               </div>
             )}
             {model && (
@@ -2035,7 +2035,7 @@ export default function ModelSpace() {
                         sub={`G: ${f2(k.Gi.x)} (i) · ${f2(k.Gj.x)} (j)`} />
                       <Row label="K — Z-sway" value={`sway ${f2(k.Kz.sway)} · braced ${f2(k.Kz.braced)}`}
                         sub={`G: ${f2(k.Gi.z)} (i) · ${f2(k.Gj.z)} (j)`} />
-                      <p className="mt-1 text-[10px] text-slate-500">
+                      <p className="mt-1 text-[10px] text-muted">
                         G = Σ(EI/L)<sub>col</sub> / Σ(EI/L)<sub>beam</sub> at each joint; fixed base G = 1.0, pinned/no-beam G = 10.
                       </p>
                     </div>
@@ -2046,7 +2046,7 @@ export default function ModelSpace() {
                     <button type="button" onClick={() => { save(removeElements(model, new Set([selMember.id]))); setSelected(null) }}
                       className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700">Delete member — confirm</button>
                     <button type="button" onClick={() => setArmDelete(null)}
-                      className="text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+                      className="text-sm font-semibold text-muted hover:text-slate-700">Cancel</button>
                   </div>
                 ) : (
                   <button type="button" onClick={() => setArmDelete(selMember.id)}
@@ -2071,7 +2071,7 @@ export default function ModelSpace() {
                     <button type="button" onClick={() => { save(removeElements(model, new Set([selPlate.id]))); setSelected(null) }}
                       className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700">Delete slab — confirm</button>
                     <button type="button" onClick={() => setArmDelete(null)}
-                      className="text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+                      className="text-sm font-semibold text-muted hover:text-slate-700">Cancel</button>
                   </div>
                 ) : (
                   <button type="button" onClick={() => setArmDelete(selPlate.id)}
@@ -2125,7 +2125,7 @@ export default function ModelSpace() {
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
                       <thead>
-                        <tr className="text-left uppercase tracking-wide text-slate-500">
+                        <tr className="text-left uppercase tracking-wide text-muted">
                           <th className="py-1 pr-2 font-semibold">Id</th>
                           <th className="py-1 pr-1 font-semibold">x</th>
                           <th className="py-1 pr-1 font-semibold">y</th>
@@ -2158,7 +2158,7 @@ export default function ModelSpace() {
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500">Coordinates in m (y = up). Removing a node also removes everything attached to it.</p>
+                  <p className="mt-1 text-[11px] text-muted">Coordinates in m (y = up). Removing a node also removes everything attached to it.</p>
                 </Sec>
               )}
 
@@ -2167,7 +2167,7 @@ export default function ModelSpace() {
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
                       <thead>
-                        <tr className="text-left uppercase tracking-wide text-slate-500">
+                        <tr className="text-left uppercase tracking-wide text-muted">
                           <th className="py-1 pr-2 font-semibold">Id</th>
                           <th className="py-1 pr-1 font-semibold">Role</th>
                           <th className="py-1 pr-1 font-semibold">b</th>
@@ -2212,7 +2212,7 @@ export default function ModelSpace() {
                                   </select>
                                 </td>
                               ))}
-                              <td className={`py-0.5 pr-1 tabular-nums ${trimmed ? 'font-semibold text-violet-700' : 'text-slate-500'}`}
+                              <td className={`py-0.5 pr-1 tabular-nums ${trimmed ? 'font-semibold text-violet-700' : 'text-muted'}`}
                                 title={trimmed ? `full ${Lfull.toFixed(2)} m` : 'no rigid end zone'}>
                                 {Lc.toFixed(2)}
                               </td>
@@ -2236,7 +2236,7 @@ export default function ModelSpace() {
                       <option value="">node i…</option>
                       {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
                     </select>
-                    <span className="text-slate-500">→</span>
+                    <span className="text-muted">→</span>
                     <select value={newJ} onChange={(e) => setNewJ(e.target.value)} className="max-w-[5.5rem] rounded border border-slate-200 px-1 py-0.5">
                       <option value="">node j…</option>
                       {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
@@ -2267,7 +2267,7 @@ export default function ModelSpace() {
                         <p className="mb-1.5 font-semibold text-amber-800">End releases — {sel.id}</p>
                         <table className="w-full border-collapse">
                           <thead>
-                            <tr className="text-left text-[10px] uppercase tracking-wide text-slate-500">
+                            <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
                               <th className="pr-2">End</th>
                               {dofs.map((d) => <th key={d} className="pr-1 text-center">{d}</th>)}
                             </tr>
@@ -2287,7 +2287,7 @@ export default function ModelSpace() {
                             ))}
                           </tbody>
                         </table>
-                        <p className="mt-1 text-[10px] text-slate-500">Check to release (zero force/moment). Mz = in-plane bending; My = out-of-plane. Click a member row to select.</p>
+                        <p className="mt-1 text-[10px] text-muted">Check to release (zero force/moment). Mz = in-plane bending; My = out-of-plane. Click a member row to select.</p>
                       </div>
                     )
                   })()}
@@ -2311,7 +2311,7 @@ export default function ModelSpace() {
                         <p className="mb-1.5 font-semibold text-violet-800">Rigid end offsets (m) — {sel.id}</p>
                         <table className="w-full border-collapse">
                           <thead>
-                            <tr className="text-left text-[10px] uppercase tracking-wide text-slate-500">
+                            <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
                               <th className="pr-2">End</th>
                               {axes.map((a) => <th key={a} className="pr-1 text-center">{a}</th>)}
                             </tr>
@@ -2331,7 +2331,7 @@ export default function ModelSpace() {
                             ))}
                           </tbody>
                         </table>
-                        <p className="mt-1 text-[10px] text-slate-500">Vector node→member-end (global m). The flexible member spans end→end; node↔end is a rigid arm (purple).</p>
+                        <p className="mt-1 text-[10px] text-muted">Vector node→member-end (global m). The flexible member spans end→end; node↔end is a rigid arm (purple).</p>
                         <label className="mt-2 flex items-center gap-2 border-t border-violet-200 pt-2 text-[11px] text-slate-700">
                           <span>Auto rigid-zone factor override</span>
                           <input type="number" min={0} max={1} step={0.1}
@@ -2341,7 +2341,7 @@ export default function ModelSpace() {
                               updMember(sel.id, { rigidZoneFactor: Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : undefined })
                             }}
                             className="w-16 rounded border border-violet-200 px-1 py-0.5 text-right" />
-                          <span className="text-[10px] text-slate-500">blank = model factor · 0 = no zone for this member (needs Auto rigid end zones on)</span>
+                          <span className="text-[10px] text-muted">blank = model factor · 0 = no zone for this member (needs Auto rigid end zones on)</span>
                         </label>
                         <label className="mt-2 flex items-center gap-2 border-t border-violet-200 pt-2 text-[11px] text-slate-700">
                           <span>Local axis rotation θ (°)</span>
@@ -2352,7 +2352,7 @@ export default function ModelSpace() {
                               updMember(sel.id, { axisRotation: Number.isFinite(v) ? v : undefined })
                             }}
                             className="w-16 rounded border border-violet-200 px-1 py-0.5 text-right" />
-                          <span className="text-[10px] text-slate-500">Local-axis angle about the member axis. Blank = default (vertical members 90° — depth d on global X); orients section stiffness, rigid zones and the drawn shape.</span>
+                          <span className="text-[10px] text-muted">Local-axis angle about the member axis. Blank = default (vertical members 90° — depth d on global X); orients section stiffness, rigid zones and the drawn shape.</span>
                         </label>
                         {(sel.role === 'beam' || sel.role === 'girder') && (
                           <label className="mt-2 flex items-center gap-2 border-t border-violet-200 pt-2 text-[11px] text-slate-700">
@@ -2364,7 +2364,7 @@ export default function ModelSpace() {
                                 updMember(sel.id, { Lb: Number.isFinite(v) && v > 0 ? v : undefined })
                               }}
                               className="w-16 rounded border border-violet-200 px-1 py-0.5 text-right" />
-                            <span className="text-[10px] text-slate-500">§F2 LTB brace spacing — blank = full member length (conservative)</span>
+                            <span className="text-[10px] text-muted">§F2 LTB brace spacing — blank = full member length (conservative)</span>
                           </label>
                         )}
                         <label className="mt-2 flex flex-wrap items-center gap-2 border-t border-violet-200 pt-2 text-[11px] text-slate-700">
@@ -2379,7 +2379,7 @@ export default function ModelSpace() {
                             <option value="tension-only">Tension-only (cross-brace, tie)</option>
                             <option value="compression-only">Compression-only (strut, bearing)</option>
                           </select>
-                          <span className="block text-[10px] text-slate-500">
+                          <span className="block text-[10px] text-muted">
                             Limited members are solved by an active-set iteration: one that violates its
                             mode is switched off and the model re-solved. This breaks superposition, so
                             every NSCP combination gets its OWN active set (the shared-factorization fast
@@ -2407,7 +2407,7 @@ export default function ModelSpace() {
                               </label>
                             ))}
                           </div>
-                          <span className="mt-1 block text-[10px] text-slate-500">Simple = shear-only pin (releases My, Mz — the connection hinge); Moment = rigid; drives both analysis and steel connection design.</span>
+                          <span className="mt-1 block text-[10px] text-muted">Simple = shear-only pin (releases My, Mz — the connection hinge); Moment = rigid; drives both analysis and steel connection design.</span>
                         </div>
                       </div>
                     )
@@ -2419,12 +2419,12 @@ export default function ModelSpace() {
               {model && (
                 <Sec grid={false} title="Slabs / plates">
                   {model.plates.filter((p) => p.role !== 'wall').length === 0 ? (
-                    <p className="text-xs text-slate-500">No slabs — generate a grid or add members forming closed panels.</p>
+                    <p className="text-xs text-muted">No slabs — generate a grid or add members forming closed panels.</p>
                   ) : (
                     <div className="max-h-60 overflow-auto">
                       <table className="w-full border-collapse text-xs">
                         <thead>
-                          <tr className="text-left uppercase tracking-wide text-slate-500">
+                          <tr className="text-left uppercase tracking-wide text-muted">
                             <th className="py-1 pr-2 font-semibold">Slab</th>
                             <th className="py-1 pr-2 font-semibold">Corners</th>
                             <th className="py-1 pr-1 font-semibold">t (mm)</th>
@@ -2435,7 +2435,7 @@ export default function ModelSpace() {
                           {model.plates.filter((p) => p.role !== 'wall').map((p) => (
                             <tr key={p.id} className={`border-t border-slate-100 ${p.id === selected ? 'bg-amber-50' : ''}`}>
                               <td className="py-0.5 pr-2 font-medium cursor-pointer" onClick={() => setSelected(p.id)}>{p.id}</td>
-                              <td className="py-0.5 pr-2 text-slate-500">{p.corners.join(', ')}</td>
+                              <td className="py-0.5 pr-2 text-muted">{p.corners.join(', ')}</td>
                               <td className="py-0.5 pr-1">
                                 <input type="number" step="10" value={p.thickness}
                                   onChange={(e) => updPlateThickness(p.id, parseFloat(e.target.value))}
@@ -2451,7 +2451,7 @@ export default function ModelSpace() {
                       </table>
                     </div>
                   )}
-                  <p className="mt-1 text-[11px] text-slate-500">Thickness drives slab self-weight (t·γc) → tributary line loads on the edge beams.</p>
+                  <p className="mt-1 text-[11px] text-muted">Thickness drives slab self-weight (t·γc) → tributary line loads on the edge beams.</p>
                 </Sec>
               )}
 
@@ -2462,7 +2462,7 @@ export default function ModelSpace() {
                     <div className="mb-2 max-h-48 overflow-auto">
                       <table className="w-full border-collapse text-xs">
                         <thead>
-                          <tr className="text-left uppercase tracking-wide text-slate-500">
+                          <tr className="text-left uppercase tracking-wide text-muted">
                             <th className="py-1 pr-2 font-semibold">On</th>
                             <th className="py-1 pr-1 font-semibold">h (m)</th>
                             <th className="py-1 pr-1 font-semibold">t (mm)</th>
@@ -2507,7 +2507,7 @@ export default function ModelSpace() {
                       )
                     })()}
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500">A wall adds its self-weight (t·h·γc) as a line load on the chosen beam. A “shear wall” also braces the storey below it — modelled as an equivalent X of diagonal struts (shear + flexure stiffness) so it carries seismic/wind in the analysis.</p>
+                  <p className="mt-1 text-[11px] text-muted">A wall adds its self-weight (t·h·γc) as a line load on the chosen beam. A “shear wall” also braces the storey below it — modelled as an equivalent X of diagonal struts (shear + flexure stiffness) so it carries seismic/wind in the analysis.</p>
 
                 </Sec>
 
@@ -2516,7 +2516,7 @@ export default function ModelSpace() {
                     <div className="mb-2 max-h-48 overflow-auto">
                       <table className="w-full border-collapse text-xs">
                         <thead>
-                          <tr className="text-left uppercase tracking-wide text-slate-500">
+                          <tr className="text-left uppercase tracking-wide text-muted">
                             <th className="py-1 pr-2 font-semibold">From → to</th>
                             <th className="py-1 pr-1 font-semibold">R / G</th>
                             <th className="py-1 pr-1 font-semibold">θ</th>
@@ -2538,7 +2538,7 @@ export default function ModelSpace() {
                                 </td>
                                 <td className="py-0.5 pr-1">{p ? `${p.thetaDeg.toFixed(1)}°` : '—'}</td>
                                 <td className="py-0.5 pr-1">{f1(st.width)}</td>
-                                <td className="py-0.5 pr-1 text-slate-500">
+                                <td className="py-0.5 pr-1 text-muted">
                                   {(st.landings ?? []).length
                                     ? (st.landings ?? []).map((l) => `${f1(l.depth)}${l.at === 'low' ? '↓' : '↑'}`).join(' ')
                                     : '—'}
@@ -2594,7 +2594,7 @@ export default function ModelSpace() {
                             + Add stair
                           </button>
                           {trial && (
-                            <span className="text-[11px] text-slate-500">
+                            <span className="text-[11px] text-muted">
                               → R {trial.R.toFixed(0)} · G {trial.G.toFixed(0)} · θ {trial.thetaDeg.toFixed(1)}° · run {trial.run.toFixed(2)} m
                               {trial.landings.length > 0 && ` (${trial.flightRun.toFixed(2)} of it sloping)`}
                             </span>
@@ -2603,7 +2603,7 @@ export default function ModelSpace() {
                       )
                     })()}
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500">A flight is placed by the two beams it bears on: the rise and run come from where they are, and R = rise/risers, G = run/risers, so the risers are equal by construction. A <strong>half-landing</strong> at either end is part of the same one-way slab, so it eats into the run and the flight climbs the same rise over what is left — and the beam at that end is the <strong>landing beam</strong> the stair breaks on. Between floors that is two flights meeting on a beam at mid height, with the landing given to ONE of them: modelled on both, the same slab is in the frame twice. Its weight reaches the frame as reactions on those two beams — the flight itself is NOT meshed, so it adds no stiffness. That is conservative for the frame and not for the stair, which in reality braces the storey it climbs.</p>
+                  <p className="mt-1 text-[11px] text-muted">A flight is placed by the two beams it bears on: the rise and run come from where they are, and R = rise/risers, G = run/risers, so the risers are equal by construction. A <strong>half-landing</strong> at either end is part of the same one-way slab, so it eats into the run and the flight climbs the same rise over what is left — and the beam at that end is the <strong>landing beam</strong> the stair breaks on. Between floors that is two flights meeting on a beam at mid height, with the landing given to ONE of them: modelled on both, the same slab is in the frame twice. Its weight reaches the frame as reactions on those two beams — the flight itself is NOT meshed, so it adds no stiffness. That is conservative for the frame and not for the stair, which in reality braces the storey it climbs.</p>
                 </Sec>
               </>)}
             </div>
@@ -2619,7 +2619,7 @@ export default function ModelSpace() {
                   if (model) generate(next)          // auto-regenerate grid with new frame material
                 }}
                   options={[['concrete', 'Reinforced concrete'], ['steel', 'Structural steel (AISC W)'], ['wood', 'Timber (wood frame)']]} />
-                <p className="col-span-full -mt-1 text-[11px] text-slate-500">
+                <p className="col-span-full -mt-1 text-[11px] text-muted">
                   {material === 'steel'
                     ? 'Members become AISC W-shapes designed to AISC 360-16 LRFD (§F flexure, §G shear, §E/§H1 columns); base plates per §J8. Slabs/footings stay reinforced concrete.'
                     : material === 'wood'
@@ -2644,7 +2644,7 @@ export default function ModelSpace() {
                   <Num label="Steel Fy" unit="MPa" value={steelFy} onChange={setSteelFy} step="5" />
                   <Num label="Steel Fu" unit="MPa" value={steelFu} onChange={setSteelFu} step="5" />
                   <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
-                  <p className="col-span-full text-[11px] text-slate-500">
+                  <p className="col-span-full text-[11px] text-muted">
                     All AISC families (W/C/L/HSS/Pipe/WT) — analysis & 3D extrusion use the true section.
                     HSS/angles suit braces. Auto-design covers W/WT flexure + axial for any family; detailed
                     HSS/angle/channel flexure checks are not yet automated. Concrete f′c is still used for base-plate bearing.
@@ -2681,7 +2681,7 @@ export default function ModelSpace() {
                       onChange={(e) => { setWoodWet(e.target.checked); if (model) generate('wood', { wet: e.target.checked }) }} />
                     Wet service — MC &gt; 19% sawn / 16% glulam (applies C<sub>M</sub>)
                   </label>
-                  <p className="col-span-full -mb-1 text-[11px] text-slate-500">
+                  <p className="col-span-full -mb-1 text-[11px] text-muted">
                     Solid rectangular b × d members. Each starts from its role size and grows independently
                     when optimised; columns are kept ≥ girders ≥ beams in width.
                   </p>
@@ -2692,7 +2692,7 @@ export default function ModelSpace() {
                   <Num label="Beam b" unit="mm" value={beaB} onChange={setBeaB} />
                   <Num label="Beam d" unit="mm" value={beaH} onChange={setBeaH} />
                   <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
-                  <p className="col-span-full text-[11px] text-slate-500">
+                  <p className="col-span-full text-[11px] text-muted">
                     Designed to NDS §3 / NSCP §6: reference values ({woodKind === 'glulam' ? 'glulam' : 'sawn'}, {activeWood.origin})
                     adjusted by C<sub>D</sub>/C<sub>M</sub>/C<sub>F</sub>/C<sub>V</sub>, beam stability C<sub>L</sub> and column
                     stability C<sub>P</sub>; factored demands checked LRFD (Appendix N, K<sub>F</sub>·φ·λ). Floor slabs become timber decks; footings stay reinforced concrete.
@@ -2700,7 +2700,7 @@ export default function ModelSpace() {
                 </Sec>
               ) : (
                 <Sec title="Initial member sizes (mm)">
-                  <p className="col-span-full -mb-1 text-[11px] text-slate-500">
+                  <p className="col-span-full -mb-1 text-[11px] text-muted">
                     Each member starts from its role size and grows independently when optimised;
                     columns are kept ≥ girders ≥ beams in width (strong-column / weak-beam).
                   </p>
@@ -2714,7 +2714,7 @@ export default function ModelSpace() {
                 </Sec>
               )}
               <Sec title="Concrete & reinforcement">
-                <p className="col-span-full -mb-1 text-[11px] text-slate-500">
+                <p className="col-span-full -mb-1 text-[11px] text-muted">
                   Shared material applied to every section when you generate the grid. f′c drives Ec and the
                   flexural/shear capacities; fy the steel; ⌀ and cover the bar layout and effective depth.
                   {material === 'steel' && ' (Used for slabs, footings and base-plate bearing.)'}
@@ -2734,7 +2734,7 @@ export default function ModelSpace() {
                   <input type="checkbox" checked={tBeamOn} onChange={(e) => setTBeamOn(e.target.checked)} />
                   <span>Design beams as T-beams — §6.3.2 flange from the adjoining slabs for sagging sections (when a ≤ hf). Off = plain rectangular web.</span>
                 </label>
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   Sagging sections that get flange action are tagged “T bf=…” in the schedule and drawn as a T-section.
                 </p>
               </Sec>
@@ -2764,12 +2764,12 @@ export default function ModelSpace() {
                     {psOn ? 'Apply prestressing to beam sections' : 'Clear prestressing from beam sections'}
                   </button>
                 </div>
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   The pipeline back-derives equivalent gravity UDLs from the D/L solves (w = 8M/L²) and runs the
                   full prestressed engine per member — losses, transfer/service stresses, fps/φMn, 1.2Mcr.
                 </p>
               </Sec>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-muted">
                 Per-member b×h are editable in the Geometry → Beams &amp; columns table; slab thickness per panel
                 in Geometry → Slabs. f′c, fy, ⌀, cover and slab thickness are applied when you generate a new grid;
                 γc feeds self-weight (members + slabs) and seismic mass — change it, then “Rebuild D + L” (Loading)
@@ -2786,7 +2786,7 @@ export default function ModelSpace() {
                 <Num label="Soil qa" unit="kPa" value={qa} onChange={setQa} />
                 <Num label="Footing depth H" unit="m" value={Hf} onChange={setHf} />
                 <Num label="Soil unit wt γsoil" unit="kN/m³" value={gammaSoil} onChange={setGammaSoil} step="0.5" />
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   Base supports are toggled per node in the Geometry → Nodes table (“Sup” column).
                   qa is the allowable bearing; γsoil is the overburden weight deducted for the net bearing
                   (q_net = qa − γsoil·Ds − γc·Dc). Applied on the next Design / Optimize.
@@ -2794,13 +2794,13 @@ export default function ModelSpace() {
               </Sec>
               {model && model.supports.length > 0 && (
                 <Sec grid={false} title="Support fixity">
-                  <p className="mb-2 text-xs text-slate-500">
+                  <p className="mb-2 text-xs text-muted">
                     Fixed = all 6 DOFs clamped. Pin = 3 translations free to rotate. Spring = translational springs (kN/m).
                   </p>
                   <div className="overflow-auto">
                     <table className="w-full border-collapse text-xs">
                       <thead>
-                        <tr className="text-left uppercase tracking-wide text-slate-500">
+                        <tr className="text-left uppercase tracking-wide text-muted">
                           <th className="py-1 pr-2 font-semibold">Node</th>
                           <th className="py-1 pr-2 font-semibold">Fixity</th>
                           <th className="py-1 pr-1 font-semibold">kx (kN/m)</th>
@@ -2841,14 +2841,14 @@ export default function ModelSpace() {
               )}
               {model && model.supports.length > 0 && (
                 <Sec grid={false} title="Footing plan">
-                  <p className="mb-2 text-xs text-slate-500">
+                  <p className="mb-2 text-xs text-muted">
                     Every base support gets an isolated square footing. Where two of those pads would physically
                     collide, the design pairs them as one combined footing — the pairing follows the pads, so it
                     only happens where a combined footing is the right answer. Overlapping pads are drawn
                     <span className="mx-1 inline-block h-2 w-3 rounded-sm align-middle" style={{ background: '#dc2626' }} />
                     red on the model until they are resolved.
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-muted">
                     Combining columns that are <em>not</em> in each other's way is what produces a grade beam: the
                     pad is stretched until it is symmetric about the bearing resultant, and with unequal loads that
                     runs far past the columns and leaves the width to fall out as area &divide; length.
@@ -2864,14 +2864,14 @@ export default function ModelSpace() {
               <Sec title="Slab loads">
                 <Num label="Default SDL" unit="kPa" value={qD} onChange={setQD} />
                 <Num label="Live load" unit="kPa" value={qL} onChange={setQL} />
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   “Default SDL” applies to any slab without a composed NSCP-204 SDL below. Live load is shared.
                 </p>
               </Sec>
 
               {/* NSCP 204 superimposed-dead-load composer (per slab) */}
               <Sec grid={false} title="Superimposed dead load — NSCP 204">
-                <p className="mb-2 text-[11px] text-slate-500">
+                <p className="mb-2 text-[11px] text-muted">
                   Build the SDL from finishes/ceilings/partitions (Table 204-1, kPa) and material layers
                   (Table 204-2, γ × thickness). Then apply it to every slab, or to the slab selected in the 3D view.
                 </p>
@@ -2884,7 +2884,7 @@ export default function ModelSpace() {
                         <label key={c.id} className="flex items-center gap-2 text-[11px]">
                           <input type="checkbox" checked={sdlDraft.some((x) => x.id === c.id)} onChange={() => toggleSdl204_1(c)} />
                           <span className="flex-1">{c.label}</span>
-                          <span className="text-slate-500">{c.kPa.toFixed(2)}</span>
+                          <span className="text-muted">{c.kPa.toFixed(2)}</span>
                         </label>
                       ))}
                     </div>
@@ -2898,16 +2898,16 @@ export default function ModelSpace() {
                         {TABLE_204_2.map((mtl) => <option key={mtl.id} value={mtl.id}>{mtl.label} ({mtl.gamma})</option>)}
                       </select>
                       <input type="number" value={sdlMatT} onChange={(e) => setSdlMatT(parseFloat(e.target.value))}
-                        className="w-20 rounded-md border border-slate-300 px-2 py-1 text-xs" /> <span className="text-[11px] text-slate-500">mm</span>
+                        className="w-20 rounded-md border border-slate-300 px-2 py-1 text-xs" /> <span className="text-[11px] text-muted">mm</span>
                       <button type="button" onClick={addSdl204_2}
                         className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-brand hover:border-brand-hover hover:bg-blue-50">+ Add</button>
                     </div>
                     <div className="mt-2 space-y-0.5">
-                      {sdlDraft.length === 0 && <p className="text-[11px] text-slate-500">No components selected.</p>}
+                      {sdlDraft.length === 0 && <p className="text-[11px] text-muted">No components selected.</p>}
                       {sdlDraft.map((it, i) => (
                         <div key={i} className="flex items-center gap-2 text-[11px]">
                           <span className="flex-1">{it.label}</span>
-                          <span className="text-slate-500">{sdlItemKPa(it).toFixed(2)} kPa</span>
+                          <span className="text-muted">{sdlItemKPa(it).toFixed(2)} kPa</span>
                           <button type="button" onClick={() => removeSdlItem(i)} className="rounded px-1 text-red-500 hover:bg-red-50">✕</button>
                         </div>
                       ))}
@@ -2925,13 +2925,13 @@ export default function ModelSpace() {
                     title="Select a slab panel in the 3D view first">
                     Apply to selected slab{selPlate && selPlate.role !== 'wall' ? ` (${selPlate.id})` : ''}
                   </button>
-                  <span className="text-[11px] text-slate-500">Empty composition clears a slab back to the default SDL.</span>
+                  <span className="text-[11px] text-muted">Empty composition clears a slab back to the default SDL.</span>
                 </div>
               </Sec>
 
               {/* NSCP 205-1 / 206 live-load occupancy (per slab) */}
               <Sec grid={false} title="Live load — NSCP 205 / 206">
-                <p className="mb-2 text-[11px] text-slate-500">
+                <p className="mb-2 text-[11px] text-muted">
                   Pick the occupancy (Table 205-1) or other minimum load (§206); its uniform live load overrides the
                   default LL for the chosen slabs.
                 </p>
@@ -2963,7 +2963,7 @@ export default function ModelSpace() {
                   <div className="max-h-64 overflow-auto">
                     <table className="w-full border-collapse text-[11px]">
                       <thead>
-                        <tr className="text-left uppercase tracking-wide text-slate-500">
+                        <tr className="text-left uppercase tracking-wide text-muted">
                           <th className="py-1 pr-2 font-semibold">Slab</th>
                           <th className="py-1 pr-2 text-right font-semibold">SDL</th>
                           <th className="py-1 pr-2 font-semibold">SDL source</th>
@@ -2980,7 +2980,7 @@ export default function ModelSpace() {
                             <tr key={p.id} className={`border-t border-slate-100 ${selected === p.id ? 'bg-blue-50/60' : ''}`}>
                               <td className="py-0.5 pr-2 font-medium cursor-pointer hover:text-brand" onClick={() => setSelected(p.id)}>{p.id}</td>
                               <td className="py-0.5 pr-2 text-right">{(composed ? sdlTotal(p.sdlItems) : qD).toFixed(2)}</td>
-                              <td className="py-0.5 pr-2 text-slate-500">{composed ? `204 (${p.sdlItems!.length})` : 'default'}</td>
+                              <td className="py-0.5 pr-2 text-muted">{composed ? `204 (${p.sdlItems!.length})` : 'default'}</td>
                               <td className="py-0.5 pr-2 text-right">{(p.live ? p.live.kPa : qL).toFixed(2)}</td>
                               <td className="py-0.5 pr-2">
                                 <select value={p.live?.id ?? ''} onChange={(e) => setSlabLive(p.id, e.target.value)}
@@ -3008,7 +3008,7 @@ export default function ModelSpace() {
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500">
+                  <p className="mt-1 text-[11px] text-muted">
                     “set SDL” writes the composition built above to that panel; the occupancy dropdown sets its NSCP-205 live load.
                     “+ timber” turns a panel into a timber deck-on-joist floor (designed by the wood-slab engine, reported like RC). Click a slab id to select it in 3D.
                   </p>
@@ -3073,7 +3073,7 @@ export default function ModelSpace() {
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
                       <thead>
-                        <tr className="text-left uppercase tracking-wide text-slate-500">
+                        <tr className="text-left uppercase tracking-wide text-muted">
                           <th className="py-1 pr-2 font-semibold">Cat</th>
                           <th className="py-1 pr-2 font-semibold">Target</th>
                           <th className="py-1 pr-1 font-semibold">Value</th>
@@ -3095,10 +3095,10 @@ export default function ModelSpace() {
                                     <input type="number" step="0.1" value={val}
                                       onChange={(e) => updLoad(idx, parseFloat(e.target.value))}
                                       className="w-16 rounded border border-slate-200 px-1 py-0.5" /> {unit}
-                                    {l.kind === 'member-thermal' && <span className="ml-1 text-slate-500">(α = {(l.alpha * 1e6).toFixed(1)}×10⁻⁶)</span>}
+                                    {l.kind === 'member-thermal' && <span className="ml-1 text-muted">(α = {(l.alpha * 1e6).toFixed(1)}×10⁻⁶)</span>}
                                   </>
                                 ) : (
-                                  <span className="text-slate-500">
+                                  <span className="text-muted">
                                     {l.kind === 'node' ? ['Fx' as const, 'Fy' as const, 'Fz' as const]
                                       .filter((k) => (l[k] ?? 0) !== 0).map((k) => `${k}=${f1(l[k]!)}`).join(' ') + ' kN' : ''}
                                   </span>
@@ -3114,7 +3114,7 @@ export default function ModelSpace() {
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500">
+                  <p className="mt-1 text-[11px] text-muted">
                     Dead = self-weight (members from b×h, slabs from t, γc = 24 kN/m³) + the SDL input; live = the LL
                     input. “Rebuild” regenerates both after you edit the frame.
                   </p>
@@ -3158,7 +3158,7 @@ export default function ModelSpace() {
                       + Add thermal load
                     </button>
                   </div>
-                  <p className="col-span-full text-[10px] text-slate-500">
+                  <p className="col-span-full text-[10px] text-muted">
                     Equivalent axial force P_T = EA·α·ΔT applied as self-equilibrating end forces (AISC 360-16 Commentary §C2). Treated as dead load (D) in NSCP 2015 combinations. Thermal effects appear in the member N diagram after Analyze.
                   </p>
                 </Sec>
@@ -3179,7 +3179,7 @@ export default function ModelSpace() {
                   <input type="checkbox" checked={methodB} onChange={(e) => setMethodB(e.target.checked)} className="mt-0.5" />
                   <span>
                     Method-B period (§208.5.2.2) — use the modal fundamental period per axis, capped at {Zf >= 0.4 ? '1.3' : '1.4'}·Ta.
-                    {!modal && <span className="text-slate-500"> No modal result yet — run Modal (Dynamics) first, else Method A is used.</span>}
+                    {!modal && <span className="text-muted"> No modal result yet — run Modal (Dynamics) first, else Method A is used.</span>}
                   </span>
                 </label>
                 <label className="col-span-full flex items-start gap-2 text-xs text-slate-600">
@@ -3212,7 +3212,7 @@ export default function ModelSpace() {
                     const sx = seisXZ?.x, sz = seisXZ?.z
                     return (
                     <div className="mt-1 space-y-1">
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-muted">
                         {twoAxis ? `${primAxis.toUpperCase()}: ` : ''}T = {seis.T.toFixed(3)} s{seis.Tmethod === 'B' ? ` (Method B, Ta = ${seis.Ta.toFixed(3)} s)` : ''} · W = {f1(seis.W)} kN · V = {f1(seis.V)} kN
                         {seis.V === seis.Vmax ? ' (2.5CaIW/R cap governs)'
                           : seis.Vsrc > 0 && seis.V === seis.Vsrc ? ' (Zone-4 0.8ZNvIW/R floor governs)'
@@ -3221,13 +3221,13 @@ export default function ModelSpace() {
                         {Zf >= 0.4 ? ` Zone-4 floor = ${f1(seis.Vsrc)} kN.` : ' (Zone-4 floor off: Z < 0.4)'}
                       </p>
                       {twoAxis && other && (
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-muted">
                           {primAxis === 'x' ? 'Z' : 'X'}: T = {other.T.toFixed(3)} s{other.Tmethod === 'B' ? ` (Method B, Ta = ${other.Ta.toFixed(3)} s)` : ''} · V = {f1(other.V)} kN{other.Ft > 0 ? ` · Ft = ${f1(other.Ft)} kN` : ''}
                         </p>
                       )}
                       <table className="w-full border-collapse text-xs">
                         <thead>
-                          <tr className="text-left uppercase tracking-wide text-slate-500">
+                          <tr className="text-left uppercase tracking-wide text-muted">
                             <th className="py-0.5 pr-2 font-semibold">Level (m)</th>
                             <th className="py-0.5 pr-2 text-right font-semibold">wx (kN)</th>
                             {twoAxis ? (
@@ -3250,12 +3250,12 @@ export default function ModelSpace() {
                                   <td className="py-0.5 pr-2 text-right font-medium text-[#7c3aed]">{f1(sz.storeys[i]?.Fx ?? 0)}</td>
                                 </>
                               ) : <td className="py-0.5 pr-2 text-right font-medium text-[#7c3aed]">{f1(s.Fx)}</td>}
-                              <td className="py-0.5 text-right text-slate-500">{s.nodes}</td>
+                              <td className="py-0.5 text-right text-muted">{s.nodes}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                      <p className="text-[10px] text-slate-500">
+                      <p className="text-[10px] text-muted">
                         System: <b>{seismicSystem.toUpperCase()}</b> (R = {Rw}) — column tie detailing uses {seismicSystem === 'smf' ? 'NSCP §418.7.5 SMF confinement' : seismicSystem === 'imf' ? 'NSCP §418.4.3 IMF hinge zone' : '§425.7.2 gravity ties only'}.
                       </p>
                     </div>
@@ -3273,14 +3273,14 @@ export default function ModelSpace() {
                     </label>
                   </div>
                   {(!modal || modal.modes.length === 0) && (
-                    <p className="mt-1 text-[10px] text-slate-500">Needs a Modal run (Dynamics) — the CQC storey shears are combined from the mode shapes, then scaled to the §208.6.4.2 static floor and enveloped by Design/Optimize like any E case.</p>
+                    <p className="mt-1 text-[10px] text-muted">Needs a Modal run (Dynamics) — the CQC storey shears are combined from the mode shapes, then scaled to the §208.6.4.2 static floor and enveloped by Design/Optimize like any E case.</p>
                   )}
                   {rsaGen && (
                     <div className="mt-1 space-y-1">
                       {(['x', 'z'] as const).map((ax) => {
                         const g = rsaGen[ax]
                         return (
-                          <p key={ax} className="text-xs text-slate-500">
+                          <p key={ax} className="text-xs text-muted">
                             {ax.toUpperCase()}: V<sub>CQC</sub> = {f1(g.Vdyn)} kN · §208.6.4.2 floor = {f1(g.Vfloor)} kN → scale ×{g.scale.toFixed(3)} · mass participation {Math.round(g.massRatio * 100)}%
                             {g.massRatio < 0.9 && <span className="font-semibold text-amber-600"> — below 90% (§208.6.4.1): raise the mode count in Dynamics</span>}
                           </p>
@@ -3288,7 +3288,7 @@ export default function ModelSpace() {
                       })}
                       <table className="w-full border-collapse text-xs">
                         <thead>
-                          <tr className="text-left uppercase tracking-wide text-slate-500">
+                          <tr className="text-left uppercase tracking-wide text-muted">
                             <th className="py-0.5 pr-2 font-semibold">Level (m)</th>
                             <th className="py-0.5 pr-2 text-right font-semibold">F·X (kN)</th>
                             <th className="py-0.5 pr-2 text-right font-semibold">V·X (kN)</th>
@@ -3308,7 +3308,7 @@ export default function ModelSpace() {
                           ))}
                         </tbody>
                       </table>
-                      <p className="text-[10px] text-slate-500">
+                      <p className="text-[10px] text-muted">
                         Storey forces back-difference the CQC storey-shear diagram, scaled so the base shear meets the §208.6.4.2 floor, split to the level&apos;s nodes ∝ seismic mass. They replace the static pattern in the cat-E cases enveloped by Analyze/Design/Optimize.
                       </p>
                     </div>
@@ -3336,7 +3336,7 @@ export default function ModelSpace() {
                   <button type="button" onClick={generateW} disabled={!model || wDirs.length === 0}
                     className="rounded-lg border border-slate-300 bg-sheet px-3 py-1.5 text-sm font-semibold text-brand hover:border-brand-hover hover:bg-blue-50 disabled:opacity-40">🌬 Generate W cases</button>
                   {wind && (
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-muted">
                       qh = {f2(wind.qh)} kPa · B×L = {f1(wind.B)}×{f1(wind.L)} m (L/B {f2(wind.LB)}) ·
                       Cp,lee {f2(wind.CpLee)} · base shear V = {f1(wind.baseShear)} kN — {wCases.length} cat-W
                       case{wCases.length === 1 ? '' : 's'} ({wDirs.join(', ') || 'none'}). Windward Cp = 0.8, G = {wind.G}, Kd = {wind.Kd}.
@@ -3346,7 +3346,7 @@ export default function ModelSpace() {
               </Sec>
 
               <Sec title="Wind — NSCP 207E.4 Components & Cladding (walls)">
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   Local wall cladding/curtain-wall pressures p = qh·[(GCp) − (GCpi)] at the mean roof
                   height. GCp by zone &amp; effective wind area (Fig 207E.4-1); GCpi from the enclosure
                   (±0.18 enclosed, ±0.55 partially enclosed). Uses the V, Kzt &amp; exposure above.
@@ -3367,7 +3367,7 @@ export default function ModelSpace() {
                     className="rounded-lg border border-slate-300 bg-sheet px-3 py-1.5 text-sm font-semibold text-brand hover:border-brand-hover hover:bg-blue-50 disabled:opacity-40">▦ Compute C&amp;C wall pressures</button>
                   {cladding && (
                     <table className="mt-2 w-full text-left text-xs">
-                      <thead className="text-slate-500">
+                      <thead className="text-muted">
                         <tr className="border-b border-slate-200">
                           <th className="py-1 pr-2">Zone</th><th className="py-1 pr-2">GCp (+ / −)</th>
                           <th className="py-1 pr-2">p⁺ (inward)</th><th className="py-1 pr-2">p⁻ (suction)</th>
@@ -3386,7 +3386,7 @@ export default function ModelSpace() {
                     </table>
                   )}
                   {cladding && (
-                    <p className="mt-1 text-[10px] text-slate-500">
+                    <p className="mt-1 text-[10px] text-muted">
                       qh = {f2(cladding.qh)} kPa at h = {f1(cladding.h)} m · |GCpi| = {cladding.GCpi} · A = {f1(cladding.area)} m².
                       Corner zone 5 governs cladding suction. Roof C&amp;C and h &gt; 18.3 m (§207E.5) out of scope.
                     </p>
@@ -3402,7 +3402,7 @@ export default function ModelSpace() {
               <Sec title="Analysis options" hint={<AnalysisOptionsHelp />}>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={assembly} onChange={(e) => setAssembly(e.target.checked)} />
-                  <span>Assembly or garage <span className="text-slate-500">(f₁ = 1.0)</span></span>
+                  <span>Assembly or garage <span className="text-muted">(f₁ = 1.0)</span></span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={pDelta} onChange={(e) => setPDelta(e.target.checked)} />
@@ -3410,15 +3410,15 @@ export default function ModelSpace() {
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={cracked} onChange={(e) => setCracked(e.target.checked)} />
-                  <span>Cracked sections <span className="text-slate-500">(ACI §6.6.3.1.1)</span></span>
+                  <span>Cracked sections <span className="text-muted">(ACI §6.6.3.1.1)</span></span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={shearDef} onChange={(e) => setShearDef(e.target.checked)} />
-                  <span>Shear deformation <span className="text-slate-500">(Timoshenko)</span></span>
+                  <span>Shear deformation <span className="text-muted">(Timoshenko)</span></span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={beamTopSteel} onChange={(e) => setBeamTopSteel(e.target.checked)} />
-                  <span>Beams framed at top of steel <span className="text-slate-500">(node = top of beam; matches the drawings, moves the column moments)</span></span>
+                  <span>Beams framed at top of steel <span className="text-muted">(node = top of beam; matches the drawings, moves the column moments)</span></span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={allAround} onChange={(e) => setAllAround(e.target.checked)} />
@@ -3440,7 +3440,7 @@ export default function ModelSpace() {
                     <input type="number" min={0} max={1} step={0.1} value={model.rigidZoneFactor ?? 0.5}
                       onChange={(e) => model && save({ ...model, rigidZoneFactor: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) })}
                       className="w-20 rounded border border-slate-300 px-2 py-1" />
-                    <span className="text-[11px] text-slate-500">× ½·(framing member depth) at each joint</span>
+                    <span className="text-[11px] text-muted">× ½·(framing member depth) at each joint</span>
                   </label>
                 )}
                 <label className="col-span-full flex items-center gap-2 text-sm">
@@ -3456,7 +3456,7 @@ export default function ModelSpace() {
                         value={model.shellSubdiv ?? 1}
                         onChange={(e) => model && save({ ...model, shellSubdiv: clampSubdiv(parseFloat(e.target.value)) })}
                         className="w-20 rounded border border-slate-300 px-2 py-1" />
-                      <span className="text-[11px] text-slate-500">
+                      <span className="text-[11px] text-muted">
                         {(model.shellSubdiv ?? 1) > 1
                           ? `${2 * (model.shellSubdiv ?? 1) ** 2} triangles per panel; edge beams are split at the mesh nodes so the panel is held by them`
                           : '2 triangles per panel on its corner nodes — no node between the supports, so the slab cannot deflect'}
@@ -3467,7 +3467,7 @@ export default function ModelSpace() {
                         onChange={(e) => setDesignShells(e.target.checked)} />
                       <span>Use the slab mesh in the DESIGN solve too</span>
                     </label>
-                    <p className="col-span-full pl-6 text-[11px] text-slate-500">
+                    <p className="col-span-full pl-6 text-[11px] text-muted">
                       {designShells
                         ? 'Every beam and column result now comes from a frame with slab stiffness in it, instead of tributary line loads — measured −15% to +18% on beam design moments. The design mesh is at least 2×2 whatever is set above: two triangles deliver the panel\u2019s whole load to its corner columns and design the beams 80–90% under-loaded.'
                         : 'Off: the design keeps the tributary load model, so the mesh changes stress plots and the analysis only. Turning it on moves every published beam and column result.'}
@@ -3478,7 +3478,7 @@ export default function ModelSpace() {
                   <input type="checkbox" checked={tryBars} onChange={(e) => setTryBars(e.target.checked)} />
                   <span>Try alternative bar sizes</span>
                 </label>
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   §203.3.1 live-load factor f₁ = <b>{fLive.toFixed(1)}</b>
                   {fLive === 1 ? (assembly ? ' (assembly/garage)' : ' (Lo > 4.8 kPa)') : ' (ordinary occupancy)'}.
                   {pDelta ? ' Frame solved with the geometric-stiffness P-Δ iteration.' : ' First-order (linear) frame solve.'}
@@ -3514,7 +3514,7 @@ export default function ModelSpace() {
                   <Row label="Extremes" value={`M ${f1(govRes.Mmax)} kN·m`}
                     sub={`V ${f1(govRes.Vmax)} · N ${f1(govRes.Nmax)} kN`} />
                   {orphans > 0 && <Row alert label="⚠ Orphan edges" value={`${orphans}`} sub="slab edges with no member" />}
-                  <p className="mt-1 text-[11px] text-slate-500">Members tinted red by |M| relative to the model max. Click one for its diagrams.</p>
+                  <p className="mt-1 text-[11px] text-muted">Members tinted red by |M| relative to the model max. Click one for its diagrams.</p>
                 </Sec>
               )}
 
@@ -3532,12 +3532,12 @@ export default function ModelSpace() {
 
               {model?.shellElements && model.plates.length > 0 && (
                 <Sec title="Shell plate stress (CST membrane + DKT bending)">
-                  <p className="col-span-full text-[11px] text-slate-500">
+                  <p className="col-span-full text-[11px] text-muted">
                     Recovers per-element membrane stresses (σx, σy, τxy, von Mises) and bending
                     moments (Mx, My, Mxy) from the shell FEM. Uses E = 25 000 MPa, ν = 0.2 for
                     all plates. Area loads are applied as uniform pressure.
                   </p>
-                  <p className="col-span-full text-[11px] text-slate-500">
+                  <p className="col-span-full text-[11px] text-muted">
                     Mesh density is set with the model, beside the shell-elements switch above —
                     it is the same mesh the analysis solves.
                   </p>
@@ -3551,7 +3551,7 @@ export default function ModelSpace() {
                       ▦ Design slab steel (Wood-Armer)
                     </button>
                   </div>
-                  <p className="col-span-full text-[11px] text-slate-500">
+                  <p className="col-span-full text-[11px] text-muted">
                     Wood-Armer (1968) converts the factored (1.2D + 1.6L) shell moment field (Mx, My, Mxy) into
                     orthogonal design moments for the bottom (sagging) and top (hogging) faces, then sizes the x/y
                     reinforcement per metre to NSCP 2015 / ACI 318-14 (φ = 0.90, ⌀12 @ 20 mm cover, fc 28, fy 415).
@@ -3565,7 +3565,7 @@ export default function ModelSpace() {
                 <Sec grid={false} title="Slab reinforcement — Wood-Armer (shell FE, factored)">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
-                      <thead className="text-slate-500">
+                      <thead className="text-muted">
                         <tr className="border-b border-slate-200">
                           <th className="py-1 pr-2">Slab</th><th className="py-1 pr-2">t (mm)</th>
                           <th className="py-1 pr-2">Face / dir</th><th className="py-1 pr-2">M* (kN·m/m)</th>
@@ -3595,7 +3595,7 @@ export default function ModelSpace() {
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-2 text-[10px] text-slate-500">
+                  <p className="mt-2 text-[10px] text-muted">
                     Envelope of the per-element Wood-Armer design moments over each panel. As includes the
                     shrinkage/temperature minimum (ρ_min); spacing capped at min(3t, 450) mm. d = t − cover − 1.5⌀.
                   </p>
@@ -3610,7 +3610,7 @@ export default function ModelSpace() {
                       value={`ΔM = ${row.dM.toFixed(1)} mm ${row.ok ? '✓' : '✗'}`}
                       sub={`Δs ${row.ds.toFixed(2)} · limit ${row.limit.toFixed(0)} mm`} />
                   ))}
-                  <p className="mt-1 text-[11px] text-slate-500">
+                  <p className="mt-1 text-[11px] text-muted">
                     Limit {seis.T < 0.7 ? '0.025' : '0.020'}·hs (T {seis.T < 0.7 ? '<' : '≥'} 0.7 s) — NSCP 208.5.10.
                   </p>
                 </Sec>
@@ -3624,7 +3624,7 @@ export default function ModelSpace() {
                       value={`θ = ${row.theta.toFixed(3)} ${row.pDeltaRequired ? '— second-order REQUIRED' : '✓'}`}
                       sub={`Px ${row.Px.toFixed(0)} kN · Vx ${row.Vx.toFixed(0)} kN · Δs/hs ${(row.driftRatio * 100).toFixed(2)}%${row.exempt ? ' · exempt, Zone 3/4 Δs/hs ≤ 0.02/R' : ''}`} />
                   ))}
-                  <p className="mt-1 text-[11px] text-slate-500">
+                  <p className="mt-1 text-[11px] text-muted">
                     {stability.some((r) => r.pDeltaRequired)
                       ? pDelta
                         ? 'θ > 0.10 on at least one storey — P-Δ is required and is ON, so these results carry it.'
@@ -3644,7 +3644,7 @@ export default function ModelSpace() {
                         value={`${f.verdict === 'extreme' ? '✗ extreme' : '△ irregular'}${f.elevation != null ? ` · EL ${f1(f.elevation)} m` : ''}`}
                         sub={`${f.table} — ${f.detail}`} />
                     ))}
-                  <p className="mt-1 text-[11px] text-slate-500">
+                  <p className="mt-1 text-[11px] text-muted">
                     Auto-flags off the E-case drift field + storey weights: P1 torsional (208-10 §1a/1b),
                     V1 soft-storey, V2 mass, V3 vertical-geometric (208-9 §1–3). Capacity/plan-shape types are not auto-checked.
                   </p>
@@ -3673,7 +3673,7 @@ export default function ModelSpace() {
                         <div className="mt-2 max-h-60 overflow-auto">
                           <table className="w-full border-collapse text-[11px]">
                             <thead>
-                              <tr className="text-left text-[10px] uppercase tracking-wide text-slate-500">
+                              <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
                                 <th className="pr-2 pb-1">Combination</th>
                                 <th className="pr-2 pb-1 text-right">Iter</th>
                                 <th className="pb-1">Members switched off</th>
@@ -3690,7 +3690,7 @@ export default function ModelSpace() {
                             </tbody>
                           </table>
                         </div>
-                        <p className="mt-1 text-[11px] text-slate-500">
+                        <p className="mt-1 text-[11px] text-muted">
                           {everOff.size === 0
                             ? 'No limited member violated its mode in any combination — the model behaves linearly and the results match an ordinary solve.'
                             : `${everOff.size} member(s) drop out in at least one combination; which one depends on the load direction, so the envelope needs every combo.`}
@@ -3721,11 +3721,11 @@ export default function ModelSpace() {
                     <option value="consistent">Consistent (element mass matrices)</option>
                   </select>
                 </label>
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   Free vibration ([K]−ω²[M]). Mass from member &amp; slab self-weight (dead). Request enough
                   modes to accumulate ≥90% of the lateral mass (NSCP 208.5.5).
                 </p>
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   <b>Lumped</b> puts the mass at the nodes and gives the rotational DOFs no inertia — it bounds the true
                   frequencies from <b>below</b>. <b>Consistent</b> integrates each member&apos;s own element mass matrix
                   over the same shape functions as its stiffness, so rotational inertia and end-to-end coupling are
@@ -3786,7 +3786,7 @@ export default function ModelSpace() {
                         {thCsv.name} — {thCsv.npts} pts
                       </span>
                       <button type="button" onClick={() => setThCsv(null)}
-                        className="text-[11px] text-slate-500 hover:text-red-500">✕ clear</button>
+                        className="text-[11px] text-muted hover:text-red-500">✕ clear</button>
                     </div>
                   ) : (
                     <label className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-slate-300 bg-sheet px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
@@ -3832,7 +3832,7 @@ export default function ModelSpace() {
                 )}
                 <Pick label="Direction" value={thDir} onChange={setThDir} options={[['x', '+X'], ['z', '+Z']]} />
                 <Num label="Damping ζ" unit="%" value={thZeta} onChange={setThZeta} step="1" />
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   Modal superposition: each mode is an SDOF integrated by Newmark-β (β=¼, γ=½). Upload a real
                   record (two-column t/ag, one-column with Δt, or PEER AT2) or use the built-in synthetic motion.
                 </p>
@@ -3848,7 +3848,7 @@ export default function ModelSpace() {
                   )}
                 </div>
                 {thCsv && (
-                  <p className="col-span-full text-[11px] text-slate-500">
+                  <p className="col-span-full text-[11px] text-muted">
                     The response spectrum integrates an SDOF oscillator per period (Newmark-β, ζ = {thZeta}%) over the
                     uploaded record, then overlays it on the NSCP 208 design spectrum (Ca {Ca}, Cv {Cv}, I {Ie}, R {Rw}).
                   </p>
@@ -3874,7 +3874,7 @@ export default function ModelSpace() {
                       hint={dg11Suggest ? `analysis suggests ${dg11Suggest.deflMm.toFixed(1)} (0 = use it)` : 'run Analyze to auto-suggest'} />
                     <Num label="Supported weight W" unit="kN" value={dg11W} onChange={setDg11W} step="10"
                       hint={dg11Suggest ? `storey dead ≈ ${dg11Suggest.W.toFixed(0)} (0 = use it)` : 'effective panel weight'} />
-                    <p className="col-span-full text-[11px] text-slate-500">
+                    <p className="col-span-full text-[11px] text-muted">
                       fn = 0.18·√(g/Δ); aₚ/g = Po·e^(−0.35 fn)/(β·W) ≤ aₒ/g. Po = {occ.Po} kN, β = {occ.beta}, aₒ/g = {(occ.aoLimit * 100).toFixed(1)}% (DG11 Table 4.1).
                     </p>
                     {has ? (
@@ -3924,7 +3924,7 @@ export default function ModelSpace() {
                     onChange={(e) => setPoPDelta(e.target.checked)} />
                   <span>P-Δ second order (gravity geometric stiffness softens the capacity curve)</span>
                 </label>
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   Event-to-event concentrated plastic hinges (a hinge = a member-end moment release).
                   Capacity curve = base shear vs roof displacement; pushes to a 4% drift target or a collapse
                   mechanism. Mp: steel Fy·Zx; concrete ρ·b·d²·fy·(1−0.59ρfy/f′c).
@@ -3975,7 +3975,7 @@ export default function ModelSpace() {
                     onChange={(e) => setBxPM(e.target.checked)} />
                   <span>P–M interaction (axial load reduces the hinge capacities)</span>
                 </label>
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   Unlike the pushover above, this one runs on the <strong>real 3-D model</strong> — no reduction to an
                   equivalent plane frame — and each member end carries a <strong>biaxial</strong> hinge whose two bending
                   axes yield on one coupled surface. That is what lets the push run at any plan angle: at 45° a corner
@@ -4024,7 +4024,7 @@ export default function ModelSpace() {
                   hint="assumed steel ratio for Mp (concrete only) · 0.1–5%" />
                 {nlKindModel === 'hinges' ? (
                   <>
-                    <p className="col-span-full text-[11px] text-slate-500">
+                    <p className="col-span-full text-[11px] text-muted">
                       The 3D model is condensed to an <strong>equivalent plane frame</strong> (all frame lines
                       parallel to the loading direction are combined), then integrated with a bilinear hysteretic
                       plastic hinge at <strong>every member end</strong> — Newmark-β with Newton-Raphson each step.
@@ -4039,7 +4039,7 @@ export default function ModelSpace() {
                   </>
                 ) : (
                   <>
-                    <p className="col-span-full text-[11px] text-slate-500">
+                    <p className="col-span-full text-[11px] text-muted">
                       The frame is reduced to an equivalent nonlinear <strong>shear building</strong>: one bilinear
                       hysteretic spring per storey — mass from the seismic mass, stiffness k₀ = V/Δ from a static
                       lateral probe, capacity Fy = Σ2·Mp/h. Newmark-β with Newton-Raphson iteration each step;
@@ -4103,7 +4103,7 @@ export default function ModelSpace() {
                       <Sec grid={false} title="Yielded hinges (largest plastic rotation first)">
                         <div className="overflow-x-auto">
                           <table className="w-full text-right text-[12px]">
-                            <thead className="text-slate-500">
+                            <thead className="text-muted">
                               <tr className="border-b border-slate-200">
                                 <th className="py-1 pr-2 text-left">Member</th><th className="py-1 pr-2 text-left">End</th>
                                 <th className="py-1 pr-2">M (kN·m)</th><th className="py-1 pr-2">θ (mrad)</th>
@@ -4124,7 +4124,7 @@ export default function ModelSpace() {
                             </tbody>
                           </table>
                         </div>
-                        <p className="mt-2 text-[10px] text-slate-500">
+                        <p className="mt-2 text-[10px] text-muted">
                           θp is the permanent (plastic) rotation left in the hinge. Member ids are the condensed
                           frame&rsquo;s — each combines the parallel 3D members at that grid position.
                           {yielded.length > 20 && ` Showing the 20 worst of ${yielded.length}.`}
@@ -4168,7 +4168,7 @@ export default function ModelSpace() {
                     <Sec grid={false} title="Storey reduction & demand">
                       <div className="overflow-x-auto">
                         <table className="w-full text-right text-[12px]">
-                          <thead className="text-slate-500">
+                          <thead className="text-muted">
                             <tr className="border-b border-slate-200">
                               <th className="py-1 pr-2 text-left">Storey</th><th className="py-1 pr-2">EL (m)</th>
                               <th className="py-1 pr-2">m (t)</th><th className="py-1 pr-2">k₀ (kN/m)</th>
@@ -4195,7 +4195,7 @@ export default function ModelSpace() {
                           </tbody>
                         </table>
                       </div>
-                      <p className="mt-2 text-[10px] text-slate-500">
+                      <p className="mt-2 text-[10px] text-muted">
                         μ = peak storey drift / yield drift (μ &gt; 1 ⇒ that storey yielded, highlighted).
                         Δpeak is the spring deformation, i.e. the interstorey drift. E is the energy that storey
                         dissipated hysteretically.
@@ -4242,7 +4242,7 @@ export default function ModelSpace() {
                     Running in the background — the page stays responsive; results appear when ready.
                   </p>
                 )}
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   The full schedules (beam/girder, column, footing) render below, each the full width of the page.
                   Click any schedule row for its step-by-step solution and plan/elevation drawings.
                 </p>
@@ -4275,7 +4275,7 @@ export default function ModelSpace() {
           <div className="divide-y divide-hairline-2 px-4 py-1" data-tour="display-panel">
             <Sec title="Display" grid={false}>
               <div className="space-y-2.5 text-xs text-slate-600">
-                <p className="text-[11px] leading-snug text-slate-500">
+                <p className="text-[11px] leading-snug text-muted">
                   What the 3D view draws. These apply on every tab.
                 </p>
                 {/* First, because it governs everything under it: this is HOW
@@ -4296,13 +4296,13 @@ export default function ModelSpace() {
                       user's own choice — it comes back when the diagram goes
                       off — so without this line the control looks broken. */}
                   {forceDiag !== null && viewMode === 'solid' && (
-                    <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                    <p className="mt-1 text-[11px] leading-snug text-muted">
                       Drawn wireframe while the {DIAG_LABEL[forceDiag]} diagram is up — the ribbon
                       runs along the member axis, inside its own concrete.
                     </p>
                   )}
                   {drawMode === 'wireframe' && (
-                    <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                    <p className="mt-1 text-[11px] leading-snug text-muted">
                       One line per member, node to node, with a marker at each joint.
                       Members and panels stay clickable.
                     </p>
@@ -4332,15 +4332,15 @@ export default function ModelSpace() {
                       disabled={!design} />
                     Show reinforcement cages
                   </label>
-                  {!design && <p className="pl-6 text-[11px] text-slate-400">design the structure first</p>}
-                  {showRebar && <p className="pl-6 text-[11px] text-slate-400">concrete shown see-through</p>}
+                  {!design && <p className="pl-6 text-[11px] text-faint">design the structure first</p>}
+                  {showRebar && <p className="pl-6 text-[11px] text-faint">concrete shown see-through</p>}
                   {showRebar && cagesByKind.size > 0 && (
                     <div className="mt-1.5 pl-6">
-                      <div className="mb-1 text-[11px] text-slate-500">Cages to show</div>
+                      <div className="mb-1 text-[11px] text-muted">Cages to show</div>
                       <div className="flex flex-wrap gap-1.5">
                         {CAGE_KINDS.filter((k) => cagesByKind.has(k)).map((k) => (
                           <label key={k} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${
-                            cageKinds.includes(k) ? 'border-brand bg-blue-50 text-brand' : 'border-slate-200 text-slate-500'}`}>
+                            cageKinds.includes(k) ? 'border-brand bg-blue-50 text-brand' : 'border-slate-200 text-muted'}`}>
                             <input type="checkbox" className="sr-only" checked={cageKinds.includes(k)}
                               onChange={() => toggleCageKind(k)} />
                             {CAGE_KIND_LABEL[k]}
@@ -4380,7 +4380,7 @@ export default function ModelSpace() {
                   )}
                 </div>
                 {!design && (
-                  <p className="rounded border border-hairline bg-sheet-2 px-2 py-1.5 text-[11px] leading-snug text-slate-500">
+                  <p className="rounded border border-hairline bg-sheet-2 px-2 py-1.5 text-[11px] leading-snug text-muted">
                     Footings, steel connections and the bar cages appear here once the
                     structure has been designed — they are drawn from the design, so
                     there is nothing to draw until it has run.
@@ -4404,7 +4404,7 @@ export default function ModelSpace() {
                   <p className="mb-1 font-medium">Force diagram</p>
                   <div className={`flex flex-wrap items-center gap-1 ${govRes ? '' : 'opacity-45'}`}>
                     <button type="button" onClick={() => setForceDiag(null)} disabled={!govRes}
-                      className={`rounded px-1.5 py-0.5 font-semibold ${forceDiag === null ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:text-slate-600'} disabled:cursor-not-allowed disabled:hover:text-slate-500`}>off</button>
+                      className={`rounded px-1.5 py-0.5 font-semibold ${forceDiag === null ? 'bg-slate-200 text-slate-700' : 'text-muted hover:text-slate-600'} disabled:cursor-not-allowed disabled:hover:text-muted`}>off</button>
                     {(['N', 'Vy', 'Vz', 'My', 'Mz', 'T'] as DiagramComp[]).map((c) => (
                       <button key={c} type="button" onClick={() => setForceDiag(c)} disabled={!govRes}
                         title={govRes ? `Draw ${c} on every member (governing combo)` : 'Needs analysis results'}
@@ -4417,13 +4417,13 @@ export default function ModelSpace() {
                     ))}
                   </div>
                   {!govRes && (
-                    <p className="mt-1 text-[11px] text-slate-400">
+                    <p className="mt-1 text-[11px] text-faint">
                       analyse the model first — designing rebuilds the loads, so analyse again after it
                     </p>
                   )}
                   {govRes && forceDiag && (
                     <label className="mt-1.5 flex items-center gap-1.5">
-                      <span className="text-slate-500">scale</span>
+                      <span className="text-muted">scale</span>
                       <input type="range" min={0.3} max={3} step={0.1} value={forceDiagScale}
                         onChange={(e) => setForceDiagScale(Number(e.target.value))} className="h-1 flex-1" />
                     </label>
@@ -4474,7 +4474,7 @@ export default function ModelSpace() {
                 {opt.stopReason ?? 'iteration cap hit — check spans/loads'}
               </p>
             )}
-            <div className="mb-2 space-y-0.5 text-xs text-slate-500">
+            <div className="mb-2 space-y-0.5 text-xs text-muted">
               <p>Concrete — <b>columns</b> {sizesFor('column')} · <b>girders</b> {sizesFor('girder')} · <b>beams</b> {sizesFor('beam')}</p>
               {(hasSteelBeams || hasSteelCols) && (
                 <p>
@@ -4492,7 +4492,7 @@ export default function ModelSpace() {
             </div>
             <table className="w-auto border-collapse text-xs">
               <thead>
-                <tr className="text-left uppercase tracking-wide text-slate-500">
+                <tr className="text-left uppercase tracking-wide text-muted">
                   <th className="py-1 pr-4 font-semibold">Step</th>
                   <th className="py-1 pr-4 text-right font-semibold">Members grown</th>
                   <th className="py-1 pr-4 text-right font-semibold">Failing</th>
@@ -4527,7 +4527,7 @@ export default function ModelSpace() {
           {/* PAGE 1 — header + 3D model snapshot */}
           <h2 className="text-xl font-extrabold tracking-tight text-brand">
             Structure design — {design.govName} governs
-            <span className="ml-3 text-sm font-normal text-slate-500">
+            <span className="ml-3 text-sm font-normal text-muted">
               concrete ≈ {f1(design.totals.concrete)} m³ ({f1(design.totals.concreteMembers)} members + {f1(design.totals.concreteSlabs)} slabs)
               {design.totals.steelKg > 0 && ` · steel ${(design.totals.steelKg / 1000).toFixed(2)} t`}
             </span>
@@ -4564,7 +4564,7 @@ export default function ModelSpace() {
           <div className="no-print flex flex-wrap items-center gap-1.5 border-b border-slate-200" data-tour="results-tabs">
             {([['schedules', 'Schedules'], ['boq', 'Bill of Quantities'], ['schedule', 'Construction Schedule']] as const).map(([id, label]) => (
               <button key={id} type="button" onClick={() => setResultsTab(id)}
-                className={`rounded-t-md px-3.5 py-2 text-[13px] font-semibold ${resultsTab === id ? 'border-b-2 border-brand text-brand' : 'text-slate-500 hover:text-brand'}`}>
+                className={`rounded-t-md px-3.5 py-2 text-[13px] font-semibold ${resultsTab === id ? 'border-b-2 border-brand text-brand' : 'text-muted hover:text-brand'}`}>
                 {label}
               </button>
             ))}
@@ -4576,7 +4576,7 @@ export default function ModelSpace() {
           </div>
 
           {resultsTab === 'schedules' && (<>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted">
             Envelope of <b>{design.cases.length}</b> load case{design.cases.length === 1 ? '' : 's'} (NSCP combinations × lateral directions).
             Each element is designed for its own governing case, shown in the “Case” column. Click any row for its worked solution.
           </p>
@@ -4601,7 +4601,7 @@ export default function ModelSpace() {
             <h3 className="mb-2 text-[1.02rem] font-bold text-brand">RC beam & girder schedule<SchedChip items={design.beams} ok={(b) => b.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                <tr className="sched-head text-left uppercase tracking-wide text-muted">
                   <th className="py-1 pr-2 font-semibold">Member</th>
                   <th className="py-1 pr-2 font-semibold">Section</th>
                   <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
@@ -4638,7 +4638,7 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2">{d.mode}</td>
                       <td className="py-1 pr-2">{d.bars}⌀{sec?.barDia}{d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}{s.hogging ? ' top' : ''}</td>
                       <td className="py-1 pr-2">{d.sAdopt > 0 ? `${d.legs}L@${Math.round(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠'}</td>
-                      <td className="py-1 text-slate-500">{k === 0 ? bm.gov : ''}</td>
+                      <td className="py-1 text-muted">{k === 0 ? bm.gov : ''}</td>
                     </tr>,
                     open && model && sec && (
                       <tr key={`${key}:sol`}>
@@ -4687,7 +4687,7 @@ export default function ModelSpace() {
             <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Prestressed member checks (§24.5 · PCI)<SchedChip items={design.prestressed} ok={(pr) => pr.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                <tr className="sched-head text-left uppercase tracking-wide text-muted">
                   <th className="py-1 pr-2 font-semibold">Member</th>
                   <th className="py-1 pr-2 text-right font-semibold">Loss %</th>
                   <th className="py-1 pr-2 text-right font-semibold">fse (MPa)</th>
@@ -4720,7 +4720,7 @@ export default function ModelSpace() {
             <h3 className="mb-2 text-[1.02rem] font-bold text-brand">RC column schedule<SchedChip items={design.columns} ok={(c) => c.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                <tr className="sched-head text-left uppercase tracking-wide text-muted">
                   <th className="py-1 pr-2 font-semibold">Column</th>
                   <th className="py-1 pr-2 font-semibold">Section</th>
                   <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
@@ -4747,7 +4747,7 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2 text-right" title={`${BIAXIAL_LABEL[c.biaxialMethod]} — φPn ${f1(c.phiPn)} kN`}>
                         {(c.util * 100).toFixed(0)}%
                       </td>
-                      <td className="py-1 text-slate-500">{c.gov}</td>
+                      <td className="py-1 text-muted">{c.gov}</td>
                     </tr>,
                     open && model && cs && (
                       <tr key={`${key}:sol`}>
@@ -4770,11 +4770,11 @@ export default function ModelSpace() {
                                 <div className="border-t border-slate-100 pt-2 text-[11px] text-slate-600">
                                   <p className="mb-0.5 font-semibold text-brand">Seismic confinement ({seismicSystem.toUpperCase()})</p>
                                   <p>Confinement zone ℓo = {Math.round(c.seismicLoZone!)} mm</p>
-                                  <p>Ties within ℓo @ {Math.round(c.seismicSConf)} mm <span className="text-slate-500">({c.tieSpacingLabel})</span></p>
+                                  <p>Ties within ℓo @ {Math.round(c.seismicSConf)} mm <span className="text-muted">({c.tieSpacingLabel})</span></p>
                                   {c.seismicSOut !== undefined && c.seismicSOut !== c.tieSpacing && (
                                     <p>Ties outside ℓo @ {Math.round(c.seismicSOut)} mm</p>
                                   )}
-                                  <p className="mt-0.5 text-slate-500">✱ Seismic controls over §425.7.2 gravity tie spacing ({Math.round(c.tieSpacing)} mm)</p>
+                                  <p className="mt-0.5 text-muted">✱ Seismic controls over §425.7.2 gravity tie spacing ({Math.round(c.tieSpacing)} mm)</p>
                                 </div>
                               )}
                             </div>
@@ -4798,7 +4798,7 @@ export default function ModelSpace() {
               </h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Beam</th>
                     <th className="py-1 pr-2 text-right font-semibold">Ln (m)</th>
                     <th className="py-1 pr-2 text-right font-semibold">Mn− / Mn+ face i</th>
@@ -4829,7 +4829,7 @@ export default function ModelSpace() {
                   })}
                 </tbody>
               </table>
-              <p className="mt-2 text-[10px] text-slate-500">
+              <p className="mt-2 text-[10px] text-muted">
                 Mn+ at a joint face ≥ {momentRatios[0].ratios.system === 'smf' ? '½' : '⅓'}·Mn− there, and Mn
                 at ANY section ≥ {momentRatios[0].ratios.system === 'smf' ? '¼' : '⅕'}·the largest Mn at either
                 face ({momentRatios[0].ratios.clause}). Measured on the bars as placed — a curtailed bar is
@@ -4844,7 +4844,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Strong-column / weak-beam — NSCP §418.7.3.2<SchedChip items={design.scwb} ok={(j) => j.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Joint</th>
                     <th className="py-1 pr-2 text-right font-semibold">ΣMnc (kN·m)</th>
                     <th className="py-1 pr-2 text-right font-semibold">ΣMnb (kN·m)</th>
@@ -4861,12 +4861,12 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2 text-right font-mono">{f1(j.sumMnb)}</td>
                       <td className="py-1 pr-2 text-right font-mono">{Number.isFinite(j.ratio) ? j.ratio.toFixed(2) : '∞'}</td>
                       <td className={`py-1 pr-2 text-right font-semibold ${j.ok ? 'text-emerald-600' : 'text-red-600'}`}>{j.ok ? '✓' : '✗'}</td>
-                      <td className="py-1 text-slate-500">{j.nCols} / {j.nBeams}</td>
+                      <td className="py-1 text-muted">{j.nCols} / {j.nBeams}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <p className="mt-2 text-[10px] text-slate-500">
+              <p className="mt-2 text-[10px] text-muted">
                 ΣMnc ≥ (6/5)·ΣMnb at each beam-column joint (§418.7.3.2). Column Mnc is taken at the design axial Pu;
                 beam Mnb from the heaviest designed tension steel. Failing joints need larger columns or lighter beams.
                 {design.scwb.every((j) => j.ok) ? ' All joints satisfy the requirement.' : ' ✗ One or more joints fail.'}
@@ -4880,7 +4880,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Slab schedule (two-way DDM)<SchedChip items={design.slabs} ok={(x) => x.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Panel</th>
                     <th className="py-1 pr-2 font-semibold">lx × ly (m)</th>
                     <th className="py-1 pr-2 font-semibold">h (mm)</th>
@@ -4919,7 +4919,7 @@ export default function ModelSpace() {
                                   </p>
                                   <table className="w-full border-collapse text-[11px]">
                                     <thead>
-                                      <tr className="text-left text-slate-500">
+                                      <tr className="text-left text-muted">
                                         <th className="py-0.5 pr-2">Location</th>
                                         <th className="py-0.5 pr-2 text-right">M (kN·m)</th>
                                         <th className="py-0.5 pr-2">Column strip</th>
@@ -4929,7 +4929,7 @@ export default function ModelSpace() {
                                     <tbody>
                                       {dr.locations.map((loc, li) => (
                                         <tr key={li} className="border-t border-slate-100">
-                                          <td className="py-0.5 pr-2">{loc.name} <span className="text-slate-500">({loc.coeff.toFixed(2)})</span></td>
+                                          <td className="py-0.5 pr-2">{loc.name} <span className="text-muted">({loc.coeff.toFixed(2)})</span></td>
                                           <td className="py-0.5 pr-2 text-right">{f1(loc.M)}</td>
                                           {/* When nothing complies there is no mat to quote. Printing the
                                               fallback layout would present a §8.7.2.2 violation as a design. */}
@@ -4954,19 +4954,19 @@ export default function ModelSpace() {
                               <table className="w-full border-collapse text-[11px]">
                                 <tbody>
                                   <tr className="border-t border-slate-100">
-                                    <td className="py-0.5 pr-2 text-slate-500">Immediate (D+L)</td>
+                                    <td className="py-0.5 pr-2 text-muted">Immediate (D+L)</td>
                                     <td className="py-0.5 pr-2 text-right">{dd.deflection.immediate.toFixed(1)} mm</td>
-                                    <td className="py-0.5 pr-2 text-slate-500">{dd.deflection.cracked ? 'section cracked (Ie < Ig)' : 'uncracked (Ie = Ig)'}</td>
+                                    <td className="py-0.5 pr-2 text-muted">{dd.deflection.cracked ? 'section cracked (Ie < Ig)' : 'uncracked (Ie = Ig)'}</td>
                                   </tr>
                                   <tr className="border-t border-slate-100">
-                                    <td className="py-0.5 pr-2 text-slate-500">Immediate live</td>
+                                    <td className="py-0.5 pr-2 text-muted">Immediate live</td>
                                     <td className="py-0.5 pr-2 text-right">{dd.deflection.immLive.toFixed(1)} mm</td>
                                     <td className={`py-0.5 pr-2 ${dd.deflection.liveOK ? 'text-emerald-600' : 'text-rose-600'}`}>
                                       ≤ ℓn/360 = {dd.deflection.limitLive.toFixed(1)} mm {dd.deflection.liveOK ? '✓' : '✗'}
                                     </td>
                                   </tr>
                                   <tr className="border-t border-slate-100">
-                                    <td className="py-0.5 pr-2 text-slate-500">Long-term + live (λΔ = {dd.deflection.lambdaDelta.toFixed(1)})</td>
+                                    <td className="py-0.5 pr-2 text-muted">Long-term + live (λΔ = {dd.deflection.lambdaDelta.toFixed(1)})</td>
                                     <td className="py-0.5 pr-2 text-right">{dd.deflection.total.toFixed(1)} mm</td>
                                     <td className={`py-0.5 pr-2 ${dd.deflection.totalOK ? 'text-emerald-600' : 'text-rose-600'}`}>
                                       ≤ ℓn/240 = {dd.deflection.limitTotal.toFixed(1)} mm {dd.deflection.totalOK ? '✓' : '✗'}
@@ -4976,7 +4976,7 @@ export default function ModelSpace() {
                               </table>
                             </div>
                             {dd.notes.length > 0 && (
-                              <ul className="mt-2 list-disc pl-5 text-[11px] text-slate-500">
+                              <ul className="mt-2 list-disc pl-5 text-[11px] text-muted">
                                 {dd.notes.map((n, ni) => <li key={ni}>{n}</li>)}
                               </ul>
                             )}
@@ -4987,7 +4987,7 @@ export default function ModelSpace() {
                   })}
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted">
                 NSCP §408.10 Direct Design Method: Mo = wu·ℓ2·ℓn²/8 split into negative/positive then column/middle
                 strips (αf neglected → conservative slab steel). Column-strip width = 2·min(0.25ℓ1, 0.25ℓ2).
                 Deflection per §424.2 (Branson Ie + crossing-strip; λΔ = 2.0).
@@ -5001,7 +5001,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Stair schedule<SchedChip items={design.stairs} ok={(st) => st.ok} /></h3>
               <table className="w-full border-collapse text-[13px]">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-slate-500">
+                  <tr className="border-b border-slate-200 text-left text-muted">
                     {['Flight', 'Bears on', 'Rise / run (m)', 'Landing (m)', 'Risers', 'R / G (mm)', 'θ', 'Waist', 'Mu (kN·m/m)', 'Main', 'Dist.', 'Reaction D+L (kN)', ''].map((h) => (
                       <th key={h} className="py-1 pr-3 font-semibold">{h}</th>
                     ))}
@@ -5038,7 +5038,7 @@ export default function ModelSpace() {
                   })}
                 </tbody>
               </table>
-              <p className="mt-1.5 text-[11px] text-slate-500">
+              <p className="mt-1.5 text-[11px] text-muted">
                 Rise, run, R and G are derived from where the two supporting beams are — R = rise/risers, so the risers are equal by construction. An amber R/G is outside the proportions stairs are usually built in (a comfort read, not a code check). The flight is designed on its PLAN run, which is the length its kPa-of-plan-area load works through — a half-landing does not change that span, only how much of it slopes, and a flat landing is the lighter strip, so the design is conservative on a stair that has one. The reactions are not: they come from the real stepped load. It is not meshed into the frame: it contributes load, not stiffness.
               </p>
             </div>
@@ -5049,7 +5049,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Shear-wall schedule (in-plane)<SchedChip items={design.walls} ok={(w) => w.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Wall</th>
                     <th className="py-1 pr-2 font-semibold">ℓw × hw (m)</th>
                     <th className="py-1 pr-2 font-semibold">t (mm)</th>
@@ -5068,7 +5068,7 @@ export default function ModelSpace() {
                     return [
                       <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
                         className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${wl.ok ? '' : 'bg-rose-50 text-rose-700'}`}>
-                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {wl.id} <span className="text-slate-500">({wl.member})</span></td>
+                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {wl.id} <span className="text-muted">({wl.member})</span></td>
                         <td className="py-1 pr-2">{f1(wl.lw)} × {f1(wl.hw)}</td>
                         <td className="py-1 pr-2">{Math.round(wl.thickness)}</td>
                         <td className="py-1 pr-2">{wd.aspect.toFixed(2)}</td>
@@ -5081,17 +5081,17 @@ export default function ModelSpace() {
                         <tr key={`${key}:sol`}>
                           <td colSpan={8} className="bg-slate-50/60 px-3 pb-3">
                             <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-[11px] sm:grid-cols-3">
-                              <div><span className="text-slate-500">Acv</span> = {Math.round(wd.Acv)} mm²</div>
-                              <div><span className="text-slate-500">αc</span> = {wd.alphaC.toFixed(2)}</div>
-                              <div><span className="text-slate-500">Curtains</span>: {curt}</div>
-                              <div><span className="text-slate-500">Vn cap (0.83·Acv√fc)</span> = {f1(wd.VnCap)} kN</div>
-                              <div><span className="text-slate-500">ρt req</span> = {wd.horiz.rhoReq.toFixed(4)}</div>
-                              <div><span className="text-slate-500">s,max</span> = {Math.round(wd.sMax)} mm</div>
-                              <div><span className="text-slate-500">Boundary elements</span>: {wd.boundaryElement ? 'required' : 'not indicated'}</div>
-                              <div><span className="text-slate-500">Governing case</span>: {wl.gov || '—'}</div>
+                              <div><span className="text-muted">Acv</span> = {Math.round(wd.Acv)} mm²</div>
+                              <div><span className="text-muted">αc</span> = {wd.alphaC.toFixed(2)}</div>
+                              <div><span className="text-muted">Curtains</span>: {curt}</div>
+                              <div><span className="text-muted">Vn cap (0.83·Acv√fc)</span> = {f1(wd.VnCap)} kN</div>
+                              <div><span className="text-muted">ρt req</span> = {wd.horiz.rhoReq.toFixed(4)}</div>
+                              <div><span className="text-muted">s,max</span> = {Math.round(wd.sMax)} mm</div>
+                              <div><span className="text-muted">Boundary elements</span>: {wd.boundaryElement ? 'required' : 'not indicated'}</div>
+                              <div><span className="text-muted">Governing case</span>: {wl.gov || '—'}</div>
                             </div>
                             {wd.notes.length > 0 && (
-                              <ul className="mt-2 list-disc pl-5 text-[11px] text-slate-500">
+                              <ul className="mt-2 list-disc pl-5 text-[11px] text-muted">
                                 {wd.notes.map((n, ni) => <li key={ni}>{n}</li>)}
                               </ul>
                             )}
@@ -5102,7 +5102,7 @@ export default function ModelSpace() {
                   })}
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted">
                 NSCP §418.10: Vn = Acv(αc·λ√f′c + ρt·fy), φ = 0.75, capped at 0.83·Acv·√f′c. In-plane shear from the
                 enveloped strut forces; distributed web steel ρt, ρℓ ≥ 0.0025. Flexural boundary reinforcement designed separately.
               </p>
@@ -5116,7 +5116,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Timber beam / girder schedule — NDS §3.3/§3.4 (NSCP §6, LRFD)<SchedChip items={design.woodBeams} ok={(b) => b.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Beam</th>
                     <th className="py-1 pr-2 font-semibold">b×d (mm)</th>
                     <th className="py-1 pr-2 font-semibold">Grade</th>
@@ -5142,7 +5142,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right">{b.CL.toFixed(2)}</td>
                         <td className={`py-1 pr-2 text-right font-semibold ${b.utilM > 1 ? 'text-red-600' : b.utilM > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(b.utilM * 100).toFixed(0)}%</td>
                         <td className={`py-1 pr-2 text-right font-semibold ${b.utilV > 1 ? 'text-red-600' : b.utilV > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(b.utilV * 100).toFixed(0)}%</td>
-                        <td className="py-1 text-[11px] text-slate-500">{b.gov}</td>
+                        <td className="py-1 text-[11px] text-muted">{b.gov}</td>
                       </tr>,
                       open && wantSol && (
                         <tr key={`${key}:sol`}>
@@ -5155,7 +5155,7 @@ export default function ModelSpace() {
                   })}
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted">
                 fb = M/S ≤ F′b (§3.3, beam stability CL §3.3.3); fv = 1.5V/A ≤ F′v (§3.4). Reference values adjusted by
                 CD→λ, CM, CF/CV and converted to LRFD via Appendix N (KF·φ·λ). le auto per §3.3.3.
               </p>
@@ -5167,7 +5167,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Timber column schedule — NDS §3.7 + §3.9 (NSCP §6, LRFD)<SchedChip items={design.woodColumns} ok={(c) => c.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Column</th>
                     <th className="py-1 pr-2 font-semibold">b×d (mm)</th>
                     <th className="py-1 pr-2 font-semibold">Grade</th>
@@ -5195,7 +5195,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right">{c.CP.toFixed(2)}</td>
                         <td className="py-1 pr-2 text-right">{c.slenderness.toFixed(0)}</td>
                         <td className={`py-1 pr-2 text-right font-semibold ${c.ratio > 1 ? 'text-red-600' : c.ratio > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(c.ratio * 100).toFixed(0)}%</td>
-                        <td className="py-1 text-[11px] text-slate-500">{c.gov}</td>
+                        <td className="py-1 text-[11px] text-muted">{c.gov}</td>
                       </tr>,
                       open && wantSol && (
                         <tr key={`${key}:sol`}>
@@ -5208,7 +5208,7 @@ export default function ModelSpace() {
                   })}
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted">
                 fc = P/A ≤ F′c with column stability CP (§3.7.1, governing plane le/d); beam-column members add the §3.9.2
                 interaction (fc/F′c)² + fb/[F′b(1 − fc/FcE)]. Ratio = governing of the two.
               </p>
@@ -5219,7 +5219,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel beam / girder schedule — AISC 360-16 LRFD<SchedChip items={design.steelBeams} ok={(b) => b.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Member</th>
                     <th className="py-1 pr-2 font-semibold">Shape</th>
                     <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
@@ -5241,7 +5241,7 @@ export default function ModelSpace() {
                       <tr key={b.id}
                         className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}
                         onClick={() => setExpanded(open ? null : key)}>
-                        <td className="py-1 pr-2 font-medium">{b.id} <span className="text-slate-500">{open ? '▲' : '▼'}</span></td>
+                        <td className="py-1 pr-2 font-medium">{b.id} <span className="text-muted">{open ? '▲' : '▼'}</span></td>
                         <td className="py-1 pr-2 font-mono">{b.shape}</td>
                         <td className="py-1 pr-2 text-right">{f1(b.Mu)}</td>
                         <td className="py-1 pr-2 text-right">{f1(b.phiMn)}</td>
@@ -5250,7 +5250,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right">{f1(b.phiVn)}</td>
                         <td className={`py-1 pr-2 text-right font-mono ${b.deflOK ? 'text-slate-700' : 'text-red-600 font-semibold'}`}>{b.defl.toFixed(1)}</td>
                         <td className={`py-1 pr-2 text-right font-semibold ${util > 1 ? 'text-red-600' : util > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(util * 100).toFixed(0)}%</td>
-                        <td className="py-1 text-[11px] text-slate-500">{b.gov}</td>
+                        <td className="py-1 text-[11px] text-muted">{b.gov}</td>
                       </tr>,
                     ]
                     if (open) rows.push(
@@ -5270,7 +5270,7 @@ export default function ModelSpace() {
                                     ['Ix', `${(b.Ix / 1e6).toFixed(1)} ×10⁶ mm⁴`], ['Sx', `${(b.Sx / 1e3).toFixed(0)} ×10³ mm³`],
                                     ['Zx', `${(b.Zx / 1e3).toFixed(0)} ×10³ mm³`], ['Iy', `${(b.Iy / 1e6).toFixed(1)} ×10⁶ mm⁴`], ['ry', `${b.ry.toFixed(1)} mm`],
                                   ].map(([lbl, val]) => (
-                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className="font-mono">{val}</td></tr>
+                                    <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className="font-mono">{val}</td></tr>
                                   ))}
                                 </tbody>
                               </table>
@@ -5295,7 +5295,7 @@ export default function ModelSpace() {
                                     ['Clause', `§${b.clause} — ${b.governing} governs`],
                                     ...(Number.isFinite(b.MnFLB) ? [['Mn (FLB, §F3.2)', `${f1(b.MnFLB)} kN·m`]] : []),
                                   ].map(([lbl, val]) => (
-                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className="font-mono">{val}</td></tr>
+                                    <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className="font-mono">{val}</td></tr>
                                   ))}
                                 </tbody>
                               </table>
@@ -5314,7 +5314,7 @@ export default function ModelSpace() {
                                     ['Vu', `${f1(b.Vu)} kN`],
                                     ['Util (V)', `${(b.utilV * 100).toFixed(1)}%`],
                                   ].map(([lbl, val]) => (
-                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className="font-mono">{val}</td></tr>
+                                    <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className="font-mono">{val}</td></tr>
                                   ))}
                                 </tbody>
                               </table>
@@ -5330,13 +5330,13 @@ export default function ModelSpace() {
                                     ['δ / limit', `${b.deflLim > 0 ? ((b.defl / b.deflLim) * 100).toFixed(1) : '—'}%`],
                                     ['OK?', b.deflOK ? '✓ Pass' : '✗ Fail'],
                                   ].map(([lbl, val]) => (
-                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className={`font-mono ${lbl === 'OK?' && !b.deflOK ? 'text-red-600 font-bold' : ''}`}>{val}</td></tr>
+                                    <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className={`font-mono ${lbl === 'OK?' && !b.deflOK ? 'text-red-600 font-bold' : ''}`}>{val}</td></tr>
                                   ))}
                                 </tbody>
                               </table>
                             </div>
                           </div>
-                          <p className="mt-2 text-[10px] text-slate-500">Lb = member brace spacing (set per-member in Geometry → Properties; blank = full length, conservative). Cb = 1.0. φ = 0.9 (flexure), 1.0 (shear, doubly-symmetric I). δ est. = 5Mu·L²/(48·E·Ix), SS bound vs L/240.</p>
+                          <p className="mt-2 text-[10px] text-muted">Lb = member brace spacing (set per-member in Geometry → Properties; blank = full length, conservative). Cb = 1.0. φ = 0.9 (flexure), 1.0 (shear, doubly-symmetric I). δ est. = 5Mu·L²/(48·E·Ix), SS bound vs L/240.</p>
                         </td>
                       </tr>
                     )
@@ -5344,7 +5344,7 @@ export default function ModelSpace() {
                   })}
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted">
                 §F2 flexure (Lb = full member length, conservative; Cb = 1.0), §G2.1 shear, §L2 serviceability (δ est. = 5Mu·L²/48EI vs L/240). δ est. column shows estimated midspan deflection (mm) — red if &gt; L/240. Util = max(Mu/φMn, Vu/φVn, δ/lim). Click a row to expand.
               </p>
             </div>
@@ -5356,7 +5356,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel column schedule — AISC §E3 + §H1-1<SchedChip items={design.steelColumns} ok={(c) => c.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Column</th>
                     <th className="py-1 pr-2 font-semibold">Shape</th>
                     <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
@@ -5377,7 +5377,7 @@ export default function ModelSpace() {
                       <tr key={c.id}
                         className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}
                         onClick={() => setExpanded(open ? null : key)}>
-                        <td className="py-1 pr-2 font-medium">{c.id} <span className="text-slate-500">{open ? '▲' : '▼'}</span></td>
+                        <td className="py-1 pr-2 font-medium">{c.id} <span className="text-muted">{open ? '▲' : '▼'}</span></td>
                         <td className="py-1 pr-2 font-mono">{c.shape}</td>
                         <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
                         <td className="py-1 pr-2 text-right">{f1(c.phiPn)}</td>
@@ -5385,7 +5385,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right">{c.slenderness.toFixed(0)}</td>
                         <td className="py-1 pr-2">{c.equation}</td>
                         <td className={`py-1 pr-2 text-right font-semibold ${c.ratio > 1 ? 'text-red-600' : c.ratio > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(c.ratio * 100).toFixed(0)}%</td>
-                        <td className="py-1 text-[11px] text-slate-500">{c.gov}</td>
+                        <td className="py-1 text-[11px] text-muted">{c.gov}</td>
                       </tr>,
                     ]
                     if (open) rows.push(
@@ -5408,7 +5408,7 @@ export default function ModelSpace() {
                                   {[['d', `${c.d.toFixed(1)} mm`], ['bf', `${c.bf.toFixed(1)} mm`], ['tf', `${c.tf.toFixed(1)} mm`], ['tw', `${c.tw.toFixed(1)} mm`],
                                     ['A', `${c.A.toFixed(0)} mm²`], ['rx', `${c.rx.toFixed(1)} mm`], ['ry', `${c.ry.toFixed(1)} mm`],
                                   ].map(([lbl, val]) => (
-                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className="font-mono">{val}</td></tr>
+                                    <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className="font-mono">{val}</td></tr>
                                   ))}
                                 </tbody>
                               </table>
@@ -5429,7 +5429,7 @@ export default function ModelSpace() {
                                     ['Pu', `${f1(c.Pu)} kN`],
                                     ['Pu/φPn', `${(c.Pu / (c.phiPn || 1) * 100).toFixed(1)}%`],
                                   ].map(([lbl, val]) => (
-                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className="font-mono">{val}</td></tr>
+                                    <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className="font-mono">{val}</td></tr>
                                   ))}
                                 </tbody>
                               </table>
@@ -5447,13 +5447,13 @@ export default function ModelSpace() {
                                     ['Interaction ratio', `${(c.ratio * 100).toFixed(1)}%`],
                                     ['Status', c.ok ? '✓ OK' : '✗ NG'],
                                   ].map(([lbl, val]) => (
-                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className={`font-mono ${lbl === 'Status' ? (c.ok ? 'text-green-700' : 'text-red-600') : ''}`}>{val}</td></tr>
+                                    <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className={`font-mono ${lbl === 'Status' ? (c.ok ? 'text-green-700' : 'text-red-600') : ''}`}>{val}</td></tr>
                                   ))}
                                 </tbody>
                               </table>
                             </div>
                           </div>
-                          <p className="mt-2 text-[10px] text-slate-500">K = 1.0 (conservative). §E3: 4.71√(E/Fy) threshold. §H1-1a when Pu/φPn ≥ 0.2, else §H1-1b.</p>
+                          <p className="mt-2 text-[10px] text-muted">K = 1.0 (conservative). §E3: 4.71√(E/Fy) threshold. §H1-1a when Pu/φPn ≥ 0.2, else §H1-1b.</p>
                         </td>
                       </tr>
                     )
@@ -5461,7 +5461,7 @@ export default function ModelSpace() {
                   })}
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted">
                 §E3 axial buckling (governing KL/r, K = 1.0), §H1-1 combined axial + flexure. Ratio ≤ 100% passes. Click a row to expand the worked solution.
               </p>
             </div>
@@ -5473,7 +5473,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Base-plate schedule — AISC §J8 / Design Guide 1<SchedChip items={design.basePlates} ok={(pl) => pl.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Node</th>
                     <th className="py-1 pr-2 font-semibold">Column</th>
                     <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
@@ -5497,7 +5497,7 @@ export default function ModelSpace() {
                   ))}
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted">
                 Bearing §J8: φc·0.85f′c·√(A2/A1), φc = 0.65. Plate thickness from cantilever bending
                 t = ℓ√(2fp/(0.9Fy)); ℓ = max(m, n, n′). Uplift sizes anchor rods (φt·0.75·Fu).
                 Adopted t rounded to plate stock.
@@ -5511,7 +5511,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Timber deck slab schedule — NDS §3 / NSCP §6<SchedChip items={design.woodSlabs} ok={(s) => s.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Panel</th>
                     <th className="py-1 pr-2 text-right font-semibold">Span (m)</th>
                     <th className="py-1 pr-2 font-semibold">Species</th>
@@ -5538,7 +5538,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right">{(s.design.deck.ratio * 100).toFixed(0)}%</td>
                         <td className="py-1 pr-2 text-right">{(s.design.joist.ratio * 100).toFixed(0)}%</td>
                         <td className="py-1 pr-2 text-right">{f0(t.joistBoardFeet + t.deckBoardFeet)}</td>
-                        <td className="py-1 text-slate-500">{s.ok ? '✓ OK' : '✗ check'}</td>
+                        <td className="py-1 text-muted">{s.ok ? '✓ OK' : '✗ check'}</td>
                       </tr>,
                       open && wantSol && (
                         <tr key={`${key}:sol`}>
@@ -5551,7 +5551,7 @@ export default function ModelSpace() {
                   })}
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">Deck-on-joist: the deck board spans the joist spacing, the joist spans the panel; bending + shear + service deflection (L/360 live, L/240 total). Board feet by size. Click a row for the worked solution.</p>
+              <p className="mt-1 text-[11px] text-muted">Deck-on-joist: the deck board spans the joist spacing, the joist spans the panel; bending + shear + service deflection (L/360 live, L/240 total). Board feet by size. Click a row for the worked solution.</p>
             </div>
           )}
 
@@ -5559,12 +5559,12 @@ export default function ModelSpace() {
           {(design.joints.length > 0 || design.beamJoints.length > 0) && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel connection schedule — AISC SCM<SchedChip items={[...design.joints.flatMap((j) => j.connections), ...design.beamJoints.flatMap((j) => j.connections)]} ok={(cn) => cn.ok} /></h3>
-              <p className="mb-2 text-[11px] text-slate-500">
+              <p className="mb-2 text-[11px] text-muted">
                 Columns oriented with depth <em>d</em> in X (flanges face ±X); X-direction girders land on the column <strong>flange</strong> face (strong-axis moment connection), Z-direction beams land on the column <strong>web</strong> face (shear tab). Bolts: M20 A325 single-shear (φRₙ = 116.5 kN/bolt). Welds: E70XX fillet, both sides of plate.
               </p>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Node</th>
                     <th className="py-1 pr-2 font-semibold">Col. shape</th>
                     <th className="py-1 pr-2 font-semibold">Beam</th>
@@ -5590,25 +5590,25 @@ export default function ModelSpace() {
                         className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
                         <td className={`py-1 pr-2 align-top ${ci === 0 ? 'font-medium' : 'text-slate-300'}`}>
                           {open ? '▾' : '▸'} {j.nodeId}
-                          {ci === 0 && <div className="text-[10px] text-slate-500">{j.strongAxisDir.toUpperCase()}-axis</div>}
+                          {ci === 0 && <div className="text-[10px] text-muted">{j.strongAxisDir.toUpperCase()}-axis</div>}
                         </td>
                         <td className={`py-1 pr-2 font-mono align-top ${ci === 0 ? '' : 'text-slate-300'}`}>{j.columnShape}</td>
                         <td className="py-1 pr-2 font-medium">{c.beamId}</td>
                         <td className="py-1 pr-2 uppercase">{c.spanDir}</td>
                         <td className="py-1 pr-2 text-[11px]">
                           <span className={c.faceType === 'flange' ? 'font-semibold text-blue-700' : 'text-slate-600'}>col {c.faceType}</span>
-                          <span className="text-slate-500"> → beam {c.beamElement}</span>
+                          <span className="text-muted"> → beam {c.beamElement}</span>
                         </td>
                         <td className="py-1 pr-2 text-[11px]">
                           {c.connType === 'moment-flange-weld' ? 'Moment (CJP flange)'
                             : c.connType === 'moment-web-plate' ? 'Moment (web ext. plates)' : 'Shear tab'}
-                          <div className="text-[10px] text-slate-500">{c.pinned ? 'pin — releases Mz' : 'rigid'}</div>
+                          <div className="text-[10px] text-muted">{c.pinned ? 'pin — releases Mz' : 'rigid'}</div>
                         </td>
                         <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
                         <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
                         <td className="py-1 pr-2 text-[11px]">
-                          {c.bolts.n} × M{c.bolts.dia} A325 <span className="text-[10px] text-slate-500">(single shear)</span>
-                          <div className="text-[10px] text-slate-500">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN/bolt · e={Math.round(c.bolts.ecc)}mm</div>
+                          {c.bolts.n} × M{c.bolts.dia} A325 <span className="text-[10px] text-muted">(single shear)</span>
+                          <div className="text-[10px] text-muted">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN/bolt · e={Math.round(c.bolts.ecc)}mm</div>
                         </td>
                         <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
                         <td className="py-1 pr-2 text-[11px]">
@@ -5618,7 +5618,7 @@ export default function ModelSpace() {
                         <td className="py-1 text-[11px]">
                           <span className={c.ok ? 'text-green-700' : 'text-red-600'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
                           {c.flange && (
-                            <div className="text-[10px] text-slate-500">Tf={f1(c.flange.Tf)} kN</div>
+                            <div className="text-[10px] text-muted">Tf={f1(c.flange.Tf)} kN</div>
                           )}
                         </td>
                       </tr>
@@ -5646,27 +5646,27 @@ export default function ModelSpace() {
                         className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
                         <td className={`py-1 pr-2 align-top ${ci === 0 ? 'font-medium' : 'text-slate-300'}`}>
                           {open ? '▾' : '▸'} {bj.nodeId}
-                          {ci === 0 && <div className="text-[10px] text-slate-500">beam-to-beam</div>}
+                          {ci === 0 && <div className="text-[10px] text-muted">beam-to-beam</div>}
                         </td>
                         <td className={`py-1 pr-2 font-mono align-top ${ci === 0 ? '' : 'text-slate-300'}`}>
                           {bj.girderShape}
-                          {ci === 0 && <div className="text-[10px] text-slate-500">girder {bj.girderId}</div>}
+                          {ci === 0 && <div className="text-[10px] text-muted">girder {bj.girderId}</div>}
                         </td>
                         <td className="py-1 pr-2 font-medium">{c.beamId}</td>
                         <td className="py-1 pr-2 uppercase">{c.spanDir}</td>
                         <td className="py-1 pr-2 text-[11px]">
                           <span className="text-slate-600">girder web</span>
-                          <span className="text-slate-500"> → beam web{c.cope ? ` (coped ${c.cope.lengthMm}×${c.cope.depthMm})` : ''}</span>
+                          <span className="text-muted"> → beam web{c.cope ? ` (coped ${c.cope.lengthMm}×${c.cope.depthMm})` : ''}</span>
                         </td>
                         <td className="py-1 pr-2 text-[11px]">
                           Fin plate
-                          <div className="text-[10px] text-slate-500">pin — releases Mz</div>
+                          <div className="text-[10px] text-muted">pin — releases Mz</div>
                         </td>
                         <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
                         <td className="py-1 pr-2 text-right">—</td>
                         <td className="py-1 pr-2 text-[11px]">
-                          {c.bolts.n} × M{c.bolts.dia} A325 <span className="text-[10px] text-slate-500">(single shear)</span>
-                          <div className="text-[10px] text-slate-500">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN/bolt · e={Math.round(c.bolts.ecc)}mm</div>
+                          {c.bolts.n} × M{c.bolts.dia} A325 <span className="text-[10px] text-muted">(single shear)</span>
+                          <div className="text-[10px] text-muted">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN/bolt · e={Math.round(c.bolts.ecc)}mm</div>
                         </td>
                         <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
                         <td className="py-1 pr-2 text-[11px]">{c.tab.weldSizeMm}mm E70</td>
@@ -5690,7 +5690,7 @@ export default function ModelSpace() {
                   )}
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted">
                 Shear tab: A36 plate (Fy=248, Fu=400 MPa), M20 A325 bolts @ 75 mm pitch, 40 mm edge. Plate shear yielding φ=1.0 (§J4.2).
                 Moment connection: CJP groove weld at beam flanges, φFu·A_flange (§J2.6). Weld = E70XX fillet both sides of shear tab.
                 Beam-to-beam: fin plate welded to the girder web, supported-beam top flange coped to clear the girder flange (SCM Pt 9/10).
@@ -5703,7 +5703,7 @@ export default function ModelSpace() {
             <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Footing schedule<SchedChip items={design.footings} ok={(f) => f.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                <tr className="sched-head text-left uppercase tracking-wide text-muted">
                   <th className="py-1 pr-2 font-semibold">Node</th>
                   <th className="py-1 pr-2 text-right font-semibold">P / Pu (kN)</th>
                   <th className="py-1 pr-2 font-semibold">Plan</th>
@@ -5724,7 +5724,7 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2">B = {f2(f.design.B)} m</td>
                       <td className="py-1 pr-2">{Math.round(f.design.Dc)} mm</td>
                       <td className="py-1 pr-2">{f.design.bars}⌀{f.barDia} @ {Math.round(f.design.barSpacing)} e.w.</td>
-                      <td className="py-1 text-slate-500">{f.gov}</td>
+                      <td className="py-1 text-muted">{f.gov}</td>
                     </tr>,
                     open && model && (
                       <tr key={`${key}:sol`}>
@@ -5753,7 +5753,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Combined footing schedule<SchedChip items={design.combined} ok={(c) => c.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Nodes</th>
                     <th className="py-1 pr-2 text-right font-semibold">Spacing</th>
                     <th className="py-1 pr-2 text-right font-semibold">DL / LL (kN)</th>
@@ -5786,13 +5786,13 @@ export default function ModelSpace() {
                   })}
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted">
                 Column loads split from D-only / L-only frame solves. Click a row for the full worked solution.
               </p>
             </div>
           )}
 
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-muted">
             Pipeline: slab area loads → tributary line loads → 3D frame FEM (governing NSCP combo) → beam/girder
             critical sections (SRRB/DRRB) → column P–M → base reactions → isolated footings. Open any standalone
             page for the full worked solution of a given element.
@@ -5826,7 +5826,7 @@ export default function ModelSpace() {
                   class looks the same as a derived one and the bill quietly
                   stops matching the design. */}
               {classPin === null ? (
-                <span className="text-[11.5px] text-slate-500">
+                <span className="text-[11.5px] text-muted">
                   from f′c = {f2(fc)} MPa
                 </span>
               ) : (
@@ -5860,7 +5860,7 @@ export default function ModelSpace() {
               takeoff.timberM3 > 0 && ['Timber (bd·ft)', `${f0(takeoff.timberBoardFeet)}`],
             ].filter(Boolean as unknown as (v: unknown) => v is [string, string]).map(([k, v]) => (
               <div key={k} className="rounded-lg border border-slate-200 bg-sheet p-2 text-center shadow-sm">
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">{k}</div>
+                <div className="text-[11px] uppercase tracking-wide text-muted">{k}</div>
                 <div className="text-sm font-bold text-brand">{v}</div>
               </div>
             ))}
@@ -5875,7 +5875,7 @@ export default function ModelSpace() {
               </div>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <tr className="text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Material</th>
                     <th className="py-1 pr-2 text-right font-semibold">Qty</th>
                     <th className="py-1 pr-2 font-semibold">Unit</th>
@@ -5891,7 +5891,7 @@ export default function ModelSpace() {
                       <tr key={r.item} className="border-t border-slate-100">
                         <td className="py-0.5 pr-2">{r.item}</td>
                         <td className="py-0.5 pr-2 text-right">{f2(r.qty)}</td>
-                        <td className="py-0.5 pr-2 text-slate-500">{r.unit}</td>
+                        <td className="py-0.5 pr-2 text-muted">{r.unit}</td>
                         <td className="py-0.5 pr-2 text-right">
                           {key ? (
                             <>
@@ -5912,7 +5912,7 @@ export default function ModelSpace() {
                   </tr>
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted">
                 Edit the unit prices to your local rates (PHP). Steel priced on the purchased (6 m-bar) weight incl. lap/waste;
                 concrete via cement/sand/gravel; timber per board foot. Labour, hauling and contingencies not included.
               </p>
@@ -5925,7 +5925,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Bill of Quantities (by element)</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <tr className="text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Item</th>
                     <th className="py-1 pr-2 text-right font-semibold">Qty</th>
                     <th className="py-1 font-semibold">Unit</th>
@@ -5936,7 +5936,7 @@ export default function ModelSpace() {
                     <tr key={r.item} className="border-t border-slate-100">
                       <td className="py-0.5 pr-2">{r.item}</td>
                       <td className="py-0.5 pr-2 text-right">{f2(r.qty)}</td>
-                      <td className="py-0.5 text-slate-500">{r.unit}</td>
+                      <td className="py-0.5 text-muted">{r.unit}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -5948,7 +5948,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Reinforcement by bar Ø (6 m bars)</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <tr className="text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Bar</th>
                     <th className="py-1 pr-2 text-right font-semibold">Net (m)</th>
                     <th className="py-1 pr-2 text-right font-semibold">6 m pcs</th>
@@ -5975,7 +5975,7 @@ export default function ModelSpace() {
                   </tr>
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">
+              <p className="mt-1 text-[11px] text-muted">
                 Continuous bars spliced (usable 6 − 0.30 m lap); stirrups/ties nested (cuts per 6 m). Fabricated net
                 {' '}{f1(takeoff.totalSteelNetKg)} kg → bought {f1(takeoff.totalSteelPurchasedKg)} kg.
                 Class {concreteClass}: {takeoff.concrete.factor} cement bags/m³ · sand 0.5, gravel 1.0 m³/m³ (NSCP mix).
@@ -5989,7 +5989,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Structural steel by shape</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <tr className="text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Shape</th>
                     <th className="py-1 pr-2 text-right font-semibold">Unit wt (kg/m)</th>
                     <th className="py-1 pr-2 text-right font-semibold">Length (m)</th>
@@ -6013,7 +6013,7 @@ export default function ModelSpace() {
                   </tr>
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">Net mass: ρ = 7 850 kg/m³ · A (mm²) × L (m). Connections, base plates and field splices not included.</p>
+              <p className="mt-1 text-[11px] text-muted">Net mass: ρ = 7 850 kg/m³ · A (mm²) × L (m). Connections, base plates and field splices not included.</p>
             </div>
           )}
 
@@ -6023,7 +6023,7 @@ export default function ModelSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Timber by size</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <tr className="text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Size (mm)</th>
                     <th className="py-1 pr-2 font-semibold">Species</th>
                     <th className="py-1 pr-2 font-semibold">Kind</th>
@@ -6054,7 +6054,7 @@ export default function ModelSpace() {
                   </tr>
                 </tbody>
               </table>
-              <p className="mt-1 text-[11px] text-slate-500">Solid-rectangle volume b×h×L; board feet = m³ × 423.776 (1 bd·ft = 1/12 ft³). Priced per board foot in the Bill of Materials. Connections and wastage/off-cuts not included.</p>
+              <p className="mt-1 text-[11px] text-muted">Solid-rectangle volume b×h×L; board feet = m³ × 423.776 (1 bd·ft = 1/12 ft³). Priced per board foot in the Bill of Materials. Connections and wastage/off-cuts not included.</p>
             </div>
           )}
 
@@ -6102,7 +6102,7 @@ export default function ModelSpace() {
             <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Reinforcement cut list</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="text-left uppercase tracking-wide text-slate-500">
+                <tr className="text-left uppercase tracking-wide text-muted">
                   <th className="py-1 pr-2 font-semibold">Element</th>
                   <th className="py-1 pr-2 font-semibold">Mark</th>
                   <th className="py-1 pr-2 text-right font-semibold">Bar</th>
@@ -6126,7 +6126,7 @@ export default function ModelSpace() {
                 ))}
               </tbody>
             </table>
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-[11px] text-muted">
               Cut lengths include a 40·d_b lap/anchorage allowance on straight bars and a 2·max(6·d_t, 75 mm) hook
               allowance on stirrups/ties. {takeoff.slabSteelDDM ? 'Slab steel follows the DDM column/middle-strip layout: +M bottom bars span-long, −M top bars cut off 0.3·ℓn over supports.' : ''}
             </p>

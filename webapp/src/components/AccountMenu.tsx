@@ -88,9 +88,9 @@ export function AccountMenu({ dark }: { dark?: boolean }) {
           <div className="border-b border-slate-100 px-3.5 py-2.5">
             <p className="truncate text-[12.5px] font-semibold text-ink">{label}</p>
             {user.email && user.email !== label && (
-              <p className="truncate text-[11px] text-slate-500">{user.email}</p>
+              <p className="truncate text-[11px] text-muted">{user.email}</p>
             )}
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-[11px] text-muted">
               On the <strong className="text-brand">{plan.name}</strong> plan
               {!user.emailVerified && <span className="text-amber-700"> · email not verified</span>}
             </p>

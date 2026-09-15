@@ -331,7 +331,7 @@ export default function ColumnDesign() {
             {system === 'smf' && (
               <>
                 <Num label="Max lateral bar spacing hx" unit="mm" value={hx} onChange={setHx} />
-                <p className="col-span-full text-[10px] text-slate-500">
+                <p className="col-span-full text-[10px] text-muted">
                   hx = centre-to-centre of outermost laterally restrained bars (≤ 350 mm).
                   Set 0 to use the column least dimension as the default.
                 </p>
@@ -345,7 +345,7 @@ export default function ColumnDesign() {
             {loadInput === 'individual' ? <>
               <Num label={<>Dead <KTex tex="D" /></>} unit="kN" value={dead} onChange={setDead} />
               <Num label={<>Live <KTex tex="L" /></>} unit="kN" value={live} onChange={setLive} />
-              <p className="col-span-full text-xs text-slate-500">Pu = max(1.4D, 1.2D+1.6L) = {f0(Pu)} kN</p>
+              <p className="col-span-full text-xs text-muted">Pu = max(1.4D, 1.2D+1.6L) = {f0(Pu)} kN</p>
             </> : (
               <Num label={<KTex tex="P_u" />} unit="kN" value={PuDirect} onChange={setPuDirect} />
             )}
@@ -362,7 +362,7 @@ export default function ColumnDesign() {
                 <Num label={<KTex tex="M_1" />} unit="kN·m" value={M1} onChange={setM1} />
                 <Num label={<KTex tex="M_2" />} unit="kN·m" value={M2} onChange={setM2} />
                 <Num label="EI (0 = 0.4EcIg/1.6)" unit="kN·m²" value={EIin} onChange={setEIin} />
-                <p className="col-span-full text-xs text-slate-500">
+                <p className="col-span-full text-xs text-muted">
                   Sheet convention: M1/M2 negative for single curvature.
                 </p>
               </>}
@@ -459,7 +459,7 @@ export default function ColumnDesign() {
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-200 text-left uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-slate-200 text-left uppercase tracking-wide text-muted">
                   <th className="pb-1.5 pr-3 font-semibold">Point</th>
                   <th className="pb-1.5 pr-3 font-semibold">c (mm)</th>
                   <th className="pb-1.5 pr-3 font-semibold">εt</th>
@@ -474,11 +474,11 @@ export default function ColumnDesign() {
                 {/* Compression cap */}
                 <tr className="border-b border-slate-100 bg-slate-50">
                   <td className="py-1 pr-3 font-semibold text-slate-600">Max. axial cap</td>
-                  <td className="py-1 pr-3 text-slate-500">—</td>
-                  <td className="py-1 pr-3 text-slate-500">—</td>
-                  <td className="py-1 pr-3 text-slate-500">0.65</td>
-                  <td className="py-1 pr-3 text-slate-500">{f1(inter.PnMax)}</td>
-                  <td className="py-1 pr-3 text-slate-500">0</td>
+                  <td className="py-1 pr-3 text-muted">—</td>
+                  <td className="py-1 pr-3 text-muted">—</td>
+                  <td className="py-1 pr-3 text-muted">0.65</td>
+                  <td className="py-1 pr-3 text-muted">{f1(inter.PnMax)}</td>
+                  <td className="py-1 pr-3 text-muted">0</td>
                   <td className="py-1 pr-3 font-semibold text-slate-800">{f1(0.65 * inter.PnMax)}</td>
                   <td className="py-1 font-semibold text-slate-800">0</td>
                 </tr>
@@ -505,7 +505,7 @@ export default function ColumnDesign() {
             </table>
           </div>
           {cap && (
-            <p className="mt-2 text-[11px] text-slate-500">
+            <p className="mt-2 text-[11px] text-muted">
               Demand: P<sub>u</sub>={f1(Pu)} kN · M<sub>u</sub>={f1(MuEff)} kN·m —
               capacity at e={f0((MuEff / Pu) * 1000)} mm: φP<sub>n</sub>={f1(cap.phi * cap.Pn)} kN,
               utilisation {util !== null ? `${(util * 100).toFixed(0)}%` : '—'}.

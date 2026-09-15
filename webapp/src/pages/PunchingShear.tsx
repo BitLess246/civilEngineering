@@ -168,7 +168,7 @@ export default function PunchingShear() {
             </ResultCard>
           </div>
         ) : (
-          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-slate-500">
+          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-muted">
             Fill in all inputs to see results.
           </p>
         )}

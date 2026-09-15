@@ -32,7 +32,7 @@ function Field({ label, value, onChange, unit, step = 'any', min, max }: {
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-muted">{label}</span>
       <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
     </div>
   )
@@ -88,7 +88,7 @@ export default function WaterTank() {
   return (
         <div>
       <PageHeader title="Circular RC water tank — wall" badges={['IS 3370', 'ACI 350']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
+      <div className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Circular Water Tank" badges={['IS 3370', 'ACI 350']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Permissible-stress (working-stress) wall design for a circular liquid-retaining tank, following the
@@ -130,7 +130,7 @@ export default function WaterTank() {
         <Out label="Vertical steel As" value={`${f0(r.vertAs)} mm²/m — ⌀${barDia} @ ${f0(r.vertSpacing)} mm`} />
         <Out label={`Concrete tension fct (≤ ${f2(sigmaCt)})`} value={`${f2(r.fct)} MPa`} ok={r.thicknessOK} />
         <Out label="Freeboard ≥ 300 mm" value={`${f2(freeboard)} m`} ok={r.freeboardOK} />
-        <p className="mt-2 text-[10px] text-slate-500">
+        <p className="mt-2 text-[10px] text-muted">
           Provide ring steel on both faces near the base where hoop tension peaks; reduce up the wall as
           T = γw·z·D/2 falls. σst ≈ 115–150 MPa controls crack width (IS 3370 / ACI 350). Base slab, roof,
           and the wall-base joint (fixed vs hinged) are designed separately.
@@ -141,7 +141,7 @@ export default function WaterTank() {
       <div className="mt-5">
         <WorkedSolution steps={solution} title="Calculation report — worked solution" />
       </div>
-    </main>
+    </div>
     </div>
   )
 }

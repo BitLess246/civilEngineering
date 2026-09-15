@@ -82,7 +82,7 @@ export function WelcomeDialog({ onClose }: { onClose: () => void }) {
 
         <div className="px-6 py-5">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <span className="text-[12px] font-semibold text-slate-500">
+            <span className="text-[12px] font-semibold text-muted">
               {chosen.size} of {CHOOSABLE_GROUPS.length} selected
             </span>
             <button type="button"
@@ -111,7 +111,7 @@ export function WelcomeDialog({ onClose }: { onClose: () => void }) {
               Pick at least one, or use “Show me everything”.
             </span>
           )}
-          <span className="ml-auto hidden text-[11.5px] text-slate-400 sm:inline">
+          <span className="ml-auto hidden text-[11.5px] text-faint sm:inline">
             Change later in <Link to="/profile" className="underline">your profile</Link>
           </span>
         </div>

@@ -17,7 +17,7 @@ function ControlTable({ controls }: { controls: DocControl[] }) {
     <div className="mt-2 overflow-x-auto">
       <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="text-left uppercase tracking-wide text-slate-500">
+          <tr className="text-left uppercase tracking-wide text-muted">
             <th className="w-8 py-1 pr-2 font-semibold" />
             <th className="py-1 pr-3 font-semibold">Control</th>
             <th className="py-1 pr-3 font-semibold">Unit</th>
@@ -33,10 +33,10 @@ function ControlTable({ controls }: { controls: DocControl[] }) {
                   <span className={`rounded px-1 py-px text-[9px] font-semibold uppercase ${tag.cls}`}>{tag.label}</span>
                 </td>
                 <td className="py-1.5 pr-3 font-medium text-slate-800">{c.name}</td>
-                <td className="py-1.5 pr-3 whitespace-nowrap text-slate-500">{c.unit ?? '—'}</td>
+                <td className="py-1.5 pr-3 whitespace-nowrap text-muted">{c.unit ?? '—'}</td>
                 <td className="py-1.5 leading-5 text-slate-700">
                   {c.what}
-                  {c.default && <span className="text-slate-500"> Default: {c.default}.</span>}
+                  {c.default && <span className="text-muted"> Default: {c.default}.</span>}
                 </td>
               </tr>
             )
@@ -52,14 +52,14 @@ function ToolDoc({ t }: { t: DocTool }) {
     <section id={t.id} className="scroll-mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline gap-2">
         <h2 className="text-lg font-bold text-brand">{t.name}</h2>
-        <a href={`#${t.id}`} className="text-[11px] text-slate-400 hover:text-brand" aria-label={`Link to ${t.name}`}>#</a>
+        <a href={`#${t.id}`} className="text-[11px] text-faint hover:text-brand" aria-label={`Link to ${t.name}`}>#</a>
         <Link to={t.route} className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-brand hover:border-brand-hover hover:bg-blue-50">
           Open tool →
         </Link>
       </div>
       <p className="mt-1 text-sm leading-6 text-slate-700">{t.summary}</p>
       {t.basis && (
-        <p className="mt-1 text-[11px] text-slate-500"><span className="font-semibold">Basis:</span> {t.basis}</p>
+        <p className="mt-1 text-[11px] text-muted"><span className="font-semibold">Basis:</span> {t.basis}</p>
       )}
       {t.sections.map((s) => (
         <div key={s.id} id={`${t.id}-${s.id}`} className="mt-4 scroll-mt-6 border-t border-slate-100 pt-3">
@@ -88,8 +88,8 @@ export default function Documentation() {
   const shownControls = useMemo(() => countControls(shown), [shown])
 
   return (
-    <main className="mx-auto max-w-[1400px] px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Reference</p>
+    <div className="mx-auto max-w-[1400px] px-5 py-10">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Reference</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">Documentation</h1>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
         Every control in the app — each field, dropdown, checkbox, button, tab and result — with what it does and
@@ -97,7 +97,7 @@ export default function Documentation() {
         searching here for something you can see in the UI finds its explanation.{' '}
         <b>{total} controls</b> across <b>{DOC_TOOLS.length} entries</b>.
       </p>
-      <p className="mt-2 max-w-3xl text-[11px] text-slate-500">
+      <p className="mt-2 max-w-3xl text-[11px] text-muted">
         Units follow the project convention throughout: geometry in m, section dimensions in mm, forces in kN,
         stresses in MPa. Where a page departs from that, the unit column says so.
       </p>
@@ -109,7 +109,7 @@ export default function Documentation() {
           className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none sm:w-96"
         />
         {q.trim() && (
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-muted">
             {shown.length} tool{shown.length === 1 ? '' : 's'} · {shownControls} controls
             <button type="button" onClick={() => setQ('')} className="ml-2 text-brand underline">clear</button>
           </span>
@@ -119,7 +119,7 @@ export default function Documentation() {
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
         {/* ── contents ── */}
         <nav className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Contents</p>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-faint">Contents</p>
           {DOC_GROUPS.map((g) => {
             const tools = shown.filter((t) => t.group === g)
             if (!tools.length) return null
@@ -143,7 +143,7 @@ export default function Documentation() {
         {/* ── body ── */}
         <div className="space-y-8">
           {shown.length === 0 && (
-            <p className="rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-slate-500">
+            <p className="rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-muted">
               Nothing matches “{q}”. Every word has to match — try fewer of them.
             </p>
           )}
@@ -152,7 +152,7 @@ export default function Documentation() {
             if (!tools.length) return null
             return (
               <div key={g}>
-                <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">{g}</h2>
+                <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted">{g}</h2>
                 <div className="space-y-5">
                   {tools.map((t) => <ToolDoc key={t.id} t={t} />)}
                 </div>
@@ -162,11 +162,11 @@ export default function Documentation() {
         </div>
       </div>
 
-      <p className="mt-10 text-[11px] text-slate-500">
+      <p className="mt-10 text-[11px] text-muted">
         Codes: NSCP 2015 · ACI 318-14 · AISC 360-16 · NDS. Engine results are checked against independent hand
         calculations on the{' '}
         <Link to="/validation" className="text-brand underline">validation page</Link>.
       </p>
-    </main>
+    </div>
   )
 }

@@ -60,7 +60,7 @@ export function ConnectionDrawing({ geom, db, boltForces, critical, Vu, Hu, ex_l
 
   return (
     <div className="print-avoid-break rounded-xl border border-slate-200 bg-sheet p-3 shadow-sm">
-      <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
+      <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
         Connection face — {connType === 'bolt' ? 'bolt layout' : 'weld layout'}
       </h3>
       <svg width="100%" style={{ maxWidth: svgW * 1.15 }} viewBox={`0 0 ${svgW} ${svgH}`} className="h-auto">

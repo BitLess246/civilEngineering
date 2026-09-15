@@ -4,7 +4,7 @@ import { SITE, businessName, addressLines, missingSiteFields } from '../../lib/s
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="border-t border-slate-100 py-3 sm:grid sm:grid-cols-[160px_1fr] sm:gap-4">
-      <dt className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
+      <dt className="text-[12px] font-semibold uppercase tracking-wide text-muted">{label}</dt>
       <dd className="mt-1 text-[14px] leading-6 text-slate-800 sm:mt-0">{children}</dd>
     </div>
   )
@@ -20,8 +20,8 @@ export default function Contact() {
   const missing = missingSiteFields()
   const addr = addressLines()
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Support</p>
+    <div className="mx-auto max-w-3xl px-5 py-10">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Support</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">Contact us</h1>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
         A real person reads these. If something is wrong with a calculation, tell us what you entered
@@ -39,7 +39,7 @@ export default function Contact() {
         <dl>
           <Row label="Business name">
             {SITE.legalName.trim()
-              ? <><strong>{SITE.legalName}</strong>{' '}<span className="text-slate-500">trading as {SITE.tradeName}</span></>
+              ? <><strong>{SITE.legalName}</strong>{' '}<span className="text-muted">trading as {SITE.tradeName}</span></>
               : <Unset what="registered business name" />}
           </Row>
           <Row label="Address">
@@ -82,13 +82,13 @@ export default function Contact() {
         right?&rdquo;, that page may answer it faster than we can.
       </p>
 
-      <p className="mt-8 border-t border-slate-200 pt-4 text-[13px] text-slate-500">
+      <p className="mt-8 border-t border-slate-200 pt-4 text-[13px] text-muted">
         {businessName()} is a Philippine business. Our{' '}
         <Link to="/terms" className="text-brand underline">Terms</Link>,{' '}
         <Link to="/privacy" className="text-brand underline">Privacy Policy</Link> and{' '}
         <Link to="/refunds" className="text-brand underline">Refund Policy</Link> apply to all
         use of the service.
       </p>
-    </main>
+    </div>
   )
 }

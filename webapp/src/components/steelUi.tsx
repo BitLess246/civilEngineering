@@ -31,7 +31,7 @@ export function ZoneBadge({ zone }: { zone: string }) {
 }
 
 export function Spinner() {
-  return <div className="flex h-80 items-center justify-center rounded-lg border border-hairline bg-sheet text-sm text-slate-400">Loading 3D…</div>
+  return <div className="flex h-80 items-center justify-center rounded-lg border border-hairline bg-sheet text-sm text-faint">Loading 3D…</div>
 }
 
 /** In-flight / failed state of the calc API call, shown beside a card title. */
@@ -41,7 +41,7 @@ export function CalcBadge({ loading, error, cause }: { loading: boolean; error: 
   if (cause instanceof TrialExhaustedError)
     return <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">free trial used up</span>
   if (error)   return <span className="ml-2 rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">API error — check console</span>
-  if (loading) return <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-500">computing…</span>
+  if (loading) return <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-muted">computing…</span>
   return null
 }
 
@@ -110,7 +110,7 @@ export function BasisPick({ value, onChange }: { value: DesignBasis; onChange: (
 /** The basis stated where the report will print it. */
 export function BasisNote({ basis }: { basis: DesignBasis }) {
   return (
-    <p className="col-span-full text-[10px] text-slate-500">
+    <p className="col-span-full text-[10px] text-muted">
       {basis === 'LRFD'
         ? 'LRFD: capacities are φRn, compared against the governing factored combination max(1.4D, 1.2D + 1.6L).'
         : 'ASD: capacities are the allowable Rn/Ω, compared against the service combination D + L. Do not compare these against factored loads.'}

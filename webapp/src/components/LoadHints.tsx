@@ -25,7 +25,7 @@ export function HintButton({ title, label = 'ⓘ Guide', children }: { title: st
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
               <h3 className="text-[1.02rem] font-bold text-brand">{title}</h3>
               <button type="button" onClick={() => setOpen(false)}
-                className="rounded-md px-2 py-1 text-sm font-semibold text-slate-500 hover:bg-slate-100">✕</button>
+                className="rounded-md px-2 py-1 text-sm font-semibold text-muted hover:bg-slate-100">✕</button>
             </div>
             <div className="max-h-[75vh] space-y-4 overflow-y-auto px-4 py-4 text-xs text-slate-700">
               {children}
@@ -114,7 +114,7 @@ export function SeismicHint(): ReactNode {
             <tr><Td>Nv (A / B / C)</Td><Td>2.0 / 1.6 / 1.0</Td><Td>1.6 / 1.2 / 1.0</Td><Td>1.2 / 1.0 / 1.0</Td><Td>1.0</Td></tr>
           </tbody>
         </table>
-        <p className="mt-1 text-slate-500">Source A: M ≥ 7.0, high slip rate. B: most faults. C: M &lt; 6.5, low rate. Outside Zone 4, Na = Nv = 1.0.</p>
+        <p className="mt-1 text-muted">Source A: M ≥ 7.0, high slip rate. B: most faults. C: M &lt; 6.5, low rate. Outside Zone 4, Na = Nv = 1.0.</p>
       </Section>
 
       <Section title="R — response modification (Table 208-11)">
@@ -127,7 +127,7 @@ export function SeismicHint(): ReactNode {
             <tr><Td>Bearing wall + special RC shear wall</Td><Td>4.5</Td></tr>
           </tbody>
         </table>
-        <p className="mt-1 text-slate-500">IMRF and OMRF are not permitted as the SFRS in Zone 4.</p>
+        <p className="mt-1 text-muted">IMRF and OMRF are not permitted as the SFRS in Zone 4.</p>
       </Section>
 
       <Section title="Importance factor I (Table 103-1 / 208-1)">
@@ -165,7 +165,7 @@ export function WindHint(): ReactNode {
             <tr><Td>Western Visayas / Mindanao interior</Td><Td>≈ 200–250</Td><Td>≈ 56–69</Td></tr>
           </tbody>
         </table>
-        <p className="mt-1 text-slate-500">Use the actual contour value from Fig 207A.5-1 for the site — these are indicative only.</p>
+        <p className="mt-1 text-muted">Use the actual contour value from Fig 207A.5-1 for the site — these are indicative only.</p>
       </Section>
 
       <Section title="Exposure category (§207A.7)">
@@ -199,7 +199,7 @@ export function WindHint(): ReactNode {
             <tr><Td>30</Td><Td>0.99</Td><Td>1.26</Td><Td>1.43</Td></tr>
           </tbody>
         </table>
-        <p className="mt-1 text-slate-500">Computed automatically from Kz = 2.01(z/zg)^(2/α) per storey.</p>
+        <p className="mt-1 text-muted">Computed automatically from Kz = 2.01(z/zg)^(2/α) per storey.</p>
       </Section>
     </>
   )

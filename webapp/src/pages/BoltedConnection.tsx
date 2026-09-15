@@ -177,7 +177,7 @@ function BoltedConnectionCalc() {
           <Num label={`Applied ${demandLabel(basis, 'V')}`} unit="kN" value={Vu} onChange={setVu} />
           <Num label={`Applied ${demandLabel(basis, 'H')} (horizontal)`} unit="kN" value={Hu} onChange={setHu} />
           <BasisNote basis={basis} />
-          <p className="col-span-full text-[10px] text-slate-500">
+          <p className="col-span-full text-[10px] text-muted">
             The load is entered directly here, so it is on you to enter a demand that matches the
             basis — factored for LRFD, service for ASD.
           </p>
@@ -190,7 +190,7 @@ function BoltedConnectionCalc() {
               options={[['yes','Yes (N)'],['no','No (X)']]} />
             <Pick label="Shear planes" value={String(nShear)} onChange={v => setNShear(Number(v) as 1 | 2)}
               options={[['1','Single shear (1)'],['2','Double shear (2)']]} />
-            <p className="col-span-full text-[10px] text-slate-500">
+            <p className="col-span-full text-[10px] text-muted">
               §J3.6 counts bolt shear per PLANE, so double shear doubles φRn,shear. Bearing is a
               plate check and does not change — enter the thickness of the ply the bolt bears on.
             </p>
@@ -210,7 +210,7 @@ function BoltedConnectionCalc() {
                 </div>
                 <div className="max-h-60 overflow-auto">
                   <table className="w-full text-xs">
-                    <thead className="text-slate-500"><tr className="text-left">
+                    <thead className="text-muted"><tr className="text-left">
                       <th className="py-1 pr-2">Bolt</th><th className="pr-2">x</th><th className="pr-2">y</th>
                       <th className="pr-2 text-right">R (kN)</th><th />
                     </tr></thead>
@@ -230,7 +230,7 @@ function BoltedConnectionCalc() {
                             <td className="pr-2 text-right font-mono">{force ? f2(force.R) : '—'}</td>
                             <td className="text-right">
                               <button type="button" onClick={() => delBolt(i)} disabled={custom.length <= 1}
-                                className="text-slate-500 hover:text-red-600 disabled:opacity-30">✕</button>
+                                className="text-muted hover:text-red-600 disabled:opacity-30">✕</button>
                             </td>
                           </tr>
                         )
@@ -238,7 +238,7 @@ function BoltedConnectionCalc() {
                     </tbody>
                   </table>
                 </div>
-                <p className="mt-1.5 text-[10px] text-slate-500">
+                <p className="mt-1.5 text-[10px] text-muted">
                   Seeded from the grid. Block shear is not reported for a free-form pattern —
                   the shear-tab tear-out paths assume a single vertical bolt line.
                 </p>
@@ -258,7 +258,7 @@ function BoltedConnectionCalc() {
             <Num label="In-plane e_x" unit="mm" value={ex_load} onChange={setExLoad} />
             <Num label="In-plane e_y" unit="mm" value={ey_load} onChange={setEyLoad} />
             <Num label="Out-of-plane e_out" unit="mm" value={e_out} onChange={setEOut} />
-            <p className="col-span-full text-[10px] text-slate-500">
+            <p className="col-span-full text-[10px] text-muted">
               e_x/e_y: in-plane offset (§J3.6 elastic method).
               e_out: perpendicular to plate → bolt tension + §J3.7 interaction.
             </p>
@@ -266,7 +266,7 @@ function BoltedConnectionCalc() {
           {e_out > 0 && (
             <Card title="Prying action §J3.9">
               <Num label="Gage b (bolt CL → web face)" unit="mm" value={b_gage} onChange={setBGage} />
-              <p className="col-span-full text-[10px] text-slate-500">
+              <p className="col-span-full text-[10px] text-muted">
                 b = distance from bolt centreline to face of the connecting web or stem.
                 Set 0 to skip prying check. Edge dist a = ex, pitch p = sv, plate tf/Fy reused from above.
               </p>
@@ -316,7 +316,7 @@ function BoltedConnectionCalc() {
           <ResultCard title="Per-bolt forces">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead><tr className="text-left text-slate-500">
+                <thead><tr className="text-left text-muted">
                   <th className="pr-2 pb-1">id</th><th className="pr-2 pb-1">Vx kN</th><th className="pr-2 pb-1">Vy kN</th>
                   <th className="pr-2 pb-1">R kN</th><th className="pb-1">fbr MPa</th>
                 </tr></thead>
@@ -336,7 +336,7 @@ function BoltedConnectionCalc() {
           </ResultCard>
           <ResultCard title="Block shear §J4.3">
             {res.blockShear.length === 0 && (
-              <p className="col-span-full text-[11px] text-slate-500">
+              <p className="col-span-full text-[11px] text-muted">
                 Not applicable to a free-form bolt pattern: the §J4.3 shear-tab paths run along a
                 single vertical bolt line. Switch the layout back to a rectangular grid, or check
                 tear-out by hand against the pattern you have.
@@ -368,7 +368,7 @@ function BoltedConnectionCalc() {
                 value={<Verdict pass={res.outOfPlane.ok} value={res.outOfPlane.ok ? 'PASS' : 'FAIL'} />} />
               <div className="col-span-full overflow-x-auto">
                 <table className="mt-1 w-full text-xs">
-                  <thead><tr className="text-left text-slate-500">
+                  <thead><tr className="text-left text-muted">
                     <th className="pr-2 pb-1">id</th><th className="pr-2 pb-1">yi mm</th>
                     <th className="pr-2 pb-1">T kN</th><th className="pr-2 pb-1">frv MPa</th><th className="pb-1">util</th>
                   </tr></thead>

@@ -47,8 +47,8 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children
 
     return (
-      <main className="mx-auto max-w-2xl px-5 py-16 text-center">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">
+      <div className="mx-auto max-w-2xl px-5 py-16 text-center">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">
           This page stopped
         </p>
         <h1 className="mt-1 text-2xl font-bold text-brand">Something broke while drawing this page</h1>
@@ -72,8 +72,8 @@ export class ErrorBoundary extends Component<Props, State> {
         {/* The message, not the stack. A stack trace in the UI reads as a crash
             report the user is expected to act on; the stack is in the console
             for whoever can use it. */}
-        <p className="mt-6 break-words text-[12px] text-slate-400">{error.message}</p>
-      </main>
+        <p className="mt-6 break-words text-[12px] text-faint">{error.message}</p>
+      </div>
     )
   }
 }

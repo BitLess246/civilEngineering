@@ -75,7 +75,7 @@ export default function WeldedConnection() {
   return (
         <div>
       <PageHeader title="Eccentric weld group" badges={['AISC 360-16']} />
-      <main className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
+      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
       <ReportControls title="Welded Connection Report" badges={['AISC 360-16']} />
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Elastic (weld-as-a-line) method for an eccentrically-loaded fillet weld group. Each unit length
@@ -94,7 +94,7 @@ export default function WeldedConnection() {
           </div>
           <div className="max-h-56 overflow-auto">
             <table className="w-full text-xs">
-              <thead className="text-slate-500"><tr className="text-left"><th className="pr-2 py-1">Weld</th><th className="pr-2">x₁</th><th className="pr-2">y₁</th><th className="pr-2">x₂</th><th className="pr-2">y₂</th><th className="pr-2 text-right">L</th><th /></tr></thead>
+              <thead className="text-muted"><tr className="text-left"><th className="pr-2 py-1">Weld</th><th className="pr-2">x₁</th><th className="pr-2">y₁</th><th className="pr-2">x₂</th><th className="pr-2">y₂</th><th className="pr-2 text-right">L</th><th /></tr></thead>
               <tbody>
                 {segs.map((s, i) => (
                   <tr key={s.id} className="border-t border-slate-100">
@@ -103,7 +103,7 @@ export default function WeldedConnection() {
                       <td key={k} className="pr-2"><input type="number" value={s[k]} onChange={(e) => setSeg(i, k, num(e.target.value))} className="w-14 rounded border border-slate-200 px-1 py-0.5" /></td>
                     ))}
                     <td className="pr-2 text-right font-mono">{f2(Math.hypot(s.x2 - s.x1, s.y2 - s.y1))}</td>
-                    <td className="text-right"><button type="button" onClick={() => delSeg(i)} className="text-slate-500 hover:text-red-600">✕</button></td>
+                    <td className="text-right"><button type="button" onClick={() => delSeg(i)} className="text-muted hover:text-red-600">✕</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -164,14 +164,14 @@ export default function WeldedConnection() {
               // number is the ALLOWABLE strength. AISC calls both the available
               // strength, which is the one word that is true either way.
               [`Available strength / length (${basis})`, `${f2(r.capacityPerLen)} N/mm`]].map(([k, v]) => (
-              <div key={k} className="flex justify-between border-t border-slate-100 py-1"><span className="text-slate-500">{k}</span><span className="font-mono">{v}</span></div>
+              <div key={k} className="flex justify-between border-t border-slate-100 py-1"><span className="text-muted">{k}</span><span className="font-mono">{v}</span></div>
             ))}
             <div className="flex justify-between border-t border-slate-100 py-1">
-              <span className="text-slate-500">Peak force / length f_max (≤ {f2(r.capacityPerLen)})</span>
+              <span className="text-muted">Peak force / length f_max (≤ {f2(r.capacityPerLen)})</span>
               <span className={`font-mono font-semibold ${r.ok ? 'text-emerald-600' : 'text-red-600'}`}>{f2(r.fMax)} N/mm {r.ok ? '✓' : '✗'}</span>
             </div>
             <div className="flex justify-between border-t border-slate-100 py-1">
-              <span className="text-slate-500">Required fillet leg</span>
+              <span className="text-muted">Required fillet leg</span>
               <span className="font-mono">{f2(r.reqSize)} mm</span>
             </div>
             <div className="mt-2 flex items-baseline justify-between rounded-lg bg-blue-50 p-2">
@@ -183,7 +183,7 @@ export default function WeldedConnection() {
       </div>
 
       <WorkedSolution steps={weldedConnectionSolution({ segments: segs, size, FEXX, phi, load: { P, angleDeg: angle, px, py } }, r)} />
-    </main>
+    </div>
     </div>
   )
 }

@@ -240,11 +240,11 @@ export default function TrussSpace() {
                 <span className={selForce.N >= 0 ? 'text-blue-700' : 'text-red-600'}>
                   {f1(Math.abs(selForce.N))} kN {selForce.N >= 0 ? 'tension' : 'compression'}
                 </span>
-                {selDes && <span className="text-slate-500">util {(selDes.util * 100).toFixed(0)}%</span>}
-                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-slate-500 hover:text-red-500">✕</button>
+                {selDes && <span className="text-muted">util {(selDes.util * 100).toFixed(0)}%</span>}
+                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-muted hover:text-red-500">✕</button>
               </div>
             )}
-            <div className="no-print pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-500">
+            <div className="no-print pointer-events-none absolute bottom-2 left-3 text-[10px] text-muted">
               drag to orbit · scroll to zoom · hold <b>Shift</b> (or right-drag) to pan · <span className="text-blue-700">tension</span> / <span className="text-red-600">compression</span>
             </div>
           </div>
@@ -275,7 +275,7 @@ export default function TrussSpace() {
               <input type="checkbox" checked={includeSW} onChange={(e) => setIncludeSW(e.target.checked)} />
               <span>Add member self-weight (from the section) to Dead</span>
             </label>
-            <p className="col-span-full text-[11px] text-slate-500">
+            <p className="col-span-full text-[11px] text-muted">
               Members are enveloped over <b>1.4D</b> and <b>1.2D + 1.6L</b>; each is designed for its governing combination.
             </p>
           </Card>
@@ -286,7 +286,7 @@ export default function TrussSpace() {
                 disabled={customSec} />
               <span>
                 Size each design group from the catalogue
-                {customSec && <span className="ml-1 text-slate-400">(turn off the custom section first)</span>}
+                {customSec && <span className="ml-1 text-faint">(turn off the custom section first)</span>}
               </span>
             </label>
             {optimize && !customSec && (
@@ -302,7 +302,7 @@ export default function TrussSpace() {
                     onChange={(e) => setSearchAllFamilies(e.target.checked)} />
                   <span>Search every family, not just {family}</span>
                 </label>
-                <p className="col-span-full text-[11px] text-slate-500">
+                <p className="col-span-full text-[11px] text-muted">
                   Each group takes the <b>lightest</b> section that carries every one of its members:
                   strength first (AISC D2 / E3), then KL/r ≤ 200 for compression (§E2), then least steel.
                   A group is buckling-limited by its <b>longest</b> member, not its largest force — so a
@@ -344,7 +344,7 @@ export default function TrussSpace() {
             <Num label="Effective length K" value={K} onChange={setK} step="0.05" />
             <div className="col-span-full flex items-center gap-3 border-t border-slate-100 pt-2">
               {!customSec && <SectionShape sec={eff} />}
-              <div className="text-[11px] text-slate-500">
+              <div className="text-[11px] text-muted">
                 <div className="font-semibold text-brand">{eff.label}</div>
                 <div>A = {Math.round(eff.A)} mm²</div>
                 <div>rx {eff.rx.toFixed(1)} · ry {eff.ry.toFixed(1)} mm</div>
@@ -410,14 +410,14 @@ export default function TrussSpace() {
         <div className="mt-6 space-y-4">
           <h2 className="text-xl font-extrabold tracking-tight text-brand">
             Truss member schedule — {custom ? 'custom truss' : `${type} · ${f1(span)} m span`}
-            <span className="ml-3 text-sm font-normal text-slate-500">
+            <span className="ml-3 text-sm font-normal text-muted">
               {result.determinacy.status} · {opt ? `${opt.groups.length} auto-sized sections` : eff.label} · Fy {Fy} MPa · max util {(design.maxUtil * 100).toFixed(0)}%
             </span>
           </h2>
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="text-left uppercase tracking-wide text-slate-500">
+                <tr className="text-left uppercase tracking-wide text-muted">
                   <th className="py-1 pr-2 font-semibold">Member</th>
                   <th className="py-1 pr-2 font-semibold">Type</th>
                   {opt && <th className="py-1 pr-2 font-semibold">Section</th>}
@@ -437,13 +437,13 @@ export default function TrussSpace() {
                   return (
                     <tr key={f.id} onClick={() => setSelected(f.id)}
                       className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''} ${selected === f.id ? 'bg-amber-50' : ''}`}>
-                      <td className="py-1 pr-2 font-medium">{f.id} <span className="text-slate-500">({f.i}–{f.j})</span></td>
+                      <td className="py-1 pr-2 font-medium">{f.id} <span className="text-muted">({f.i}–{f.j})</span></td>
                       <td className="py-1 pr-2">{f.kind}</td>
                       {opt && <td className="py-1 pr-2 font-mono text-[10px]">{sectionOfMember.get(f.id)?.label ?? '—'}</td>}
                       <td className="py-1 pr-2 text-right">{f2(f.L)}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(f.N))}</td>
                       <td className={`py-1 pr-2 ${f.N >= 0 ? 'text-blue-700' : 'text-red-600'}`}>{d.mode === 'zero' ? '—' : f.N >= 0 ? 'T' : 'C'}</td>
-                      <td className="py-1 pr-2 text-slate-500">{f.combo}</td>
+                      <td className="py-1 pr-2 text-muted">{f.combo}</td>
                       <td className="py-1 pr-2 text-right">{d.mode === 'compression' ? Math.round(d.slenderness) + (d.slenderOK ? '' : ' ⚠') : '—'}</td>
                       <td className="py-1 pr-2 text-right">{f1(d.phiPn)}</td>
                       <td className="py-1 text-right">{(d.util * 100).toFixed(0)}%</td>
@@ -452,7 +452,7 @@ export default function TrussSpace() {
                 })}
               </tbody>
             </table>
-            <p className="mt-1 text-[11px] text-slate-500">
+            <p className="mt-1 text-[11px] text-muted">
               Pin-jointed planar truss (axial only). Tension yielding φPn = 0.9·Fy·Ag; compression flexural buckling per AISC §E3
               (Fcr from KL/r, φ = 0.90). KL/r &gt; 200 flagged (⚠). Reactions: pin at the left support, roller at the right.
             </p>
@@ -466,7 +466,7 @@ export default function TrussSpace() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-xl font-extrabold tracking-tight text-brand">
               Material Take-off &amp; Bill of Materials
-              <span className="ml-3 text-sm font-normal text-slate-500">{takeoff.section}</span>
+              <span className="ml-3 text-sm font-normal text-muted">{takeoff.section}</span>
             </h2>
           </div>
 
@@ -480,7 +480,7 @@ export default function TrussSpace() {
               ['Total steel', `${f1(takeoff.totalKg)} kg`],
             ].map(([k, v]) => (
               <div key={k} className="rounded-lg border border-slate-200 bg-sheet p-2 text-center shadow-sm">
-                <div className="text-[11px] uppercase tracking-wide text-slate-500">{k}</div>
+                <div className="text-[11px] uppercase tracking-wide text-muted">{k}</div>
                 <div className="text-base font-bold text-brand">{v}</div>
               </div>
             ))}
@@ -492,7 +492,7 @@ export default function TrussSpace() {
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel by member</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <tr className="text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2 font-semibold">Member</th>
                     <th className="py-1 pr-2 font-semibold">Kind</th>
                     <th className="py-1 pr-2 text-right font-semibold">L (m)</th>
@@ -504,7 +504,7 @@ export default function TrussSpace() {
                   {takeoff.byMember.map((m) => (
                     <tr key={m.id} className="border-t border-slate-100">
                       <td className="py-0.5 pr-2 font-medium">{m.id}</td>
-                      <td className="py-0.5 pr-2 capitalize text-slate-500">{m.kind}</td>
+                      <td className="py-0.5 pr-2 capitalize text-muted">{m.kind}</td>
                       <td className="py-0.5 pr-2 text-right">{f2(m.L)}</td>
                       <td className="py-0.5 pr-2 text-right">{f2(m.kgPerM)}</td>
                       <td className="py-0.5 text-right">{f2(m.netWeightKg)}</td>
@@ -524,7 +524,7 @@ export default function TrussSpace() {
                 <h3 className="mb-2 text-[1.02rem] font-bold text-brand">By element kind</h3>
                 <table className="w-full border-collapse text-xs">
                   <thead>
-                    <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <tr className="text-left uppercase tracking-wide text-muted">
                       <th className="py-1 pr-2 font-semibold">Kind</th>
                       <th className="py-1 pr-2 text-right font-semibold">Members</th>
                       <th className="py-1 pr-2 text-right font-semibold">Length (m)</th>
@@ -575,7 +575,7 @@ export default function TrussSpace() {
                 </div>
                 <table className="w-full border-collapse text-xs">
                   <thead>
-                    <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <tr className="text-left uppercase tracking-wide text-muted">
                       <th className="py-1 pr-2 font-semibold">Item</th>
                       <th className="py-1 pr-2 text-right font-semibold">Qty</th>
                       <th className="py-1 pr-2 font-semibold">Unit</th>
@@ -599,7 +599,7 @@ export default function TrussSpace() {
                     </tr>
                   </tbody>
                 </table>
-                <p className="mt-1 text-[11px] text-slate-500">
+                <p className="mt-1 text-[11px] text-muted">
                   Section steel weight = A × L × 7850 kg/m³ per member.
                   Gusset / connection plate allowance added as a fraction of the section steel.
                   Prices in Philippine Peso (₱); edit to match current market rates.

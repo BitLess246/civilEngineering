@@ -78,9 +78,9 @@ function IssueList({ issues }: { issues: ValidationIssue[] }) {
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-sheet px-3 py-2">
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{label}</p>
       <p className="mt-0.5 font-mono text-[15px] font-semibold text-slate-800">{value}</p>
-      {sub && <p className="text-[10px] text-slate-500">{sub}</p>}
+      {sub && <p className="text-[10px] text-muted">{sub}</p>}
     </div>
   )
 }
@@ -111,7 +111,7 @@ function LayerRow({
           onChange={(e) => onChange({ depthBottom: num(e.target.value) })}
           className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
       </td>
-      <td className="py-0.5 pr-2 text-right font-mono text-slate-500">{f2(layerThickness(layer))}</td>
+      <td className="py-0.5 pr-2 text-right font-mono text-muted">{f2(layerThickness(layer))}</td>
       <td className="py-0.5 pr-2">
         <input value={layer.symbol ?? ''} placeholder="—"
           onChange={(e) => onChange({ symbol: e.target.value.toUpperCase() || undefined })}
@@ -202,7 +202,7 @@ function SampleRow({
           onChange={(e) => onChange({ driveLength: e.target.value === '' ? undefined : num(e.target.value) })}
           className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
       </td>
-      <td className={`py-0.5 pr-2 text-right font-mono ${rec != null && rec < 50 ? 'text-amber-700' : 'text-slate-500'}`}>
+      <td className={`py-0.5 pr-2 text-right font-mono ${rec != null && rec < 50 ? 'text-amber-700' : 'text-muted'}`}>
         {rec == null ? '—' : `${f0(rec)} %`}
       </td>
       <td className="py-0.5 pr-2">
@@ -304,8 +304,8 @@ export default function SoilInvestigation() {
 
   if (!inv) {
     return (
-      <main className="mx-auto max-w-3xl px-5 py-10">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
+      <div className="mx-auto max-w-3xl px-5 py-10">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Geotechnical</p>
         <h1 className="mt-1 text-2xl font-bold text-brand">Soil investigation</h1>
         <p className="mt-2 text-sm text-slate-600">
           Enter a site investigation once — boreholes, strata, samples and field tests — and reuse it across the
@@ -324,20 +324,20 @@ export default function SoilInvestigation() {
               Load the example
             </button>
           </div>
-          <p className="mt-3 text-[11px] text-slate-500">
+          <p className="mt-3 text-[11px] text-muted">
             Investigations are stored in this browser only. Export the JSON to keep a copy — it is the backup, not a
             convenience.
           </p>
         </section>
-      </main>
+      </div>
     )
   }
 
   const set = api.update
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
+    <div className="mx-auto max-w-5xl px-5 py-10">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">
         {inv.meta.title || 'Untitled investigation'}
       </h1>
@@ -469,7 +469,7 @@ export default function SoilInvestigation() {
           <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
             <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Data integrity</h2>
             <IssueList issues={issues} />
-            <p className="mt-3 text-[11px] text-slate-500">
+            <p className="mt-3 text-[11px] text-muted">
               Errors are the physically impossible — overlapping layers, groundwater below the hole, a plastic limit
               above the liquid limit. Warnings are the merely unusual, which is often perfectly real. Nothing here is
               repaired automatically: an unlogged interval may be a logging error or an unrecovered run, and only
@@ -534,7 +534,7 @@ export default function SoilInvestigation() {
                     </label>
                   ))}
                 </div>
-                <p className="mt-3 text-[11px] text-slate-500">
+                <p className="mt-3 text-[11px] text-muted">
                   Leave groundwater blank when it was not encountered — the log then says so rather than drawing a
                   table at an assumed depth.
                 </p>
@@ -543,7 +543,7 @@ export default function SoilInvestigation() {
               <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
                 <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Borehole log</h2>
                 <LogView bh={bh} />
-                <p className="mt-2 text-[11px] text-slate-500">
+                <p className="mt-2 text-[11px] text-muted">
                   Strata hatching follows the USCS group symbol where one has been entered, otherwise the description —
                   in which the noun governs, so &ldquo;Silty Sand&rdquo; is drawn as a sand. A refusal blow count is
                   marked with an asterisk so it cannot be read as a measurement.
@@ -577,7 +577,7 @@ export default function SoilInvestigation() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[12px]">
-                <thead className="text-slate-500">
+                <thead className="text-muted">
                   <tr className="border-b border-slate-200">
                     <th className="py-1 pr-2">Top (m)</th><th className="py-1 pr-2">Base (m)</th>
                     <th className="py-1 pr-2 text-right">Thk</th><th className="py-1 pr-2">USCS</th>
@@ -596,7 +596,7 @@ export default function SoilInvestigation() {
               </table>
             </div>
             {!bh.layers.length && (
-              <p className="mt-3 text-[12px] text-slate-500">No layers logged yet.</p>
+              <p className="mt-3 text-[12px] text-muted">No layers logged yet.</p>
             )}
           </div>
 
@@ -631,7 +631,7 @@ export default function SoilInvestigation() {
             </div>
             <div className="overflow-x-auto" data-tour="samples-table">
               <table className="w-full text-left text-[12px]">
-                <thead className="text-slate-500">
+                <thead className="text-muted">
                   <tr className="border-b border-slate-200">
                     <th className="py-1 pr-2">Sample</th><th className="py-1 pr-2">Type</th>
                     <th className="py-1 pr-2">Top (m)</th><th className="py-1 pr-2">Base (m)</th>
@@ -652,7 +652,7 @@ export default function SoilInvestigation() {
               </table>
             </div>
             {!bh.samples.length && (
-              <p className="mt-3 text-[12px] text-slate-500">
+              <p className="mt-3 text-[12px] text-muted">
                 No samples recorded. Add one here first — laboratory tests are booked against a
                 SAMPLE, not a layer, so the Laboratory tab stays empty until a sample exists.
               </p>
@@ -666,7 +666,7 @@ export default function SoilInvestigation() {
         <section className="mt-5 space-y-4" data-tour="spt-panel">
           <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
             <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Unit weights for the stress profile</h2>
-            <p className="mb-3 text-[11px] text-slate-500">
+            <p className="mb-3 text-[11px] text-muted">
               (N₁)₆₀ needs the effective stress at each test depth, which needs a unit weight per layer. These are an
               interpretation, so they are stored as ASSUMED values with that stated on them — which is also what
               lets the bearing-capacity and slope pages read this layer without the number arriving from nowhere.
@@ -675,7 +675,7 @@ export default function SoilInvestigation() {
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[12px]">
-                <thead className="text-slate-500">
+                <thead className="text-muted">
                   <tr className="border-b border-slate-200">
                     <th className="py-1 pr-3">Layer</th><th className="py-1 pr-3">γ (kN/m³)</th>
                     <th className="py-1 pr-3">γsat (kN/m³)</th>
@@ -706,7 +706,7 @@ export default function SoilInvestigation() {
             <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Corrected blow counts</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-right text-[12px]">
-                <thead className="text-slate-500">
+                <thead className="text-muted">
                   <tr className="border-b border-slate-200">
                     <th className="py-1 pr-3 text-left">Depth (m)</th><th className="py-1 pr-3 text-left">Layer</th>
                     <th className="py-1 pr-3">N</th><th className="py-1 pr-3">C_R</th>
@@ -736,7 +736,7 @@ export default function SoilInvestigation() {
                 </tbody>
               </table>
             </div>
-            {!profile.rows.length && <p className="mt-3 text-[12px] text-slate-500">No SPT results recorded.</p>}
+            {!profile.rows.length && <p className="mt-3 text-[12px] text-muted">No SPT results recorded.</p>}
             {profile.notes.map((n, k) => (
               <p key={k} className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
                 {n}
@@ -835,7 +835,7 @@ export default function SoilInvestigation() {
         <GuidedTour step={tour.step} index={tour.at} total={tour.total}
           onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
       )}
-    </main>
+    </div>
   )
 }
 
@@ -863,7 +863,7 @@ function SyncPanel() {
               {badge.text}
             </span>
           </h2>
-          <p className="mt-0.5 text-[11px] text-slate-500">
+          <p className="mt-0.5 text-[11px] text-muted">
             Investigations live in THIS BROWSER until you sync. Nothing syncs on a timer or on save — moving data
             between machines is a decision, not something that happens while you type.
           </p>
@@ -925,7 +925,7 @@ function SyncPanel() {
                 <span className="font-mono">{o.id}</span> — {o.kind === 'failed' ? `failed: ${o.error}` : o.kind}
               </li>
             ))}
-            {!s.report.outcomes.length && <li className="text-slate-500">Nothing to sync.</li>}
+            {!s.report.outcomes.length && <li className="text-muted">Nothing to sync.</li>}
           </ul>
 
           {s.report.conflicts.length > 0 && (
@@ -1025,7 +1025,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
         <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-[1.05rem] font-bold text-brand">Cone penetration test</h2>
-            <p className="mt-0.5 text-[11px] text-slate-500">
+            <p className="mt-0.5 text-[11px] text-muted">
               {cite('d5778')}. A cone recovers NO SAMPLE, so the classification below is a soil BEHAVIOUR type —
               a clayey sand and a sandy clay can plot in the same zone, and only a sample settles it.
             </p>
@@ -1039,7 +1039,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
 
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[12px]">
-            <thead className="text-slate-500">
+            <thead className="text-muted">
               <tr className="border-b border-slate-200">
                 <th className="py-1 pr-2 text-left">Depth (m)</th>
                 <th className="py-1 pr-2">q<sub>c</sub> (MPa)</th>
@@ -1099,7 +1099,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
           + reading
         </button>
         {sounding.rows.some((r) => !r.corrected) && (
-          <p className="mt-1 text-[10px] text-slate-500">* q<sub>t</sub> could not be corrected — no u₂ at that depth.</p>
+          <p className="mt-1 text-[10px] text-muted">* q<sub>t</sub> could not be corrected — no u₂ at that depth.</p>
         )}
 
         {sounding.notes.map((n, k) => (
@@ -1113,7 +1113,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
           <ul className="space-y-0.5 text-[12px]">
             {zones.map((z) => (
               <li key={z.zone} className="flex items-baseline gap-2">
-                <span className="font-mono text-slate-500">zone {z.zone}</span>
+                <span className="font-mono text-muted">zone {z.zone}</span>
                 <span className="text-slate-800">{z.label}</span>
                 <span className="font-mono text-slate-600">{(z.fraction * 100).toFixed(0)}%</span>
               </li>
@@ -1125,12 +1125,12 @@ function CptPanel({ bh, unitWeights, onChange }: {
       {sounding.rows.some((r) => r.normalised) && (
         <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
           <h2 className="mb-2 text-[1.05rem] font-bold text-brand">Correlations</h2>
-          <p className="mb-2 text-[11px] text-slate-500">
+          <p className="mb-2 text-[11px] text-muted">
             Each is refused outside the soil it applies to, with the reason — the same rule the SPT correlations follow.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[12px]">
-              <thead className="text-slate-500">
+              <thead className="text-muted">
                 <tr className="border-b border-slate-200">
                   <th className="py-1 pr-3">Depth</th><th className="py-1 pr-3">D<sub>r</sub></th>
                   <th className="py-1 pr-3">φ′</th><th className="py-1 pr-3">s<sub>u</sub></th>
@@ -1144,7 +1144,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
                   const cell = (c: { value?: number; unit: string; refusal?: string }) =>
                     c.value != null
                       ? <span className="font-mono">{f1(c.value)} {c.unit}</span>
-                      : <span className="text-[10px] text-slate-500">{c.refusal}</span>
+                      : <span className="text-[10px] text-muted">{c.refusal}</span>
                   return (
                     <tr key={r.depth} className="border-b border-slate-100 align-top">
                       <td className="py-0.5 pr-3 font-mono">{f2(r.depth)}</td>
@@ -1187,7 +1187,7 @@ function SectionPanel({ boreholes }: { boreholes: Borehole[] }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
       <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Correlated section</h2>
-      <p className="mb-3 text-[11px] text-slate-500">
+      <p className="mb-3 text-[11px] text-muted">
         Only the vertical hole traces are measured. Every boundary between holes is inferred and is drawn
         dashed to say so — this is the most over-read drawing in a geotechnical report, and it is an
         interpretation, not a record. Layers are correlated by USCS symbol or name, never by their position
@@ -1237,7 +1237,7 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
     <div className="space-y-4">
       <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
         <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Design earthquake</h2>
-        <p className="mb-3 text-[11px] text-slate-500">
+        <p className="mb-3 text-[11px] text-muted">
           a_max is the peak acceleration at the GROUND SURFACE. A site-specific hazard or site-response study is the
           defensible source; the NSCP seismic coefficient below is a screening stand-in only, and using it is a
           decision worth recording in the report.
@@ -1287,7 +1287,7 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
             {fines.map((f) => (
               <li key={f.layerId} className="font-mono">
                 {bh.layers.find((l) => l.id === f.layerId)?.name ?? f.layerId}: {f.fines.toFixed(1)}%
-                <span className="ml-1.5 font-sans text-slate-500">
+                <span className="ml-1.5 font-sans text-muted">
                   from {f.fromSamples.map((x) => x.sampleName).join(', ')}
                   {f.fromSamples.length > 1 ? ' (mean)' : ''}
                 </span>
@@ -1310,7 +1310,7 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
         <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Triggering by test</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[12px]">
-            <thead className="text-slate-500">
+            <thead className="text-muted">
               <tr className="border-b border-slate-200">
                 <th className="py-1 pr-3 text-left">Depth (m)</th>
                 <th className="py-1 pr-3 text-left">Layer</th>
@@ -1331,7 +1331,7 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
                       <td className="py-0.5 pr-3 font-mono">{r.result.csr.toFixed(3)}</td>
                       <td className="py-0.5 pr-3 font-mono">{r.result.crr != null ? r.result.crr.toFixed(3) : '—'}</td>
                       <td className={`py-0.5 pr-3 font-mono font-semibold ${
-                        r.result.factorOfSafety == null ? 'text-slate-500'
+                        r.result.factorOfSafety == null ? 'text-muted'
                           : r.result.factorOfSafety < 1 ? 'text-red-700'
                           : r.result.factorOfSafety < 1.3 ? 'text-amber-700' : 'text-emerald-700'
                       }`}>
@@ -1339,7 +1339,7 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
                       </td>
                     </>
                   ) : (
-                    <td colSpan={4} className="py-0.5 pr-3 text-left text-[11px] text-slate-500">
+                    <td colSpan={4} className="py-0.5 pr-3 text-left text-[11px] text-muted">
                       {r.skipped ? skipText(r.skipped) : '—'}
                     </td>
                   )}
@@ -1360,7 +1360,7 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
           <p key={k} className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">{n}</p>
         ))}
 
-        <p className="mt-3 text-[10px] text-slate-500">
+        <p className="mt-3 text-[10px] text-muted">
           {cite('d1586')} blow counts through the NCEER simplified procedure (Youd et al. 2001). FS here is TRIGGERING
           only — it does not predict post-liquefaction settlement, bearing loss or lateral spread, each of which is a
           separate analysis.
@@ -1434,7 +1434,7 @@ function ClassificationPanel() {
           </p>
         ))}
         {!result.symbol && (
-          <p className="mt-2 text-[11px] text-slate-500">
+          <p className="mt-2 text-[11px] text-muted">
             The classifier will not guess. Where D2487 needs a test that has not been run, it says which one rather
             than picking the likeliest symbol.
           </p>
@@ -1487,7 +1487,7 @@ function TestCard({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <span className="text-[13px] font-semibold text-slate-800">{spec?.label ?? test.type}</span>
-          <span className="ml-2 font-mono text-[10px] text-slate-500">{cite(test.standard)}</span>
+          <span className="ml-2 font-mono text-[10px] text-muted">{cite(test.standard)}</span>
         </div>
         <div className="flex items-center gap-2">
           <select value={test.status} onChange={(e) => onStatus(e.target.value as LabTestStatus)}
@@ -1502,7 +1502,7 @@ function TestCard({
         </div>
       </div>
 
-      {spec?.purpose && <p className="mt-1 text-[11px] text-slate-500">{spec.purpose}</p>}
+      {spec?.purpose && <p className="mt-1 text-[11px] text-muted">{spec.purpose}</p>}
 
       {!implemented ? (
         <p className="mt-2 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
@@ -1541,7 +1541,7 @@ function TestCard({
                   <option value="B">B — wetted at the in-situ vertical stress</option>
                   <option value="C">C — height held constant (swelling pressure measured)</option>
                 </select>
-                <span className="mt-0.5 text-[10px] text-slate-500">
+                <span className="mt-0.5 text-[10px] text-muted">
                   A gives the largest figure the soil can produce; B gives what that depth would do if it
                   got wet. C holds the height, so its strain is zero by construction.
                 </span>
@@ -1569,7 +1569,7 @@ function TestCard({
                   <option value="false">Unsoaked</option>
                   <option value="true">Soaked — four days (D1883 §10)</option>
                 </select>
-                <span className="mt-0.5 text-[10px] text-slate-500">
+                <span className="mt-0.5 text-[10px] text-muted">
                   On a plastic subgrade the soaked value can be a third of the unsoaked one.
                 </span>
               </label>
@@ -1589,7 +1589,7 @@ function TestCard({
                 <option value="constant-head">Constant head — D2434 (sands, k &gt; 1e-5 m/s)</option>
                 <option value="falling-head">Falling head — D5084 (fines, k &lt; 1e-6 m/s)</option>
               </select>
-              <span className="mt-0.5 text-[10px] text-slate-500">
+              <span className="mt-0.5 text-[10px] text-muted">
                 Fill the fields belonging to the method chosen; the other set is ignored.
               </span>
             </label>
@@ -1607,7 +1607,7 @@ function TestCard({
                   <option value="CU">CU — consolidated undrained, u measured (D4767)</option>
                   <option value="CD">CD — consolidated drained (D7181)</option>
                 </select>
-                <span className="mt-0.5 text-[10px] text-slate-500">
+                <span className="mt-0.5 text-[10px] text-muted">
                   A saturated UU test has φ = 0 and c = su. A CU test gives BOTH a total and an effective
                   envelope, and they are not interchangeable.
                 </span>
@@ -1629,7 +1629,7 @@ function TestCard({
                   <option value="standard">Standard — D698 (600 kN·m/m³)</option>
                   <option value="modified">Modified — D1557 (2 700 kN·m/m³)</option>
                 </select>
-                <span className="mt-0.5 text-[10px] text-slate-500">
+                <span className="mt-0.5 text-[10px] text-muted">
                   The modified curve sits higher and drier. &ldquo;95% of MDD&rdquo; means nothing until it says which.
                 </span>
               </label>
@@ -1651,7 +1651,7 @@ function TestCard({
                 <option value="partly-saturated">Partly saturated</option>
                 <option value="granular">Granular</option>
               </select>
-              <span className="mt-0.5 text-[10px] text-slate-500">
+              <span className="mt-0.5 text-[10px] text-muted">
                 cu = qu/2 assumes φ = 0. Outside a saturated cohesive soil the module reports qu and declines cu.
               </span>
             </label>
@@ -1692,7 +1692,7 @@ function TestCard({
           )}
 
           {!outcome && !error && (
-            <p className="mt-2 text-[11px] text-slate-500">Enter every required field to compute a result.</p>
+            <p className="mt-2 text-[11px] text-muted">Enter every required field to compute a result.</p>
           )}
         </>
       )}
@@ -1732,7 +1732,7 @@ function LabPanel({
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-[1.05rem] font-bold text-brand">
               {s.name}
-              <span className="ml-2 font-mono text-[12px] font-normal text-slate-500">
+              <span className="ml-2 font-mono text-[12px] font-normal text-muted">
                 {f2(s.depthTop)}–{f2(s.depthBottom)} m · {s.type}
               </span>
             </h2>
@@ -1770,7 +1770,7 @@ function LabPanel({
               ))}
             </div>
           ) : (
-            <p className="text-[12px] text-slate-500">No tests booked on this sample.</p>
+            <p className="text-[12px] text-muted">No tests booked on this sample.</p>
           )}
 
           <SampleClassificationCard sample={s} layers={bh.layers} onApply={onApplySymbol} />
@@ -1805,7 +1805,7 @@ function SieveStack({
   return (
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
-        <thead className="text-slate-500">
+        <thead className="text-muted">
           <tr className="border-b border-slate-200">
             <th className="py-1 pr-2">Sieve</th>
             <th className="py-1 pr-2">Opening (mm)</th>
@@ -1863,7 +1863,7 @@ function EngineNotes({ notes, className = '' }: { notes: LabNote[]; className?: 
       {notes.map((n, k) => (
         <p key={k} className={n.severity === 'warning'
           ? 'mt-1 text-[10px] text-amber-900'
-          : 'mt-1 text-[10px] text-slate-500'}>
+          : 'mt-1 text-[10px] text-muted'}>
           {n.severity === 'warning' && <span className="font-bold">! </span>}
           {n.text}
         </p>
@@ -1887,7 +1887,7 @@ function SampleClassificationCard({
 
   return (
     <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
         Classification from this sample
       </p>
 
@@ -1905,30 +1905,30 @@ function SampleClassificationCard({
       {/* The two other systems, each answering its own question. They are shown
           side by side and never reconciled — see the engine headers. */}
       <dl className="mt-2 grid grid-cols-[64px_1fr] gap-x-2 gap-y-1 border-t border-slate-200 pt-2 text-[11px]">
-        <dt className="font-semibold text-slate-500">AASHTO</dt>
+        <dt className="font-semibold text-muted">AASHTO</dt>
         <dd className="text-slate-700">
           {c.aashto?.label ? (
             <>
               <span className="font-mono">{c.aashto.label}</span>
-              <span className="text-slate-500"> — {c.aashto.rating} as subgrade</span>
+              <span className="text-muted"> — {c.aashto.rating} as subgrade</span>
             </>
           ) : (
-            <span className="text-slate-500">{c.aashto?.reason ?? 'Not enough data for a highway group.'}</span>
+            <span className="text-muted">{c.aashto?.reason ?? 'Not enough data for a highway group.'}</span>
           )}
         </dd>
-        <dt className="font-semibold text-slate-500">USDA</dt>
+        <dt className="font-semibold text-muted">USDA</dt>
         <dd className="text-slate-700">
           {c.usda ? (
             <>
               <span className="font-medium">{c.usda.name}</span>
-              <span className="text-slate-500">
+              <span className="text-muted">
                 {' '}— sand {c.usda.composition.sand.toFixed(0)}%, silt {c.usda.composition.silt.toFixed(0)}%,
                 clay {c.usda.composition.clay.toFixed(0)}% of the fine earth
               </span>
-              <span className="block text-[10px] text-slate-500">{c.usda.reason}</span>
+              <span className="block text-[10px] text-muted">{c.usda.reason}</span>
             </>
           ) : (
-            <span className="text-slate-500">{c.usdaGap}</span>
+            <span className="text-muted">{c.usdaGap}</span>
           )}
         </dd>
       </dl>
@@ -1963,7 +1963,7 @@ function SampleClassificationCard({
       )}
 
       {symbol && !layer && (
-        <p className="mt-2 text-[11px] text-slate-500">
+        <p className="mt-2 text-[11px] text-muted">
           This sample is not attributed to a layer, so there is nothing to apply the symbol to.
         </p>
       )}
@@ -2000,7 +2000,7 @@ function ShearPoints({
   return (
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
-        <thead className="text-slate-500">
+        <thead className="text-muted">
           <tr className="border-b border-slate-200">
             <th className="py-1 pr-2">Specimen</th>
             <th className="py-1 pr-2 text-right">σ′n (kPa)</th>
@@ -2089,7 +2089,7 @@ function ParametersPanel({
     <div className="space-y-4">
       <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
         <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Design parameters</h2>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-[11px] text-muted">
           Resolved once per layer from every piece of evidence available, each carrying where it came from. A stated
           engineer override beats a measurement, a measurement beats a correlation, and a parameter with no evidence
           at all stays <strong>absent</strong> — it is never filled in with a textbook value, because a number that
@@ -2111,7 +2111,7 @@ function ParametersPanel({
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="text-[1rem] font-bold text-brand">
                 {layer.name}
-                <span className="ml-2 font-mono text-[12px] font-normal text-slate-500">
+                <span className="ml-2 font-mono text-[12px] font-normal text-muted">
                   {f2(layer.depthTop)}–{f2(layer.depthBottom)} m{layer.symbol ? ` · ${layer.symbol}` : ''}
                 </span>
               </h3>
@@ -2120,7 +2120,7 @@ function ParametersPanel({
             {r.resolved.length ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-[12px]">
-                  <thead className="text-slate-500">
+                  <thead className="text-muted">
                     <tr className="border-b border-slate-200">
                       <th className="py-1 pr-3">Parameter</th>
                       <th className="py-1 pr-3 text-right">Value</th>
@@ -2142,9 +2142,9 @@ function ParametersPanel({
                         </td>
                         <td className="py-1 pr-3 text-[11px] text-slate-600">
                           {describeProvenance(p.value.provenance)}
-                          {p.value.note && <span className="block text-slate-500">{p.value.note}</span>}
+                          {p.value.note && <span className="block text-muted">{p.value.note}</span>}
                           {p.alternatives.length > 0 && (
-                            <span className="mt-0.5 block text-[10px] text-slate-500">
+                            <span className="mt-0.5 block text-[10px] text-muted">
                               Also available: {p.alternatives.map((a) =>
                                 `${formatParameter(a)} (${PROVENANCE_LABEL[a.provenance.kind].toLowerCase()})`,
                               ).join(', ')}
@@ -2199,7 +2199,7 @@ function LoadIncrements({
   return (
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
-        <thead className="text-slate-500">
+        <thead className="text-muted">
           <tr className="border-b border-slate-200">
             <th className="py-1 pr-2 text-right">σ′ (kPa)</th>
             <th className="py-1 pr-2 text-right">Compression (mm)</th>
@@ -2229,7 +2229,7 @@ function LoadIncrements({
           ))}
         </tbody>
       </table>
-      <p className="mt-1 text-[10px] text-slate-500">
+      <p className="mt-1 text-[10px] text-muted">
         Without t₅₀ the magnitude of settlement can be computed but not its rate.
       </p>
       <button onClick={() => onChange([...pts, { stress: 0, compression: 0 }])}
@@ -2262,7 +2262,7 @@ function CompactionPoints({
   return (
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
-        <thead className="text-slate-500">
+        <thead className="text-muted">
           <tr className="border-b border-slate-200">
             <th className="py-1 pr-2 text-right">w (%)</th>
             <th className="py-1 pr-2 text-right">Mould + wet soil (g)</th>
@@ -2290,7 +2290,7 @@ function CompactionPoints({
           ))}
         </tbody>
       </table>
-      <p className="mt-1 text-[10px] text-slate-500">
+      <p className="mt-1 text-[10px] text-muted">
         Each row is one compacted mould: its own water content from its own oven-dry specimen.
         Two points either side of the peak, or the optimum rests on a single measurement.
       </p>
@@ -2325,7 +2325,7 @@ function TriaxialSpecimens({
   return (
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
-        <thead className="text-slate-500">
+        <thead className="text-muted">
           <tr className="border-b border-slate-200">
             <th className="py-1 pr-2 text-right">σ₃ cell (kPa)</th>
             <th className="py-1 pr-2 text-right">Δσ at failure (kPa)</th>
@@ -2357,7 +2357,7 @@ function TriaxialSpecimens({
           ))}
         </tbody>
       </table>
-      <p className="mt-1 text-[10px] text-slate-500">
+      <p className="mt-1 text-[10px] text-muted">
         Δσ is the AREA-CORRECTED deviator stress at failure, as the laboratory reports it — the raw
         load over the initial area overstates strength by 10–20% at failure strains.
       </p>
@@ -2387,7 +2387,7 @@ function CbrPoints({
   return (
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
-        <thead className="text-slate-500">
+        <thead className="text-muted">
           <tr className="border-b border-slate-200">
             <th className="py-1 pr-2 text-right">Penetration (mm)</th>
             <th className="py-1 pr-2 text-right">Plunger stress (MPa)</th>
@@ -2415,7 +2415,7 @@ function CbrPoints({
           ))}
         </tbody>
       </table>
-      <p className="mt-1 text-[10px] text-slate-500">
+      <p className="mt-1 text-[10px] text-muted">
         Stress is load ÷ 1935 mm² for the standard plunger. The curve is corrected for a concave start
         before either ordinate is read — that correction is drawn on the chart.
       </p>
@@ -2445,7 +2445,7 @@ function HydrometerReadings({
   return (
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
-        <thead className="text-slate-500">
+        <thead className="text-muted">
           <tr className="border-b border-slate-200">
             <th className="py-1 pr-2 text-right">Time (min)</th>
             <th className="py-1 pr-2 text-right">Reading (g/L)</th>
@@ -2474,7 +2474,7 @@ function HydrometerReadings({
           ))}
         </tbody>
       </table>
-      <p className="mt-1 text-[10px] text-slate-500">
+      <p className="mt-1 text-[10px] text-muted">
         Read at the top of the meniscus. The composite correction below comes from a control cylinder
         of the same dispersant solution — it is subtracted from every reading, and at 5–7 g/L against
         readings of 10–50 it is a tenth of the sample, not a rounding.
@@ -2500,7 +2500,7 @@ function SwellReload({
   return (
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
-        <thead className="text-slate-500">
+        <thead className="text-muted">
           <tr className="border-b border-slate-200">
             <th className="py-1 pr-2 text-right">Stress (kPa)</th>
             <th className="py-1 pr-2 text-right">Height (mm)</th>
@@ -2527,7 +2527,7 @@ function SwellReload({
           ))}
         </tbody>
       </table>
-      <p className="mt-1 text-[10px] text-slate-500">
+      <p className="mt-1 text-[10px] text-muted">
         Optional, and only for methods A and B: the swelling pressure is the stress that brings the
         swollen specimen back to its original height. Leave it empty and the strain on wetting is the
         whole result.
@@ -2571,7 +2571,7 @@ function MohrFailureTable({ result }: { result: TriaxialResult }) {
           <p className="mb-0.5 text-[11px] font-semibold text-slate-700">{b.label} — at failure</p>
           <div className="overflow-x-auto">
             <table className="w-full text-right text-[11px]">
-              <thead className="text-slate-500">
+              <thead className="text-muted">
                 <tr className="border-b border-slate-200">
                   <th className="py-1 pr-2 text-left">Specimen</th>
                   <th className="py-1 pr-2">σ₃</th>
@@ -2590,7 +2590,7 @@ function MohrFailureTable({ result }: { result: TriaxialResult }) {
                     <td className="py-0.5 pr-2">{c.sigma3.toFixed(1)}</td>
                     <td className="py-0.5 pr-2">{c.sigma1.toFixed(1)}</td>
                     <td className="py-0.5 pr-2">{c.center.toFixed(1)}</td>
-                    <td className="py-0.5 pr-2 text-slate-500">{c.radius.toFixed(1)}</td>
+                    <td className="py-0.5 pr-2 text-muted">{c.radius.toFixed(1)}</td>
                     <td className="py-0.5 pr-2">{c.failure ? c.failure.sigma.toFixed(1) : '—'}</td>
                     <td className="py-0.5 pr-2">{c.failure ? c.failure.tau.toFixed(1) : '—'}</td>
                     <td className="py-0.5 pr-2">{c.failure ? `${c.failure.theta.toFixed(1)}°` : '—'}</td>
@@ -2601,7 +2601,7 @@ function MohrFailureTable({ result }: { result: TriaxialResult }) {
           </div>
         </div>
       ))}
-      <p className="text-[10px] text-slate-500">
+      <p className="text-[10px] text-muted">
         Stresses in kPa. σf = p − r·sin φ and τf = r·cos φ are the normal and shear stresses on the
         FAILURE PLANE, where the envelope touches the circle — not the crown, which carries τmax on a
         plane at 45° and is larger by 1/cos φ. θ = 45 + φ/2 is that plane&rsquo;s inclination to the major

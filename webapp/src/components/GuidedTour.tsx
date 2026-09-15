@@ -134,12 +134,12 @@ export function GuidedTour({
             left: Math.min(Math.max(rect.left, 16), Math.max(window.innerWidth - 432, 16)),
           } : {}),
         }}>
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-faint">
           Step {index + 1} of {total}
         </p>
         <h2 className="mt-1 text-[15px] font-bold text-brand">{step.title}</h2>
         <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-700">{step.body}</p>
-        {step.why && <p className="mt-2 text-[11px] leading-relaxed text-slate-500">{step.why}</p>}
+        {step.why && <p className="mt-2 text-[11px] leading-relaxed text-muted">{step.why}</p>}
 
         {/* The step names a control that is not on screen. Saying so beats a
             centred card that reads as though the tour lost its place — the
@@ -151,7 +151,7 @@ export function GuidedTour({
         )}
 
         <div className="mt-3 flex items-center justify-between gap-2">
-          <button onClick={onClose} className="text-[11px] text-slate-500 hover:text-slate-800">
+          <button onClick={onClose} className="text-[11px] text-muted hover:text-slate-800">
             Close (Esc)
           </button>
           <div className="flex gap-2">

@@ -80,7 +80,11 @@ export interface VerdictStat { label: string; value: string; unit?: string }
  */
 export interface VerdictCheck { name: string; ratio: number | null; note?: string }
 
-const barColor = (r: number) => (r > 1.0001 ? '#c2402a' : r >= 0.95 ? '#b97d10' : '#1a7f4b')
+// Token values, not copies of them. These were hex literals — which meant the
+// bars never themed, and the amber was still the 3.50:1 value corrected in the
+// palette. `var()` resolves per theme in an inline style just as it does in a
+// stylesheet.
+const barColor = (r: number) => (r > 1.0001 ? 'var(--t-fail)' : r >= 0.95 ? 'var(--t-warn)' : 'var(--t-ok)')
 
 export function UtilBar({ c }: { c: VerdictCheck }) {
   if (c.ratio === null) {
@@ -192,9 +196,14 @@ export function LetterheadCard({ lh, onChange, action }: {
   const today = new Date().toISOString().slice(0, 10)
   const cell = (label: string, value: string, key: keyof LetterheadState, ph: string, mono = false) => (
     <div className="min-w-0">
-      <span className="text-[9.5px] font-semibold uppercase tracking-widest text-faint">{label}</span>
-      <input value={value} onChange={(e) => onChange({ [key]: e.target.value })} placeholder={ph}
-        className={`w-full !border-0 !bg-transparent !p-0 text-[12px] font-semibold leading-[1.35] text-ink !shadow-none placeholder:text-faint ${mono ? 'font-mono font-medium' : ''}`} />
+      <label className="block text-[9.5px] font-semibold uppercase tracking-widest text-faint" htmlFor={`lh-${key}`}>{label}</label>
+      {/* A ruled line under the value, which is how a real title block says
+          "write here" — the field previously had NO rest-state affordance at
+          all, so the project name and the preparer read as printed text and
+          went out blank. `!border-b` survives the `!border-0` reset that keeps
+          the cell flush with the grid. */}
+      <input id={`lh-${key}`} value={value} onChange={(e) => onChange({ [key]: e.target.value })} placeholder={ph}
+        className={`w-full !border-0 !border-b !border-dotted !border-field-line !bg-transparent !p-0 text-[12px] font-semibold leading-[1.35] text-ink !shadow-none transition-colors hover:!border-brand-line focus-visible:!border-solid focus-visible:!border-brand placeholder:text-faint ${mono ? 'font-mono font-medium' : ''}`} />
     </div>
   )
   // Four fields on ONE row from `sm` up — the two-row grid was the whole of the
@@ -318,7 +327,7 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
             <tr key={c.name}>
               <td className="border-b border-hairline-2 px-2.5 py-1.5 font-semibold">{c.name}</td>
               <td className="border-b border-hairline-2 px-2.5 py-1.5 text-right font-mono"
-                style={c.ratio === null ? { color: '#8a6a1e' } : { color: c.ratio > 1.0001 ? '#c2402a' : c.ratio >= 0.95 ? '#b97d10' : '#1a7f4b' }}>
+                style={c.ratio === null ? { color: 'var(--t-warn)' } : { color: barColor(c.ratio) }}>
                 {c.ratio === null ? '\u2014' : c.ratio.toFixed(2)}
               </td>
               <td className="border-b border-hairline-2 px-2.5 py-1.5 text-right">

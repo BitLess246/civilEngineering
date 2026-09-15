@@ -18,12 +18,12 @@ function Row({ c }: { c: ValidationCase }) {
     <tr className="border-t border-slate-100 align-top">
       <td className="py-2 pr-3">
         <p className="font-medium text-slate-800">{c.title}</p>
-        <p className="text-[11px] text-slate-500">{c.reference}</p>
+        <p className="text-[11px] text-muted">{c.reference}</p>
       </td>
       <td className="py-2 pr-3 font-mono text-[11px] text-slate-600">{c.formula}</td>
       <td className="py-2 pr-3 text-right font-mono">{fmt(c.manual)}</td>
       <td className="py-2 pr-3 text-right font-mono">{fmt(c.software)}</td>
-      <td className="py-2 pr-3 text-right text-slate-500">{c.unit}</td>
+      <td className="py-2 pr-3 text-right text-muted">{c.unit}</td>
       <td className="py-2 pr-3 text-right font-mono">{d < 1e-9 ? '0' : d.toFixed(4)}%</td>
       <td className={`py-2 text-right font-semibold ${ok ? 'text-emerald-600' : 'text-red-600'}`}>{ok ? '✓' : '✗'}</td>
     </tr>
@@ -48,12 +48,12 @@ function SolverModuleRow({ m }: { m: SolverModuleCoverage }) {
     <div className="border-t border-slate-100 first:border-t-0">
       <button type="button" onClick={() => setOpen(!open)}
         className="flex w-full items-baseline gap-2 py-1.5 text-left hover:bg-blue-50/40">
-        <span className="w-3 text-slate-400">{open ? '▾' : '▸'}</span>
+        <span className="w-3 text-faint">{open ? '▾' : '▸'}</span>
         <span className="font-mono text-[11px] font-semibold text-slate-800">
           engine/{m.module}.ts
-          {m.integration && <span className="ml-1 font-sans font-normal text-[10px] text-slate-400">(integration)</span>}
+          {m.integration && <span className="ml-1 font-sans font-normal text-[10px] text-faint">(integration)</span>}
         </span>
-        <span className="text-[11px] text-slate-500">{m.title}</span>
+        <span className="text-[11px] text-muted">{m.title}</span>
         <span className="ml-auto rounded bg-slate-100 px-1.5 py-px font-mono text-[10px] text-slate-600">
           {m.tests.length}
         </span>
@@ -62,7 +62,7 @@ function SolverModuleRow({ m }: { m: SolverModuleCoverage }) {
         <div className="pb-2 pl-5">
           {suites.map((s) => (
             <div key={s.suite} className="mt-1.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{s.suite}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{s.suite}</p>
               <ul className="mt-0.5 space-y-px">
                 {s.names.map((n) => (
                   <li key={n} className="flex gap-1.5 text-[11px] text-slate-700">
@@ -88,8 +88,8 @@ export default function Validation() {
   }).filter((g) => g.n > 0)
 
   return (
-    <main className="mx-auto max-w-[1400px] px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Reference</p>
+    <div className="mx-auto max-w-[1400px] px-5 py-10">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Reference</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">Validation</h1>
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Each calculation engine is checked against an independent closed-form hand calculation from a
@@ -110,7 +110,7 @@ export default function Validation() {
             </span>
           ))}
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">
+        <p className="mt-2 text-[11px] text-muted">
           A benchmark passes when the engine result is within tolerance of the hand calculation
           (typically &lt; 0.01 %). Counts are evaluated live from the same engines the design pages use.
         </p>
@@ -121,11 +121,11 @@ export default function Validation() {
         if (!cases.length) return null
         return (
           <section key={cat} className="mt-8">
-            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">{cat}</h2>
+            <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">{cat}</h2>
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <tr className="text-left uppercase tracking-wide text-muted">
                     <th className="py-1 pr-3 font-semibold">Benchmark</th>
                     <th className="py-1 pr-3 font-semibold">Formula</th>
                     <th className="py-1 pr-3 text-right font-semibold">Manual</th>
@@ -144,7 +144,7 @@ export default function Validation() {
 
       {/* ── Solver-engine test coverage ── */}
       <section className="mt-10">
-        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Solver engine coverage</h2>
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">Solver engine coverage</h2>
         <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
           <p className="max-w-3xl text-xs text-slate-600">
             The benchmarks above pin a number against a hand calculation. The <b>solvers</b> — the modules that
@@ -153,7 +153,7 @@ export default function Validation() {
             These assert things a single number cannot: equilibrium (ΣR = ΣF), agreement between independent
             solution paths, closed-form deflections and periods, convergence order, and behaviour at limit points.
           </p>
-          <p className="mt-2 max-w-3xl text-[11px] text-slate-500">
+          <p className="mt-2 max-w-3xl text-[11px] text-muted">
             Scope: the model→solver bridge, the FEM solvers, dynamics and stability, and the nonlinear path
             followers. Design checks, load generation, geotech and quantities are covered by the benchmarks above
             instead. This inventory is generated from the test sources, so it cannot drift from them — a test
@@ -186,10 +186,10 @@ export default function Validation() {
         </div>
       </section>
 
-      <p className="mt-8 text-[11px] text-slate-500">
+      <p className="mt-8 text-[11px] text-muted">
         Codes: NSCP 2015 · ACI 318-14 · AISC 360. See the{' '}
         <Link to="/docs" className="text-brand underline">documentation</Link> for the full toolkit guide.
       </p>
-    </main>
+    </div>
   )
 }

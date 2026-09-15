@@ -73,7 +73,7 @@ export function ReactionsPanel({
         </div>
         <table className="w-full">
           <thead>
-            <tr className="text-slate-500">
+            <tr className="text-muted">
               <th className="text-left font-medium">Axis</th>
               <th className="text-right font-medium">ΣApplied (kN)</th>
               <th className="text-right font-medium">ΣReactions (kN)</th>
@@ -96,7 +96,7 @@ export function ReactionsPanel({
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-slate-500">
+            <tr className="border-b border-slate-200 text-muted">
               <th className="pb-1.5 pr-3 text-left font-semibold">Node</th>
               <th className="pb-1.5 pr-3 text-left font-semibold">Fixity</th>
               <th className="pb-1.5 pr-3 text-right font-semibold">Fx (kN)</th>
@@ -111,7 +111,7 @@ export function ReactionsPanel({
             {reactions.map((r) => (
               <tr key={r.node} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                 <td className="py-1 pr-3 font-mono text-slate-700">{r.node}</td>
-                <td className="py-1 pr-3 capitalize text-slate-500">{r.fixity}</td>
+                <td className="py-1 pr-3 capitalize text-muted">{r.fixity}</td>
                 <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.F[0])}</td>
                 <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.F[1])}</td>
                 <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.F[2])}</td>

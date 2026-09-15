@@ -68,7 +68,7 @@ function NumField({ label, unit, value, onChange, step = 'any' }: {
   return (
     <label className="flex flex-col text-sm">
       <span className="mb-1 font-medium text-slate-600">
-        {label}{unit ? <span className="text-slate-500"> ({unit})</span> : null}
+        {label}{unit ? <span className="text-muted"> ({unit})</span> : null}
       </span>
       <input
         type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
@@ -230,7 +230,7 @@ export default function CombinedFootingDesign() {
               <NumField label={<>Subgrade <Math tex="k_s" /></>} unit="kN/m³" value={form.ksubgrade} onChange={set('ksubgrade')} />
             )}
             {flexible && (
-              <p className="col-span-full text-xs text-slate-500">
+              <p className="col-span-full text-xs text-muted">
                 Beam-on-elastic-foundation FEM (Hermitian elements + consistent Winkler springs). Soil reaction
                 q(x) = k_s·B·y(x). Typical k_s: loose sand ~10–25, dense sand / stiff clay ~40–120 MN/m³.
               </p>
@@ -251,7 +251,7 @@ export default function CombinedFootingDesign() {
             {form.rightRestrict && (
               <NumField label="Right overhang" unit="mm" value={form.rightOverhang} onChange={set('rightOverhang')} />
             )}
-            <p className="col-span-full text-xs text-slate-500">
+            <p className="col-span-full text-xs text-muted">
               Both edges restricted → trapezoidal (CTF). Otherwise the slab is rectangular (CRF) and sized about the
               service-load resultant so bearing is uniform.
             </p>
@@ -291,7 +291,7 @@ export default function CombinedFootingDesign() {
                 x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width}
               />
             ) : (
-              <p className="py-8 text-center text-sm text-slate-500">Enter valid inputs — net bearing must be positive.</p>
+              <p className="py-8 text-center text-sm text-muted">Enter valid inputs — net bearing must be positive.</p>
             )}
           </div>
 
@@ -332,7 +332,7 @@ export default function CombinedFootingDesign() {
           {result && (
             <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
               <h2 className="mb-2 text-[13.5px] font-bold text-ink">
-                Longitudinal flexure {flexible && <span className="text-xs font-normal text-slate-500">(from BEF moments)</span>}
+                Longitudinal flexure {flexible && <span className="text-xs font-normal text-muted">(from BEF moments)</span>}
               </h2>
               {(longSections ?? result.longSections).map((s) => (
                 <Row key={s.label} label={s.label}
@@ -378,14 +378,14 @@ export default function CombinedFootingDesign() {
         <h2 className="mb-2 text-[13.5px] font-bold text-ink">Basis</h2>
         <Math block tex={String.raw`q_{net} = q_a - \gamma_s D_s - \gamma_c D_c - q,\qquad P_u = \max(1.4D,\ 1.2D + 1.6L)`} />
         {flexible ? (
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-muted">
             Flexible (Winkler) method: footing modelled as a beam on elastic foundation, EI·y'''' + k_s·B·y = column
             loads, solved with Hermitian beam elements and consistent foundation springs. Soil pressure and internal
             V/M follow the settlement field rather than an assumed linear pressure. Geometry/thickness are inherited
             from the rigid sizing. NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90.
           </p>
         ) : (
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-muted">
             Rigid (conventional) method: equivalent line load varies linearly so its resultant matches the factored
             column loads; V(x)/M(x) integrated along the footing. NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90.
           </p>

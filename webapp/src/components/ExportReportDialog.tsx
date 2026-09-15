@@ -79,11 +79,11 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
     || (outputs.combined && noReport && noAppendix)
 
   const box = (key: string, checked: boolean, onChange: () => void, label: string, hint?: string, disabled = false) => (
-    <label key={key} className={`flex items-start gap-2 rounded-md px-2 py-1 text-[12px] ${disabled ? 'text-slate-400' : 'text-slate-700 hover:bg-slate-50'}`}>
+    <label key={key} className={`flex items-start gap-2 rounded-md px-2 py-1 text-[12px] ${disabled ? 'text-faint' : 'text-slate-700 hover:bg-slate-50'}`}>
       <input type="checkbox" className="mt-0.5" checked={checked} disabled={disabled} onChange={onChange} />
       <span>
         <span className="font-medium">{label}</span>
-        {hint && <span className="block text-[10.5px] leading-snug text-slate-400">{hint}</span>}
+        {hint && <span className="block text-[10.5px] leading-snug text-faint">{hint}</span>}
       </span>
     </label>
   )
@@ -95,16 +95,16 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
         onMouseDown={(e) => e.stopPropagation()}>
         <div className="border-b border-slate-100 px-5 py-3">
           <h2 id="export-title" className="text-[13px] font-bold uppercase tracking-wide text-brand">Generate report</h2>
-          <p className="mt-0.5 text-[11px] text-slate-500">Choose what the print includes and which PDFs to write. Sections the engine has not produced are greyed out.</p>
+          <p className="mt-0.5 text-[11px] text-muted">Choose what the print includes and which PDFs to write. Sections the engine has not produced are greyed out.</p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 px-5 py-4 sm:grid-cols-2">
           <fieldset>
-            <legend className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">Structure design report</legend>
+            <legend className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted">Structure design report</legend>
             {REPORT_KEYS.map((k) => box(k, report.has(k), () => setReport((s) => toggle(s, k)), REPORT_SECTION_TITLES[k].label, REPORT_SECTION_TITLES[k].hint))}
           </fieldset>
           <fieldset>
-            <legend className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">Analysis appendix</legend>
+            <legend className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted">Analysis appendix</legend>
             {APPENDIX_KEYS.map((k) => box(
               k,
               appendix.has(k) && available[k],
@@ -117,7 +117,7 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
         </div>
 
         <div className="border-t border-slate-100 px-5 py-3">
-          <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-slate-500">PDFs to generate</p>
+          <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted">PDFs to generate</p>
           <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
             {box('report', outputs.report, () => toggleOutput('report'), 'Structure Design Report',
               outputs.combined ? 'bound into the Combined PDF' : 'summary, schedules, worked solutions, drawings', outputs.combined)}
