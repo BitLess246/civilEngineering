@@ -97,7 +97,7 @@ export function WelcomeDialog({ onClose }: { onClose: () => void }) {
 
         <div className="flex flex-wrap items-center gap-3 border-t border-hairline bg-sheet-2 px-6 py-4">
           <button type="button" onClick={save} disabled={none}
-            className="rounded-lg bg-brand px-5 py-2.5 text-sm font-bold text-on-solid hover:bg-brand disabled:cursor-not-allowed disabled:opacity-50">
+            className="rounded-lg bg-brand px-5 py-2.5 text-sm font-bold text-on-solid hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
             Save and continue
           </button>
           <button type="button" onClick={skip}

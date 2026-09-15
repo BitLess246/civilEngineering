@@ -162,7 +162,7 @@ export function GuidedTour({
               </button>
             )}
             <button onClick={last ? onClose : onNext}
-              className="rounded-md bg-brand px-3 py-1 text-[12px] font-semibold text-on-solid hover:bg-brand">
+              className="rounded-md bg-brand px-3 py-1 text-[12px] font-semibold text-on-solid hover:bg-brand-hover">
               {last ? 'Done' : 'Next'}
             </button>
           </div>
