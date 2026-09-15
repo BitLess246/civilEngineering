@@ -35,6 +35,7 @@ import { luFactor, luSolve, matVec } from './fem'
 import { buildSeismicMass, modalAnalysis } from './modal'
 import { validateMesh, hasMeshErrors } from './meshValidation'
 import type { GroundMotion } from './timeHistory'
+import { sparseToDense } from './sparseSym'
 
 // ── Rayleigh damping ─────────────────────────────────────────────────────
 
@@ -204,7 +205,12 @@ export function directTimeHistory(
   if (hasMeshErrors(validateMesh(model))) return null
   const br = modelToFrame3D(model, { useShells: false })
   const pre = precomputeFrame(br.nodes, br.members, br.supports)
-  const K = pre.Kff_raw
+  // The integrator is dense-bound by its own algebra: M and C = αM + βK are
+  // built as full nf×nf arrays and `newmarkDirect` forms a dense K̂ = M/(βΔt²)
+  // + γC/(βΔt) + K that it LU-factors once. Densifying K here therefore costs
+  // nothing this path was not already paying — the sparse free block is the
+  // assembly-side and solver-side win, not this one.
+  const K = sparseToDense(pre.Kff_raw)
   const nf = K.length
   if (nf === 0) return null
 

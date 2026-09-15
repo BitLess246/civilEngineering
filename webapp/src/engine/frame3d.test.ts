@@ -4,6 +4,7 @@ import { solveFrame2D } from './frame2d'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import type { RectSection } from './model'
+import { sparseGet, sparseNeighbors, sparseNnz } from './sparseSym'
 
 const E = 25000, G = E / 2.4
 const b = 300, h = 500
@@ -872,5 +873,72 @@ describe('solveWithGeometry — recovering only the members a caller reads', () 
     expect([none.Mmax, none.Vmax, none.Nmax]).toEqual([0, 0, 0])
     const beamOnly = solveWithGeometry(rprecomp, rloads, undefined, new Set(['beam']))!
     expect(beamOnly.Mmax).toBeCloseTo(Math.max(...beamOnly.members[0].Mz.map(Math.abs)), 9)
+  })
+})
+
+describe('sparse free block — scatter-add and connectivity pattern', () => {
+  // Two collinear members sharing node 'b'; 'a' fixed so every DOF of b and c
+  // is free and Kff_raw carries the whole assembled block.
+  const nodes: F3Node[] = [
+    { id: 'a', x: 0, y: 0, z: 0 },
+    { id: 'b', x: 4, y: 0, z: 0 },
+    { id: 'c', x: 8, y: 0, z: 0 },
+  ]
+  const members: F3Member[] = [
+    { id: 'm1', i: 'a', j: 'b', E, G, A, Iz, Iy, J },
+    { id: 'm2', i: 'b', j: 'c', E, G, A, Iz, Iy, J },
+  ]
+  const supports: F3Support[] = [{ node: 'a', fixity: 'fixed' }]
+
+  it('a shared DOF carries the SUM of both members, not the last one written', () => {
+    const p = precomputeFrame(nodes, members, supports)
+    // b's DOFs are free positions 0..5 (a is fully fixed, so free[] starts at b).
+    for (let k = 0; k < 6; k++) {
+      const fb = p.freeIdx.get(6 * 1 + k)!
+      // m1 contributes its j-end block (rows 6..11), m2 its i-end block (0..5).
+      const expected = p.geoms[0].kg[6 + k][6 + k] + p.geoms[1].kg[k][k]
+      expect(sparseGet(p.Kff_raw, fb, fb)).toBeCloseTo(expected, 6)
+      // The single-member contribution alone would be strictly smaller — this is
+      // what a `set`-instead-of-`add` scatter would leave behind.
+      expect(sparseGet(p.Kff_raw, fb, fb)).toBeGreaterThan(p.geoms[1].kg[k][k] * 1.000001)
+    }
+  })
+
+  it('stores no entry for DOF pairs that share no element', () => {
+    // A six-node chain: the free block is 30×30, so a dense row would have 29
+    // neighbours while an interior node genuinely touches only 17 (its own
+    // other 5 DOFs plus the 6 of each adjacent node).
+    const chain: F3Node[] = Array.from({ length: 6 }, (_, i) => ({ id: `n${i}`, x: 4 * i, y: 0, z: 0 }))
+    const links: F3Member[] = Array.from({ length: 5 }, (_, i) => (
+      { id: `c${i}`, i: `n${i}`, j: `n${i + 1}`, E, G, A, Iz, Iy, J }
+    ))
+    const p = precomputeFrame(chain, links, [{ node: 'n0', fixity: 'fixed' }])
+    expect(p.free.length).toBe(30)
+    const dofOf = (n: number, k: number) => p.freeIdx.get(6 * n + k)!
+    // n2–n3 share member c2, so that coupling is stored…
+    expect(Math.abs(sparseGet(p.Kff_raw, dofOf(2, 0), dofOf(3, 0)))).toBeGreaterThan(0)
+    // …n2 and n4 share nothing, so no entry exists between them at all.
+    for (let a = 0; a < 6; a++) for (let bb = 0; bb < 6; bb++)
+      expect(sparseGet(p.Kff_raw, dofOf(2, a), dofOf(4, bb))).toBe(0)
+    // Connectivity, not n², sets the row width.
+    expect(sparseNeighbors(p.Kff_raw, dofOf(2, 0)).length).toBeLessThanOrEqual(17)
+  })
+
+  it('nonzeros per row stay flat as the mesh grows, while dense storage squares', () => {
+    const rows: { nf: number; perRow: number }[] = []
+    for (const subdiv of [1, 2, 3, 4]) {
+      const sec: RectSection = { id: 's1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+      const model = generateGridModel({ baysX: [6, 6], baysZ: [6, 6], storeyH: [3, 3], section: sec, slabThickness: 150 })
+      const br = modelToFrame3D({ ...model, shellElements: true, shellSubdiv: subdiv }, { useShells: true })
+      const p = precomputeFrame(br.nodes, br.members, br.supports, undefined, br.shells)
+      const nf = p.free.length
+      rows.push({ nf, perRow: sparseNnz(p.Kff_raw) / nf })
+    }
+    // The mesh grows the DOF count several-fold…
+    expect(rows[rows.length - 1].nf).toBeGreaterThan(3 * rows[0].nf)
+    // …but each row still couples only its own element neighbourhood. A dense
+    // block would have `perRow` grow exactly as nf.
+    for (const r of rows) expect(r.perRow).toBeLessThan(40)
+    expect(rows[rows.length - 1].perRow).toBeLessThan(2 * rows[0].perRow)
   })
 })

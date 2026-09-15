@@ -457,7 +457,7 @@ describe('validateMesh — shell mesh quality', () => {
     expect(codes({ ...withHole(6, 0.5), shellElements: false })).not.toContain('MESH_OPENING_COARSE')
   })
 
-  it('MESH_DOF_BUDGET refuses a mesh that would exhaust the dense stiffness matrix', () => {
+  it('MESH_DOF_BUDGET refuses a mesh past the solver budget', () => {
     // 40 panels at subdivision 6 → 40·49 = 1960 mesh nodes ≈ 11 800 DOF against
     // the 4 000 budget. The message must name a subdivision that fits, because
     // "too big" without a number is not actionable.
