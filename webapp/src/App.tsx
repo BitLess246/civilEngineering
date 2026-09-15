@@ -8,73 +8,89 @@ import { WelcomeDialog } from './components/WelcomeDialog'
 import { useToolPrefs } from './lib/useToolPrefs'
 import { hasAnswered } from './lib/toolPrefs'
 import Home from './pages/Home'
-import FoundationDesign from './pages/FoundationDesign'
-import PileCapDesign from './pages/PileCapDesign'
-import CombinedFootingDesign from './pages/CombinedFootingDesign'
-import BeamDesign from './pages/BeamDesign'
-import TBeamDesign from './pages/TBeamDesign'
-import PrestressedBeam from './pages/PrestressedBeam'
-import BeamAnalysis from './pages/BeamAnalysis'
-import ColumnDesign from './pages/ColumnDesign'
-import FrameAnalysis from './pages/FrameAnalysis'
-import LoadPath from './pages/LoadPath'
-import Documentation from './pages/Documentation'
 import NotFound from './pages/NotFound'
-import Validation from './pages/Validation'
-import Terms from './pages/legal/Terms'
-import Privacy from './pages/legal/Privacy'
-import Refunds from './pages/legal/Refunds'
-import Contact from './pages/legal/Contact'
-import Profile from './pages/auth/Profile'
-// three.js is heavy — the 3D pages load in their own lazy chunks.
-const ModelSpace = lazy(() => import('./pages/ModelSpace'))
-const TrussSpace = lazy(() => import('./pages/TrussSpace'))
-import SteelBeam from './pages/SteelBeam'
-import SteelColumn from './pages/SteelColumn'
-import SlabDesign from './pages/SlabDesign'
-import TorsionDesign from './pages/TorsionDesign'
-import DevLength from './pages/DevLength'
-import PunchingShear from './pages/PunchingShear'
-import RetainingWall from './pages/RetainingWall'
-import EarthPressure from './pages/EarthPressure'
-import BearingCapacity from './pages/BearingCapacity'
-import SoilNail from './pages/SoilNail'
-import StairDesign from './pages/StairDesign'
-import LintelDesign from './pages/LintelDesign'
-import WoodSlab from './pages/WoodSlab'
-import Micropile from './pages/Micropile'
-import SlopeStability from './pages/SlopeStability'
-import Settlement from './pages/Settlement'
-import LateralPile from './pages/LateralPile'
-import SoilInvestigation from './pages/SoilInvestigation'
-import Pricing from './pages/Pricing'
-import SignIn from './pages/auth/SignIn'
-import SignUp from './pages/auth/SignUp'
-import ForgotPassword from './pages/auth/ForgotPassword'
-import ResetPassword from './pages/auth/ResetPassword'
 import { RequireAuth } from './components/RequireAuth'
 import { GuestOnly } from './components/GuestOnly'
-import RockAnchor from './pages/RockAnchor'
-import SeismicWizard from './pages/SeismicWizard'
-import WaterTank from './pages/WaterTank'
-import ShotcreteFacing from './pages/ShotcreteFacing'
-import BoltedConnection from './pages/BoltedConnection'
-import WeldedConnection from './pages/WeldedConnection'
-import SlabEstimate from './pages/SlabEstimate'
-import ChbEstimate from './pages/ChbEstimate'
-import ColumnEstimate from './pages/ColumnEstimate'
-import BeamEstimate from './pages/BeamEstimate'
-import BoxCulvertEstimate from './pages/BoxCulvertEstimate'
-import LoadCombinations from './pages/LoadCombinations'
-import PlumbingDesign from './pages/PlumbingDesign'
-import Schedule from './pages/Schedule'
-import ScheduleGantt from './pages/ScheduleGantt'
-import ScheduleNetwork from './pages/ScheduleNetwork'
-import ScheduleDashboard from './pages/ScheduleDashboard'
-import ScheduleResources from './pages/ScheduleResources'
-import ScheduleReports from './pages/ScheduleReports'
-import ScheduleDaily from './pages/ScheduleDaily'
 import { ModelSpaceSkeleton } from './components/ModelSpaceSkeleton'
+import { routeName } from './lib/documentTitle'
+
+// Home and NotFound load with the app; everything else is a chunk of its own.
+//
+// 62 of the 64 pages were STATIC imports, so opening the landing page to read
+// the pitch downloaded all 53 calculators and their engines first: a 2,428 kB
+// entry chunk, 758 kB over the wire. The heavy libraries were already split
+// well (exceljs, the PDF renderer, the solver worker all arrive on demand) —
+// what was not split was the application itself.
+//
+// These two stay eager deliberately. Home is the first paint for most
+// arrivals, and lazily loading it only trades entry-chunk bytes for a round
+// trip on the one render that must not wait. NotFound is the catch-all: a
+// spinner on the way to telling someone their URL is wrong is worse than the
+// few kB it costs.
+
+// three.js is heavy, which is why these two were split long before the rest.
+const ModelSpace = lazy(() => import('./pages/ModelSpace'))
+const TrussSpace = lazy(() => import('./pages/TrussSpace'))
+const FoundationDesign = lazy(() => import('./pages/FoundationDesign'))
+const PileCapDesign = lazy(() => import('./pages/PileCapDesign'))
+const CombinedFootingDesign = lazy(() => import('./pages/CombinedFootingDesign'))
+const BeamDesign = lazy(() => import('./pages/BeamDesign'))
+const TBeamDesign = lazy(() => import('./pages/TBeamDesign'))
+const PrestressedBeam = lazy(() => import('./pages/PrestressedBeam'))
+const BeamAnalysis = lazy(() => import('./pages/BeamAnalysis'))
+const ColumnDesign = lazy(() => import('./pages/ColumnDesign'))
+const FrameAnalysis = lazy(() => import('./pages/FrameAnalysis'))
+const LoadPath = lazy(() => import('./pages/LoadPath'))
+const Documentation = lazy(() => import('./pages/Documentation'))
+const Validation = lazy(() => import('./pages/Validation'))
+const Terms = lazy(() => import('./pages/legal/Terms'))
+const Privacy = lazy(() => import('./pages/legal/Privacy'))
+const Refunds = lazy(() => import('./pages/legal/Refunds'))
+const Contact = lazy(() => import('./pages/legal/Contact'))
+const Profile = lazy(() => import('./pages/auth/Profile'))
+const SteelBeam = lazy(() => import('./pages/SteelBeam'))
+const SteelColumn = lazy(() => import('./pages/SteelColumn'))
+const SlabDesign = lazy(() => import('./pages/SlabDesign'))
+const TorsionDesign = lazy(() => import('./pages/TorsionDesign'))
+const DevLength = lazy(() => import('./pages/DevLength'))
+const PunchingShear = lazy(() => import('./pages/PunchingShear'))
+const RetainingWall = lazy(() => import('./pages/RetainingWall'))
+const EarthPressure = lazy(() => import('./pages/EarthPressure'))
+const BearingCapacity = lazy(() => import('./pages/BearingCapacity'))
+const SoilNail = lazy(() => import('./pages/SoilNail'))
+const StairDesign = lazy(() => import('./pages/StairDesign'))
+const LintelDesign = lazy(() => import('./pages/LintelDesign'))
+const WoodSlab = lazy(() => import('./pages/WoodSlab'))
+const Micropile = lazy(() => import('./pages/Micropile'))
+const SlopeStability = lazy(() => import('./pages/SlopeStability'))
+const Settlement = lazy(() => import('./pages/Settlement'))
+const LateralPile = lazy(() => import('./pages/LateralPile'))
+const SoilInvestigation = lazy(() => import('./pages/SoilInvestigation'))
+const Pricing = lazy(() => import('./pages/Pricing'))
+const SignIn = lazy(() => import('./pages/auth/SignIn'))
+const SignUp = lazy(() => import('./pages/auth/SignUp'))
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'))
+const RockAnchor = lazy(() => import('./pages/RockAnchor'))
+const SeismicWizard = lazy(() => import('./pages/SeismicWizard'))
+const WaterTank = lazy(() => import('./pages/WaterTank'))
+const ShotcreteFacing = lazy(() => import('./pages/ShotcreteFacing'))
+const BoltedConnection = lazy(() => import('./pages/BoltedConnection'))
+const WeldedConnection = lazy(() => import('./pages/WeldedConnection'))
+const SlabEstimate = lazy(() => import('./pages/SlabEstimate'))
+const ChbEstimate = lazy(() => import('./pages/ChbEstimate'))
+const ColumnEstimate = lazy(() => import('./pages/ColumnEstimate'))
+const BeamEstimate = lazy(() => import('./pages/BeamEstimate'))
+const BoxCulvertEstimate = lazy(() => import('./pages/BoxCulvertEstimate'))
+const LoadCombinations = lazy(() => import('./pages/LoadCombinations'))
+const PlumbingDesign = lazy(() => import('./pages/PlumbingDesign'))
+const Schedule = lazy(() => import('./pages/Schedule'))
+const ScheduleGantt = lazy(() => import('./pages/ScheduleGantt'))
+const ScheduleNetwork = lazy(() => import('./pages/ScheduleNetwork'))
+const ScheduleDashboard = lazy(() => import('./pages/ScheduleDashboard'))
+const ScheduleResources = lazy(() => import('./pages/ScheduleResources'))
+const ScheduleReports = lazy(() => import('./pages/ScheduleReports'))
+const ScheduleDaily = lazy(() => import('./pages/ScheduleDaily'))
 
 
 /**
@@ -90,10 +106,23 @@ import { ModelSpaceSkeleton } from './components/ModelSpaceSkeleton'
  */
 function PageLoading({ what }: { what: string }) {
   return (
-    <div className="flex min-h-[70vh] items-center justify-center p-8">
+    <div className="flex min-h-[70vh] items-center justify-center p-8" role="status" aria-live="polite">
       <p className="text-sm text-muted">Loading {what}…</p>
     </div>
   )
+}
+
+/**
+ * The fallback for every lazy route, naming the tool it is fetching.
+ *
+ * `titleFor` is the same map that names the browser tab, so the message and
+ * the tab agree — "Loading Beam Design…", not "Loading…". A generic spinner
+ * on 60 different routes tells the reader only that something is happening;
+ * this tells them the thing they clicked is the thing that is coming.
+ */
+function RouteLoading() {
+  const { pathname } = useLocation()
+  return <PageLoading what={routeName(pathname) ?? 'the page'} />
 }
 /**
  * Should the first-run question be on screen?
@@ -152,6 +181,10 @@ export default function App() {
         <Route path="/" element={<Home onAuth={(m) => nav(m === 'signup' ? '/signup' : '/signin')} />} />
         <Route path="*" element={
           <AppShell>
+            {/* ONE boundary for the whole inner table rather than 60. The
+                nearest boundary wins, so `/model` keeps its own nested
+                Suspense and still gets the workspace-shaped skeleton. */}
+            <Suspense fallback={<RouteLoading />}>
             <Routes>
         <Route path="/docs" element={<Documentation />} />
         <Route path="/terms" element={<Terms />} />
@@ -179,13 +212,7 @@ export default function App() {
             </Suspense>
           </RequireAuth>
         } />
-        <Route path="/truss" element={
-          <RequireAuth>
-            <Suspense fallback={<PageLoading what="truss space" />}>
-              <TrussSpace />
-            </Suspense>
-          </RequireAuth>
-        } />
+        <Route path="/truss" element={<RequireAuth><TrussSpace /></RequireAuth>} />
         {/* Steel Design was one page with three tabs; it is now four pages,
             one per calculator, each with its own trial allowance and its own
             printable report. /steel keeps working and lands on the beam. */}
@@ -252,6 +279,7 @@ export default function App() {
             reads as a broken app rather than a wrong URL. */}
         <Route path="*" element={<NotFound />} />
             </Routes>
+            </Suspense>
           </AppShell>
         } />
       </Routes>
