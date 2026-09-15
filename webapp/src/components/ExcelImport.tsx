@@ -38,19 +38,24 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
   }
 
   return (
-    <div className="no-print mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+    <div className="no-print mt-4 rounded-xl border border-hairline bg-sheet-2 p-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-[0.92rem] font-bold text-slate-800">Import from Excel</span>
+        <span className="text-[0.92rem] font-bold text-ink">Import from Excel</span>
 
-        <input ref={fileRef} type="file" accept=".xlsx" className="sr-only" onChange={onPick} />
+        {/* The button above is the control; this input only carries the file
+            dialog. Left focusable it is an unnamed second tab stop for the
+            same action (axe: `label`, critical), so it is taken out of the
+            tab order — and still named, because `.click()` can focus it. */}
+        <input ref={fileRef} type="file" accept=".xlsx" className="sr-only" tabIndex={-1}
+          aria-label="Choose an .xlsx file to import" onChange={onPick} />
         <button type="button" onClick={() => fileRef.current?.click()} disabled={busy}
-          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-br from-brand to-brand px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:shadow disabled:opacity-60">
+          className="inline-flex items-center gap-2 rounded-lg bg-brand px-3.5 py-2 text-sm font-semibold text-on-solid shadow-sm transition hover:shadow disabled:opacity-60">
           <UploadIcon />{busy ? 'Reading…' : 'Choose file'}
         </button>
         <span className="text-[0.83rem] text-muted">{fileName}</span>
 
         <button type="button" onClick={() => void downloadFoundationTemplate()}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-sheet px-3.5 py-2 text-sm font-semibold text-brand transition hover:border-brand hover:bg-blue-50">
+          className="inline-flex items-center gap-2 rounded-lg border border-field-line bg-sheet px-3.5 py-2 text-sm font-semibold text-brand transition hover:border-brand hover:bg-brand-tint">
           <DownloadIcon />Blank template
         </button>
 
@@ -63,18 +68,18 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
         </span>
       </div>
 
-      {error && <p className="mt-2 text-sm text-red-600">⚠ {error}</p>}
+      {error && <p className="mt-2 text-sm text-fail">⚠ {error}</p>}
 
       {showHelp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 p-4"
           role="dialog" aria-modal="true" aria-label="Excel upload format" onClick={() => setShowHelp(false)}>
           <div className="max-h-[85vh] w-full max-w-xl overflow-auto rounded-xl bg-sheet shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+            <div className="flex items-center justify-between border-b border-hairline px-5 py-3">
               <h3 className="text-base font-bold text-brand">Excel upload format</h3>
               <button type="button" onClick={() => setShowHelp(false)} aria-label="Close"
-                className="text-2xl leading-none text-muted hover:text-slate-700">×</button>
+                className="text-2xl leading-none text-muted hover:text-ink">×</button>
             </div>
-            <div className="px-5 py-4 text-sm text-slate-600">
+            <div className="px-5 py-4 text-sm text-muted">
               <p>
                 The workbook must contain a sheet named <strong>DESIGN PARAMETERS</strong>. Row 1 holds the
                 column headers; each row below is one footing, so you can design many at once. Unknown headers
@@ -87,7 +92,7 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
               </p>
               <table className="mt-3 w-full border-collapse text-[0.82rem]">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-muted">
+                  <tr className="border-b border-hairline text-left text-muted">
                     <th className="py-1.5 pr-3 font-semibold">Header</th>
                     <th className="py-1.5 pr-3 font-semibold">Req</th>
                     <th className="py-1.5 font-semibold">Notes</th>
@@ -95,8 +100,8 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
                 </thead>
                 <tbody>
                   {TEMPLATE_GUIDE.map((g) => (
-                    <tr key={g.header} className="border-b border-slate-100 align-top">
-                      <td className="py-1.5 pr-3 font-medium text-slate-700">{g.header}</td>
+                    <tr key={g.header} className="border-b border-hairline-2 align-top">
+                      <td className="py-1.5 pr-3 font-medium text-ink-2">{g.header}</td>
                       <td className="py-1.5 pr-3 text-muted">{g.required ? '✓' : ''}</td>
                       <td className="py-1.5 text-muted">{g.note}</td>
                     </tr>

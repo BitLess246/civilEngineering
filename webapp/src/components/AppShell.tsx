@@ -101,7 +101,7 @@ function Sidebar({ onOpenPalette, onNavigate, className, trailing }: {
         </div>
         <div className="mt-3"><SearchBox onOpen={onOpenPalette} compact /></div>
       </div>
-      <nav className="flex-1 px-2.5 pb-4 pt-1">
+      <nav aria-label="Tools" className="flex-1 px-2.5 pb-4 pt-1">
         {activeIsHidden && (
           <div className="mt-3 rounded-md border border-white/10 bg-sheet/[.04] px-2.5 py-2">
             <p className="text-[11px] leading-relaxed text-rail-muted">
@@ -142,7 +142,7 @@ function Sidebar({ onOpenPalette, onNavigate, className, trailing }: {
                       <Link key={t.to + t.name} to={t.to} onClick={onNavigate}
                         aria-current={active ? 'page' : undefined}
                         className={`flex min-h-[44px] items-center gap-2 rounded-md border-l-2 px-2 py-1.5 text-[13.5px] font-medium lg:min-h-0 lg:text-[12.5px] ${
-                          active ? 'border-rail-accent bg-brand/55 text-on-solid' : 'border-transparent text-rail-muted hover:bg-sheet/5 hover:text-on-solid'}`}>
+                          active ? 'border-rail-accent bg-brand text-on-solid' : 'border-transparent text-rail-muted hover:bg-sheet/5 hover:text-on-solid'}`}>
                         {t.name}
                       </Link>
                     )

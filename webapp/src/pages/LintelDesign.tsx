@@ -14,18 +14,18 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
+      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
       <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+        className="rounded-md border border-field-line bg-field px-2.5 py-1.5 text-ink" />
     </label>
   )
 }
 
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
+    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -103,7 +103,7 @@ export default function LintelDesign() {
       <PageHeader title="Lintel beam over an opening" badges={['NSCP 2015', 'ACI 318-14']} />
       <div className="mx-auto max-w-3xl px-5 py-6">
         <ReportControls title="Lintel Design" badges={['NSCP 2015', 'ACI 318-14']} report={report} />
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-muted">
           A lintel is an ordinary RC beam; what makes it its own calculation is the load.
           Masonry over an opening <strong>arches</strong>: a triangle of wall bears on the lintel and
           the rest is carried round to the jambs — unless the wall above is too short for the arch to
@@ -111,7 +111,7 @@ export default function LintelDesign() {
           geometry rather than left to be remembered.
         </p>
 
-        <section className="mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <section className="mt-6 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
           <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Opening &amp; lintel</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label="Clear opening" unit="m" value={opening} onChange={setOpening} />
@@ -138,7 +138,7 @@ export default function LintelDesign() {
           </div>
         </section>
 
-        <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm
+        <section data-pdf-drawing className="mt-5 rounded-xl border border-hairline bg-sheet p-5 shadow-sm
           [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
           <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Elevation — what reaches the lintel</h2>
           <LintelElevation
@@ -146,7 +146,7 @@ export default function LintelDesign() {
             wallHeightAbove={wallHeightAbove} triangleHeight={r.loads.triangleHeight}
             arching={r.loads.arching} masonry={r.loads.masonry}
             bars={d.sAdopt > 0 ? `${bars} · ⌀${stirrupDia} @${f0(d.sAdopt)}` : bars} />
-          <div className="mt-3 border-t border-slate-100 pt-3">
+          <div className="mt-3 border-t border-hairline-2 pt-3">
             <p className="mb-1 text-[11px] font-semibold text-brand">SECTION</p>
             <BeamSchematic b={b} h={h} cover={cover} barDia={barDia} stirrupDia={stirrupDia}
               bars={d.bars} d={d.d} layers={d.layers} comprLayers={d.comprLayers}
@@ -154,7 +154,7 @@ export default function LintelDesign() {
           </div>
         </section>
 
-        <section className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <section className="mt-5 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
           <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Results</h2>
           <Out label="Effective span (§6.3.2.1)" value={`${f2(r.span)} m`} />
           <Out label="Arch forms" value={r.loads.arching ? `yes — ${f2(r.loads.triangleHeight)} m triangle` : 'no — whole rectangle bears'}
@@ -174,7 +174,7 @@ export default function LintelDesign() {
           )}
           <Out label="Bearing stress" value={`${f2(r.bearingStress)} ≤ ${f2(r.bearingLimit)} MPa`} ok={r.bearingOK} />
           {r.notes.length > 0 && (
-            <ul className="mt-3 list-disc space-y-1 rounded border border-amber-200 bg-amber-50 px-4 py-2 text-[12.5px] text-amber-900">
+            <ul className="mt-3 list-disc space-y-1 rounded border border-warn-line bg-warn-tint px-4 py-2 text-[12.5px] text-warn">
               {r.notes.map((n, k) => <li key={k}>{n}</li>)}
             </ul>
           )}

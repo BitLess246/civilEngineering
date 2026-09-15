@@ -195,49 +195,87 @@
      they would follow a theme for free; a screenshot proved otherwise.
      Step N takes the value of step (1000−N), so the ramp reads the same way
      round on a dark ground: 50 is the darkest, 950 the lightest, 500 pivots.
-     Only this theme needs it — the other four are light. */
-  --color-amber-50: oklch(27.9% 0.077 45.635);
-  --color-amber-100: oklch(41.4% 0.112 45.904);
-  --color-amber-200: oklch(47.3% 0.137 46.201);
-  --color-amber-300: oklch(55.5% 0.163 48.998);
-  --color-amber-400: oklch(66.6% 0.179 58.318);
-  --color-amber-600: oklch(82.8% 0.189 84.429);
-  --color-amber-700: oklch(87.9% 0.169 91.605);
-  --color-amber-800: oklch(92.4% 0.12 95.746);
-  --color-amber-900: oklch(96.2% 0.059 95.617);
-  --color-amber-950: oklch(98.7% 0.022 95.277);
-  --color-emerald-100: oklch(37.8% 0.077 168.94);
-  --color-emerald-200: oklch(43.2% 0.095 166.913);
-  --color-emerald-500: oklch(69.6% 0.17 162.48);
-  --color-emerald-800: oklch(90.5% 0.093 164.15);
-  --color-emerald-900: oklch(95% 0.052 163.051);
-  --color-red-50: oklch(25.8% 0.092 26.042);
-  --color-red-100: oklch(39.6% 0.141 25.723);
-  --color-red-200: oklch(44.4% 0.177 26.899);
-  --color-red-300: oklch(50.5% 0.213 27.518);
-  --color-red-400: oklch(57.7% 0.245 27.325);
-  --color-red-500: oklch(63.7% 0.237 25.331);
-  --color-red-600: oklch(70.4% 0.191 22.216);
-  --color-red-700: oklch(80.8% 0.114 19.571);
-  --color-red-800: oklch(88.5% 0.062 18.334);
-  --color-red-900: oklch(93.6% 0.032 17.717);
-  --color-red-950: oklch(97.1% 0.013 17.38);
-  --color-sky-100: oklch(39.1% 0.09 240.876);
-  --color-sky-200: oklch(44.3% 0.11 240.79);
-  --color-sky-800: oklch(90.1% 0.058 230.902);
-  --color-sky-900: oklch(95.1% 0.026 236.824);
-  --color-slate-100: oklch(20.8% 0.042 265.755);
-  --color-slate-200: oklch(27.9% 0.041 260.031);
-  --color-slate-300: oklch(37.2% 0.044 257.287);
-  --color-slate-400: oklch(44.6% 0.043 257.281);
-  --color-slate-500: oklch(55.4% 0.046 257.417);
-  --color-slate-600: oklch(70.4% 0.04 256.788);
-  --color-slate-700: oklch(86.9% 0.022 252.894);
-  --color-slate-800: oklch(92.9% 0.013 255.508);
-  --color-slate-900: oklch(96.8% 0.007 247.896);
-  --color-violet-200: oklch(43.2% 0.232 292.759);
-  --color-violet-500: oklch(60.6% 0.25 292.717);
-  --color-violet-800: oklch(89.4% 0.057 293.283);
+     Only this theme needs it — the other four are light.
+
+     EVERY step of every family listed here, not just the ones in use when
+     this was written. The first cut generated only the steps the codebase
+     happened to name, which left `slate-50` and `slate-950` undefined — so
+     `bg-slate-50` stayed at its stock LIGHT value while the text on it
+     inverted, and one component came out at 1.17:1, light on light. The
+     comment above promised "50 is the darkest" for a ramp that did not
+     define 50. A hole in a ramp is a defect waiting for the next utility
+     that lands in it, so the ramps are complete and a test says so. */
+  --color-amber-50: oklch(27.9% 0.077 45.635);   /* = stock amber-950 */
+  --color-amber-100: oklch(41.4% 0.112 45.904);   /* = stock amber-900 */
+  --color-amber-200: oklch(47.3% 0.137 46.201);   /* = stock amber-800 */
+  --color-amber-300: oklch(55.5% 0.163 48.998);   /* = stock amber-700 */
+  --color-amber-400: oklch(66.6% 0.179 58.318);   /* = stock amber-600 */
+  --color-amber-500: oklch(76.9% 0.188 70.08);   /* = stock amber-500 */
+  --color-amber-600: oklch(82.8% 0.189 84.429);   /* = stock amber-400 */
+  --color-amber-700: oklch(87.9% 0.169 91.605);   /* = stock amber-300 */
+  --color-amber-800: oklch(92.4% 0.12 95.746);   /* = stock amber-200 */
+  --color-amber-900: oklch(96.2% 0.059 95.617);   /* = stock amber-100 */
+  --color-amber-950: oklch(98.7% 0.022 95.277);   /* = stock amber-50 */
+
+  --color-emerald-50: oklch(26.2% 0.051 172.552);   /* = stock emerald-950 */
+  --color-emerald-100: oklch(37.8% 0.077 168.94);   /* = stock emerald-900 */
+  --color-emerald-200: oklch(43.2% 0.095 166.913);   /* = stock emerald-800 */
+  --color-emerald-300: oklch(50.8% 0.118 165.612);   /* = stock emerald-700 */
+  --color-emerald-400: oklch(59.6% 0.145 163.225);   /* = stock emerald-600 */
+  --color-emerald-500: oklch(69.6% 0.17 162.48);   /* = stock emerald-500 */
+  --color-emerald-600: oklch(76.5% 0.177 163.223);   /* = stock emerald-400 */
+  --color-emerald-700: oklch(84.5% 0.143 164.978);   /* = stock emerald-300 */
+  --color-emerald-800: oklch(90.5% 0.093 164.15);   /* = stock emerald-200 */
+  --color-emerald-900: oklch(95% 0.052 163.051);   /* = stock emerald-100 */
+  --color-emerald-950: oklch(97.9% 0.021 166.113);   /* = stock emerald-50 */
+
+  --color-red-50: oklch(25.8% 0.092 26.042);   /* = stock red-950 */
+  --color-red-100: oklch(39.6% 0.141 25.723);   /* = stock red-900 */
+  --color-red-200: oklch(44.4% 0.177 26.899);   /* = stock red-800 */
+  --color-red-300: oklch(50.5% 0.213 27.518);   /* = stock red-700 */
+  --color-red-400: oklch(57.7% 0.245 27.325);   /* = stock red-600 */
+  --color-red-500: oklch(63.7% 0.237 25.331);   /* = stock red-500 */
+  --color-red-600: oklch(70.4% 0.191 22.216);   /* = stock red-400 */
+  --color-red-700: oklch(80.8% 0.114 19.571);   /* = stock red-300 */
+  --color-red-800: oklch(88.5% 0.062 18.334);   /* = stock red-200 */
+  --color-red-900: oklch(93.6% 0.032 17.717);   /* = stock red-100 */
+  --color-red-950: oklch(97.1% 0.013 17.38);   /* = stock red-50 */
+
+  --color-sky-50: oklch(29.3% 0.066 243.157);   /* = stock sky-950 */
+  --color-sky-100: oklch(39.1% 0.09 240.876);   /* = stock sky-900 */
+  --color-sky-200: oklch(44.3% 0.11 240.79);   /* = stock sky-800 */
+  --color-sky-300: oklch(50% 0.134 242.749);   /* = stock sky-700 */
+  --color-sky-400: oklch(58.8% 0.158 241.966);   /* = stock sky-600 */
+  --color-sky-500: oklch(68.5% 0.169 237.323);   /* = stock sky-500 */
+  --color-sky-600: oklch(74.6% 0.16 232.661);   /* = stock sky-400 */
+  --color-sky-700: oklch(82.8% 0.111 230.318);   /* = stock sky-300 */
+  --color-sky-800: oklch(90.1% 0.058 230.902);   /* = stock sky-200 */
+  --color-sky-900: oklch(95.1% 0.026 236.824);   /* = stock sky-100 */
+  --color-sky-950: oklch(97.7% 0.013 236.62);   /* = stock sky-50 */
+
+  --color-slate-50: oklch(12.9% 0.042 264.695);   /* = stock slate-950 */
+  --color-slate-100: oklch(20.8% 0.042 265.755);   /* = stock slate-900 */
+  --color-slate-200: oklch(27.9% 0.041 260.031);   /* = stock slate-800 */
+  --color-slate-300: oklch(37.2% 0.044 257.287);   /* = stock slate-700 */
+  --color-slate-400: oklch(44.6% 0.043 257.281);   /* = stock slate-600 */
+  --color-slate-500: oklch(55.4% 0.046 257.417);   /* = stock slate-500 */
+  --color-slate-600: oklch(70.4% 0.04 256.788);   /* = stock slate-400 */
+  --color-slate-700: oklch(86.9% 0.022 252.894);   /* = stock slate-300 */
+  --color-slate-800: oklch(92.9% 0.013 255.508);   /* = stock slate-200 */
+  --color-slate-900: oklch(96.8% 0.007 247.896);   /* = stock slate-100 */
+  --color-slate-950: oklch(98.4% 0.003 247.858);   /* = stock slate-50 */
+
+  --color-violet-50: oklch(28.3% 0.141 291.089);   /* = stock violet-950 */
+  --color-violet-100: oklch(38% 0.189 293.745);   /* = stock violet-900 */
+  --color-violet-200: oklch(43.2% 0.232 292.759);   /* = stock violet-800 */
+  --color-violet-300: oklch(49.1% 0.27 292.581);   /* = stock violet-700 */
+  --color-violet-400: oklch(54.1% 0.281 293.009);   /* = stock violet-600 */
+  --color-violet-500: oklch(60.6% 0.25 292.717);   /* = stock violet-500 */
+  --color-violet-600: oklch(70.2% 0.183 293.541);   /* = stock violet-400 */
+  --color-violet-700: oklch(81.1% 0.111 293.571);   /* = stock violet-300 */
+  --color-violet-800: oklch(89.4% 0.057 293.283);   /* = stock violet-200 */
+  --color-violet-900: oklch(94.3% 0.029 294.588);   /* = stock violet-100 */
+  --color-violet-950: oklch(96.9% 0.016 293.756);   /* = stock violet-50 */
 }
 
 /* ── 4 · MONO ───────────────────────────────────
