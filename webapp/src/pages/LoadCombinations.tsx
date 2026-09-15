@@ -77,10 +77,10 @@ export default function LoadCombinations() {
                       <td className="px-3 py-2 text-right font-semibold tabular-nums">
                         {f2(c.value)}
                         {isMax && (
-                          <span className="ml-1.5 rounded bg-green-100 px-1 py-0.5 text-[10px] font-semibold text-green-700">MAX</span>
+                          <span className="ml-1.5 rounded bg-ok-tint px-1 py-0.5 text-[10px] font-semibold text-ok">MAX</span>
                         )}
                         {isMin && r.minCombo.value < 0 && (
-                          <span className="ml-1.5 rounded bg-red-100 px-1 py-0.5 text-[10px] font-semibold text-red-700">MIN</span>
+                          <span className="ml-1.5 rounded bg-fail-tint px-1 py-0.5 text-[10px] font-semibold text-fail">MIN</span>
                         )}
                       </td>
                     </tr>
@@ -91,7 +91,7 @@ export default function LoadCombinations() {
             <div className="flex gap-6 border-t border-slate-100 bg-slate-50 px-4 py-3 text-sm">
               <div>
                 <span className="text-muted">Max (governing):</span>
-                <span className="ml-1.5 font-bold text-green-700">{f2(r.maxCombo.value)}</span>
+                <span className="ml-1.5 font-bold text-ok">{f2(r.maxCombo.value)}</span>
                 <span className="ml-1 text-muted text-xs">combo {r.maxCombo.id}</span>
               </div>
               <div>

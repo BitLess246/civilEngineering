@@ -153,7 +153,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
       {/* Activity table — editable duration */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
         <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Activity network (CPM / PERT)</h3>
-        {depErr && <p className="no-print mb-2 rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700">{depErr}</p>}
+        {depErr && <p className="no-print mb-2 rounded border border-fail-line bg-fail-tint px-2 py-1 text-[11px] font-semibold text-fail">{depErr}</p>}
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="text-left uppercase tracking-wide text-muted">
@@ -175,7 +175,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
               const c = cpm.get(a.id)!
               const isCrit = crit.has(a.id)
               return (
-                <tr key={a.id} className={`border-t border-slate-100 ${isCrit ? 'bg-red-50/60' : ''}`}>
+                <tr key={a.id} className={`border-t border-slate-100 ${isCrit ? 'bg-fail-tint/60' : ''}`}>
                   <td className="py-1 pr-2 font-semibold">{a.id}</td>
                   <td className="py-1 pr-2 font-sans text-slate-700">{a.name}</td>
                   <td className="py-1 pr-2 text-muted">{a.quantity} {a.unit}</td>
@@ -192,7 +192,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
                             onChange={(e) => patchLink(a.id, l.id, { lag: Math.round(+e.target.value || 0) })}
                             className="w-9 rounded border border-slate-200 px-0.5 py-px text-right text-[10px]" />
                           <button type="button" onClick={() => removeLink(a.id, l.id)} title="remove link"
-                            className="no-print px-0.5 text-red-500 hover:text-red-700">×</button>
+                            className="no-print px-0.5 text-fail hover:text-fail-hover">×</button>
                         </div>
                       ))}
                       <select value="" onChange={(e) => { if (e.target.value) addLink(a.id, e.target.value) }}
@@ -212,7 +212,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
                   <td className="py-1 pr-2 text-right">{fmtDay(c.ls)}</td>
                   <td className="py-1 pr-2 text-right">{fmtDay(c.lf)}</td>
                   <td className="py-1 pr-2 text-right">{fmtDay(c.totalFloat)}</td>
-                  <td className={`py-1 font-semibold ${isCrit ? 'text-red-600' : 'text-faint'}`}>{isCrit ? '● yes' : 'no'}</td>
+                  <td className={`py-1 font-semibold ${isCrit ? 'text-fail' : 'text-faint'}`}>{isCrit ? '● yes' : 'no'}</td>
                 </tr>
               )
             })}

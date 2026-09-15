@@ -127,12 +127,31 @@ function chunks(src: string): string[] {
 
 const PROPS = ['bg', 'text', 'border'] as const
 
+/**
+ * Roles whose hover may not resolve to their own rest value.
+ *
+ * `brand` was the original set. The status roles joined it when the stock
+ * status colours were retired: a button carrying `bg-amber-600
+ * hover:bg-amber-700` has TWO steps, and one role cannot absorb two without
+ * collapsing the hover onto the rest — which is why `ok-hover`, `warn-hover`
+ * and `fail-hover` exist. Three such collapses were created and caught here
+ * during that migration.
+ */
+const ROLES = [
+  'brand', 'brand-hover',
+  'ok', 'warn', 'fail',
+  'ok-tint', 'warn-tint', 'fail-tint',
+  'ok-line', 'warn-line', 'fail-line',
+  'ok-hover', 'warn-hover', 'fail-hover',
+] as const
+const ROLE_RE = ROLES.join('|')
+
 function deadPairs(src: string): string[] {
   const found: string[] = []
   for (const c of chunks(src)) {
     for (const prop of PROPS) {
-      const rest = new Set([...c.matchAll(new RegExp(`(?<![\\w:-])${prop}-(brand|brand-hover)(?![\\w-])`, 'g'))].map((m) => m[1]))
-      const hov = new Set([...c.matchAll(new RegExp(`hover:${prop}-(brand|brand-hover)(?![\\w-])`, 'g'))].map((m) => m[1]))
+      const rest = new Set([...c.matchAll(new RegExp(`(?<![\\w:-])${prop}-(${ROLE_RE})(?![\\w-/])`, 'g'))].map((m) => m[1]))
+      const hov = new Set([...c.matchAll(new RegExp(`hover:${prop}-(${ROLE_RE})(?![\\w-/])`, 'g'))].map((m) => m[1]))
       for (const t of rest) if (hov.has(t)) found.push(`${prop}-${t} with hover:${prop}-${t}`)
     }
   }

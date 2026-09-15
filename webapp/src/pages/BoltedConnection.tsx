@@ -219,7 +219,7 @@ function BoltedConnectionCalc() {
                         const force = res?.eccentric.bolts.find(f => f.id === b.id)
                         const crit = force && res && b.id === res.eccentric.critical
                         return (
-                          <tr key={b.id} className={`border-t border-slate-100 ${crit ? 'font-semibold text-amber-700' : ''}`}>
+                          <tr key={b.id} className={`border-t border-slate-100 ${crit ? 'font-semibold text-warn' : ''}`}>
                             <td className="py-1 pr-2 font-medium">{b.id}</td>
                             {(['x','y'] as const).map(k => (
                               <td key={k} className="pr-2">
@@ -230,7 +230,7 @@ function BoltedConnectionCalc() {
                             <td className="pr-2 text-right font-mono">{force ? f2(force.R) : '—'}</td>
                             <td className="text-right">
                               <button type="button" onClick={() => delBolt(i)} disabled={custom.length <= 1}
-                                className="text-muted hover:text-red-600 disabled:opacity-30">✕</button>
+                                className="text-muted hover:text-fail disabled:opacity-30">✕</button>
                             </td>
                           </tr>
                         )
@@ -322,7 +322,7 @@ function BoltedConnectionCalc() {
                 </tr></thead>
                 <tbody>
                   {res.eccentric.bolts.map(b => (
-                    <tr key={b.id} className={b.id === res.eccentric.critical ? 'font-semibold text-amber-700' : ''}>
+                    <tr key={b.id} className={b.id === res.eccentric.critical ? 'font-semibold text-warn' : ''}>
                       <td className="pr-2">{b.id}</td>
                       <td className="pr-2">{f2(b.Vx)}</td>
                       <td className="pr-2">{f2(b.Vy)}</td>
@@ -374,12 +374,12 @@ function BoltedConnectionCalc() {
                   </tr></thead>
                   <tbody>
                     {res.outOfPlane.bolts.map(b => (
-                      <tr key={b.id} className={b.id === res.outOfPlane!.critical ? 'font-semibold text-amber-700' : ''}>
+                      <tr key={b.id} className={b.id === res.outOfPlane!.critical ? 'font-semibold text-warn' : ''}>
                         <td className="pr-2">{b.id}</td>
                         <td className="pr-2">{b.yi.toFixed(0)}</td>
                         <td className="pr-2">{f2(b.T)}</td>
                         <td className="pr-2">{f1(b.frv)}</td>
-                        <td className={b.util > 1 ? 'text-red-600' : ''}>{(b.util*100).toFixed(0)}%</td>
+                        <td className={b.util > 1 ? 'text-fail' : ''}>{(b.util*100).toFixed(0)}%</td>
                       </tr>
                     ))}
                   </tbody>

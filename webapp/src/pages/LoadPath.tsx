@@ -78,7 +78,7 @@ export default function LoadPath() {
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wide text-muted">{l.cat} load</span>
                     <button type="button" onClick={() => setAreaLoads((ls) => ls.filter((q) => q.id !== l.id))}
-                      className="text-xs text-red-500 hover:underline">remove</button>
+                      className="text-xs text-fail hover:underline">remove</button>
                   </div>
                   <div className="flex flex-wrap gap-3 [&>label]:w-36">
                     <Num label="q" unit="kPa" value={l.q}

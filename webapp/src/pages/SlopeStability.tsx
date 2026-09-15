@@ -32,7 +32,7 @@ function Out({ label, value, ok }: { label: string; value: string; ok?: boolean 
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -299,7 +299,7 @@ export default function SlopeStability() {
         </label>
         <div className="mt-3 flex items-baseline justify-between border-t border-slate-100 pt-2">
           <span className="text-sm text-muted">Factor of safety</span>
-          <span className={`font-mono text-lg font-bold ${infFS >= 1.5 ? 'text-green-700' : infFS >= 1 ? 'text-amber-700' : 'text-red-700'}`}>
+          <span className={`font-mono text-lg font-bold ${infFS >= 1.5 ? 'text-ok' : infFS >= 1 ? 'text-warn' : 'text-fail'}`}>
             {Number.isFinite(infFS) ? infFS.toFixed(2) : '—'}
             <span className="ml-2 text-[11px] font-normal">
               {infFS >= 1.5 ? '✓ stable' : infFS >= 1 ? '⚠ marginal' : '✗ unstable'}

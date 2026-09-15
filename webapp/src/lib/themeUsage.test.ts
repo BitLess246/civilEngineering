@@ -111,41 +111,42 @@ describe("Blueprint's inverted stock ramps are complete", () => {
 })
 
 describe('verdict colour comes from the status roles', () => {
-  // A RATCHET, not a clean bill. The token migration never reached the status
-  // colours on most pages: 140 stock emerald/green/red/rose uses survive across
-  // 33 of the 65. They are not currently BROKEN — Blueprint inverts the stock
-  // ramp (#755), so `text-emerald-600` lands as a light green on a dark ground
-  // and happens to pass — but they are fragile: they track Tailwind's ramp
-  // rather than the theme's semantic roles, and they inverted by accident
-  // rather than by design.
+  // Was a RATCHET at 140 while the debt stood. The debt is gone: all 519 uses
+  // of the eight status families across 61 files now name a role, so this is a
+  // rule rather than a ceiling.
   //
-  // LintelDesign was the one page where a stock colour carried the page's
-  // actual PASS/FAIL readout, and it failed contrast in ALL FIVE themes. That
-  // one is migrated. The rest are named here with an exact count so a new page
-  // cannot add to the pile and so the debt is a number rather than a feeling.
-  const BASELINE = 140
+  // sky/blue/violet are deliberately NOT here. They carry informational tags —
+  // "derived", "field" — not a verdict, and no role names that, so they keep
+  // the (complete, inverted) stock ramp. A rule that swept them up would be
+  // demanding a token that does not exist.
+  const STATUS = 'emerald|green|lime|red|rose|amber|yellow|orange'
+  const PROPS = 'text|bg|border|ring|divide|fill|stroke|decoration'
 
-  const stockVerdicts = () => {
+  const stockStatus = () => {
     const found: string[] = []
     for (const [file, src] of Object.entries(SOURCES)) {
-      if (!file.includes('/pages/')) continue
       for (const c of classStrings(src)) {
-        const m = c.match(/(?<![\w:-])text-(?:emerald|green|red|rose)-(?:[5-9]\d{2})(?![\w-])/)
-        if (m) found.push(`${file}: ${m[0]}`)
+        for (const m of c.matchAll(new RegExp(`(?<![\\w:-])(?:${PROPS})-(?:${STATUS})-\\d{2,3}(?![\\w-])`, 'g'))) {
+          found.push(`${file}: ${m[0]}`)
+        }
       }
     }
     return found
   }
 
-  it('does not grow', () => {
-    expect(stockVerdicts().length).toBeLessThanOrEqual(BASELINE)
+  it('is not painted with a stock colour anywhere', () => {
+    expect(stockStatus()).toEqual([])
   })
 
-  it('is gone from the pages that carry a verdict readout', () => {
-    // These print a design PASS/FAIL the reader acts on, so their status
-    // colour has to be the theme's, not Tailwind's.
-    const migrated = ['LintelDesign.tsx']
-    const left = stockVerdicts()
-    for (const page of migrated) expect(left.filter((o) => o.includes(page))).toEqual([])
+  it('has roles for all three verdicts, at every weight a component needs', () => {
+    // The migration needed a fill, a tint behind text, a border and a hover
+    // for each; a missing one is what forces a component back onto the stock
+    // ramp, which is how the debt accumulated the first time.
+    const bp = themesCss.slice(themesCss.indexOf('[data-theme="blueprint"]'))
+    for (const role of ['ok', 'warn', 'fail']) {
+      for (const suffix of ['', '-tint', '-line', '-hover']) {
+        expect(bp, `${role}${suffix}`).toContain(`--t-${role}${suffix}:`)
+      }
+    }
   })
 })

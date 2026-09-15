@@ -54,9 +54,22 @@ const TEXT_PAIRS: [string, string, number][] = [
   ['fail', 'sheet', 4.5], ['fail', 'fail-tint', 4.5],
 ]
 
-/** WCAG 1.4.11: a focus ring is non-text information and needs 3:1. */
+/**
+ * WCAG 1.4.11: a focus ring is non-text information and needs 3:1.
+ *
+ * So is the BORDER OF AN INPUT — it is what says where the field is, and the
+ * rule names "visual information required to identify user interface
+ * components" explicitly. The field line measured 1.35-2.30:1 across the five
+ * themes, which is why this row is here: the audit that found it could not
+ * have been an axe run, because axe does not check 1.4.11 at all.
+ *
+ * Three grounds because a field sits on all three — inside a card (`sheet`),
+ * on the page itself (`paper`), and against its own fill (`field`) — and the
+ * border has to be findable on the worst of them, not the average.
+ */
 const NON_TEXT_PAIRS: [string, string, number][] = [
   ['focus', 'sheet', 3.0], ['focus', 'paper', 3.0], ['focus', 'field', 3.0],
+  ['field-line', 'sheet', 3.0], ['field-line', 'paper', 3.0], ['field-line', 'field', 3.0],
 ]
 
 // `?inline` needs `css: true` in vite.config.ts — vitest defaults to `false`,
@@ -68,8 +81,16 @@ const palettes = parseThemes(themesCss)
 describe('themes — every palette is legible, by measurement', () => {
   it('parses one block per registered theme', () => {
     // Guards the sweep below against passing vacuously on an empty parse.
+    //
+    // 33, not the original 30: `ok-hover`, `warn-hover` and `fail-hover` joined
+    // when the stock status colours were retired. A button carrying
+    // `bg-amber-600 hover:bg-amber-700` has TWO steps and one role cannot
+    // absorb both without collapsing the hover onto the rest. This count is
+    // deliberately exact — it is what catches a role added to one theme and
+    // forgotten in another, which is a hole the contrast sweep cannot see
+    // because it only measures the pairs it is given.
     expect(Object.keys(palettes).sort()).toEqual(THEMES.map((t) => t.id).slice().sort())
-    for (const id of Object.keys(palettes)) expect(Object.keys(palettes[id]).length).toBe(30)
+    for (const id of Object.keys(palettes)) expect(Object.keys(palettes[id]).length, id).toBe(33)
   })
 
   for (const { id, name } of THEMES) {
@@ -85,7 +106,7 @@ describe('themes — every palette is legible, by measurement', () => {
       expect(fails).toEqual([])
     })
 
-    it(`${name}: the focus ring clears 3:1 against every surface it lands on`, () => {
+    it(`${name}: non-text UI boundaries clear 3:1 — focus ring and field border (WCAG 1.4.11)`, () => {
       const pal = palettes[id]
       const fails: string[] = []
       for (const [fg, bg, min] of NON_TEXT_PAIRS) {

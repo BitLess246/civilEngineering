@@ -67,8 +67,8 @@ export function ReactionsPanel({
       </div>
 
       {/* Statics self-check — STAAD-style ΣApplied vs ΣReactions */}
-      <div className={`mb-3 rounded-lg border p-2.5 text-xs ${ok ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
-        <div className={`mb-1 font-bold ${ok ? 'text-emerald-700' : 'text-red-700'}`}>
+      <div className={`mb-3 rounded-lg border p-2.5 text-xs ${ok ? 'border-ok-line bg-ok-tint' : 'border-fail-line bg-fail-tint'}`}>
+        <div className={`mb-1 font-bold ${ok ? 'text-ok' : 'text-fail'}`}>
           {ok ? '✓ Equilibrium satisfied' : '✗ Equilibrium residual high'} — max residual {residPct.toExponential(1)}% of load
         </div>
         <table className="w-full">

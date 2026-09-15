@@ -103,7 +103,7 @@ export default function WeldedConnection() {
                       <td key={k} className="pr-2"><input type="number" value={s[k]} onChange={(e) => setSeg(i, k, num(e.target.value))} className="w-14 rounded border border-slate-200 px-1 py-0.5" /></td>
                     ))}
                     <td className="pr-2 text-right font-mono">{f2(Math.hypot(s.x2 - s.x1, s.y2 - s.y1))}</td>
-                    <td className="text-right"><button type="button" onClick={() => delSeg(i)} className="text-muted hover:text-red-600">✕</button></td>
+                    <td className="text-right"><button type="button" onClick={() => delSeg(i)} className="text-muted hover:text-fail">✕</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -168,7 +168,7 @@ export default function WeldedConnection() {
             ))}
             <div className="flex justify-between border-t border-slate-100 py-1">
               <span className="text-muted">Peak force / length f_max (≤ {f2(r.capacityPerLen)})</span>
-              <span className={`font-mono font-semibold ${r.ok ? 'text-emerald-600' : 'text-red-600'}`}>{f2(r.fMax)} N/mm {r.ok ? '✓' : '✗'}</span>
+              <span className={`font-mono font-semibold ${r.ok ? 'text-ok' : 'text-fail'}`}>{f2(r.fMax)} N/mm {r.ok ? '✓' : '✗'}</span>
             </div>
             <div className="flex justify-between border-t border-slate-100 py-1">
               <span className="text-muted">Required fillet leg</span>

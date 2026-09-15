@@ -92,7 +92,7 @@ export function AccountMenu({ dark }: { dark?: boolean }) {
             )}
             <p className="mt-1 text-[11px] text-muted">
               On the <strong className="text-brand">{plan.name}</strong> plan
-              {!user.emailVerified && <span className="text-amber-700"> · email not verified</span>}
+              {!user.emailVerified && <span className="text-warn"> · email not verified</span>}
             </p>
           </div>
           <nav className="py-1 text-[12.5px]">
@@ -112,7 +112,7 @@ export function AccountMenu({ dark }: { dark?: boolean }) {
           <div className="border-t border-slate-100 py-1">
             <button type="button"
               onClick={async () => { setOpen(false); await signOut(); nav('/') }}
-              className="block w-full px-3.5 py-1.5 text-left text-[12.5px] font-semibold text-red-700 hover:bg-red-50">
+              className="block w-full px-3.5 py-1.5 text-left text-[12.5px] font-semibold text-fail hover:bg-fail-tint">
               Sign out
             </button>
           </div>

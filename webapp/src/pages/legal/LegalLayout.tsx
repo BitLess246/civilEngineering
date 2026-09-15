@@ -22,7 +22,7 @@ export function LegalLayout({ title, subtitle, children }: {
       <p className="mt-1 text-[12px] text-muted">Last updated {SITE.policiesUpdated}</p>
 
       {missing.length > 0 && (
-        <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-900">
+        <div className="mt-5 rounded-lg border border-fail-line bg-fail-tint px-4 py-3 text-[13px] leading-6 text-fail">
           <strong>This document is incomplete.</strong> The following business details have not been
           filled in yet, so the statements below that rely on them are unfinished:
           <ul className="mt-1.5 list-inside list-disc">
@@ -75,7 +75,7 @@ export function Detail({ value, what }: { value: string; what: string }) {
   const v = value.trim()
   if (v) return <>{v}</>
   return (
-    <span className="rounded bg-red-50 px-1 font-mono text-[12px] font-semibold text-red-700">
+    <span className="rounded bg-fail-tint px-1 font-mono text-[12px] font-semibold text-fail">
       [{what} not set]
     </span>
   )

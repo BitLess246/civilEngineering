@@ -1682,14 +1682,14 @@ export default function ModelSpace() {
         )
       })()}
       {planBlock && (
-        <div className="no-print mx-4 mt-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+        <div className="no-print mx-4 mt-4 flex items-start gap-3 rounded-lg border border-warn-line bg-warn-tint px-4 py-3">
           <span aria-hidden>🔒</span>
           <div className="min-w-0 flex-1">
-            <p className="text-[12.5px] leading-6 text-amber-900">{planBlock}</p>
-            <Link to="/pricing" className="text-[12px] font-semibold text-amber-900 underline">Compare plans</Link>
+            <p className="text-[12.5px] leading-6 text-warn">{planBlock}</p>
+            <Link to="/pricing" className="text-[12px] font-semibold text-warn underline">Compare plans</Link>
           </div>
           <button type="button" onClick={() => setPlanBlock(null)}
-            className="text-[11px] font-semibold text-amber-900/70 hover:text-amber-900" aria-label="Dismiss">✕</button>
+            className="text-[11px] font-semibold text-warn/70 hover:text-warn" aria-label="Dismiss">✕</button>
         </div>
       )}
       {/* ── Tab ribbon ──────────────────────────────────────────────────────
@@ -1960,7 +1960,7 @@ export default function ModelSpace() {
               <div className="no-print absolute left-3 top-12 flex items-center gap-2 rounded-md border border-brand/30 bg-sheet/95 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
                 <span className="font-semibold text-brand">▣ {selInfo.kind} {selInfo.id}</span>
                 {selInfo.extra && <span className="text-muted">{selInfo.extra}</span>}
-                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-muted hover:text-red-500" title="Deselect">✕</button>
+                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-muted hover:text-fail" title="Deselect">✕</button>
               </div>
             )}
             {model && (
@@ -2044,13 +2044,13 @@ export default function ModelSpace() {
                 {armDelete === selMember.id ? (
                   <div className="mt-2 flex items-center gap-2">
                     <button type="button" onClick={() => { save(removeElements(model, new Set([selMember.id]))); setSelected(null) }}
-                      className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700">Delete member — confirm</button>
+                      className="rounded-lg bg-fail px-3 py-1.5 text-sm font-semibold text-on-solid hover:bg-fail-hover">Delete member — confirm</button>
                     <button type="button" onClick={() => setArmDelete(null)}
                       className="text-sm font-semibold text-muted hover:text-slate-700">Cancel</button>
                   </div>
                 ) : (
                   <button type="button" onClick={() => setArmDelete(selMember.id)}
-                    className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">Delete member</button>
+                    className="mt-2 rounded-lg border border-fail-line px-3 py-1.5 text-sm font-semibold text-fail hover:bg-fail-tint">Delete member</button>
                 )}
               </Sec>
             )}
@@ -2069,13 +2069,13 @@ export default function ModelSpace() {
                 {armDelete === selPlate.id ? (
                   <div className="mt-2 flex items-center gap-2">
                     <button type="button" onClick={() => { save(removeElements(model, new Set([selPlate.id]))); setSelected(null) }}
-                      className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700">Delete slab — confirm</button>
+                      className="rounded-lg bg-fail px-3 py-1.5 text-sm font-semibold text-on-solid hover:bg-fail-hover">Delete slab — confirm</button>
                     <button type="button" onClick={() => setArmDelete(null)}
                       className="text-sm font-semibold text-muted hover:text-slate-700">Cancel</button>
                   </div>
                 ) : (
                   <button type="button" onClick={() => setArmDelete(selPlate.id)}
-                    className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">Delete slab</button>
+                    className="mt-2 rounded-lg border border-fail-line px-3 py-1.5 text-sm font-semibold text-fail hover:bg-fail-tint">Delete slab</button>
                 )}
               </Sec>
             )}
@@ -2151,7 +2151,7 @@ export default function ModelSpace() {
                             </td>
                             <td className="py-0.5 text-right">
                               <button type="button" onClick={() => { save(removeNode(model, n.id)); if (selected) setSelected(null) }}
-                                className="rounded px-1.5 text-red-500 hover:bg-red-50" title="Remove node + attached members/plates/loads">✕</button>
+                                className="rounded px-1.5 text-fail hover:bg-fail-tint" title="Remove node + attached members/plates/loads">✕</button>
                             </td>
                           </tr>
                         ))}
@@ -2188,7 +2188,7 @@ export default function ModelSpace() {
                           const Lc = Math.max(Lfull - (eI ? Math.hypot(...eI) : 0) - (eJ ? Math.hypot(...eJ) : 0), 0)
                           const trimmed = Lc < Lfull - 1e-6
                           return (
-                            <tr key={m.id} className={`border-t border-slate-100 ${m.id === selected ? 'bg-amber-50' : ''}`}>
+                            <tr key={m.id} className={`border-t border-slate-100 ${m.id === selected ? 'bg-warn-tint' : ''}`}>
                               <td className="py-0.5 pr-2 font-medium cursor-pointer" onClick={() => setSelected(m.id)}>{m.id}</td>
                               <td className="py-0.5 pr-1">
                                 <select value={m.role} onChange={(e) => updMember(m.id, { role: e.target.value as MemberRole })}
@@ -2218,7 +2218,7 @@ export default function ModelSpace() {
                               </td>
                               <td className="py-0.5 text-right">
                                 <button type="button" onClick={() => { save(removeElements(model, new Set([m.id]))); if (selected === m.id) setSelected(null) }}
-                                  className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                                  className="rounded px-1.5 text-fail hover:bg-fail-tint">✕</button>
                               </td>
                             </tr>
                           )
@@ -2263,8 +2263,8 @@ export default function ModelSpace() {
                       updMember(sel.id, { releases: { ...rel, [end]: { ...cur, [dof]: v } } })
                     }
                     return (
-                      <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs">
-                        <p className="mb-1.5 font-semibold text-amber-800">End releases — {sel.id}</p>
+                      <div className="mt-2 rounded-lg border border-warn-line bg-warn-tint p-2 text-xs">
+                        <p className="mb-1.5 font-semibold text-warn">End releases — {sel.id}</p>
                         <table className="w-full border-collapse">
                           <thead>
                             <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
@@ -2433,7 +2433,7 @@ export default function ModelSpace() {
                         </thead>
                         <tbody>
                           {model.plates.filter((p) => p.role !== 'wall').map((p) => (
-                            <tr key={p.id} className={`border-t border-slate-100 ${p.id === selected ? 'bg-amber-50' : ''}`}>
+                            <tr key={p.id} className={`border-t border-slate-100 ${p.id === selected ? 'bg-warn-tint' : ''}`}>
                               <td className="py-0.5 pr-2 font-medium cursor-pointer" onClick={() => setSelected(p.id)}>{p.id}</td>
                               <td className="py-0.5 pr-2 text-muted">{p.corners.join(', ')}</td>
                               <td className="py-0.5 pr-1">
@@ -2443,7 +2443,7 @@ export default function ModelSpace() {
                               </td>
                               <td className="py-0.5 text-right">
                                 <button type="button" onClick={() => { save(removeElements(model, new Set([p.id]))); if (selected === p.id) setSelected(null) }}
-                                  className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                                  className="rounded px-1.5 text-fail hover:bg-fail-tint">✕</button>
                               </td>
                             </tr>
                           ))}
@@ -2480,7 +2480,7 @@ export default function ModelSpace() {
                               <td className="py-0.5 pr-1">{f1((w.thickness / 1000) * w.height * 24)}</td>
                               <td className="py-0.5 pr-1">{w.shearWall ? <span className="font-semibold text-purple-700">shear</span> : 'gravity'}</td>
                               <td className="py-0.5 text-right">
-                                <button type="button" onClick={() => removeWall(w.id)} className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                                <button type="button" onClick={() => removeWall(w.id)} className="rounded px-1.5 text-fail hover:bg-fail-tint">✕</button>
                               </td>
                             </tr>
                           ))}
@@ -2532,7 +2532,7 @@ export default function ModelSpace() {
                             return (
                               <tr key={st.id} className="border-t border-slate-100">
                                 <td className="py-0.5 pr-2 font-medium">{st.low} → {st.high}</td>
-                                <td className={`py-0.5 pr-1 ${odd ? 'font-semibold text-amber-700' : ''}`}
+                                <td className={`py-0.5 pr-1 ${odd ? 'font-semibold text-warn' : ''}`}
                                   title={odd ? 'Outside the proportions stairs are usually built in — a comfort read, not a code check' : undefined}>
                                   {p ? `${p.R.toFixed(0)}/${p.G.toFixed(0)}` : '—'}
                                 </td>
@@ -2544,7 +2544,7 @@ export default function ModelSpace() {
                                     : '—'}
                                 </td>
                                 <td className="py-0.5 text-right">
-                                  <button type="button" onClick={() => removeStair(st.id)} className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                                  <button type="button" onClick={() => removeStair(st.id)} className="rounded px-1.5 text-fail hover:bg-fail-tint">✕</button>
                                 </td>
                               </tr>
                             )
@@ -2908,7 +2908,7 @@ export default function ModelSpace() {
                         <div key={i} className="flex items-center gap-2 text-[11px]">
                           <span className="flex-1">{it.label}</span>
                           <span className="text-muted">{sdlItemKPa(it).toFixed(2)} kPa</span>
-                          <button type="button" onClick={() => removeSdlItem(i)} className="rounded px-1 text-red-500 hover:bg-red-50">✕</button>
+                          <button type="button" onClick={() => removeSdlItem(i)} className="rounded px-1 text-fail hover:bg-fail-tint">✕</button>
                         </div>
                       ))}
                       <div className="mt-1 border-t border-slate-100 pt-1 text-[11px] font-semibold">
@@ -2992,7 +2992,7 @@ export default function ModelSpace() {
                               <td className="py-0.5 pr-2">
                                 <button type="button" onClick={() => setPlateDeck(p.id, p.deck ? undefined : DEFAULT_DECK)}
                                   title={p.deck ? 'Remove the timber deck (revert to RC slab)' : 'Make this a timber deck-on-joist floor (wood slab)'}
-                                  className={`rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${p.deck ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'text-brand hover:bg-blue-50'}`}>
+                                  className={`rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${p.deck ? 'bg-warn-tint text-warn hover:bg-warn-line' : 'text-brand hover:bg-blue-50'}`}>
                                   {p.deck ? 'timber ✓' : '+ timber'}
                                 </button>
                               </td>
@@ -3000,7 +3000,7 @@ export default function ModelSpace() {
                                 <button type="button" onClick={() => setSlabSdl(p.id, false)} title="Apply the composed SDL above to this slab"
                                   className="rounded px-1.5 text-brand hover:bg-blue-50">set SDL</button>
                                 <button type="button" onClick={() => setSlabSdl(p.id, true)} title="Clear to default SDL"
-                                  className="rounded px-1.5 text-red-500 hover:bg-red-50">clear</button>
+                                  className="rounded px-1.5 text-fail hover:bg-fail-tint">clear</button>
                               </td>
                             </tr>
                           )
@@ -3016,8 +3016,8 @@ export default function ModelSpace() {
                     const d = selPlate.deck!
                     const gopts = gradesOf(d.joistSpecies?.split('-')[0] ?? 'DFL')
                     return (
-                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
-                        <h4 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-amber-700">Timber deck — {selPlate.id} (NDS §3 / NSCP §6)</h4>
+                      <div className="mt-3 rounded-lg border border-warn-line bg-warn-tint/40 p-3">
+                        <h4 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-warn">Timber deck — {selPlate.id} (NDS §3 / NSCP §6)</h4>
                         <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
                           <label className="flex flex-col">Species
                             <select value={d.joistSpecies?.split('-')[0] ?? 'DFL'} onChange={(e) => { const sp = e.target.value; const g = gradesOf(sp); patchDeck(selPlate.id, { joistSpecies: g.length ? g[0].id : `${sp}-2`, joistKind: g[0]?.kind ?? 'sawn' }) }}
@@ -3087,7 +3087,7 @@ export default function ModelSpace() {
                           const unit = l.kind === 'area' ? 'kPa' : l.kind === 'member-udl' ? 'kN/m' : l.kind === 'member-thermal' ? '°C' : 'kN'
                           return (
                             <tr key={idx} className="border-t border-slate-100">
-                              <td className={`py-0.5 pr-2 font-semibold ${l.cat === 'D' ? 'text-slate-600' : l.cat === 'L' ? 'text-emerald-700' : l.cat === 'T' ? 'text-amber-600' : 'text-purple-700'}`}>{l.cat}</td>
+                              <td className={`py-0.5 pr-2 font-semibold ${l.cat === 'D' ? 'text-slate-600' : l.cat === 'L' ? 'text-ok' : l.cat === 'T' ? 'text-warn' : 'text-purple-700'}`}>{l.cat}</td>
                               <td className="py-0.5 pr-2">{l.kind === 'node' ? '·' : l.kind === 'area' ? '▦' : l.kind === 'member-thermal' ? '🌡' : '—'} {target}</td>
                               <td className="py-0.5 pr-1 whitespace-nowrap">
                                 {val !== null ? (
@@ -3106,7 +3106,7 @@ export default function ModelSpace() {
                               </td>
                               <td className="py-0.5 text-right">
                                 <button type="button" onClick={() => delLoad(idx)}
-                                  className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                                  className="rounded px-1.5 text-fail hover:bg-fail-tint">✕</button>
                               </td>
                             </tr>
                           )
@@ -3282,7 +3282,7 @@ export default function ModelSpace() {
                         return (
                           <p key={ax} className="text-xs text-muted">
                             {ax.toUpperCase()}: V<sub>CQC</sub> = {f1(g.Vdyn)} kN · §208.6.4.2 floor = {f1(g.Vfloor)} kN → scale ×{g.scale.toFixed(3)} · mass participation {Math.round(g.massRatio * 100)}%
-                            {g.massRatio < 0.9 && <span className="font-semibold text-amber-600"> — below 90% (§208.6.4.1): raise the mode count in Dynamics</span>}
+                            {g.massRatio < 0.9 && <span className="font-semibold text-warn"> — below 90% (§208.6.4.1): raise the mode count in Dynamics</span>}
                           </p>
                         )
                       })}
@@ -3379,7 +3379,7 @@ export default function ModelSpace() {
                             <td className="py-1 pr-2 font-medium">Zone {lbl}</td>
                             <td className="py-1 pr-2 font-mono">{f2(zone.GCpPos)} / {f2(zone.GCpNeg)}</td>
                             <td className="py-1 pr-2 font-mono">{f2(zone.pPos)} kPa</td>
-                            <td className="py-1 pr-2 font-mono text-red-600">{f2(zone.pNeg)} kPa</td>
+                            <td className="py-1 pr-2 font-mono text-fail">{f2(zone.pNeg)} kPa</td>
                           </tr>
                         ))}
                       </tbody>
@@ -3487,7 +3487,7 @@ export default function ModelSpace() {
                     unconservative side, measured against a meshed-slab reference. Stated on the
                     card rather than only in the ⓘ, because it changes what a girder result means. */}
                 {!designShells && (
-                <p className="col-span-full rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-900">
+                <p className="col-span-full rounded-md border border-warn-line bg-warn-tint px-2.5 py-2 text-[11px] leading-relaxed text-warn">
                   <b>Slab loads reach beams by 45° tributary area</b>, not a slab mesh. Cross-checked against
                   STAAD.Pro with the slab meshed, every input matched (2×1 bay, 2 storeys): total reaction agrees
                   to <b>0.001%</b> and joint deflections to <b>0.2%</b>, but <b>interior girders come out 22–29%
@@ -3500,7 +3500,7 @@ export default function ModelSpace() {
                   <button type="button" onClick={analyze} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'analyze' ? '⏳ Analyzing…' : '▶ Analyze (3D FEM)'}
                   </button>
-                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors below to enable analysis.</p>}
+                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-fail">Resolve the mesh errors below to enable analysis.</p>}
                 </div>
                 {busy === 'analyze' && <SolverProgress p={progress} />}
                 {solveErr && !busy && <SolveError message={solveErr} />}
@@ -3681,9 +3681,9 @@ export default function ModelSpace() {
                             </thead>
                             <tbody>
                               {rows.map(({ c, a }) => (
-                                <tr key={c.combo.name} className={c === analysis.perCombo[analysis.govIdx] ? 'bg-amber-50 font-semibold' : ''}>
+                                <tr key={c.combo.name} className={c === analysis.perCombo[analysis.govIdx] ? 'bg-warn-tint font-semibold' : ''}>
                                   <td className="pr-2 py-0.5 text-slate-700">{c.combo.name}</td>
-                                  <td className={`pr-2 py-0.5 text-right ${a!.converged ? 'text-slate-600' : 'text-red-600'}`}>{a!.iterations}</td>
+                                  <td className={`pr-2 py-0.5 text-right ${a!.converged ? 'text-slate-600' : 'text-fail'}`}>{a!.iterations}</td>
                                   <td className="py-0.5 text-slate-600">{a!.inactive.length ? a!.inactive.join(', ') : '—'}</td>
                                 </tr>
                               ))}
@@ -3737,7 +3737,7 @@ export default function ModelSpace() {
                   <button type="button" onClick={runModal} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'modal' ? '⏳ Solving modes…' : '〰 Run modal analysis'}
                   </button>
-                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable modal analysis.</p>}
+                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-fail">Resolve the mesh errors in the Analysis tab to enable modal analysis.</p>}
                 </div>
                 {busy === 'modal' && <SolverProgress p={progress} />}
                 {solveErr && !busy && <SolveError message={solveErr} />}
@@ -3786,7 +3786,7 @@ export default function ModelSpace() {
                         {thCsv.name} — {thCsv.npts} pts
                       </span>
                       <button type="button" onClick={() => setThCsv(null)}
-                        className="text-[11px] text-muted hover:text-red-500">✕ clear</button>
+                        className="text-[11px] text-muted hover:text-fail">✕ clear</button>
                     </div>
                   ) : (
                     <label className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-slate-300 bg-sheet px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
@@ -3887,7 +3887,7 @@ export default function ModelSpace() {
                           value={`ratio ${res.ratio.toFixed(2)}`} sub={res.ok ? 'aₚ ≤ aₒ' : 'stiffen framing, add damping/mass, or relax occupancy'} />
                       </div>
                     ) : (
-                      <p className="col-span-full text-[11px] text-amber-600">Enter Δ and W (or run Analyze for auto-suggestions) to evaluate.</p>
+                      <p className="col-span-full text-[11px] text-warn">Enter Δ and W (or run Analyze for auto-suggestions) to evaluate.</p>
                     )}
                   </Sec>
                 )
@@ -3938,7 +3938,7 @@ export default function ModelSpace() {
                     {busy === 'pushover' ? '⏳ Pushing…' : '⤧ Run pushover'}
                   </button>
                   {!nonlinearGate.allowed && <UpgradeNotice compact message={nonlinearGate.message} />}
-                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable pushover.</p>}
+                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-fail">Resolve the mesh errors in the Analysis tab to enable pushover.</p>}
                 </div>
                 {busy === 'pushover' && <SolverProgress p={progress} />}
                 {solveErr && !busy && <SolveError message={solveErr} />}
@@ -4046,7 +4046,7 @@ export default function ModelSpace() {
                       Rayleigh damping on the initial stiffness. An elastic reference run is solved alongside so the
                       inelastic force reduction is visible.
                     </p>
-                    <p className="col-span-full rounded-md bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+                    <p className="col-span-full rounded-md bg-warn-tint px-2 py-1.5 text-[11px] text-warn">
                       <strong>Assumes a shear-type (strong-beam / weak-column) mechanism.</strong> A frame that hinges
                       in its beams has a lower real capacity than Σ2·Mp/h, so Fy would be unconservative — confirm the
                       governing mechanism with the Pushover tab first. One direction at a time; torsion ignored.
@@ -4057,7 +4057,7 @@ export default function ModelSpace() {
                   <button type="button" onClick={runNonlinear} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'nonlinearTH' ? '⏳ Integrating…' : '⚡ Run nonlinear time-history'}
                   </button>
-                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable this run.</p>}
+                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-fail">Resolve the mesh errors in the Analysis tab to enable this run.</p>}
                 </div>
                 {busy === 'nonlinearTH' && <SolverProgress p={progress} />}
                 {solveErr && !busy && <SolveError message={solveErr} />}
@@ -4112,7 +4112,7 @@ export default function ModelSpace() {
                             </thead>
                             <tbody className="font-mono">
                               {yielded.slice(0, 20).map((h) => (
-                                <tr key={`${h.member}-${h.end}`} className="border-b border-slate-100 bg-amber-50">
+                                <tr key={`${h.member}-${h.end}`} className="border-b border-slate-100 bg-warn-tint">
                                   <td className="py-0.5 pr-2 text-left">{h.member}</td>
                                   <td className="py-0.5 pr-2 text-left">{h.end}</td>
                                   <td className="py-0.5 pr-2">{f1(h.moment)}</td>
@@ -4180,7 +4180,7 @@ export default function ModelSpace() {
                             {ie.storeys.map((s, i) => {
                               const mu = ie.response.ductility[i] ?? 0
                               return (
-                                <tr key={s.storey} className={`border-b border-slate-100 ${mu > 1 ? 'bg-amber-50' : ''}`}>
+                                <tr key={s.storey} className={`border-b border-slate-100 ${mu > 1 ? 'bg-warn-tint' : ''}`}>
                                   <td className="py-0.5 pr-2 text-left">{s.storey}</td>
                                   <td className="py-0.5 pr-2">{f2(s.elevation)}</td>
                                   <td className="py-0.5 pr-2">{f1(s.mass)}</td>
@@ -4231,7 +4231,7 @@ export default function ModelSpace() {
                   {!optimizeGate.allowed && <UpgradeNotice compact message={optimizeGate.message} />}
                 </div>
                 {meshErrors && (
-                  <p className="col-span-full text-[11px] font-medium text-red-600">
+                  <p className="col-span-full text-[11px] font-medium text-fail">
                     Mesh has errors — fix them in the Analysis tab before designing.
                   </p>
                 )}
@@ -4356,7 +4356,7 @@ export default function ModelSpace() {
                       .map(([role, label]) => [REBAR_ROLE_COLOR[role], label] as const)} />
                   )}
                   {showRebar && rebarNotes.length > 0 && (
-                    <div className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-900">
+                    <div className="mt-1.5 rounded border border-warn-line bg-warn-tint px-2 py-1.5 text-[11px] leading-snug text-warn">
                       <div className="font-medium">What the detailing had to decide</div>
                       <ul className="mt-1 list-disc space-y-0.5 pl-4">
                         {rebarNotes.map(([note, at]) => (
@@ -4470,7 +4470,7 @@ export default function ModelSpace() {
                 : 'did NOT converge'}
             </h3>
             {!opt.converged && (
-              <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+              <p className="mb-2 rounded-lg bg-warn-tint px-3 py-2 text-xs font-medium text-warn">
                 {opt.stopReason ?? 'iteration cap hit — check spans/loads'}
               </p>
             )}
@@ -4484,7 +4484,7 @@ export default function ModelSpace() {
                     hasSteelBeams ? `beams/girders: ${steelBeamShapes}` : '',
                   ].filter(Boolean).join(' · ')}
                   {` · ${(steelKg / 1000).toFixed(2)} t · `}
-                  <span className={steelOK ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                  <span className={steelOK ? 'text-ok font-semibold' : 'text-fail font-semibold'}>
                     {steelOK ? '✓ all steel OK' : '✗ steel check fails'}
                   </span>
                 </p>
@@ -4501,7 +4501,7 @@ export default function ModelSpace() {
               </thead>
               <tbody>
                 {opt.steps.map((s, i) => (
-                  <tr key={i} className={`border-t border-slate-100 ${s.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                  <tr key={i} className={`border-t border-slate-100 ${s.ok ? '' : 'bg-fail-tint text-fail'}`}>
                     <td className="py-0.5 pr-4">{i + 1}</td>
                     <td className="py-0.5 pr-4 text-right">{s.grown || '—'}</td>
                     <td className="py-0.5 pr-4 text-right">{s.fails}</td>
@@ -4533,7 +4533,7 @@ export default function ModelSpace() {
             </span>
           </h2>
           {design.pDeltaIssues.length > 0 && (
-            <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+            <div className="rounded-xl border border-fail-line bg-fail-tint p-3 text-sm text-fail">
               <p className="font-bold">⚠ P-Δ did not converge for {design.pDeltaIssues.length} load case(s) — forces from these runs are unreliable (possible elastic instability).</p>
               <ul className="mt-1 list-inside list-disc">
                 {design.pDeltaIssues.map((n) => <li key={n}><span className="font-mono">{n}</span></li>)}
@@ -4541,7 +4541,7 @@ export default function ModelSpace() {
             </div>
           )}
           {design.pDeltaSkipped.length > 0 && (
-            <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+            <div className="rounded-xl border border-fail-line bg-fail-tint p-3 text-sm text-fail">
               <p className="font-bold">⚠ P-Δ was NOT run for {design.pDeltaSkipped.length} load case(s) — the model has more degrees of freedom than the second-order tangent can be factored at, so these carry FIRST-ORDER forces.</p>
               <p className="mt-1">This is not an instability warning. Lower the shell subdivision (or turn shell elements off) to bring the model under the limit, then re-run.</p>
               <ul className="mt-1 list-inside list-disc">
@@ -4550,7 +4550,7 @@ export default function ModelSpace() {
             </div>
           )}
           {design.unchecked.length > 0 && (
-            <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+            <div className="rounded-xl border border-fail-line bg-fail-tint p-3 text-sm text-fail">
               <p className="font-bold">⚠ {design.unchecked.length} member(s) could NOT be design-checked — the result is not a passing design.</p>
               <ul className="mt-1 list-inside list-disc">
                 {design.unchecked.map((u) => (
@@ -4621,12 +4621,12 @@ export default function ModelSpace() {
                   const sec = sectionFor(bm.id)
                   return [
                     <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                      className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''}`}>
+                      className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-fail-tint text-fail' : ''}`}>
                       <td className="py-1 pr-2 font-medium">
                         {k === 0 ? `${open ? '▾' : '▸'} ${bm.id} (${bm.role} ${sec?.name ?? ''}, ${f1(bm.L)} m)` : ''}
                         {k === 0 && bm.deflection && (
                           <span className={`ml-1.5 whitespace-nowrap rounded px-1 py-px text-[10px] font-semibold ${
-                            bm.deflection.liveOK && bm.deflection.totalOK ? 'bg-emerald-50 text-emerald-700' : 'bg-red-100 text-red-700'}`}
+                            bm.deflection.liveOK && bm.deflection.totalOK ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}
                             title={`§424.2 total deflection ${f1(bm.deflection.deltaTotal)} mm vs L/240 = ${f1(bm.deflection.limitL240)} mm`}>
                             δ {f1(bm.deflection.deltaTotal)}/{f1(bm.deflection.limitL240)}
                           </span>
@@ -4700,7 +4700,7 @@ export default function ModelSpace() {
               </thead>
               <tbody>
                 {design.prestressed.map((pr) => (
-                  <tr key={pr.id} className={`border-t border-slate-100 ${pr.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                  <tr key={pr.id} className={`border-t border-slate-100 ${pr.ok ? '' : 'bg-fail-tint text-fail'}`}>
                     <td className="py-1 pr-2 font-medium">{pr.id} ({f1(pr.L)} m)</td>
                     <td className="py-1 pr-2 text-right">{pr.design.lossPct.toFixed(1)}</td>
                     <td className="py-1 pr-2 text-right">{f1(pr.design.fse)}</td>
@@ -4737,7 +4737,7 @@ export default function ModelSpace() {
                   const cs = sectionFor(c.id)
                   return [
                     <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                      className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-fail-tint text-fail'}`}>
                       <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.id}</td>
                       <td className="py-1 pr-2">{cs?.name}</td>
                       <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
@@ -4823,7 +4823,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right font-mono">{f1(z.MnNeg)} / {f1(z.MnPos)}</td>
                         <td className="py-1 pr-2 text-right font-mono">{f1(along)}</td>
                         <td className="py-1 pr-2 text-right font-mono">{Number.isFinite(util) ? util.toFixed(2) : '—'}</td>
-                        <td className={`py-1 font-semibold ${r.ratios.ok ? 'text-emerald-600' : 'text-red-600'}`}>{r.ratios.ok ? '✓' : '✗'}</td>
+                        <td className={`py-1 font-semibold ${r.ratios.ok ? 'text-ok' : 'text-fail'}`}>{r.ratios.ok ? '✓' : '✗'}</td>
                       </tr>
                     )
                   })}
@@ -4860,7 +4860,7 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2 text-right font-mono">{f1(j.sumMnc)}</td>
                       <td className="py-1 pr-2 text-right font-mono">{f1(j.sumMnb)}</td>
                       <td className="py-1 pr-2 text-right font-mono">{Number.isFinite(j.ratio) ? j.ratio.toFixed(2) : '∞'}</td>
-                      <td className={`py-1 pr-2 text-right font-semibold ${j.ok ? 'text-emerald-600' : 'text-red-600'}`}>{j.ok ? '✓' : '✗'}</td>
+                      <td className={`py-1 pr-2 text-right font-semibold ${j.ok ? 'text-ok' : 'text-fail'}`}>{j.ok ? '✓' : '✗'}</td>
                       <td className="py-1 text-muted">{j.nCols} / {j.nBeams}</td>
                     </tr>
                   ))}
@@ -4895,7 +4895,7 @@ export default function ModelSpace() {
                     const dd = sl.design
                     return [
                       <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${dd.applicable ? '' : 'bg-amber-50 text-amber-800'}`}>
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${dd.applicable ? '' : 'bg-warn-tint text-warn'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {sl.plate}</td>
                         <td className="py-1 pr-2">{f1(sl.lx)} × {f1(sl.ly)}</td>
                         <td className="py-1 pr-2">{Math.round(dd.h)}{dd.h < dd.hmin ? ` (< ${Math.round(dd.hmin)} min)` : ''}</td>
@@ -4961,14 +4961,14 @@ export default function ModelSpace() {
                                   <tr className="border-t border-slate-100">
                                     <td className="py-0.5 pr-2 text-muted">Immediate live</td>
                                     <td className="py-0.5 pr-2 text-right">{dd.deflection.immLive.toFixed(1)} mm</td>
-                                    <td className={`py-0.5 pr-2 ${dd.deflection.liveOK ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    <td className={`py-0.5 pr-2 ${dd.deflection.liveOK ? 'text-ok' : 'text-fail'}`}>
                                       ≤ ℓn/360 = {dd.deflection.limitLive.toFixed(1)} mm {dd.deflection.liveOK ? '✓' : '✗'}
                                     </td>
                                   </tr>
                                   <tr className="border-t border-slate-100">
                                     <td className="py-0.5 pr-2 text-muted">Long-term + live (λΔ = {dd.deflection.lambdaDelta.toFixed(1)})</td>
                                     <td className="py-0.5 pr-2 text-right">{dd.deflection.total.toFixed(1)} mm</td>
-                                    <td className={`py-0.5 pr-2 ${dd.deflection.totalOK ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    <td className={`py-0.5 pr-2 ${dd.deflection.totalOK ? 'text-ok' : 'text-fail'}`}>
                                       ≤ ℓn/240 = {dd.deflection.limitTotal.toFixed(1)} mm {dd.deflection.totalOK ? '✓' : '✗'}
                                     </td>
                                   </tr>
@@ -5023,16 +5023,16 @@ export default function ModelSpace() {
                             : '—'}
                         </td>
                         <td className="py-1 pr-3">{st.risers}</td>
-                        <td className={`py-1 pr-3 ${odd ? 'font-semibold text-amber-700' : ''}`}>{f0(st.R)} / {f0(st.G)}</td>
+                        <td className={`py-1 pr-3 ${odd ? 'font-semibold text-warn' : ''}`}>{f0(st.R)} / {f0(st.G)}</td>
                         <td className="py-1 pr-3">{f1(st.thetaDeg)}°</td>
-                        <td className="py-1 pr-3">{st.waist} mm{st.design.tMinOK ? '' : <span className="ml-1 text-red-600" title={`below the ${f0(st.design.tMin)} mm span/depth minimum`}>&lt; min</span>}</td>
+                        <td className="py-1 pr-3">{st.waist} mm{st.design.tMinOK ? '' : <span className="ml-1 text-fail" title={`below the ${f0(st.design.tMin)} mm span/depth minimum`}>&lt; min</span>}</td>
                         <td className="py-1 pr-3">{f2(st.design.Mu)}</td>
                         <td className="py-1 pr-3">⌀12 @ {f0(st.design.mainSpacing)}</td>
                         <td className="py-1 pr-3">⌀10 @ {f0(st.design.distSpacing)}</td>
                         <td className="py-1 pr-3">{f1(st.totalD)} + {f1(st.totalL)}</td>
                         <td className="py-1">{st.ok
-                          ? <span className="font-semibold text-emerald-600">OK</span>
-                          : <span className="font-semibold text-red-600">CHECK</span>}</td>
+                          ? <span className="font-semibold text-ok">OK</span>
+                          : <span className="font-semibold text-fail">CHECK</span>}</td>
                       </tr>
                     )
                   })}
@@ -5067,7 +5067,7 @@ export default function ModelSpace() {
                     const curt = wd.twoCurtains ? '2 curtains' : '1 curtain'
                     return [
                       <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${wl.ok ? '' : 'bg-rose-50 text-rose-700'}`}>
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${wl.ok ? '' : 'bg-fail-tint text-fail'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {wl.id} <span className="text-muted">({wl.member})</span></td>
                         <td className="py-1 pr-2">{f1(wl.lw)} × {f1(wl.hw)}</td>
                         <td className="py-1 pr-2">{Math.round(wl.thickness)}</td>
@@ -5133,15 +5133,15 @@ export default function ModelSpace() {
                     const key = `wbeam:${b.id}`, open = expanded === key || reportOpen
                     return [
                       <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${b.ok ? '' : 'bg-fail-tint text-fail'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {b.id}</td>
                         <td className="py-1 pr-2 font-mono">{b.b}×{b.d}</td>
                         <td className="py-1 pr-2" title={WOOD_SPECIES[b.species]?.label ?? b.species}>{b.species}{b.kind === 'glulam' ? ' (GL)' : ''}</td>
                         <td className="py-1 pr-2 text-right">{f1(b.Mu)}</td>
                         <td className="py-1 pr-2 text-right">{b.FbPrime.toFixed(2)}</td>
                         <td className="py-1 pr-2 text-right">{b.CL.toFixed(2)}</td>
-                        <td className={`py-1 pr-2 text-right font-semibold ${b.utilM > 1 ? 'text-red-600' : b.utilM > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(b.utilM * 100).toFixed(0)}%</td>
-                        <td className={`py-1 pr-2 text-right font-semibold ${b.utilV > 1 ? 'text-red-600' : b.utilV > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(b.utilV * 100).toFixed(0)}%</td>
+                        <td className={`py-1 pr-2 text-right font-semibold ${b.utilM > 1 ? 'text-fail' : b.utilM > 0.9 ? 'text-warn' : 'text-ok'}`}>{(b.utilM * 100).toFixed(0)}%</td>
+                        <td className={`py-1 pr-2 text-right font-semibold ${b.utilV > 1 ? 'text-fail' : b.utilV > 0.9 ? 'text-warn' : 'text-ok'}`}>{(b.utilV * 100).toFixed(0)}%</td>
                         <td className="py-1 text-[11px] text-muted">{b.gov}</td>
                       </tr>,
                       open && wantSol && (
@@ -5185,7 +5185,7 @@ export default function ModelSpace() {
                     const key = `wcol:${c.id}`, open = expanded === key || reportOpen
                     return [
                       <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-fail-tint text-fail'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.id}</td>
                         <td className="py-1 pr-2 font-mono">{c.b}×{c.d}</td>
                         <td className="py-1 pr-2" title={WOOD_SPECIES[c.species]?.label ?? c.species}>{c.species}{c.kind === 'glulam' ? ' (GL)' : ''}</td>
@@ -5194,7 +5194,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right">{c.FcPrime.toFixed(2)}</td>
                         <td className="py-1 pr-2 text-right">{c.CP.toFixed(2)}</td>
                         <td className="py-1 pr-2 text-right">{c.slenderness.toFixed(0)}</td>
-                        <td className={`py-1 pr-2 text-right font-semibold ${c.ratio > 1 ? 'text-red-600' : c.ratio > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(c.ratio * 100).toFixed(0)}%</td>
+                        <td className={`py-1 pr-2 text-right font-semibold ${c.ratio > 1 ? 'text-fail' : c.ratio > 0.9 ? 'text-warn' : 'text-ok'}`}>{(c.ratio * 100).toFixed(0)}%</td>
                         <td className="py-1 text-[11px] text-muted">{c.gov}</td>
                       </tr>,
                       open && wantSol && (
@@ -5239,7 +5239,7 @@ export default function ModelSpace() {
                     const util = Math.max(b.utilM, b.utilV, b.deflLim > 0 ? b.defl / b.deflLim : 0)
                     const rows = [
                       <tr key={b.id}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${b.ok ? '' : 'bg-fail-tint text-fail'}`}
                         onClick={() => setExpanded(open ? null : key)}>
                         <td className="py-1 pr-2 font-medium">{b.id} <span className="text-muted">{open ? '▲' : '▼'}</span></td>
                         <td className="py-1 pr-2 font-mono">{b.shape}</td>
@@ -5248,8 +5248,8 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2">{b.ltbZone}</td>
                         <td className="py-1 pr-2 text-right">{f1(b.Vu)}</td>
                         <td className="py-1 pr-2 text-right">{f1(b.phiVn)}</td>
-                        <td className={`py-1 pr-2 text-right font-mono ${b.deflOK ? 'text-slate-700' : 'text-red-600 font-semibold'}`}>{b.defl.toFixed(1)}</td>
-                        <td className={`py-1 pr-2 text-right font-semibold ${util > 1 ? 'text-red-600' : util > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(util * 100).toFixed(0)}%</td>
+                        <td className={`py-1 pr-2 text-right font-mono ${b.deflOK ? 'text-slate-700' : 'text-fail font-semibold'}`}>{b.defl.toFixed(1)}</td>
+                        <td className={`py-1 pr-2 text-right font-semibold ${util > 1 ? 'text-fail' : util > 0.9 ? 'text-warn' : 'text-ok'}`}>{(util * 100).toFixed(0)}%</td>
                         <td className="py-1 text-[11px] text-muted">{b.gov}</td>
                       </tr>,
                     ]
@@ -5330,7 +5330,7 @@ export default function ModelSpace() {
                                     ['δ / limit', `${b.deflLim > 0 ? ((b.defl / b.deflLim) * 100).toFixed(1) : '—'}%`],
                                     ['OK?', b.deflOK ? '✓ Pass' : '✗ Fail'],
                                   ].map(([lbl, val]) => (
-                                    <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className={`font-mono ${lbl === 'OK?' && !b.deflOK ? 'text-red-600 font-bold' : ''}`}>{val}</td></tr>
+                                    <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className={`font-mono ${lbl === 'OK?' && !b.deflOK ? 'text-fail font-bold' : ''}`}>{val}</td></tr>
                                   ))}
                                 </tbody>
                               </table>
@@ -5375,7 +5375,7 @@ export default function ModelSpace() {
                     const E_STEEL = 200000
                     const rows = [
                       <tr key={c.id}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${c.ok ? '' : 'bg-fail-tint text-fail'}`}
                         onClick={() => setExpanded(open ? null : key)}>
                         <td className="py-1 pr-2 font-medium">{c.id} <span className="text-muted">{open ? '▲' : '▼'}</span></td>
                         <td className="py-1 pr-2 font-mono">{c.shape}</td>
@@ -5384,7 +5384,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
                         <td className="py-1 pr-2 text-right">{c.slenderness.toFixed(0)}</td>
                         <td className="py-1 pr-2">{c.equation}</td>
-                        <td className={`py-1 pr-2 text-right font-semibold ${c.ratio > 1 ? 'text-red-600' : c.ratio > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(c.ratio * 100).toFixed(0)}%</td>
+                        <td className={`py-1 pr-2 text-right font-semibold ${c.ratio > 1 ? 'text-fail' : c.ratio > 0.9 ? 'text-warn' : 'text-ok'}`}>{(c.ratio * 100).toFixed(0)}%</td>
                         <td className="py-1 text-[11px] text-muted">{c.gov}</td>
                       </tr>,
                     ]
@@ -5447,7 +5447,7 @@ export default function ModelSpace() {
                                     ['Interaction ratio', `${(c.ratio * 100).toFixed(1)}%`],
                                     ['Status', c.ok ? '✓ OK' : '✗ NG'],
                                   ].map(([lbl, val]) => (
-                                    <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className={`font-mono ${lbl === 'Status' ? (c.ok ? 'text-green-700' : 'text-red-600') : ''}`}>{val}</td></tr>
+                                    <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className={`font-mono ${lbl === 'Status' ? (c.ok ? 'text-ok' : 'text-fail') : ''}`}>{val}</td></tr>
                                   ))}
                                 </tbody>
                               </table>
@@ -5485,7 +5485,7 @@ export default function ModelSpace() {
                 </thead>
                 <tbody>
                   {design.basePlates.map((p) => (
-                    <tr key={p.node} className={`sched-row border-t border-slate-100 ${p.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                    <tr key={p.node} className={`sched-row border-t border-slate-100 ${p.ok ? '' : 'bg-fail-tint text-fail'}`}>
                       <td className="py-1 pr-2 font-medium">{p.node}</td>
                       <td className="py-1 pr-2">{p.shape}</td>
                       <td className="py-1 pr-2 text-right">{f1(p.Pu)}</td>
@@ -5529,7 +5529,7 @@ export default function ModelSpace() {
                     const t = s.design.takeoff
                     return [
                       <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${s.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${s.ok ? '' : 'bg-fail-tint text-fail'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {s.plate}</td>
                         <td className="py-1 pr-2 text-right">{f2(s.design.joist.span)}</td>
                         <td className="py-1 pr-2">{s.species}</td>
@@ -5587,7 +5587,7 @@ export default function ModelSpace() {
                       const beamShapeName = model?.sections.find((sx) => sx.id === model.members.find((mm) => mm.id === c.beamId)?.section)?.shape
                       return [(
                       <tr key={`${j.nodeId}-${c.beamId}`} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-fail-tint text-fail'}`}>
                         <td className={`py-1 pr-2 align-top ${ci === 0 ? 'font-medium' : 'text-slate-300'}`}>
                           {open ? '▾' : '▸'} {j.nodeId}
                           {ci === 0 && <div className="text-[10px] text-muted">{j.strongAxisDir.toUpperCase()}-axis</div>}
@@ -5616,7 +5616,7 @@ export default function ModelSpace() {
                           {c.flange && <span className="ml-1 text-blue-600">{c.flange.webPlate ? '+ ext. plates' : '+ CJP flg'}</span>}
                         </td>
                         <td className="py-1 text-[11px]">
-                          <span className={c.ok ? 'text-green-700' : 'text-red-600'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
+                          <span className={c.ok ? 'text-ok' : 'text-fail'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
                           {c.flange && (
                             <div className="text-[10px] text-muted">Tf={f1(c.flange.Tf)} kN</div>
                           )}
@@ -5643,7 +5643,7 @@ export default function ModelSpace() {
                       const beamShapeName = model?.sections.find((sx) => sx.id === model.members.find((mm) => mm.id === c.beamId)?.section)?.shape
                       return [(
                       <tr key={`bb-${bj.nodeId}-${c.beamId}`} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-fail-tint text-fail'}`}>
                         <td className={`py-1 pr-2 align-top ${ci === 0 ? 'font-medium' : 'text-slate-300'}`}>
                           {open ? '▾' : '▸'} {bj.nodeId}
                           {ci === 0 && <div className="text-[10px] text-muted">beam-to-beam</div>}
@@ -5671,7 +5671,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
                         <td className="py-1 pr-2 text-[11px]">{c.tab.weldSizeMm}mm E70</td>
                         <td className="py-1 text-[11px]">
-                          <span className={c.ok ? 'text-green-700' : 'text-red-600'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
+                          <span className={c.ok ? 'text-ok' : 'text-fail'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
                         </td>
                       </tr>
                       ),
@@ -5718,7 +5718,7 @@ export default function ModelSpace() {
                   const cs = colSectionAt(f.node)
                   return [
                     <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                      className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${f.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${f.ok ? '' : 'bg-fail-tint text-fail'}`}>
                       <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {f.node}</td>
                       <td className="py-1 pr-2 text-right">{f1(f.P)} / {f1(f.Pu)}</td>
                       <td className="py-1 pr-2">B = {f2(f.design.B)} m</td>
@@ -5767,7 +5767,7 @@ export default function ModelSpace() {
                     const key = `comb:${c.nodes.join('-')}`, open = expanded === key || (reportOpen && wantSol)
                     return [
                       <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-fail-tint text-fail'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.nodes[0]} + {c.nodes[1]}</td>
                         <td className="py-1 pr-2 text-right">{f2(c.spacing)} m</td>
                         <td className="py-1 pr-2 text-right">{f1(c.dl1)}/{f1(c.ll1)} · {f1(c.dl2)}/{f1(c.ll2)}</td>
@@ -5839,7 +5839,7 @@ export default function ModelSpace() {
           </div>
 
           {!fcClass.adequate && classPin === null && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+            <p className="rounded-md border border-warn-line bg-warn-tint px-3 py-2 text-[12px] text-warn">
               f′c = {f2(fc)} MPa is above Class AA ({f2(fcClass.classFc)} MPa), so no standard NSCP mix
               class reaches it. The bill below is priced at Class AA — a DESIGNED mix is required, and its
               cement content will be higher than the 12 bags/m³ assumed here.

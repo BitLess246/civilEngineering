@@ -131,9 +131,9 @@ function ToolPreferences() {
           className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50">
           Save
         </button>
-        {saved && <span role="status" className="text-[13px] font-medium text-emerald-700">Saved</span>}
+        {saved && <span role="status" className="text-[13px] font-medium text-ok">Saved</span>}
         {none && (
-          <span className="text-[13px] font-medium text-amber-700">
+          <span className="text-[13px] font-medium text-warn">
             Pick at least one — hiding everything would leave nothing to navigate.
           </span>
         )}
@@ -184,7 +184,7 @@ function ManageSubscription() {
           {busy ? 'Opening…' : 'Manage subscription'}
         </button>
         {cancelUrl && (
-          <a href={cancelUrl} className="text-[13px] font-semibold text-red-700 underline">
+          <a href={cancelUrl} className="text-[13px] font-semibold text-fail underline">
             Cancel subscription
           </a>
         )}
@@ -192,7 +192,7 @@ function ManageSubscription() {
       <p className="mt-2 text-[12px] leading-5 text-muted">
         Invoices, payment method and cancellation are handled by Paddle, who processed the payment.
       </p>
-      {error && <p role="alert" className="mt-2 text-[12px] leading-5 text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-[12px] leading-5 text-fail">{error}</p>}
     </div>
   )
 }
@@ -245,7 +245,7 @@ function BillingHistory() {
           <li key={row.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-[13px]">
             <span className="text-muted">{rowDate(row.billedAt) || 'Not billed yet'}</span>
             <span className="flex items-baseline gap-3">
-              <span className={needsAttention(row.status) ? 'text-[12px] font-semibold text-red-700' : 'text-[12px] text-muted'}>
+              <span className={needsAttention(row.status) ? 'text-[12px] font-semibold text-fail' : 'text-[12px] text-muted'}>
                 {statusLabel(row.status)}
               </span>
               <span className="font-medium text-slate-800">{rowAmount(row)}</span>
@@ -321,7 +321,7 @@ export default function Profile() {
             </div>
             <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
               <dt className="text-muted">Email verified</dt>
-              <dd className={user.emailVerified ? 'font-medium text-emerald-700' : 'font-medium text-amber-700'}>
+              <dd className={user.emailVerified ? 'font-medium text-ok' : 'font-medium text-warn'}>
                 {user.emailVerified ? 'Yes' : 'Not yet — check your inbox'}
               </dd>
             </div>
@@ -398,7 +398,7 @@ export default function Profile() {
             className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover">
             Save
           </button>
-          {saved && <span role="status" className="text-[13px] font-medium text-emerald-700">Saved</span>}
+          {saved && <span role="status" className="text-[13px] font-medium text-ok">Saved</span>}
         </div>
 
         <p className="mt-4 border-t border-slate-100 pt-3 text-[12px] leading-5 text-muted">

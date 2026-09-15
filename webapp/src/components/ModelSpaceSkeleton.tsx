@@ -85,7 +85,11 @@ export function ModelSpaceSkeleton() {
                 grey used everywhere else would be invisible on it. */}
             <div className="absolute left-4 top-4 h-6 w-44 animate-pulse rounded bg-sheet/10" />
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-[12px] tracking-wide text-white/35">Loading the 3D model space…</span>
+              {/* `rail-muted` rather than `text-white/35`: the panel behind is `bg-rail`,
+                  and rail-muted is the role for muted text ON the rail — already held
+                  to 4.5:1 there in every theme by theme.test.ts. The literal measured
+                  as a contrast failure on all five. */}
+              <span className="text-[12px] tracking-wide text-rail-muted">Loading the 3D model space…</span>
             </div>
           </div>
         </div>

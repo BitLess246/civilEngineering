@@ -19,7 +19,7 @@ import type { DesignBasis } from '../engine/designBasis'
 
 /** Pass/fail value with a tick or a cross. */
 export function Verdict({ pass, value }: { pass: boolean; value: string }) {
-  return <span className={pass ? 'font-semibold text-green-700' : 'font-semibold text-red-700'}>{value} {pass ? '✓' : '✗'}</span>
+  return <span className={pass ? 'font-semibold text-ok' : 'font-semibold text-fail'}>{value} {pass ? '✓' : '✗'}</span>
 }
 
 /** Lateral-torsional-buckling zone chip: plastic / inelastic / elastic. */
@@ -39,8 +39,8 @@ export function CalcBadge({ loading, error, cause }: { loading: boolean; error: 
   // A spent trial is not a fault, and must not be reported as one — "check
   // console" would send a paying-customer-to-be looking for a bug.
   if (cause instanceof TrialExhaustedError)
-    return <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">free trial used up</span>
-  if (error)   return <span className="ml-2 rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">API error — check console</span>
+    return <span className="ml-2 rounded bg-warn-tint px-2 py-0.5 text-xs text-warn">free trial used up</span>
+  if (error)   return <span className="ml-2 rounded bg-fail-tint px-2 py-0.5 text-xs text-fail">API error — check console</span>
   if (loading) return <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-muted">computing…</span>
   return null
 }
@@ -60,7 +60,7 @@ export function CalcBadge({ loading, error, cause }: { loading: boolean; error: 
 export function TrialWall({ cause }: { cause: unknown }) {
   if (!(cause instanceof TrialExhaustedError)) return null
   return (
-    <div className="mb-5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] leading-6 text-amber-900">
+    <div className="mb-5 rounded-lg border border-warn-line bg-warn-tint px-4 py-3 text-[13px] leading-6 text-warn">
       <p className="font-semibold">You have used all {GUEST_TRIAL_LIMIT} free runs of this calculator.</p>
       <p className="mt-0.5">
         Any results still shown are from your last run and will not update. A free

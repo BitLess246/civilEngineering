@@ -68,7 +68,7 @@ export function SiteFooter() {
             construction use.
           </span>
           {incomplete && (
-            <span className="rounded bg-red-50 px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-red-700">
+            <span className="rounded bg-fail-tint px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-fail">
               business details incomplete — see /contact
             </span>
           )}

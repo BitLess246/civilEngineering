@@ -38,9 +38,9 @@ export type { BeamRowSection, SectionRect, SectionRowDesign } from '../../lib/sc
 export function BeamServiceability({ r, id, L }: { r: MemberDeflectionResult; id: string; L: number }) {
   const serviceOK = r.liveOK && r.totalOK
   const cell = (label: string, value: string, sub?: string, alert?: boolean) => (
-    <div className={`rounded border px-2 py-1 ${alert ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-sheet'}`}>
+    <div className={`rounded border px-2 py-1 ${alert ? 'border-fail-line bg-fail-tint' : 'border-slate-200 bg-sheet'}`}>
       <div className="text-[9px] uppercase tracking-wide text-muted">{label}</div>
-      <div className={`font-mono text-[11px] font-semibold ${alert ? 'text-red-700' : 'text-slate-800'}`}>{value}</div>
+      <div className={`font-mono text-[11px] font-semibold ${alert ? 'text-fail' : 'text-slate-800'}`}>{value}</div>
       {sub && <div className="text-[9px] text-muted">{sub}</div>}
     </div>
   )
