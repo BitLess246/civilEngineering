@@ -36,11 +36,11 @@ export function UpgradeNotice({ message, compact }: { message: string; compact?:
  */
 export function UpgradeGate({ title, message, blurb }: { title: string; message: string; blurb?: string }) {
   return (
-    <main className="mx-auto max-w-2xl px-5 py-16 text-center">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Plan required</p>
+    <div className="mx-auto max-w-2xl px-5 py-16 text-center">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Plan required</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">{title}</h1>
       <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-600">{message}</p>
-      {blurb && <p className="mx-auto mt-2 max-w-lg text-[13px] leading-6 text-slate-500">{blurb}</p>}
+      {blurb && <p className="mx-auto mt-2 max-w-lg text-[13px] leading-6 text-muted">{blurb}</p>}
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Link to="/pricing"
           className="rounded-md bg-brand px-5 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover">
@@ -51,6 +51,6 @@ export function UpgradeGate({ title, message, blurb }: { title: string; message:
           Browse the calculators
         </Link>
       </div>
-    </main>
+    </div>
   )
 }

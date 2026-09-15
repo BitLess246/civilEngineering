@@ -8,13 +8,13 @@ export function AuthCard({ title, subtitle, children, footer }: {
   title: string; subtitle?: string; children: ReactNode; footer?: ReactNode
 }) {
   return (
-    <main className="mx-auto flex max-w-md flex-col px-5 py-14">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Account</p>
+    <div className="mx-auto flex max-w-md flex-col px-5 py-14">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Account</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">{title}</h1>
       {subtitle && <p className="mt-2 text-sm leading-6 text-slate-600">{subtitle}</p>}
       <div className="mt-6 rounded-xl border border-slate-200 bg-sheet p-6 shadow-sm">{children}</div>
       {footer && <div className="mt-4 text-center text-sm text-slate-600">{footer}</div>}
-    </main>
+    </div>
   )
 }
 
@@ -50,7 +50,7 @@ export function PasswordField(props: Omit<Parameters<typeof TextField>[0], 'type
     <div className="relative">
       <button
         type="button" onClick={() => setShow((v) => !v)}
-        className="absolute right-0 top-0 z-10 text-[11px] font-medium text-slate-500 hover:text-brand"
+        className="absolute right-0 top-0 z-10 text-[11px] font-medium text-muted hover:text-brand"
         aria-label={show ? 'Hide password' : 'Show password'}
       >
         {show ? 'Hide' : 'Show'}
@@ -63,7 +63,7 @@ export function PasswordField(props: Omit<Parameters<typeof TextField>[0], 'type
               <span key={i} className={`h-1 flex-1 rounded ${i < s.score ? tone[s.score] : 'bg-slate-200'}`} />
             ))}
           </div>
-          <p className="mt-1 text-[11px] text-slate-500">
+          <p className="mt-1 text-[11px] text-muted">
             <span className="font-medium capitalize">{s.label}</span>
             {s.hint && <span> — {s.hint}</span>}
           </p>

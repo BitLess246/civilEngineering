@@ -22,7 +22,7 @@ export function SolverProgress({ p }: { p: SolveProgress | null }) {
     <div className="col-span-full rounded-lg border border-brand/30 bg-blue-50/60 p-2.5">
       <div className="flex items-center justify-between text-[11px] font-semibold text-brand">
         <span>⏳ {p.phase}</span>
-        <span className="tabular-nums text-slate-500">
+        <span className="tabular-nums text-muted">
           {p.total && p.current ? `${p.current} / ${p.total}` : ''}{pct !== null ? ` · ${pct}%` : ''}
         </span>
       </div>
@@ -48,7 +48,7 @@ export function DirPicker({ value, onChange }: { value: string[]; onChange: (v: 
       <span className="mb-1 font-medium text-slate-600">Directions to envelope</span>
       <div className="flex gap-1.5">
         {LAT_DIRS.map((d) => (
-          <label key={d} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${value.includes(d) ? 'border-brand bg-blue-50 text-brand' : 'border-slate-200 text-slate-500'}`}>
+          <label key={d} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${value.includes(d) ? 'border-brand bg-blue-50 text-brand' : 'border-slate-200 text-muted'}`}>
             <input type="checkbox" className="sr-only" checked={value.includes(d)} onChange={() => toggle(d)} />{d}
           </label>
         ))}
@@ -123,7 +123,7 @@ export function Sec({ id, title, hint, grid = true, children }: {
  */
 export function Swatches({ items }: { items: readonly (readonly [string, string])[] }) {
   return (
-    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 pl-6 text-[11px] text-slate-500">
+    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 pl-6 text-[11px] text-muted">
       {items.map(([color, label]) => (
         <span key={label} className="inline-flex items-center gap-1">
           <span className="inline-block h-2 w-3 rounded-sm" style={{ background: color }} />{label}

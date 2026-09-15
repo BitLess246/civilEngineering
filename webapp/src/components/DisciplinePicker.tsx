@@ -39,7 +39,7 @@ export function DisciplinePicker({
               className="mt-0.5 h-4 w-4 flex-none accent-brand" />
             <span className="min-w-0">
               <span className={`block text-[13px] font-bold ${on ? 'text-brand' : 'text-slate-700'}`}>{label}</span>
-              <span className="mt-0.5 block font-mono text-[10.5px] leading-relaxed text-slate-500">{summarise(label)}</span>
+              <span className="mt-0.5 block font-mono text-[10.5px] leading-relaxed text-muted">{summarise(label)}</span>
             </span>
           </label>
         )
@@ -51,8 +51,8 @@ export function DisciplinePicker({
         <div key={label} className="flex items-start gap-2.5 rounded-lg border border-dashed border-slate-200 px-3.5 py-2.5">
           <span className="mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-[3px] bg-slate-300 text-[10px] font-bold text-white" aria-hidden="true">✓</span>
           <span className="min-w-0">
-            <span className="block text-[13px] font-bold text-slate-500">{label}</span>
-            <span className="mt-0.5 block font-mono text-[10.5px] leading-relaxed text-slate-400">Always shown — {summarise(label)}</span>
+            <span className="block text-[13px] font-bold text-muted">{label}</span>
+            <span className="mt-0.5 block font-mono text-[10.5px] leading-relaxed text-faint">Always shown — {summarise(label)}</span>
           </span>
         </div>
       ))}

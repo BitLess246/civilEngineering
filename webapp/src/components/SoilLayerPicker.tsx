@@ -179,7 +179,7 @@ export function SoilLayerPicker({
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="text-[12px] font-semibold text-slate-800">
                     {bh.name} · {layer.name}
-                    <span className="ml-1.5 font-mono text-[10px] font-normal text-slate-500">
+                    <span className="ml-1.5 font-mono text-[10px] font-normal text-muted">
                       {layer.depthTop.toFixed(2)}–{layer.depthBottom.toFixed(2)} m
                       {layer.symbol ? ` · ${layer.symbol}` : ''}
                       {` · ${layerThickness(layer).toFixed(2)} m thick`}
@@ -191,7 +191,7 @@ export function SoilLayerPicker({
                     className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
                       resolved.length
                         ? 'bg-brand text-white hover:bg-brand'
-                        : 'cursor-not-allowed bg-slate-200 text-slate-500'
+                        : 'cursor-not-allowed bg-slate-200 text-muted'
                     }`}>
                     {resolved.length ? 'Use this layer' : 'nothing to apply'}
                   </button>
@@ -206,7 +206,7 @@ export function SoilLayerPicker({
                         <span className={`rounded px-1 text-[9px] font-semibold ${PROVENANCE_STYLE[p.value.provenance.kind]}`}>
                           {PROVENANCE_LABEL[p.value.provenance.kind]}
                         </span>
-                        <span className="text-[10px] text-slate-500">{describeProvenance(p.value.provenance)}</span>
+                        <span className="text-[10px] text-muted">{describeProvenance(p.value.provenance)}</span>
                       </li>
                     ))}
                   </ul>

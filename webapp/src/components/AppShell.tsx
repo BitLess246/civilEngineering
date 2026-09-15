@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
 import { loadCollapsed, saveCollapsed, toggleCollapsed } from '../lib/navCollapse'
@@ -12,6 +12,8 @@ import { AccountMenu } from './AccountMenu'
 import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
 import { TrialGate } from './TrialGate'
 import { ErrorBoundary } from './ErrorBoundary'
+import { watchScrollableRegions } from '../lib/scrollableRegions'
+import { titleFor } from '../lib/documentTitle'
 
 // Workbench shell (docs/design/uiux-2026-07): persistent ink-navy sidebar with
 // the grouped tool catalog + ⌘K search, and a slim breadcrumb header. Wraps
@@ -155,10 +157,30 @@ export function AppShell({ children }: { children: ReactNode }) {
    */
   const embed = useMemo(() => isEmbedLocation({ pathname, search }), [pathname, search])
   usePaletteHotkey(setPalette, !embed)
+  // Name the tab. One hard-coded <title> served all 53 routes, so tabs,
+  // bookmarks and history were indistinguishable — and a screen reader
+  // announced the same page name on arrival everywhere.
+  useEffect(() => { document.title = titleFor(pathname) }, [pathname])
+
+  // Wide tables become keyboard-scrollable when — and only when — they
+  // actually overflow. See lib/scrollableRegions.ts for why this is measured
+  // rather than declared at 84 call sites.
+  useEffect(() => watchScrollableRegions(), [])
+
   const tool = useMemo(() => ALL_TOOLS.find((t) => t.to === pathname), [pathname])
 
   return (
     <div className="flex min-h-screen bg-paper" style={embed ? { pointerEvents: 'none' } : undefined}>
+      {/* Skip link — the FIRST focusable element, so the keyboard route to the
+          page is one Tab instead of 71. The sidebar lists 54 tools and 12 group
+          toggles ahead of the content, and it is re-traversed on every
+          navigation. Visually hidden until focused, then a real, visible
+          control: a skip link nobody can see they have landed on is no better
+          than none. */}
+      <a href="#content"
+        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-3 focus-visible:top-3 focus-visible:z-[100] focus-visible:rounded-md focus-visible:bg-brand focus-visible:px-3.5 focus-visible:py-2 focus-visible:text-[13px] focus-visible:font-semibold focus-visible:text-on-solid">
+        Skip to content
+      </a>
       <Sidebar onOpenPalette={() => setPalette(true)} />
       {/* A COLUMN, so the footer can be pushed to the bottom.
           This div is stretched to the full height of a `min-h-screen` row, but
@@ -209,7 +231,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             inside re-applies its own narrower lock (Model Space leaves only
             the walkthrough and the viewport live), so this is the boundary of
             what the preview allows, not a bypass of it. */}
-        <main className="min-h-0 flex-1" style={embed ? { pointerEvents: 'auto' } : undefined}>
+        <main id="content" className="min-h-0 flex-1" style={embed ? { pointerEvents: 'auto' } : undefined}>
           <ErrorBoundary key={pathname}>
             <TrialGate>{children}</TrialGate>
           </ErrorBoundary>

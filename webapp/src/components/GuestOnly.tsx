@@ -26,7 +26,7 @@ export function GuestOnly({ children }: { children: ReactNode }) {
   const view = guestRouteView({ configured, loading, signedIn: !!user })
   if (view === 'checking') {
     return (
-      <div className="mx-auto max-w-md px-5 py-20 text-center text-sm text-slate-500">
+      <div className="mx-auto max-w-md px-5 py-20 text-center text-sm text-muted">
         Checking your session…
       </div>
     )

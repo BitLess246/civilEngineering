@@ -137,7 +137,7 @@ export function ResponseSpectrumPanel({
       <h2 className="mb-1 text-[1.02rem] font-bold text-brand">
         Response Spectrum Analysis — NSCP §208.6
       </h2>
-      <p className="mb-2 text-[11px] text-slate-500">
+      <p className="mb-2 text-[11px] text-muted">
         Design spectrum: Sa/g = min(2.5·Ca·I/R, Cv·I/(R·T)) ≥ 0.11·Ca·I/R.
         {' '}Ts = {f3(Ts)} s. CQC combination (ζ = {pct(zeta)}).
         {T1 !== null && seismicT !== undefined && (
@@ -152,7 +152,7 @@ export function ResponseSpectrumPanel({
       </div>
 
       {/* Parameters row */}
-      <div className="mb-3 flex flex-wrap gap-3 text-[11px] text-slate-500">
+      <div className="mb-3 flex flex-wrap gap-3 text-[11px] text-muted">
         {[
           ['Ca', f3(Ca)], ['Cv', f3(Cv)], ['I', f2(I)], ['R', f2(R)],
           ['2.5CaI/R', f3(2.5 * Ca * I / R) + ' g'],
@@ -170,7 +170,7 @@ export function ResponseSpectrumPanel({
           <div className="mb-3 overflow-x-auto">
             <table className="min-w-full text-xs">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-500">
+                <tr className="border-b border-slate-200 text-muted">
                   <th className="pb-1 pr-3 text-left font-semibold">Mode</th>
                   <th className="pb-1 pr-3 text-right font-semibold">T (s)</th>
                   <th className="pb-1 pr-3 text-right font-semibold">Sa/g</th>
@@ -210,7 +210,7 @@ export function ResponseSpectrumPanel({
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-slate-500">
+            <tr className="border-b border-slate-200 text-muted">
               <th className="pb-1 pr-4 text-left font-semibold">Method</th>
               <th className="pb-1 pr-4 text-right font-semibold">V_x (kN)</th>
               <th className="pb-1 pr-4 text-right font-semibold">V_z (kN)</th>
@@ -231,21 +231,21 @@ export function ResponseSpectrumPanel({
               <td className="py-0.5 pr-4 text-right tabular-nums font-semibold text-slate-900">{f0(cqc[0])}</td>
               <td className="py-0.5 pr-4 text-right tabular-nums font-semibold text-slate-900">{f0(cqc[2])}</td>
               {staticV && (
-                <td className={`py-0.5 pr-4 text-right tabular-nums text-xs ${cqcRatio[0] !== null ? (cqcRatio[0]! < 0.9 ? 'text-red-600 font-semibold' : 'text-emerald-600') : 'text-slate-500'}`}>
+                <td className={`py-0.5 pr-4 text-right tabular-nums text-xs ${cqcRatio[0] !== null ? (cqcRatio[0]! < 0.9 ? 'text-red-600 font-semibold' : 'text-emerald-600') : 'text-muted'}`}>
                   {cqcRatio[0] !== null ? pct(cqcRatio[0]!) : '—'}
                 </td>
               )}
               {staticV && (
-                <td className={`py-0.5 text-right tabular-nums text-xs ${cqcRatio[2] !== null ? (cqcRatio[2]! < 0.9 ? 'text-red-600 font-semibold' : 'text-emerald-600') : 'text-slate-500'}`}>
+                <td className={`py-0.5 text-right tabular-nums text-xs ${cqcRatio[2] !== null ? (cqcRatio[2]! < 0.9 ? 'text-red-600 font-semibold' : 'text-emerald-600') : 'text-muted'}`}>
                   {cqcRatio[2] !== null ? pct(cqcRatio[2]!) : '—'}
                 </td>
               )}
             </tr>
             {staticV && (staticV[0] > 0 || staticV[2] > 0) && (
               <tr>
-                <td className="py-0.5 pr-4 text-slate-500">Static (ELF)</td>
-                <td className="py-0.5 pr-4 text-right tabular-nums text-slate-500">{f0(staticV[0])}</td>
-                <td className="py-0.5 pr-4 text-right tabular-nums text-slate-500">{f0(staticV[2])}</td>
+                <td className="py-0.5 pr-4 text-muted">Static (ELF)</td>
+                <td className="py-0.5 pr-4 text-right tabular-nums text-muted">{f0(staticV[0])}</td>
+                <td className="py-0.5 pr-4 text-right tabular-nums text-muted">{f0(staticV[2])}</td>
                 <td className="py-0.5 pr-4" />
                 <td className="py-0.5" />
               </tr>
@@ -264,7 +264,7 @@ export function ResponseSpectrumPanel({
         </p>
       )}
 
-      <p className="mt-2 text-[11px] text-slate-500">
+      <p className="mt-2 text-[11px] text-muted">
         Use CQC base shear (more accurate for closely-spaced modes). SRSS is shown for reference.
         {T1 !== null && seismicT !== undefined && T1 > seismicT && (
           <> T₁ &gt; T_approx — the static ELF base shear is conservative (short-period cap may govern).</>

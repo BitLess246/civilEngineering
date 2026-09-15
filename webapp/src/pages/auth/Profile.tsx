@@ -114,7 +114,7 @@ function ToolPreferences() {
       </p>
 
       <div className="mb-3 mt-4 flex items-center justify-between gap-3">
-        <span className="text-[12px] font-semibold text-slate-500">
+        <span className="text-[12px] font-semibold text-muted">
           {chosen.size} of {CHOOSABLE_GROUPS.length} selected
         </span>
         <button type="button"
@@ -139,7 +139,7 @@ function ToolPreferences() {
         )}
       </div>
 
-      <p className="mt-4 border-t border-slate-100 pt-3 text-[12px] leading-5 text-slate-500">
+      <p className="mt-4 border-t border-slate-100 pt-3 text-[12px] leading-5 text-muted">
         Stored in this browser, like the letterhead below. A different computer starts with the
         full catalog and asks again.
       </p>
@@ -189,7 +189,7 @@ function ManageSubscription() {
           </a>
         )}
       </div>
-      <p className="mt-2 text-[12px] leading-5 text-slate-500">
+      <p className="mt-2 text-[12px] leading-5 text-muted">
         Invoices, payment method and cancellation are handled by Paddle, who processed the payment.
       </p>
       {error && <p role="alert" className="mt-2 text-[12px] leading-5 text-red-700">{error}</p>}
@@ -243,9 +243,9 @@ function BillingHistory() {
       <ul className="mt-2 divide-y divide-slate-100">
         {rows.map((row) => (
           <li key={row.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-[13px]">
-            <span className="text-slate-500">{rowDate(row.billedAt) || 'Not billed yet'}</span>
+            <span className="text-muted">{rowDate(row.billedAt) || 'Not billed yet'}</span>
             <span className="flex items-baseline gap-3">
-              <span className={needsAttention(row.status) ? 'text-[12px] font-semibold text-red-700' : 'text-[12px] text-slate-500'}>
+              <span className={needsAttention(row.status) ? 'text-[12px] font-semibold text-red-700' : 'text-[12px] text-muted'}>
                 {statusLabel(row.status)}
               </span>
               <span className="font-medium text-slate-800">{rowAmount(row)}</span>
@@ -259,7 +259,7 @@ function BillingHistory() {
           {busy ? 'Loading…' : 'Show earlier payments'}
         </button>
       )}
-      <p className="mt-2 text-[12px] leading-5 text-slate-500">
+      <p className="mt-2 text-[12px] leading-5 text-muted">
         Invoices to download are in the billing portal above.
       </p>
     </div>
@@ -276,7 +276,7 @@ function Field({ label, value, onChange, placeholder, hint }: {
       <input id={id} value={value} placeholder={placeholder} maxLength={120}
         onChange={(e) => onChange(e.target.value)}
         className="rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-brand" />
-      {hint && <span className="mt-1 text-[11.5px] text-slate-500">{hint}</span>}
+      {hint && <span className="mt-1 text-[11.5px] text-muted">{hint}</span>}
     </label>
   )
 }
@@ -301,8 +301,8 @@ export default function Profile() {
   const preview = preparedByLine(form)
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Account</p>
+    <div className="mx-auto max-w-3xl px-5 py-10">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Account</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">Profile</h1>
 
       {/* ── Account ── */}
@@ -316,21 +316,21 @@ export default function Profile() {
         ) : user ? (
           <dl className="mt-3 space-y-2 text-[13px]">
             <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
-              <dt className="text-slate-500">Email</dt>
+              <dt className="text-muted">Email</dt>
               <dd className="font-medium text-slate-800">{user.email ?? '—'}</dd>
             </div>
             <div className="flex justify-between gap-4 border-b border-slate-100 pb-2">
-              <dt className="text-slate-500">Email verified</dt>
+              <dt className="text-muted">Email verified</dt>
               <dd className={user.emailVerified ? 'font-medium text-emerald-700' : 'font-medium text-amber-700'}>
                 {user.emailVerified ? 'Yes' : 'Not yet — check your inbox'}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-slate-500">Plan</dt>
+              <dt className="text-muted">Plan</dt>
               <dd className="font-medium text-slate-800">
                 {plan.name}
                 {plan.priceMonthly ? (
-                  <span className="text-slate-500"> · {formatUsd(priceFor(plan, 'monthly')!)}/month</span>
+                  <span className="text-muted"> · {formatUsd(priceFor(plan, 'monthly')!)}/month</span>
                 ) : null}
               </dd>
             </div>
@@ -353,7 +353,7 @@ export default function Profile() {
             when there are none. */}
         {user && CHECKOUT_ENABLED && <BillingHistory />}
 
-        <p className="mt-3 text-[12px] leading-5 text-slate-500">
+        <p className="mt-3 text-[12px] leading-5 text-muted">
           {CHECKOUT_ENABLED
             ? <>Compare plans on the <Link to="/pricing" className="text-brand underline">Plans page</Link>.</>
             : <>Paid plans are not open for sign-up yet — see <Link to="/pricing" className="text-brand underline">Plans</Link> for what they include.</>}
@@ -384,12 +384,12 @@ export default function Profile() {
         </div>
 
         <div className="mt-4 rounded-lg border border-slate-200 bg-sheet-2 px-3.5 py-2.5">
-          <p className="text-[10.5px] font-semibold uppercase tracking-widest text-slate-500">Sheet preview</p>
+          <p className="text-[10.5px] font-semibold uppercase tracking-widest text-muted">Sheet preview</p>
           <p className="mt-1 font-mono text-[13px] text-slate-800">
-            Prepared by: {preview || <span className="text-slate-400">(not set)</span>}
+            Prepared by: {preview || <span className="text-faint">(not set)</span>}
           </p>
           <p className="font-mono text-[13px] text-slate-800">
-            Project: {form.defaultProject.trim() || <span className="text-slate-400">(not set)</span>}
+            Project: {form.defaultProject.trim() || <span className="text-faint">(not set)</span>}
           </p>
         </div>
 
@@ -401,13 +401,13 @@ export default function Profile() {
           {saved && <span role="status" className="text-[13px] font-medium text-emerald-700">Saved</span>}
         </div>
 
-        <p className="mt-4 border-t border-slate-100 pt-3 text-[12px] leading-5 text-slate-500">
+        <p className="mt-4 border-t border-slate-100 pt-3 text-[12px] leading-5 text-muted">
           <strong>These are stored in this browser, not in your account.</strong> They follow the
           device rather than the login, so a different computer starts blank and clearing site data
           clears them. That is deliberate: the same account field carries your subscription plan, and
           a page that could write to it is a page that could try to grant itself one.
         </p>
       </form>
-    </main>
+    </div>
   )
 }

@@ -39,7 +39,7 @@ function Sheet({ sheet, svg, onOpen }: { sheet: PlanSheet; svg: string; onOpen: 
         <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5">
           <span className="text-xs font-semibold text-slate-600">
             {sheet.title}
-            {sheet.subtitle && <span className="font-normal text-slate-400"> · {sheet.subtitle}</span>}
+            {sheet.subtitle && <span className="font-normal text-faint"> · {sheet.subtitle}</span>}
           </span>
           <span className="flex shrink-0 items-center gap-1.5">
             <button type="button" onClick={onOpen} title="View full screen"
@@ -90,7 +90,7 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="pl-3 text-[11px] text-slate-400">Click a plan to view it full screen.</p>
+        <p className="pl-3 text-[11px] text-faint">Click a plan to view it full screen.</p>
         <label className="flex shrink-0 items-center gap-1.5 pl-3 text-[11px] text-slate-600">
           <input type="checkbox" checked={hooked} onChange={(e) => setHooked(e.target.checked)} />
           90° mat hooks
@@ -98,7 +98,7 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
       </div>
 
       {!design && (
-        <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400">
+        <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-faint">
           Run the design to generate the foundation plan &amp; the detail sheets.
         </p>
       )}
@@ -106,7 +106,7 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
       {groups.map((g) => (
         <div key={g.group} className="space-y-3">
           {g.group !== 'Plans' && (
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{g.group}</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted">{g.group}</h4>
           )}
           {g.sheets.map(({ sheet, svg, index }) => (
             <Sheet key={sheet.key} sheet={sheet} svg={svg} onOpen={() => setViewing(index)} />

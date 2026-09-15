@@ -421,14 +421,14 @@ export default function FoundationDesign() {
         <div className="no-print mt-4 overflow-hidden rounded-lg border border-hairline bg-sheet">
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
             <h2 className="text-[13.5px] font-bold text-ink">
-              Batch schedule <span className="text-sm font-normal text-slate-500">({batch.designed}/{batch.rows.length} designed)</span>
+              Batch schedule <span className="text-sm font-normal text-muted">({batch.designed}/{batch.rows.length} designed)</span>
             </h2>
-            <button type="button" onClick={() => setBatch(null)} className="no-print text-xs text-slate-500 hover:text-slate-700 hover:underline">Clear</button>
+            <button type="button" onClick={() => setBatch(null)} className="no-print text-xs text-muted hover:text-slate-700 hover:underline">Clear</button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-muted">
                   <th className="px-4 py-2 font-semibold">Label</th>
                   <th className="px-4 py-2 font-semibold">Type</th>
                   <th className="px-4 py-2 font-semibold">Plan</th>
@@ -445,14 +445,14 @@ export default function FoundationDesign() {
                     <td className="px-4 py-2 text-slate-800">{r.size}</td>
                     <td className="px-4 py-2 text-slate-800">{r.thickness}</td>
                     <td className="px-4 py-2 text-slate-800">{r.steel}</td>
-                    <td className="px-4 py-2 text-xs text-slate-500">{r.note}</td>
+                    <td className="px-4 py-2 text-xs text-muted">{r.note}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           {batch.unknownHeaders.length > 0 && (
-            <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
+            <p className="border-t border-slate-100 px-4 py-2 text-xs text-muted">
               Ignored headers: {batch.unknownHeaders.join(', ')}
             </p>
           )}
@@ -493,7 +493,7 @@ export default function FoundationDesign() {
               <NumField label="Width By" unit="m" value={form.fixedBy} onChange={set('fixedBy')} />
             )}
             {ecc && (
-              <p className="col-span-full text-xs text-slate-500">Eccentric is square-only in this pilot; the footing is sized to keep the load in the kern (no uplift).</p>
+              <p className="col-span-full text-xs text-muted">Eccentric is square-only in this pilot; the footing is sized to keep the load in the kern (no uplift).</p>
             )}
           </Card>
 
@@ -504,7 +504,7 @@ export default function FoundationDesign() {
               <>
                 <NumField label={<>Dead <Math tex="D" /></>} unit="kN" value={form.deadLoad} onChange={set('deadLoad')} />
                 <NumField label={<>Live <Math tex="L" /></>} unit="kN" value={form.liveLoad} onChange={set('liveLoad')} />
-                <p className="col-span-full text-xs text-slate-500">
+                <p className="col-span-full text-xs text-muted">
                   P = D + L = {f0(serviceLoad)} kN · Pu = max(1.4D, 1.2D+1.6L) = {f0(ultimateLoad)} kN
                 </p>
               </>
@@ -536,12 +536,12 @@ export default function FoundationDesign() {
                 ['beam', 'Beam §9.6.1.2 only'],
               ]} />
             {circular && (
-              <p className="col-span-full text-xs text-slate-500">
+              <p className="col-span-full text-xs text-muted">
                 Circular column → equivalent square c = D·√(π/4) = {f0(colWidth)} mm (equal area, legacy convention).
               </p>
             )}
             {rectCol && !rect && (
-              <p className="col-span-full text-xs text-slate-500">
+              <p className="col-span-full text-xs text-muted">
                 Punching uses the full cx × cy perimeter (β = max/min); one-way shear & flexure use the smaller
                 dimension (longer cantilever governs both ways on a square footing).
               </p>

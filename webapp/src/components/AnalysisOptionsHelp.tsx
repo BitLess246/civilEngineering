@@ -14,7 +14,7 @@ const Opt = ({ name, clause, children }: { name: string; clause?: string; childr
   <div>
     <h4 className="mb-0.5 font-bold text-slate-800">
       {name}
-      {clause && <span className="ml-1.5 font-medium text-slate-500">{clause}</span>}
+      {clause && <span className="ml-1.5 font-medium text-muted">{clause}</span>}
     </h4>
     <div className="space-y-1.5 text-slate-700">{children}</div>
   </div>
@@ -77,7 +77,7 @@ export function AnalysisOptionsHelp() {
           Φ = 12EI/(G·A<sub>s</sub>·L²). It softens deep girders and squat columns, where shear flexibility is
           a real part of the deflection rather than a rounding error.
         </p>
-        <p className="text-slate-500">
+        <p className="text-muted">
           Fixed-end forces stay Euler — exact for a UDL, a small O(Φ) approximation for asymmetric point and
           trapezoidal loads. Modal, pushover and buckling still run the Euler element.
         </p>
@@ -99,7 +99,7 @@ export function AnalysisOptionsHelp() {
           distributes by the relative stiffness of the frames resisting it, and accidental torsion becomes
           meaningful.
         </p>
-        <p className="text-slate-500">
+        <p className="text-muted">
           In-plane only. It adds no out-of-plane (slab bending) stiffness, so it does not change how gravity
           load reaches the beams.
         </p>

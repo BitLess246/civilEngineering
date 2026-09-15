@@ -66,6 +66,10 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
 
   return (
     <div className="min-h-screen bg-paper">
+      <a href="#content"
+        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-3 focus-visible:top-3 focus-visible:z-[100] focus-visible:rounded-md focus-visible:bg-brand focus-visible:px-3.5 focus-visible:py-2 focus-visible:text-[13px] focus-visible:font-semibold focus-visible:text-on-solid">
+        Skip to content
+      </a>
       {/* Top bar */}
       <nav className="no-print sticky top-0 z-50 border-b border-white/10 bg-rail">
         <div className="mx-auto flex h-[52px] max-w-[1200px] items-center gap-5 px-6">
@@ -86,6 +90,10 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         </div>
       </nav>
 
+      {/* Home renders OUTSIDE AppShell (App.tsx), so it carries its own main
+          landmark and its own skip link. Without one, axe reported every
+          section of this page as content outside any landmark. */}
+      <main id="content">
       {/* Hero on a drafting grid */}
       <section className="border-b border-hairline bg-rail [background-image:linear-gradient(rgba(255,255,255,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.045)_1px,transparent_1px)] [background-size:32px_32px]">
         <div className="mx-auto max-w-[1200px] px-6 pb-14 pt-16">
@@ -257,7 +265,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         <div className="mx-auto flex max-w-[1200px] flex-col items-start justify-between gap-5 px-6 py-10 sm:flex-row sm:items-center">
           <div>
             <h2 className="text-xl font-extrabold text-white">Every calculation, code-referenced.</h2>
-            <p className="mt-1 text-[13px] text-rail-muted">Clause citations on every worked step. Validated against hand calcs — <Link to="/validation" className="text-rail-accent hover:underline">see the validation suite</Link>.</p>
+            <p className="mt-1 text-[13px] text-rail-muted">Clause citations on every worked step. Validated against hand calcs — <Link to="/validation" className="text-rail-accent underline underline-offset-2 decoration-rail-accent/40 hover:decoration-rail-accent">see the validation suite</Link>.</p>
           </div>
           {/* The ask depends on who is reading. A member has no account left
               to create, so the button becomes the workbench link — the same
@@ -275,6 +283,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         </div>
       </section>
 
+      </main>
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
     </div>
   )

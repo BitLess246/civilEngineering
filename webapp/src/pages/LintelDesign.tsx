@@ -24,7 +24,7 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-muted">{label}</span>
       <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
     </div>
   )
@@ -101,7 +101,7 @@ export default function LintelDesign() {
   return (
     <div>
       <PageHeader title="Lintel beam over an opening" badges={['NSCP 2015', 'ACI 318-14']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
+      <div className="mx-auto max-w-3xl px-5 py-6">
         <ReportControls title="Lintel Design" badges={['NSCP 2015', 'ACI 318-14']} report={report} />
         <p className="mt-2 text-sm text-slate-600">
           A lintel is an ordinary RC beam; what makes it its own calculation is the load.
@@ -166,7 +166,7 @@ export default function LintelDesign() {
           <Out label="Bars" value={bars} ok={d.flexOK} />
           <Out label="Stirrups" value={stirrups} />
           {d.sAdopt === 0 && (
-            <p className="pt-1 text-[11px] text-slate-500">
+            <p className="pt-1 text-[11px] text-muted">
               The shear is under half the concrete's own capacity, so §409.6.3.1 requires no
               stirrups. A lintel is normally given nominal ties anyway, for the cage — that is a
               practice decision, not this check.
@@ -179,7 +179,7 @@ export default function LintelDesign() {
             </ul>
           )}
         </section>
-      </main>
+      </div>
     </div>
   )
 }

@@ -25,7 +25,7 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-muted">{label}</span>
       <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
     </div>
   )
@@ -106,7 +106,7 @@ export default function RockAnchor() {
         <Out label="FS (allowable / demand)" value={f2(r.fs)} ok={r.ok} />
         <Out label="Proof/test load" value={`${f0(r.testLoad)} kN`} />
         <Out label="Bond length for FS = 2" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
-        <p className="mt-2 text-[10px] text-slate-500">
+        <p className="mt-2 text-[10px] text-muted">
           Td = 0.60·GUTS (PTI permanent max). Bond Qult = π·Dhole·Lbond·τult / FS. Proof load
           min(1.33·T, 0.80·GUTS). Provide the unbonded (free) length and corrosion protection separately.
         </p>

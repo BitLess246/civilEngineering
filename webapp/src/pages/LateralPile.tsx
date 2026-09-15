@@ -29,7 +29,7 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 function Out({ label, value, ok, sub }: { label: string; value: string; ok?: boolean; sub?: string }) {
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
-      <span className="text-slate-500">{label}{sub && <span className="ml-1 text-[11px] text-slate-400">{sub}</span>}</span>
+      <span className="text-muted">{label}{sub && <span className="ml-1 text-[11px] text-faint">{sub}</span>}</span>
       <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
     </div>
   )
@@ -231,7 +231,7 @@ export default function LateralPile() {
           <Out label="Applied H / Hu" value={f2(util)} ok={util <= 1}
             sub={util <= 1 ? 'within ultimate capacity' : 'exceeds ultimate capacity'} />
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">
+        <p className="mt-2 text-[11px] text-muted">
           The governing capacity is the LOWER of the two mechanisms, which is also what tells you which kind of pile
           this is — &ldquo;short&rdquo; is a verdict, not a length. Broms is an ultimate check: apply your own factor
           of safety, typically 2 to 3 on Hu for a working load.
@@ -249,7 +249,7 @@ export default function LateralPile() {
           <Out label="Solution" value={py.converged ? `converged in ${f0(py.iterations)} iterations` : 'did not converge'}
             ok={py.converged} sub={`residual ${py.residual.toExponential(1)}`} />
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">
+        <p className="mt-2 text-[11px] text-muted">
           Clay uses Matlock&rsquo;s soft-clay curve, sand the API RP 2A sand curve. The pile is modelled as beam
           elements on nonlinear springs and solved by Newton; the residual is reported so a solve that fell short is
           visible rather than silently presented as an answer. Deflections are relative to the undeflected pile axis.

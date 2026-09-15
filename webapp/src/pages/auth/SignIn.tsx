@@ -42,7 +42,7 @@ export default function SignIn() {
           <PasswordField label="Password" value={password} onChange={setPassword}
             error={errs.password} autoComplete="current-password" disabled={busy} />
           <div className="mb-4 text-right">
-            <Link to="/forgot-password" className="text-[12px] text-slate-500 underline hover:text-brand">
+            <Link to="/forgot-password" className="text-[12px] text-muted underline hover:text-brand">
               Forgot your password?
             </Link>
           </div>

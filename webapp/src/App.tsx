@@ -91,7 +91,7 @@ import { ModelSpaceSkeleton } from './components/ModelSpaceSkeleton'
 function PageLoading({ what }: { what: string }) {
   return (
     <div className="flex min-h-[70vh] items-center justify-center p-8">
-      <p className="text-sm text-slate-500">Loading {what}…</p>
+      <p className="text-sm text-muted">Loading {what}…</p>
     </div>
   )
 }

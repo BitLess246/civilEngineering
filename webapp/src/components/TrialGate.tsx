@@ -82,8 +82,8 @@ export function TrialGate({ children }: { children: ReactNode }) {
 
   if (verdict.kind === 'trial-exhausted') {
     return (
-      <main className="mx-auto max-w-2xl px-5 py-16 text-center">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Free trial used up</p>
+      <div className="mx-auto max-w-2xl px-5 py-16 text-center">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Free trial used up</p>
         <h1 className="mt-1 text-2xl font-bold text-brand">Create a free account to keep going</h1>
         <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-600">
           You have used all {GUEST_TRIAL_LIMIT} free runs of this calculator. A free
@@ -100,11 +100,11 @@ export function TrialGate({ children }: { children: ReactNode }) {
             Sign in
           </Link>
         </div>
-        <p className="mt-6 text-[12.5px] text-slate-500">
+        <p className="mt-6 text-[12.5px] text-muted">
           The <Link to="/docs" className="underline">documentation</Link> and{' '}
           <Link to="/validation" className="underline">validation</Link> pages stay open to everyone.
         </p>
-      </main>
+      </div>
     )
   }
 

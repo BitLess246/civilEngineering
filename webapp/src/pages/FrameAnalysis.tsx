@@ -45,7 +45,7 @@ function Shell({ title, onRemove, children }: { title: string; onRemove: () => v
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{title}</span>
+        <span className="text-xs font-bold uppercase tracking-wide text-muted">{title}</span>
         <button type="button" onClick={onRemove} className="text-xs text-red-500 hover:underline">remove</button>
       </div>
       <div className="flex flex-wrap gap-3 [&>label]:w-32">{children}</div>
@@ -104,7 +104,7 @@ export default function FrameAnalysis() {
             <Num label="b" unit="mm" value={b} onChange={setB} />
             <Num label="h" unit="mm" value={h} onChange={setH} />
             <Num label="f′c" unit="MPa" value={fc} onChange={setFc} />
-            <p className="col-span-full text-xs text-slate-500">
+            <p className="col-span-full text-xs text-muted">
               E = 4700√f′c = {f1(E)} MPa · A = {b * h} mm² · I = {(b * h ** 3 / 12 / 1e9).toFixed(3)}×10⁹ mm⁴
             </p>
           </Card>
@@ -205,7 +205,7 @@ export default function FrameAnalysis() {
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-xs">
                   <thead>
-                    <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <tr className="text-left uppercase tracking-wide text-muted">
                       <th className="py-1 pr-2 font-semibold">Combination</th>
                       <th className="py-1 pr-2 text-right font-semibold">Nmax</th>
                       <th className="py-1 pr-2 text-right font-semibold">Vmax</th>
@@ -249,7 +249,7 @@ export default function FrameAnalysis() {
               className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm">
               {r.members.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
             </select>
-            <span className="text-xs text-slate-500">local x from node i · N &gt; 0 tension</span>
+            <span className="text-xs text-muted">local x from node i · N &gt; 0 tension</span>
           </div>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">

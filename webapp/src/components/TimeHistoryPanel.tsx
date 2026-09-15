@@ -42,13 +42,13 @@ export function TimeHistoryPanel({ res, dirLabel }: { res: TimeHistoryModelResul
 
   return (
     <ResultCard title={`Time-history — ground motion ${dirLabel}${res.source === 'csv' ? ' (CSV record)' : ''}`}>
-      <div className="mb-1 text-[11px] font-semibold text-slate-500">Base shear V(t)</div>
+      <div className="mb-1 text-[11px] font-semibold text-muted">Base shear V(t)</div>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
         <TimeChart t={t} y={r.baseShear} color="#0056b3" yLabel="V (kN)" />
       </div>
       {roof.length > 0 && (
         <>
-          <div className="mb-1 text-[11px] font-semibold text-slate-500">Roof displacement Δ(t) — node {res.controlNode}</div>
+          <div className="mb-1 text-[11px] font-semibold text-muted">Roof displacement Δ(t) — node {res.controlNode}</div>
           <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
             <TimeChart t={t} y={roof} color="#ea580c" yLabel="Δ (mm)" yScale={1000} />
           </div>

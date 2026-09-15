@@ -55,7 +55,7 @@ export default function BearingCapacity() {
   return (
         <div>
       <PageHeader title="Bearing Capacity" badges={['Meyerhof', 'Hansen', 'Vesić']} />
-      <main className="mx-auto max-w-[1400px] px-5 py-6 sm:px-7">
+      <div className="mx-auto max-w-[1400px] px-5 py-6 sm:px-7">
       <p className="no-print mt-1 max-w-3xl text-sm text-slate-600">
         Shallow-foundation bearing capacity by the general equation, with shape, depth and
         inclination factors and Meyerhof&rsquo;s effective area for eccentric load. Nq and Nc are
@@ -136,7 +136,7 @@ export default function BearingCapacity() {
                     <Row key={m} label={BEARING_METHOD_LABEL[m]} value={`${f2(all[m].qult)} kPa`}
                       sub={m === method ? 'selected' : undefined} />
                   ))}
-                  <p className="mt-2 text-[10.5px] text-slate-500">
+                  <p className="mt-2 text-[10.5px] text-muted">
                     They disagree by design. A bearing pressure quoted without naming its method is
                     not reproducible.
                   </p>
@@ -154,7 +154,7 @@ export default function BearingCapacity() {
       </div>
 
       {steps.length > 0 && <WorkedSolution steps={steps} />}
-    </main>
+    </div>
     </div>
   )
 }

@@ -25,7 +25,7 @@ function Field({ label, value, onChange, unit, step = 'any', hint }: {
       <span className="mb-1 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
       <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
         className="rounded-md border border-slate-300 px-2.5 py-1.5" />
-      {hint && <span className="mt-0.5 text-[10px] text-slate-400">{hint}</span>}
+      {hint && <span className="mt-0.5 text-[10px] text-faint">{hint}</span>}
     </label>
   )
 }
@@ -33,7 +33,7 @@ function Field({ label, value, onChange, unit, step = 'any', hint }: {
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-muted">{label}</span>
       <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
     </div>
   )
@@ -91,7 +91,7 @@ export default function PlumbingDesign() {
 
   const tabBtn = (id: Tab, label: string) => (
     <button type="button" onClick={() => { setTab(id); scrollTop() }}
-      className={`border-b-2 px-1 pb-1.5 text-sm font-semibold ${tab === id ? 'border-brand text-brand' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+      className={`border-b-2 px-1 pb-1.5 text-sm font-semibold ${tab === id ? 'border-brand text-brand' : 'border-transparent text-faint hover:text-slate-600'}`}>
       {label}
     </button>
   )
@@ -131,8 +131,8 @@ export default function PlumbingDesign() {
           ))}
         </div>
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-slate-100 pt-2 text-sm">
-          <span className="text-slate-500">Total supply units <b className="font-mono text-slate-800">{f0(wsfu)} WSFU</b></span>
-          <span className="text-slate-500">Total drainage units <b className="font-mono text-slate-800">{f0(dfu)} DFU</b></span>
+          <span className="text-muted">Total supply units <b className="font-mono text-slate-800">{f0(wsfu)} WSFU</b></span>
+          <span className="text-muted">Total drainage units <b className="font-mono text-slate-800">{f0(dfu)} DFU</b></span>
         </div>
       </section>
 
@@ -184,7 +184,7 @@ export default function PlumbingDesign() {
             <Out label="Recommended pipe" value={supply.pipe.size ? `${supply.pipe.size.label} (${f1(supply.pipe.size.idMm)} mm ID)` : '—'} ok={!!supply.pipe.size && supply.ok} />
             <Out label="Velocity at size" value={`${f2(supply.pipe.velocity)} m/s`} ok={supply.pipe.velocityOK} />
             <Out label="Friction at size" value={`${f1(supply.pipe.frictionDrop)} kPa`} ok={supply.pipe.frictionOK} />
-            <p className="mt-2 text-[10px] text-slate-500">
+            <p className="mt-2 text-[10px] text-muted">
               Design flow from Hunter's curve (Charts A-2/A-3) — override with a chart-read flow if needed.
               Friction by Hazen-Williams (the physics behind Charts A-4…A-7). Minimum service pipe 19 mm (¾");
               velocity capped at 3 m/s.
@@ -219,7 +219,7 @@ export default function PlumbingDesign() {
             <Out label="Max developed length" value={`drain ${f0(drainage.maxDrainM)} m · vent ${f0(drainage.maxVentM)} m`} />
             <Out label="Building-sewer min slope" value={`${f1(drainage.sewer.minPct)}% (${f1(drainage.sewer.mmPerM)} mm/m)`} />
             {drainage.wcStackWarn && <p className="mt-1 text-[11px] text-amber-600">⚠ {drainage.wcCount} water closets on one stack — the code allows max 4 per stack; split the stack.</p>}
-            <p className="mt-2 text-[10px] text-slate-500">
+            <p className="mt-2 text-[10px] text-muted">
               Drain/vent size &amp; max length from Table 7-5; a vent is ≥ 32 mm and ≥ ½ the drain. No water closet
               into a drain &lt; 75 mm. Slope per §1206. Set the fixture schedule above.
             </p>
@@ -245,7 +245,7 @@ export default function PlumbingDesign() {
             <Out label="Digestive chamber (2/3)" value={`${f2(tankWidth)} × ${f2(septic.inletLength)} × ${f2(septic.totalHeight)} m · ${f2(septic.inletVol)} m³`} ok={septic.inletVolOK && septic.inletDimOK} />
             <Out label="Leaching chamber (1/3)" value={`${f2(tankWidth)} × ${f2(septic.outletLength)} × ${f2(septic.totalHeight)} m · ${f2(septic.outletVol)} m³`} ok={septic.outletVolOK} />
             <Out label="Provided liquid volume" value={`${f2(septic.providedVol)} m³`} ok={septic.capacityOK} />
-            <p className="mt-2 text-[10px] text-slate-500">
+            <p className="mt-2 text-[10px] text-muted">
               Capacity from Table B-2 (by DFU). L = V/(w·d); inlet 2/3 (≥ 2 m³ &amp; ≥ 2/3 total), secondary 1/3
               (≥ 1 m³). Liquid depth 0.6–1.8 m; side walls 228.6 mm above liquid. Two 508 mm manholes required.
             </p>

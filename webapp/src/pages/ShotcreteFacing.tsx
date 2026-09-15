@@ -25,7 +25,7 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-muted">{label}</span>
       <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
     </div>
   )
@@ -121,7 +121,7 @@ export default function ShotcreteFacing() {
         <Out label="Punching R_FP" value={`${f0(r.Rfp)} kN`} />
         <Out label={`Governing facing strength (${r.governs})`} value={`${f0(r.strength)} kN`} ok={r.ok} />
         <Out label="FS (strength / nail-head force)" value={f2(r.fs)} ok={r.ok} />
-        <p className="mt-2 text-[10px] text-slate-500">
+        <p className="mt-2 text-[10px] text-muted">
           R_FF = C_F·(m_neg + m_pos)·8·S_perp/S_span (fixed-strip mechanism). R_FP = φ·0.33·√f′c·bo·d
           around the bearing plate. C_F ≈ 2.0 thin → 1.0 thick facing (FHWA GEC-7 Table). Headed-stud
           tension (permanent facing) and temporary-vs-final facing stages are checked separately.

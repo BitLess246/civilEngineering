@@ -68,7 +68,7 @@ function DirCard({ title, dir, barDia, mats }: {
       <div className="mt-2 overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-left uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 text-left uppercase tracking-wide text-muted">
               <th className="pb-1 pr-2 font-semibold">Location</th>
               <th className="pb-1 pr-2 font-semibold">M (kN·m)</th>
               <th className="pb-1 pr-2 font-semibold">Col strip</th>
@@ -82,15 +82,15 @@ function DirCard({ title, dir, barDia, mats }: {
                 <td className="py-1 pr-2 text-slate-600">{f1(loc.M)}</td>
                 <td className="py-1 pr-2">
                   <div className="font-semibold text-slate-800">{steelText(loc.column, barDia, mat(loc.name, 'column'))}</div>
-                  <div className="text-slate-500">{steelSub(loc.column)}</div>
+                  <div className="text-muted">{steelSub(loc.column)}</div>
                 </td>
                 <td className="py-1">
                   {loc.middle.b > 0 ? (
                     <>
                       <div className="font-semibold text-slate-800">{steelText(loc.middle, barDia, mat(loc.name, 'middle'))}</div>
-                      <div className="text-slate-500">{steelSub(loc.middle)}</div>
+                      <div className="text-muted">{steelSub(loc.middle)}</div>
                     </>
-                  ) : <span className="text-slate-500">—</span>}
+                  ) : <span className="text-muted">—</span>}
                 </td>
               </tr>
             ))}
@@ -328,7 +328,7 @@ export default function SlabDesign() {
                     )
                   })}
                 </div>
-                <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                <p className="mt-2 text-[11px] leading-5 text-muted">
                   Sections are taken along <KTex tex="l_1" /> in the x-direction. Top steel is the
                   negative-moment mat over the supports; bottom steel is the positive-moment mat
                   through mid-span. The shrinkage and temperature bars run perpendicular, so a
@@ -354,13 +354,13 @@ export default function SlabDesign() {
                     alert={!defl.totalOK}
                     sub={`L/240 = ${f1(defl.limitTotal)} mm${defl.totalOK ? ' ✓' : ' ✗'}`} />
                   {defl.cracked && (
-                    <p className="mt-1 text-xs text-slate-500">Slab cracks under service load — Branson I_e applied.</p>
+                    <p className="mt-1 text-xs text-muted">Slab cracks under service load — Branson I_e applied.</p>
                   )}
                 </ResultCard>
               )}
             </>
           ) : (
-            <p className="py-8 text-center text-sm text-slate-500">Enter valid panel inputs to see results.</p>
+            <p className="py-8 text-center text-sm text-muted">Enter valid panel inputs to see results.</p>
           )}
         </div>
       </div>

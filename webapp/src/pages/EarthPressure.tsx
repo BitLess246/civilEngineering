@@ -65,7 +65,7 @@ export default function EarthPressure() {
   return (
         <div>
       <PageHeader title="Lateral Earth Pressure" badges={['Rankine', 'Coulomb', 'NSCP 2015']} />
-      <main className="mx-auto max-w-[1400px] px-5 py-6 sm:px-7">
+      <div className="mx-auto max-w-[1400px] px-5 py-6 sm:px-7">
       <p className="no-print mt-1 max-w-3xl text-sm text-slate-600">
         Rankine and Coulomb active and passive thrust, with the Mononobe–Okabe seismic case.
         Rankine needs a smooth vertical wall and level fill; Coulomb carries wall friction, an
@@ -150,7 +150,7 @@ export default function EarthPressure() {
       </div>
 
       <WorkedSolution steps={steps} />
-    </main>
+    </div>
     </div>
   )
 }

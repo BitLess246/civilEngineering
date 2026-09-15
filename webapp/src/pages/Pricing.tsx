@@ -81,7 +81,7 @@ function PlanChangeDialog({ plan, priceId, onClose }: {
           <>
             {change && <p className="mt-3 text-[13px] leading-6 text-slate-700">{describeChange(change)}</p>}
             {change?.direction === 'downgrade' && (
-              <p className="mt-2 text-[12px] leading-5 text-slate-500">
+              <p className="mt-2 text-[12px] leading-5 text-muted">
                 You keep your current plan until then — nothing is refunded and nothing is lost today.
               </p>
             )}
@@ -140,16 +140,16 @@ function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeri
 
   const btn = 'block w-full rounded-md bg-brand px-4 py-2 text-center text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-60'
 
-  if (plan.id === 'guest') return <p className="text-center text-[12px] text-slate-500">No sign-up needed</p>
+  if (plan.id === 'guest') return <p className="text-center text-[12px] text-muted">No sign-up needed</p>
   if (plan.priceMonthly === 0) {
     return user
-      ? <p className="text-center text-[12px] text-slate-500">You have an account</p>
+      ? <p className="text-center text-[12px] text-muted">You have an account</p>
       : <Link to="/signup" className={btn}>Create a free account</Link>
   }
 
   if (!CHECKOUT_ENABLED) {
     return (
-      <div className="rounded-md border border-dashed border-slate-300 px-3 py-2 text-center text-[12px] text-slate-500">
+      <div className="rounded-md border border-dashed border-slate-300 px-3 py-2 text-center text-[12px] text-muted">
         Not open for sign-up yet
       </div>
     )
@@ -256,14 +256,14 @@ function PriceLine({ plan, period, prices }: { plan: Plan; period: BillingPeriod
     <div className="mt-3">
       <p className="text-2xl font-bold text-slate-800">
         {perMonth}
-        <span className="text-sm font-medium text-slate-500"> /month</span>
+        <span className="text-sm font-medium text-muted"> /month</span>
       </p>
       {period === 'annual' ? (
-        <p className="mt-0.5 text-[12px] leading-5 text-slate-500">
+        <p className="mt-0.5 text-[12px] leading-5 text-muted">
           {total} billed yearly{saving && <> · save {saving}</>}
         </p>
       ) : (
-        <p className="mt-0.5 text-[12px] leading-5 text-slate-500">billed monthly</p>
+        <p className="mt-0.5 text-[12px] leading-5 text-muted">billed monthly</p>
       )}
     </div>
   )
@@ -369,8 +369,8 @@ export default function Pricing() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Plans</p>
+    <div className="mx-auto max-w-5xl px-5 py-10">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Plans</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">Pricing</h1>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
         Every calculator is free, with or without an account — a free account only removes the trial counter and
@@ -397,7 +397,7 @@ export default function Pricing() {
         ))}
       </div>
 
-      <p className="mt-4 text-[12px] leading-6 text-slate-500">
+      <p className="mt-4 text-[12px] leading-6 text-muted">
         {converted ? (
           <>
             Prices are shown in {currency} — the amount Paddle will charge you, converted from our US dollar
@@ -426,6 +426,6 @@ export default function Pricing() {
         are open to everyone, always. Being able to check the engine against hand calculations should never be
         behind a paywall.
       </p>
-    </main>
+    </div>
   )
 }

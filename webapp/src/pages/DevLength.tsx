@@ -170,7 +170,7 @@ export default function DevLength() {
           <Card title="Confinement §25.4.2.3">
             <Num label={<>(cb + Ktr) / db<CodeHint spec={DEV_HINTS.confine} /></>}
               value={f.cbKtr_db} onChange={set('cbKtr_db')} step="0.1" />
-            <div className="col-span-full text-xs text-slate-500 -mt-2">
+            <div className="col-span-full text-xs text-muted -mt-2">
               cb = smaller of cover-to-bar-CL or half cc spacing · Ktr = 40Atr/(s·n) · cap 2.5.
               Use 1.5 when in doubt (conservative), 2.5 with adequate cover and ties.
             </div>
@@ -183,7 +183,7 @@ export default function DevLength() {
             <Pick label="Confining ties ψr" value={f.hookTies ? 'yes' : 'no'}
               onChange={(v) => set('hookTies')(v === 'yes')}
               options={[['no', 'Not satisfied (ψr = 1.0)'], ['yes', 'Ties at s ≤ 3db (ψr = 0.8)']]} />
-            <div className="col-span-full -mt-2 text-xs text-slate-500">
+            <div className="col-span-full -mt-2 text-xs text-muted">
               ψc and ψr apply to ⌀36 and smaller only. ψt does NOT apply to hooks.
             </div>
           </Card>
@@ -197,7 +197,7 @@ export default function DevLength() {
               <Num label="Member cover" unit="mm" value={f.memberCover} onChange={set('memberCover')} />
               <Num label="Tie / hoop ⌀" unit="mm" value={f.memberTieDia} onChange={set('memberTieDia')} />
               <Num label="Far-face bar ⌀" unit="mm" value={f.memberBarDia} onChange={set('memberBarDia')} />
-              <div className="col-span-full -mt-2 text-xs text-slate-500">
+              <div className="col-span-full -mt-2 text-xs text-muted">
                 The hook turns down BEHIND the far-face longitudinal bar, so the embedment
                 available is depth − cover − tie ⌀ − bar ⌀, not the member depth.
               </div>
@@ -275,7 +275,7 @@ export default function DevLength() {
             </ResultCard>
           </div>
         ) : (
-          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-slate-500">
+          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-muted">
             Fill in all inputs to see results.
           </p>
         )}

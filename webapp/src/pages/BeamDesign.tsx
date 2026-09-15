@@ -359,7 +359,7 @@ export default function BeamDesign() {
               <Num label={<KTex tex="V_u" />} unit="kN" value={f.Vu} onChange={set('Vu')} />
             </>}
             {hogging && !multi && (
-              <p className="col-span-full text-xs text-slate-500">Negative Mu — hogging: designed with |Mu|; the tension steel goes at the TOP.</p>
+              <p className="col-span-full text-xs text-muted">Negative Mu — hogging: designed with |Mu|; the tension steel goes at the TOP.</p>
             )}
           </Card>
 
@@ -372,7 +372,7 @@ export default function BeamDesign() {
                   className="rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">
                   + Add section
                 </button>
-                <span className="text-xs text-slate-500">or auto-detect from <Link to="/beam-analysis" className="text-brand hover:underline">Beam Analysis</Link>. Negative Mu = hogging (top steel).</span>
+                <span className="text-xs text-muted">or auto-detect from <Link to="/beam-analysis" className="text-brand hover:underline">Beam Analysis</Link>. Negative Mu = hogging (top steel).</span>
               </div>
               <div className="space-y-3">
                 {sections.map((s) => (
@@ -423,7 +423,7 @@ export default function BeamDesign() {
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-xs">
                   <thead>
-                    <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <tr className="text-left uppercase tracking-wide text-muted">
                       <th className="py-1 pr-2 font-semibold">Section</th>
                       <th className="py-1 pr-2 font-semibold">Mode</th>
                       <th className="py-1 pr-2 font-semibold">Tension</th>
@@ -450,7 +450,7 @@ export default function BeamDesign() {
                   </tbody>
                 </table>
               </div>
-              <p className="mt-1 text-[11px] text-slate-500">Click a row to view its drawing, results and worked solution. Red rows have errors.</p>
+              <p className="mt-1 text-[11px] text-muted">Click a row to view its drawing, results and worked solution. Red rows have errors.</p>
             </ResultCard>
           )}
 

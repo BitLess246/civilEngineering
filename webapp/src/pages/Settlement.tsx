@@ -32,7 +32,7 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 function Out({ label, value, ok, sub }: { label: string; value: string; ok?: boolean; sub?: string }) {
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
-      <span className="text-slate-500">{label}{sub && <span className="ml-1 text-[11px] text-slate-400">{sub}</span>}</span>
+      <span className="text-muted">{label}{sub && <span className="ml-1 text-[11px] text-faint">{sub}</span>}</span>
       <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
     </div>
   )
@@ -203,7 +203,7 @@ export default function Settlement() {
         <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Soil profile</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[12px]">
-            <thead className="text-slate-500">
+            <thead className="text-muted">
               <tr className="border-b border-slate-200">
                 <th className="py-1 pr-2 text-left">Layer</th>
                 <th className="py-1 pr-2">H (m)</th><th className="py-1 pr-2">γ</th><th className="py-1 pr-2">γsat</th>
@@ -230,7 +230,7 @@ export default function Settlement() {
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">
+        <p className="mt-2 text-[11px] text-muted">
           Leave e₀ or Cc at zero for a layer that does not consolidate (granular fill, rock) — it is then carried
           for overburden only. σ′p at zero means normally consolidated. Cr defaults to Cc/6 unless you set it.
         </p>
@@ -238,7 +238,7 @@ export default function Settlement() {
 
       <ResultCard title="Stress increase below the footing">
         <StressProfile q={q} B={B} L={L} Df={Df} zMax={Math.max(totalDepth, 2 * B)} />
-        <p className="mt-2 text-[11px] text-slate-500">
+        <p className="mt-2 text-[11px] text-muted">
           Boussinesq at the footing CENTRE, where the stress and therefore the settlement peak. The 2:1 rule is the
           average over the spread area, so it sits below the centre value and the two converge with depth.
         </p>
@@ -261,7 +261,7 @@ export default function Settlement() {
       <ResultCard title="Consolidation by layer">
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[12px]">
-            <thead className="text-slate-500">
+            <thead className="text-muted">
               <tr className="border-b border-slate-200">
                 <th className="py-1 pr-3 text-left">Layer</th><th className="py-1 pr-3">z mid (m)</th>
                 <th className="py-1 pr-3">σ′₀ (kPa)</th><th className="py-1 pr-3">Δσ (kPa)</th>
@@ -277,7 +277,7 @@ export default function Settlement() {
                   <td className="py-0.5 pr-3">{f1(l.sigma0)}</td>
                   <td className="py-0.5 pr-3">{f1(l.dSigma)}</td>
                   <td className="py-0.5 pr-3">{f1(l.sigmaP)}</td>
-                  <td className={`py-0.5 pr-3 text-left ${l.branch === 'none' ? 'text-slate-400' : 'text-slate-600'}`}>
+                  <td className={`py-0.5 pr-3 text-left ${l.branch === 'none' ? 'text-faint' : 'text-slate-600'}`}>
                     {l.branch}
                   </td>
                   <td className="py-0.5 pr-3 font-semibold">{f1(l.settlement)}</td>
@@ -286,7 +286,7 @@ export default function Settlement() {
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-[10px] text-slate-500">
+        <p className="mt-2 text-[10px] text-muted">
           Sc = Cc·H/(1+e₀)·log₁₀(σ′f/σ′₀) on the virgin branch, Cr in place of Cc while σ′f stays below σ′p, and
           both terms when the increment crosses σ′p. Each layer is sliced 20 ways so Δσ is integrated rather than
           sampled at mid-height. Time factors are the standard closed-form fits to Terzaghi&rsquo;s series, good to
