@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { useScrollTopOnChange } from './lib/useScrollTop'
-import { isEmbedSearch } from './lib/embed'
+import { isEmbedLocation } from './lib/embed'
 import { usePageViews } from './lib/analytics'
 import { WelcomeDialog } from './components/WelcomeDialog'
 import { useToolPrefs } from './lib/useToolPrefs'
@@ -140,7 +140,7 @@ export default function App() {
   // modal popping over the mini viewport is the preview interrupting the
   // marketing page it sits on. The answer is still collected on the next
   // ordinary page — nothing is lost by waiting.
-  const embed = useMemo(() => isEmbedSearch(search), [search])
+  const embed = useMemo(() => isEmbedLocation({ pathname, search }), [pathname, search])
   const askPrefs = !hasAnswered(prefs) && !dismissed && !NO_ASK_ROUTES.includes(pathname) && !embed
 
   // Home carries its own hero navigation; every tool route lives inside the
