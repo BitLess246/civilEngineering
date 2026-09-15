@@ -18,9 +18,112 @@ const SOURCES = import.meta.glob('../**/*.tsx', { query: '?raw', import: 'defaul
  * and the repo has no DOM harness.
  */
 
-/** Class strings, so a hover in one element is not paired with a rest in another. */
-const chunks = (src: string) =>
-  src.split(/(`[^`]*`|"[^"]*"|'[^']*')/).filter((c) => /^["'`]/.test(c))
+/**
+ * ONE element's classes per chunk, and never two classes that cannot apply at
+ * the same time.
+ *
+ * The first cut split on every quote in the file and kept the odd spans. That
+ * works until a string literal appears inside a JSX expression —
+ * `style={embed ? { pointerEvents: 'none' } : undefined}` — whose lone quote
+ * pair opens a span that runs on for sixty lines and swallows a dozen
+ * elements. It then reported the header badge's `text-brand` as the dead hover
+ * of the hamburger's `hover:text-brand`, two elements 17 lines apart.
+ *
+ * So anchor on `className=` and model what a class expression actually
+ * produces. `${cond ? 'bg-sheet text-brand' : 'text-slate-600 hover:text-brand'}`
+ * is a SELECTED tab that is brand-coloured and an UNSELECTED one that hovers
+ * to brand — correct, and a dead pair only if you pretend both branches paint
+ * the same element at once. Each branch therefore gets its own chunk, carrying
+ * the template's unconditional classes with it.
+ *
+ * Known blind spot, stated rather than discovered later: a rest in one
+ * interpolation paired with a hover in a DIFFERENT interpolation of the same
+ * element is not reported, because the branches are expanded independently
+ * rather than as a cross product.
+ */
+interface Lit { static: string; branches: string[] }
+
+/** Split a template body into its unconditional text and its `${…}` bodies. */
+function splitTemplate(body: string): { fixed: string; exprs: string[] } {
+  let fixed = ''
+  const exprs: string[] = []
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === '$' && body[i + 1] === '{') {
+      let depth = 0, j = i + 1
+      for (; j < body.length; j++) {
+        if (body[j] === '{') depth++
+        else if (body[j] === '}' && --depth === 0) break
+      }
+      exprs.push(body.slice(i + 2, j)); i = j
+    } else fixed += body[i]
+  }
+  return { fixed, exprs }
+}
+
+/** Every string/template literal in `src`, as [content, isTemplate] pairs. */
+function literals(src: string): [string, boolean][] {
+  const out: [string, boolean][] = []
+  for (let i = 0; i < src.length; i++) {
+    const q = src[i]
+    if (q !== '"' && q !== "'" && q !== '`') continue
+    if (q !== '`') {
+      const end = src.indexOf(q, i + 1)
+      if (end < 0) break
+      out.push([src.slice(i + 1, end), false]); i = end
+      continue
+    }
+    // A template ends at the backtick that is not inside one of its own `${}`.
+    let j = i + 1, depth = 0
+    for (; j < src.length; j++) {
+      if (src[j] === '$' && src[j + 1] === '{') { depth++; j++ }
+      else if (src[j] === '}' && depth > 0) depth--
+      else if (src[j] === '`' && depth === 0) break
+    }
+    out.push([src.slice(i + 1, j), true]); i = j
+  }
+  return out
+}
+
+/** The unconditional classes, and one entry per alternative branch. */
+function classExpr(src: string): Lit {
+  const lit: Lit = { static: '', branches: [] }
+  for (const [text, tmpl] of literals(src)) {
+    if (!tmpl) { lit.branches.push(text); continue }
+    const { fixed, exprs } = splitTemplate(text)
+    lit.static += ' ' + fixed
+    for (const e of exprs) {
+      const inner = classExpr(e)
+      lit.static += ' ' + inner.static
+      lit.branches.push(...inner.branches)
+    }
+  }
+  return lit
+}
+
+function chunks(src: string): string[] {
+  const out: string[] = []
+  const re = /className=/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(src)) !== null) {
+    const i = m.index + m[0].length
+    const q = src[i]
+    if (q === '"' || q === "'") {
+      const end = src.indexOf(q, i + 1)
+      if (end > 0) { out.push(src.slice(i + 1, end)); re.lastIndex = end }
+      continue
+    }
+    if (q !== '{') continue
+    let depth = 0, j = i
+    for (; j < src.length; j++) {
+      if (src[j] === '{') depth++
+      else if (src[j] === '}' && --depth === 0) break
+    }
+    const { static: fixed, branches } = classExpr(src.slice(i + 1, j))
+    out.push(...(branches.length ? branches.map((b) => `${fixed} ${b}`) : [fixed]))
+    re.lastIndex = j
+  }
+  return out
+}
 
 const PROPS = ['bg', 'text', 'border'] as const
 

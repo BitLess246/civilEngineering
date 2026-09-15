@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
 import { loadCollapsed, saveCollapsed, toggleCollapsed } from '../lib/navCollapse'
@@ -14,6 +14,7 @@ import { TrialGate } from './TrialGate'
 import { ErrorBoundary } from './ErrorBoundary'
 import { watchScrollableRegions } from '../lib/scrollableRegions'
 import { titleFor } from '../lib/documentTitle'
+import { useFocusTrap } from '../lib/useFocusTrap'
 
 // Workbench shell (docs/design/uiux-2026-07): persistent ink-navy sidebar with
 // the grouped tool catalog + ⌘K search, and a slim breadcrumb header. Wraps
@@ -43,7 +44,22 @@ function Caret({ open }: { open: boolean }) {
   )
 }
 
-function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
+/**
+ * The tool navigation. ONE component for both the desktop rail and the mobile
+ * drawer — the alternative is two lists that drift, and this one is 53 tools
+ * in 12 collapsible groups with an active-route marker.
+ *
+ * `onNavigate` lets the drawer close itself when a tool is chosen; the desktop
+ * rail passes nothing, because nothing is covering the content there.
+ *
+ * `trailing` sits at the end of the brand row. The drawer puts its close button
+ * there rather than above its own second wordmark: reusing this component and
+ * then adding a header of your own paints the brand twice, which is what the
+ * first cut of the drawer did.
+ */
+function Sidebar({ onOpenPalette, onNavigate, className, trailing }: {
+  onOpenPalette: () => void; onNavigate?: () => void; className?: string; trailing?: ReactNode
+}) {
   const { pathname } = useLocation()
   // Lazy initialiser: localStorage is read once on mount, not on every render.
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => loadCollapsed())
@@ -74,12 +90,15 @@ function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
   })
 
   return (
-    <aside className="no-print sticky top-0 hidden h-screen w-[230px] flex-none flex-col overflow-y-auto bg-rail text-rail-ink lg:flex">
+    <aside className={className ?? 'no-print sticky top-0 hidden h-screen w-[230px] flex-none flex-col overflow-y-auto bg-rail text-rail-ink lg:flex'}>
       <div className="border-b border-white/10 p-4 pb-3.5">
-        <Link to="/" className="flex items-baseline gap-2">
-          <span className="text-[15px] font-extrabold tracking-[.14em] text-rail-ink">{BRAND_MARK}</span>
-          <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-rail-muted">{BRAND_TAIL}</span>
-        </Link>
+        <div className="flex items-center justify-between gap-2">
+          <Link to="/" onClick={onNavigate} className="flex items-baseline gap-2 py-1">
+            <span className="text-[15px] font-extrabold tracking-[.14em] text-rail-ink">{BRAND_MARK}</span>
+            <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-rail-muted">{BRAND_TAIL}</span>
+          </Link>
+          {trailing}
+        </div>
         <div className="mt-3"><SearchBox onOpen={onOpenPalette} compact /></div>
       </div>
       <nav className="flex-1 px-2.5 pb-4 pt-1">
@@ -104,7 +123,7 @@ function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
             <div key={g.label} className="mt-3">
               <button type="button" onClick={() => toggle(g.label)}
                 aria-expanded={open} aria-controls={panelId}
-                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left hover:bg-sheet/5">
+                className="flex min-h-[36px] w-full items-center gap-1.5 rounded-md px-2 py-1 text-left hover:bg-sheet/5 lg:min-h-0">
                 <span className={open ? 'text-rail-muted' : 'text-rail-muted'}><Caret open={open} /></span>
                 <span className={`text-[9.5px] font-bold uppercase tracking-[.18em] ${
                   holdsActive ? 'text-rail-muted' : 'text-rail-muted'}`}>{g.label}</span>
@@ -120,9 +139,9 @@ function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
                   {g.tools.map((t) => {
                     const active = t.to === pathname
                     return (
-                      <Link key={t.to + t.name} to={t.to}
+                      <Link key={t.to + t.name} to={t.to} onClick={onNavigate}
                         aria-current={active ? 'page' : undefined}
-                        className={`flex items-center gap-2 rounded-md border-l-2 px-2 py-1.5 text-[12.5px] font-medium ${
+                        className={`flex min-h-[44px] items-center gap-2 rounded-md border-l-2 px-2 py-1.5 text-[13.5px] font-medium lg:min-h-0 lg:text-[12.5px] ${
                           active ? 'border-rail-accent bg-brand/55 text-on-solid' : 'border-transparent text-rail-muted hover:bg-sheet/5 hover:text-on-solid'}`}>
                         {t.name}
                       </Link>
@@ -141,9 +160,59 @@ function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
   )
 }
 
+
+/**
+ * Tool navigation below `lg`.
+ *
+ * Nothing reached the 53 tools on a phone: the rail is `hidden lg:flex` with no
+ * hamburger and no drawer, so the only route between them was a 63×27px
+ * unlabelled magnifier that opens a type-to-search palette. Search is not
+ * browsing — it answers "where is the tool I can already name", which is the
+ * one question a first-time visitor cannot ask.
+ *
+ * Focus is trapped (see `useFocusTrap`) because this is an `aria-modal`
+ * overlay and the app already ships seven that are not — adding an eighth
+ * would be choosing the bug.
+ */
+function NavDrawer({ open, onClose, onOpenPalette }: {
+  open: boolean; onClose: () => void; onOpenPalette: () => void
+}) {
+  const panel = useRef<HTMLDivElement>(null)
+  useFocusTrap(panel, open, onClose)
+
+  // The page behind must not scroll under the drawer.
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [open])
+
+  if (!open) return null
+  return (
+    <div className="no-print fixed inset-0 z-[90] lg:hidden">
+      <button type="button" aria-label="Close navigation" onClick={onClose}
+        className="absolute inset-0 bg-ink/60" />
+      <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Tool navigation"
+        id="nav-drawer"
+        className="absolute inset-y-0 left-0 flex w-[280px] max-w-[85vw] flex-col bg-rail text-rail-ink shadow-2xl outline-none">
+        <Sidebar onOpenPalette={() => { onClose(); onOpenPalette() }} onNavigate={onClose}
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-rail text-rail-ink"
+          trailing={(
+            <button type="button" onClick={onClose} aria-label="Close navigation"
+              className="-mr-1.5 flex h-11 w-11 flex-none items-center justify-center rounded-md text-rail-muted hover:bg-sheet/10 hover:text-rail-ink">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+            </button>
+          )} />
+      </div>
+    </div>
+  )
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { pathname, search } = useLocation()
   const [palette, setPalette] = useState(false)
+  const [nav, setNav] = useState(false)
   /**
    * ?embed=1 — Model Space is being iframed into the landing page as a
    * scaled-down preview of itself. The page stays fully DRAWN (the preview is
@@ -161,6 +230,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   // bookmarks and history were indistinguishable — and a screen reader
   // announced the same page name on arrival everywhere.
   useEffect(() => { document.title = titleFor(pathname) }, [pathname])
+  // A drawer left open across a route change covers the page you just chose.
+  // Every control INSIDE it already closes it; what it cannot see is a route
+  // change it did not cause — the browser back button. Adjusted DURING render
+  // (React's "adjusting state when a prop changes") rather than in an effect,
+  // so the drawer is never painted once over the new page before closing.
+  const [navRoute, setNavRoute] = useState(pathname)
+  if (navRoute !== pathname) { setNavRoute(pathname); setNav(false) }
 
   // Wide tables become keyboard-scrollable when — and only when — they
   // actually overflow. See lib/scrollableRegions.ts for why this is measured
@@ -193,18 +269,30 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="no-print sticky top-0 z-40 border-b border-hairline bg-sheet/95 backdrop-blur">
           <div className="flex h-11 items-center gap-3 px-4 sm:px-6">
-            <Link to="/" className="flex items-baseline gap-1.5 lg:hidden">
+            {/* Hamburger — the only way to the 53 tools below `lg`. 44px square
+                so it clears the touch-target floor. */}
+            <button type="button" onClick={() => setNav(true)}
+              aria-label="Open navigation" aria-expanded={nav} aria-controls="nav-drawer"
+              className="-ml-1.5 flex h-11 w-11 flex-none items-center justify-center rounded-md text-muted hover:bg-brand-tint hover:text-brand lg:hidden">
+              <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></svg>
+            </button>
+            <Link to="/" className="hidden min-h-[24px] items-baseline gap-1.5 sm:flex lg:hidden">
               <span className="text-[13px] font-extrabold tracking-[.14em] text-ink">{BRAND_MARK}</span>
             </Link>
-            <div className="flex min-w-0 items-center gap-2 text-[11px] text-faint">
-              <Link to="/" className="hover:text-brand">Workbench</Link>
+            {/* `min-w-0 flex-1` is what lets the breadcrumb TRUNCATE. It had
+                `min-w-0` but no `flex-1`, so it never shrank and the search pill
+                painted over it — a measured 40px overlap at 390px. The action
+                group is `flex-none` for the same reason, from the other side. */}
+            <div className="flex min-w-0 flex-1 items-center gap-2 text-[11px] text-faint">
+              <Link to="/" className="inline-flex min-h-[24px] flex-none items-center hover:text-brand">Workbench</Link>
               {tool && (<>
-                <span>/</span><span>{tool.groupLabel}</span>
+                <span className="hidden sm:inline">/</span>
+                <span className="hidden sm:inline">{tool.groupLabel}</span>
                 <span>/</span><span className="truncate font-semibold text-ink">{tool.name}</span>
                 <span className="ml-1 hidden rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[9.5px] font-medium text-brand sm:inline">{tool.sub}</span>
               </>)}
             </div>
-            <div className="ml-auto flex items-center gap-2.5">
+            <div className="ml-auto flex flex-none items-center gap-2.5">
             <button type="button" onClick={() => setPalette(true)}
               className="flex items-center gap-2 rounded-md border border-field-line bg-field px-2.5 py-1 text-xs text-faint hover:border-brand-hover hover:text-brand">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
@@ -238,6 +326,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
         <SiteFooter />
       </div>
+      <NavDrawer open={nav} onClose={() => setNav(false)} onOpenPalette={() => setPalette(true)} />
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
     </div>
   )

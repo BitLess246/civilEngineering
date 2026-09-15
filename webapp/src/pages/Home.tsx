@@ -57,10 +57,21 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
 
   const searchBox = (big: boolean) => (
     <button type="button" onClick={() => setPalette(true)}
-      className={`flex items-center gap-2.5 rounded-lg border border-white/20 bg-sheet/[.07] text-left hover:border-rail-accent ${big ? 'flex-1 px-4 py-3' : 'w-[220px] rounded-md border-white/15 bg-sheet/5 px-2.5 py-1.5'}`}>
-      <svg viewBox="0 0 24 24" width={big ? 16 : 13} height={big ? 16 : 13} fill="none" stroke="#7d8ea3" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
-      <span className={`flex-1 text-rail-muted ${big ? 'text-sm' : 'text-xs'}`}>{big ? `Search ${toolCount} tools — try "footing", "W-shape", "seismic"…` : 'Find a tool…'}</span>
-      <span className="rounded border border-white/15 px-1 py-px font-mono text-[10px] text-rail-muted">⌘K</span>
+      className={`flex items-center gap-2.5 rounded-lg border border-white/20 bg-sheet/[.07] text-left hover:border-rail-accent ${big ? 'w-full px-4 py-3 sm:flex-1' : 'w-[220px] rounded-md border-white/15 bg-sheet/5 px-2.5 py-1.5'}`}>
+      <svg className="flex-none" viewBox="0 0 24 24" width={big ? 16 : 13} height={big ? 16 : 13} fill="none" stroke="#7d8ea3" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
+      {/* The examples are the point of the long label — they teach what the
+          palette accepts — but at 390px they wrapped it to four lines and
+          pushed the row 60px tall. Below `sm` the prompt alone; the examples
+          come back where there is a line to hold them. */}
+      <span className={`min-w-0 flex-1 truncate text-rail-muted ${big ? 'text-sm' : 'text-xs'}`}>
+        {big ? (
+          <>
+            <span className="sm:hidden">Search {toolCount} tools…</span>
+            <span className="hidden sm:inline">Search {toolCount} tools — try “footing”, “W-shape”, “seismic”…</span>
+          </>
+        ) : 'Find a tool…'}
+      </span>
+      <span className="hidden flex-none rounded border border-white/15 px-1 py-px font-mono text-[10px] text-rail-muted sm:inline">⌘K</span>
     </button>
   )
 
@@ -73,7 +84,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       {/* Top bar */}
       <nav className="no-print sticky top-0 z-50 border-b border-white/10 bg-rail">
         <div className="mx-auto flex h-[52px] max-w-[1200px] items-center gap-5 px-6">
-          <Link to="/" className="flex items-baseline gap-2">
+          <Link to="/" className="flex min-h-[24px] items-baseline gap-2 py-1">
             <span className="text-[15px] font-extrabold tracking-[.14em] text-rail-ink">{BRAND_MARK}</span>
             <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-rail-muted">{BRAND_TAIL}</span>
           </Link>
@@ -100,9 +111,9 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           <p className="font-mono text-[11px] font-medium tracking-[.2em] text-rail-accent">NSCP 2015 · ACI 318-14 · AISC 360-16</p>
           <h1 className="mt-3.5 max-w-[720px] text-4xl font-extrabold leading-[1.04] tracking-tight text-rail-ink sm:text-[52px]">The structural workbench for Philippine practice.</h1>
           <p className="mt-4 max-w-[600px] text-base leading-relaxed text-rail-muted">{toolCount} code-checked calculators, 3D analysis and quantity take-off on a typed engine — every result traced to its clause, every report ready to sign.</p>
-          <div className="mt-7 flex max-w-[640px] items-center gap-2.5">
+          <div className="mt-7 flex max-w-[640px] flex-col items-stretch gap-2.5 sm:flex-row sm:items-center">
             {searchBox(true)}
-            <Link to="/model" className="whitespace-nowrap rounded-lg bg-brand px-5 py-3.5 text-sm font-bold text-on-solid hover:bg-brand-hover">Open workbench</Link>
+            <Link to="/model" className="whitespace-nowrap rounded-lg bg-brand px-5 py-3.5 text-center text-sm font-bold text-on-solid hover:bg-brand-hover">Open workbench</Link>
           </div>
           <div className="mt-6 flex flex-wrap gap-2">
             {CHIPS.map((c) => (

@@ -245,7 +245,7 @@ export default function SlabDesign() {
 
           <Card title="Detailing"
             hint={
-              <label className="no-print flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-muted">
+              <label className="no-print flex min-h-[24px] cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-muted">
                 <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
                   className="h-3.5 w-3.5 accent-brand" />
                 Auto-select bar ⌀ and spacing

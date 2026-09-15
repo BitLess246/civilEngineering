@@ -50,7 +50,7 @@ export function PasswordField(props: Omit<Parameters<typeof TextField>[0], 'type
     <div className="relative">
       <button
         type="button" onClick={() => setShow((v) => !v)}
-        className="absolute right-0 top-0 z-10 text-[11px] font-medium text-muted hover:text-brand"
+        className="absolute -top-0.5 right-0 z-10 inline-flex min-h-[24px] items-center px-1 text-[11px] font-medium text-muted hover:text-brand"
         aria-label={show ? 'Hide password' : 'Show password'}
       >
         {show ? 'Hide' : 'Show'}

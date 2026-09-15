@@ -190,7 +190,7 @@ export function SoilLayerPicker({
                     onClick={() => { onApply(fill); setApplied(`${bh.name} · ${layer.name}`); setOpen(false) }}
                     className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
                       resolved.length
-                        ? 'bg-brand text-white hover:bg-brand'
+                        ? 'bg-brand text-on-solid hover:bg-brand-hover'
                         : 'cursor-not-allowed bg-slate-200 text-muted'
                     }`}>
                     {resolved.length ? 'Use this layer' : 'nothing to apply'}
