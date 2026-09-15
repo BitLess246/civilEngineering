@@ -24,7 +24,15 @@ import type { SolutionStep } from './solution'
 import { createSheet, autoTable, MUTED } from './pdfKit'
 import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
 
-export interface CalcCheckRow { name: string; ratio: number; ok: boolean }
+/**
+ * One check row on the generated PDF.
+ *
+ * `ratio: null` = the check was NOT EVALUATED. The PDF is the artifact that
+ * leaves the building with an engineer's name on it, so the third state has to
+ * survive into it — a sheet that prints only the checks that happened, with no
+ * mark where one did not, is the failure this type exists to prevent.
+ */
+export interface CalcCheckRow { name: string; ratio: number | null; ok: boolean; note?: string }
 
 export interface CalcPdfInput {
   /** Element name — 'Rectangular RC Beam'. Heads the sheet and the file name. */
@@ -83,7 +91,7 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
         ...s.tableTheme([1]),
         startY: s.y,
         head: [['Check', 'Ratio', 'Status']],
-        body: checks.map((c) => [c.name, c.ratio.toFixed(2), c.ok ? 'PASS' : 'FAIL']),
+        body: checks.map((c) => [c.name, c.ratio === null ? '\u2014' : c.ratio.toFixed(2), c.ratio === null ? 'NOT CHECKED' : c.ok ? 'PASS' : 'FAIL']),
         columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right', font: 'mono', cellWidth: 18 }, 2: { halign: 'right', cellWidth: 18 } },
       })
       s.y = (s.lastY() ?? s.y) + 4

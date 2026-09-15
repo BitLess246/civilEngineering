@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState, type VerdictCheck } from '../components/calc'
 import { ModelMemberResults } from '../components/ModelMemberResults'
 import type { MemberLoadRequest } from '../lib/modelMemberResults'
 import { initialLetterhead } from '../lib/letterhead'
@@ -214,12 +214,24 @@ export default function BeamDesign() {
   // Mu/φMn,max (true section utilization while singly reinforced), bar-fit is
   // required-over-provided clear spacing, shear Vu/φVc while no stirrups are
   // demanded — all existing outputs, no new calculation.
+  // `allOK` speaks only for the checks that RAN. Serviceability is declared in
+  // `checks` whether or not it could be evaluated (§424.2 applies to the beam
+  // regardless of whether the user supplied a span), so an unevaluated check
+  // qualifies the headline as `DESIGN OK (3 of 4 checks)` and prints under
+  // Assumptions & Scope instead of vanishing. Before this it was absent from
+  // both, and `!deflection ||` made a missing check indistinguishable from a
+  // passing one — on a sheet an engineer signs.
   const allOK = !!r && sectionOK(r) && (!deflection || (deflection.liveOK && deflection.totalOK))
   const cap = r ? beamProvidedCapacities(fd, r) : null
-  const checks = r && cap ? [
+  const checks: VerdictCheck[] = r && cap ? [
     { name: 'Flexure Mu/φMn', ratio: demand.Mu / cap.phiMn },
     { name: 'Shear Vu/φVn', ratio: demand.Vu / cap.phiVn },
     { name: `Bar spacing (${r.layers.length} layer${r.layers.length > 1 ? 's' : ''})`, ratio: r.sMinClear / Math.max(r.sClear, 1e-9) },
+    deflection
+      // §409.3.1.1: the computed check is waived when h ≥ h_min, so a waived
+      // beam is reported at its live-deflection ratio and still passes.
+      ? { name: 'Serviceability δ/limit', ratio: deflection.deltaL / Math.max(deflection.limitL360, 1e-9) }
+      : { name: 'Serviceability δ/limit', ratio: null, note: 'enter span and service loads to run §424.2' },
   ] : []
 
   // One payload for both report paths — the printed calc sheet and the
@@ -238,7 +250,9 @@ export default function BeamDesign() {
       { label: 'Stirrups', value: r.sAdopt > 0 ? `⌀${f.stirrupDia} @${f0(r.sAdopt)}` : REGION[r.region] },
       { label: 'Eff. depth d', value: f0(r.d), unit: 'mm' },
     ],
-    checks: checks.map((c) => ({ ...c, ok: c.ratio <= 1.0001 })),
+    // `c.ratio !== null &&` is load-bearing, not defensive: `null <= 1.0001`
+    // is TRUE in JS, so without it an unevaluated check prints PASS.
+    checks: checks.map((c) => ({ ...c, ok: c.ratio !== null && c.ratio <= 1.0001 })),
     data: [
       ['Section b × h', `${f.b} × ${f.h} mm`], ['Clear cover', `${f.cover} mm`],
       ["Concrete f'c", `${f.fc} MPa`], ['Steel fy / fyt', `${f.fy} / ${f.fyt} MPa`],
