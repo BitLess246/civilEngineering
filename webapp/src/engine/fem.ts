@@ -1,3 +1,7 @@
+import {
+  type SparseSym, sparseGet, sparseNeighbors, sparseIsSymmetric, sparseToDense,
+} from './sparseSym'
+
 // ─────────────────────────────────────────────────────────────────────────
 // Shared FEM core — Phase 2 of the 3D roadmap. One linear-algebra +
 // quadrature toolbox consumed by the beam solver (beamAnalysis), the 2D
@@ -227,7 +231,17 @@ export function skylineFactor(A: number[][], perm?: number[]): SkylineFactor | n
     const base = diag[j] - j          // v[base + i] is a(i,j)
     for (let i = j - height[j]; i <= j; i++) v[base + i] = A[p[i]][p[j]]
   }
+  return ldltSkyline(n, height, diag, v, p)
+}
 
+/**
+ * The numeric half of `skylineFactor`, shared by the dense and sparse entry
+ * points so Bathe's algorithm exists once. `v` is consumed in place and becomes
+ * the factor.
+ */
+function ldltSkyline(
+  n: number, height: number[], diag: number[], v: number[], p: number[],
+): SkylineFactor | null {
   // Bathe's column-wise LDLᵀ. For each column j the entries above the
   // diagonal first become g(i,j) = a(i,j) − Σ L(k,i)·g(k,j), then are divided
   // by their own pivots to become L(i,j); the diagonal takes what is left.
@@ -297,4 +311,97 @@ export function symFactor(A: number[][]): SymFactor | null {
 /** Solve a system factored by `symFactor`, whichever way it went. */
 export function symSolve(f: SymFactor, b: number[]): number[] {
   return f.kind === 'skyline' ? skylineSolve(f, b) : luSolve(f, b)
+}
+
+// ── The same factorisation, fed from sparse storage ───────────────────────
+//
+// The dense entry points above stay exactly as they were; these read the same
+// matrix out of `SparseSym` so a caller never has to materialise nf² doubles
+// just to hand the factor its entries. Both land in `ldltSkyline`, so there is
+// ONE implementation of Bathe's algorithm and the two paths cannot drift.
+//
+// The column heights are the part that had to change, not just be re-typed.
+// The dense version walks every row above the diagonal looking for the first
+// non-zero — O(n²) reads, which at nf = 8 000 is 64 M probes that are almost
+// all zero. From the pattern the same answer is a fold over the entries that
+// exist: for column j the topmost stored row is the smallest permuted position
+// among the non-zeros of that row, so the whole profile costs O(nnz).
+
+/** `rcmOrder` over a sparse pattern. Same traversal, same output ordering. */
+export function rcmOrderSparse(A: SparseSym): number[] {
+  const n = A.n
+  const adj: number[][] = Array.from({ length: n }, (_, i) => sparseNeighbors(A, i))
+  const deg = adj.map((a) => a.length)
+  const seen = new Array<boolean>(n).fill(false)
+  const order: number[] = []
+  while (order.length < n) {
+    let start = -1
+    for (let i = 0; i < n; i++) if (!seen[i] && (start < 0 || deg[i] < deg[start])) start = i
+    if (start < 0) break
+    seen[start] = true
+    const q = [start]
+    for (let h = 0; h < q.length; h++) {
+      const v = q[h]
+      order.push(v)
+      const nb = adj[v].filter((w) => !seen[w]).sort((a, b) => deg[a] - deg[b])
+      for (const w of nb) { seen[w] = true; q.push(w) }
+    }
+  }
+  return order.reverse()
+}
+
+/** `skylineFactor` over sparse storage. */
+export function skylineFactorSparse(A: SparseSym, perm?: number[]): SkylineFactor | null {
+  const n = A.n
+  const p = perm ?? Array.from({ length: n }, (_, i) => i)
+  if (n === 0) return { kind: 'skyline', n: 0, height: [], diag: [], v: [], perm: [] }
+
+  // inverse permutation: where original index r ends up
+  const pos = new Array<number>(n).fill(0)
+  for (let k = 0; k < n; k++) pos[p[k]] = k
+
+  // Profile from the pattern, O(nnz): the topmost stored row of column j is the
+  // smallest permuted position among that column's non-zeros at or above j.
+  const height = new Array<number>(n).fill(0)
+  const diag = new Array<number>(n).fill(0)
+  let size = 0
+  for (let j = 0; j < n; j++) {
+    let top = j
+    // A is symmetric, so the non-zero ROWS of column p[j] are the non-zero
+    // COLUMNS of row p[j] — which is the map we have.
+    for (const [r, val] of A.rows[p[j]]) {
+      if (val === 0) continue
+      const k = pos[r]
+      if (k < top) top = k
+    }
+    height[j] = j - top
+    size += height[j] + 1
+    diag[j] = size - 1
+  }
+
+  const v = new Array<number>(size).fill(0)
+  for (let j = 0; j < n; j++) {
+    const base = diag[j] - j
+    for (let i = j - height[j]; i <= j; i++) v[base + i] = sparseGet(A, p[i], p[j])
+  }
+  return ldltSkyline(n, height, diag, v, p)
+}
+
+/**
+ * `symFactor` over sparse storage: skyline under RCM when the matrix is
+ * symmetric and takes, dense pivoting LU when it does not.
+ *
+ * The fallback materialises the dense form, which is the very thing this path
+ * avoids — but it is reached only when the free block is NOT positive definite,
+ * i.e. the structure has a mechanism, and every caller turns that into a
+ * reported failure rather than a solve.
+ */
+export function symFactorSparse(A: SparseSym): SymFactor | null {
+  if (A.n === 0) return { kind: 'skyline', n: 0, height: [], diag: [], v: [], perm: [] }
+  if (sparseIsSymmetric(A)) {
+    const sky = skylineFactorSparse(A, rcmOrderSparse(A))
+    if (sky) return sky
+  }
+  const lu = luFactor(sparseToDense(A))
+  return lu ? { ...lu, kind: 'lu' } : null
 }
