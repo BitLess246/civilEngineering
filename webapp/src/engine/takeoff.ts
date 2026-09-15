@@ -25,6 +25,8 @@ import { concreteMaterials, type ConcreteClass, type ConcreteMaterials } from '.
 import { shapeByName } from './aiscSections'
 import { buildStructureCages } from './cageBuilder'
 import { cutLength, type RebarRole } from './rebarModel'
+import { designSlabOpening, slabOpeningBundles } from './slabOpening'
+import { designWallDetail } from './wallDetail'
 
 const STEEL_DENSITY = 7850            // kg/m³
 const BAR_LENGTH = 6                  // m, commercial length
@@ -326,12 +328,123 @@ export function estimateTakeoff(
     })
   }
 
-  // ── Walls (concrete + formwork; in-plane reinforcement in the schedule) ──
+  // ── Opening trimmer bars ───────────────────────────────────────────────
+  //
+  // Phase 6b. The trimmer detail has been on the drawings since #598 and the
+  // BOM has never counted it: an opening REMOVES mat bars and the detail puts
+  // back an equal number each side, plus a diagonal at every re-entrant
+  // corner (§408.5.4.2, §424.3). Estimating from the drawings gave one answer
+  // and from this take-off another, and the steel was bought against the
+  // second.
+  //
+  // Read from `slabOpeningBundles` — the SAME derivation the sheet set uses
+  // (#600) — rather than re-walking `plate.openings` here. Two walks of the
+  // same data is how the BOM and the drawings drift apart.
+  //
+  // The bars the opening interrupts are NOT deducted. The mat above is
+  // quantified strip by strip from the DDM, which knows nothing about the
+  // hole; deducting here would need the interrupted length, and the detail's
+  // own count is an upper bound on bars, not a length. Over-measuring a slab
+  // mat by the area of its openings is the conservative side and is what an
+  // estimator does by hand — stated here so it is a decision and not an
+  // oversight.
+  for (const b of slabOpeningBundles(model, design)) {
+    const r = designSlabOpening(b.detail)
+    const tag = `Slab ${b.plate}`
+    const dia = b.detail.barDia
+    let openingKg = 0
+    for (const d of [r.x, r.y]) {
+      openingKg += add(tag, `Trimmer ${d.dir.toUpperCase()} (${b.opening})`, dia, d.total, d.barLength / 1000)
+    }
+    openingKg += add(tag, `Corner diagonal (${b.opening})`, r.diagonal.dia, r.diagonal.total, r.diagonal.length / 1000)
+    // Onto the panel's own row, because that is where it is cast and where an
+    // estimator looks for it.
+    const row = byElement.find((e) => e.kind === 'Slab' && e.id === b.plate)
+    if (row) row.steelKg += openingKg
+  }
+
+  // ── Walls — concrete, formwork AND the curtains ────────────────────────
+  //
+  // Phase 6b. `steelKg: 0` with the comment "in-plane reinforcement in the
+  // schedule" was true of the schedule and false of the bill: a shear wall's
+  // curtains are the largest single item of reinforcement in a core, and the
+  // BOM read ZERO for every one of them.
+  //
+  // The counts follow the same rule the trimmer detail uses (#598): the mat is
+  // set out from one face and the bar at each end is real, so a run of length
+  // L at spacing s carries ⌊L/s⌋ + 1 bars, not L/s. Horizontals run the wall
+  // LENGTH and step up its height; verticals run the height and step along the
+  // length. Doubled when the design calls for two curtains (§411.7.2.3).
   for (const w of design.walls) {
     const t = w.thickness / 1000
+    const tag = `Wall ${w.id}`
+    const curtains = w.design.twoCurtains ? 2 : 1
+    const barsAlong = (run: number, spacing: number) =>
+      spacing > 0 ? (Math.floor((run * 1000) / spacing) + 1) * curtains : 0
+    let steelKg = 0
+    steelKg += add(tag, 'Horizontal curtain', w.barDia, barsAlong(w.hw, w.design.horiz.spacing), w.lw)
+    steelKg += add(tag, 'Vertical curtain', w.barDia, barsAlong(w.lw, w.design.vert.spacing), w.hw)
     byElement.push({
-      kind: 'Wall', id: w.id, concreteM3: w.lw * w.hw * t, formworkM2: 2 * w.lw * w.hw, steelKg: 0, intersections: 0,
+      kind: 'Wall', id: w.id, concreteM3: w.lw * w.hw * t, formworkM2: 2 * w.lw * w.hw, steelKg,
+      // Every horizontal crosses every vertical, per curtain.
+      intersections: barsAlong(w.hw, w.design.horiz.spacing) * barsAlong(w.lw, w.design.vert.spacing) / Math.max(1, curtains),
     })
+  }
+
+  // ── Wall corner bars ───────────────────────────────────────────────────
+  //
+  // Phase 6b, the last of it. Ending the horizontal curtains at a corner face
+  // is what OPENS the corner under load (#599), so every corner carries an L
+  // bar continuing each horizontal round it, with each leg a Class B lap
+  // (§425.5.2). The detail sheets have drawn that since #599 and the bill
+  // never had it, for a reason worth writing down: `wallDetailBundles` pools
+  // walls by TYPE — one typical sheet per thickness/spacing/bar — so it never
+  // asks which junctions the model actually has. A count needs the geometry,
+  // not another sum over the same rows.
+  //
+  // Two walls form a corner when their supporting members share a node and are
+  // NOT collinear. Collinear neighbours are one wall in two panels: the
+  // curtains run straight through and there is nothing to turn.
+  const wallsById = new Map(design.walls.map((w) => [w.id, w]))
+  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
+  const memById = new Map(model.members.map((m) => [m.id, m]))
+  const dirOf = (memberId: string): { at: Set<string>; u: [number, number, number] } | null => {
+    const m = memById.get(memberId); if (!m) return null
+    const a = nodeById.get(m.i), b = nodeById.get(m.j); if (!a || !b) return null
+    const v: [number, number, number] = [b.x - a.x, b.y - a.y, b.z - a.z]
+    const L = Math.hypot(...v); if (!(L > 1e-9)) return null
+    return { at: new Set([m.i, m.j]), u: [v[0] / L, v[1] / L, v[2] / L] }
+  }
+  const corners = new Map<string, number>()               // wall id → corners it turns
+  const wallList = (model.walls ?? []).filter((w) => w.shearWall && wallsById.has(w.id))
+  for (let a = 0; a < wallList.length; a++) {
+    for (let b = a + 1; b < wallList.length; b++) {
+      const da = dirOf(wallList[a].member), db = dirOf(wallList[b].member)
+      if (!da || !db) continue
+      const shares = [...da.at].some((n) => db.at.has(n))
+      if (!shares) continue
+      // |cos| near 1 is collinear — the same wall carried on two members.
+      const dot = Math.abs(da.u[0] * db.u[0] + da.u[1] * db.u[1] + da.u[2] * db.u[2])
+      if (dot > 0.99) continue
+      for (const id of [wallList[a].id, wallList[b].id]) corners.set(id, (corners.get(id) ?? 0) + 1)
+    }
+  }
+  for (const [wallId, n] of corners) {
+    const w = wallsById.get(wallId)!
+    const det = designWallDetail({
+      mark: wallId, t: w.thickness, barDia: w.barDia, spacing: Math.round(w.design.horiz.spacing),
+      vertDia: w.barDia, vertSpacing: Math.round(w.design.vert.spacing),
+      cover: 20, fc: w.fc, fy: w.fy, Vu: w.Vu, lw: w.lw, surface: 'roughened',
+    })
+    const curtains = w.design.twoCurtains ? 2 : 1
+    const perCorner = (Math.floor((w.hw * 1000) / w.design.horiz.spacing) + 1) * curtains
+    // ONE bar per corner is shared by the two walls that meet there, so each
+    // wall is charged half of it. Counting it on both would buy the corner
+    // twice, which is the obvious way to get this wrong.
+    const kg = add(`Wall ${wallId}`, 'Corner bar (L)', w.barDia,
+      Math.round((perCorner * n) / 2), (2 * det.cornerLeg) / 1000)
+    const row = byElement.find((e) => e.kind === 'Wall' && e.id === wallId)
+    if (row) row.steelKg += kg
   }
 
   // ── Commercial steel by Ø: continuous bars spliced, ties nested ──

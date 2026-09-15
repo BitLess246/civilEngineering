@@ -39,7 +39,9 @@
 // Units: panel geometry and opening m; bar sizes, spacings and thickness mm;
 // stresses MPa.
 // ─────────────────────────────────────────────────────────────────────────
-import type { SlabOpening } from './model'
+import type { SlabOpening, StructuralModel, RectSection } from './model'
+import type { StructureDesign } from './pipeline'
+import type { SlabDirResult } from './slabDDM'
 import { calcDevLength } from './devLength'
 import type { PlanPrimitive, Drawing } from './planRenderer'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
@@ -569,3 +571,82 @@ export function buildSlabOpeningDetail(i: SlabOpeningInput, opts: SlabOpeningDet
 // Re-exported so the existing callers and tests keep their import site; the
 // implementation now lives in `detailSheet` as a single copy.
 export { GLYPH_W, wrapNote }
+
+// ── which openings exist, and the mat each interrupts ──────────────────────
+
+export interface SlabOpeningBundle { mark: string; plate: string; opening: string; detail: SlabOpeningInput }
+
+/**
+ * The TIGHTEST mat spacing designed anywhere in one direction of a panel, mm.
+ *
+ * The bars an opening interrupts are the ones at the opening's own location,
+ * and the DDM designs a different spacing for every strip and every critical
+ * section. Detailing off the densest of them replaces at least as many bars as
+ * the hole actually cut, whichever strip it landed in — the opposite choice
+ * would leave the panel short wherever the mat is tighter than the average.
+ */
+function tightestSpacing(d: SlabDirResult): number {
+  const all = d.locations.flatMap((l) => [l.column.spacing, l.middle.spacing]).filter((s) => s > 0 && Number.isFinite(s))
+  return all.length ? Math.min(...all) : 200
+}
+
+/**
+ * One trimmer-bar detail per opening, from the designed slab panel it is cast
+ * in (`Plate.openings` × `design.slabs`).
+ *
+ * Openings on a panel the pipeline did not design as a RC slab — a timber deck,
+ * a wall, or a panel carrying no area load — are skipped rather than detailed
+ * against a guessed mat: the whole rule is "equal in number and size to those
+ * interrupted", so without a designed mat there is nothing to be equal to.
+ *
+ * Panel marks follow the framing plan's own rule (pooled by thickness × span
+ * type, S1, S2 …) so the sheet and the plan call the same panel the same thing.
+ */
+export function slabOpeningBundles(model: StructuralModel, design: StructureDesign): SlabOpeningBundle[] {
+  const rowByPlate = new Map(design.slabs.map((s) => [s.plate, s]))
+  const secById = new Map(model.sections.map((s) => [s.id, s]))
+  // f'c / fy from a column framing into the panel — the same source the
+  // pipeline used to design the mat.
+  const concreteAt = (node: string): RectSection | undefined => {
+    const mem = model.members.find((m) => m.i === node || m.j === node)
+    return mem ? (secById.get(mem.section) as RectSection | undefined) : undefined
+  }
+
+  // panel marks, pooled exactly as the plan pools them
+  const markByKey = new Map<string, string>()
+  const markFor = (thk: number, twoWay: boolean): string => {
+    const key = `${Math.round(thk)}|${twoWay ? 'Two-way' : 'One-way'}`
+    let mk = markByKey.get(key)
+    if (!mk) { mk = `S${markByKey.size + 1}`; markByKey.set(key, mk) }
+    return mk
+  }
+
+  const out: SlabOpeningBundle[] = []
+  for (const p of model.plates) {
+    if (p.role !== 'slab') continue
+    const row = rowByPlate.get(p.id)
+    // Marked for EVERY slab panel, not only the ones with openings, so the
+    // numbering keeps step with the plan's schedule.
+    const long = Math.max(row?.lx ?? 1, row?.ly ?? 1), short = Math.max(Math.min(row?.lx ?? 1, row?.ly ?? 1), 1e-9)
+    const mark = markFor(p.thickness, long / short <= 2)
+    if (!p.openings?.length || !row) continue
+    const sec = concreteAt(p.corners[0])
+    for (const o of p.openings) {
+      out.push({
+        mark: `${mark}/${o.id}`, plate: p.id, opening: o.id,
+        detail: {
+          lx: row.lx, ly: row.ly, h: row.design.h, opening: o,
+          barDia: row.barDia,
+          spacingX: tightestSpacing(row.design.x),
+          spacingY: tightestSpacing(row.design.y),
+          dx: row.design.x.d, dy: row.design.y.d,
+          cover: 20,                                   // the pipeline's slab cover
+          fc: sec?.fc, fy: sec?.fy,
+          colSize: sec ? Math.min(sec.b, sec.h ?? sec.b) : undefined,
+          mark: `${mark}/${o.id}`,
+        },
+      })
+    }
+  }
+  return out
+}
