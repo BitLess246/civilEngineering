@@ -102,7 +102,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           <p className="mt-4 max-w-[600px] text-base leading-relaxed text-rail-muted">{toolCount} code-checked calculators, 3D analysis and quantity take-off on a typed engine — every result traced to its clause, every report ready to sign.</p>
           <div className="mt-7 flex max-w-[640px] items-center gap-2.5">
             {searchBox(true)}
-            <Link to="/model" className="whitespace-nowrap rounded-lg bg-brand px-5 py-3.5 text-sm font-bold text-on-solid hover:bg-brand">Open workbench</Link>
+            <Link to="/model" className="whitespace-nowrap rounded-lg bg-brand px-5 py-3.5 text-sm font-bold text-on-solid hover:bg-brand-hover">Open workbench</Link>
           </div>
           <div className="mt-6 flex flex-wrap gap-2">
             {CHIPS.map((c) => (
@@ -275,10 +275,10 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
               to prevent, and a wrong button on the marketing page is worse
               than a one-frame gap before the right one. */}
           {!loading && (user ? (
-            <Link to="/model" className="whitespace-nowrap rounded-md bg-brand px-5 py-3 text-[13px] font-bold text-on-solid hover:bg-brand">Open the workbench</Link>
+            <Link to="/model" className="whitespace-nowrap rounded-md bg-brand px-5 py-3 text-[13px] font-bold text-on-solid hover:bg-brand-hover">Open the workbench</Link>
           ) : (
             <button onClick={() => onAuth('signup')}
-              className="whitespace-nowrap rounded-md bg-brand px-5 py-3 text-[13px] font-bold text-on-solid hover:bg-brand">Create free account</button>
+              className="whitespace-nowrap rounded-md bg-brand px-5 py-3 text-[13px] font-bold text-on-solid hover:bg-brand-hover">Create free account</button>
           ))}
         </div>
       </section>

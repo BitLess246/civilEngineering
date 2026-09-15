@@ -316,7 +316,7 @@ export default function SoilInvestigation() {
           <h2 className="text-[1.05rem] font-bold text-brand">Start</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             <button onClick={() => api.newInvestigation()}
-              className="rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-on-solid hover:bg-brand">
+              className="rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-on-solid hover:bg-brand-hover">
               New investigation
             </button>
             <button onClick={api.loadSample}
@@ -381,7 +381,7 @@ export default function SoilInvestigation() {
               preparedBy: inv.meta.engineer,
             }))
           }}
-          className="rounded-md bg-brand px-2.5 py-1 text-[12px] font-semibold text-on-solid hover:bg-brand"
+          className="rounded-md bg-brand px-2.5 py-1 text-[12px] font-semibold text-on-solid hover:bg-brand-hover"
           data-tour="report-button">
           Report PDF
         </button>
@@ -874,7 +874,7 @@ function SyncPanel() {
             Check connection
           </button>
           <button onClick={() => { setOpen(true); void s.sync() }} disabled={s.busy || s.availability.kind !== 'ready'}
-            className="rounded-md bg-brand px-2.5 py-1 text-[12px] font-semibold text-on-solid hover:bg-brand disabled:opacity-40">
+            className="rounded-md bg-brand px-2.5 py-1 text-[12px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-40">
             {s.busy ? 'Working…' : 'Sync now'}
           </button>
         </div>
@@ -1954,7 +1954,7 @@ function SampleClassificationCard({
           </p>
         ) : (
           <button onClick={() => onApply(layer.id, symbol)}
-            className="mt-2 rounded-md bg-brand px-2.5 py-1 text-[11px] font-semibold text-on-solid hover:bg-brand">
+            className="mt-2 rounded-md bg-brand px-2.5 py-1 text-[11px] font-semibold text-on-solid hover:bg-brand-hover">
             {layer.symbol
               ? `Replace ${layer.symbol} with ${symbol} on “${layer.name}”`
               : `Apply ${symbol} to “${layer.name}”`}

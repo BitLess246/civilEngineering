@@ -40,7 +40,7 @@ export function AccountMenu({ dark }: { dark?: boolean }) {
     ? 'px-2 py-1.5 text-[12.5px] font-semibold text-rail-muted hover:text-white'
     : 'px-2 py-1 text-[12px] font-semibold text-muted hover:text-brand'
   const cta = dark
-    ? 'rounded-md bg-brand px-3.5 py-2 text-[12.5px] font-semibold text-on-solid hover:bg-brand'
+    ? 'rounded-md bg-brand px-3.5 py-2 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover'
     : 'rounded-md bg-brand px-3 py-1.5 text-[12px] font-semibold text-on-solid hover:bg-brand-hover'
 
   // Nothing to offer when the deployment has no auth configured — showing a

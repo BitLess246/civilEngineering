@@ -4564,7 +4564,7 @@ export default function ModelSpace() {
           <div className="no-print flex flex-wrap items-center gap-1.5 border-b border-slate-200" data-tour="results-tabs">
             {([['schedules', 'Schedules'], ['boq', 'Bill of Quantities'], ['schedule', 'Construction Schedule']] as const).map(([id, label]) => (
               <button key={id} type="button" onClick={() => setResultsTab(id)}
-                className={`rounded-t-md px-3.5 py-2 text-[13px] font-semibold ${resultsTab === id ? 'border-b-2 border-brand text-brand' : 'text-muted hover:text-brand'}`}>
+                className={`rounded-t-md px-3.5 py-2 text-[13px] font-semibold ${resultsTab === id ? 'border-b-2 border-brand text-brand' : 'text-muted hover:text-brand-hover'}`}>
                 {label}
               </button>
             ))}
