@@ -28,20 +28,20 @@ export function SiteFooter() {
 
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Product</p>
-          <ul className="mt-2 space-y-1 text-[12.5px]">
-            <li><Link to="/pricing" className="text-slate-600 hover:text-brand">Plans and pricing</Link></li>
-            <li><Link to="/docs" className="text-slate-600 hover:text-brand">Documentation</Link></li>
-            <li><Link to="/validation" className="text-slate-600 hover:text-brand">Validation</Link></li>
+          <ul className="mt-2 space-y-0.5 text-[12.5px]">
+            <li><Link to="/pricing" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Plans and pricing</Link></li>
+            <li><Link to="/docs" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Documentation</Link></li>
+            <li><Link to="/validation" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Validation</Link></li>
           </ul>
         </div>
 
         <div>
           <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Legal</p>
-          <ul className="mt-2 space-y-1 text-[12.5px]">
-            <li><Link to="/terms" className="text-slate-600 hover:text-brand">Terms and Conditions</Link></li>
-            <li><Link to="/privacy" className="text-slate-600 hover:text-brand">Privacy Policy</Link></li>
-            <li><Link to="/refunds" className="text-slate-600 hover:text-brand">Refund Policy</Link></li>
-            <li><Link to="/contact" className="text-slate-600 hover:text-brand">Contact</Link></li>
+          <ul className="mt-2 space-y-0.5 text-[12.5px]">
+            <li><Link to="/terms" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Terms and Conditions</Link></li>
+            <li><Link to="/privacy" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Privacy Policy</Link></li>
+            <li><Link to="/refunds" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Refund Policy</Link></li>
+            <li><Link to="/contact" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Contact</Link></li>
           </ul>
         </div>
 
@@ -51,7 +51,7 @@ export function SiteFooter() {
             {SITE.legalName.trim() && <div className="font-semibold text-slate-700">{SITE.legalName}</div>}
             {addr.map((l) => <div key={l}>{l}</div>)}
             <div>
-              <a href={`mailto:${SITE.supportEmail}`} className="hover:text-brand">{SITE.supportEmail}</a>
+              <a href={`mailto:${SITE.supportEmail}`} className="inline-flex min-h-[24px] items-center hover:text-brand">{SITE.supportEmail}</a>
             </div>
           </address>
         </div>
