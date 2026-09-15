@@ -318,7 +318,11 @@ revisit the wildcard for. **E4** and **E5** closed in #737 — C003's evidence w
 restatement of the implementation and is now six properties checked against
 three wrong formulas, and `Cv1` now follows the 360-16 edition its own file
 header declares (a no-op on shipped numbers: no catalogue shape reaches the
-branch that changed). **S5** (no rate limiting, members never metered) is the
+branch that changed). **S7** closed in #753 — found while reviewing merged work rather than in the
+audit: `RequireAuth`'s `?embed=1` bypass was keyed on the query string alone, so
+the landing page's demo poster was a skeleton key to all 18 gated routes, past
+the plan gate and past `canRun` (the app's only trial-quota enforcement point).
+**S5** (no rate limiting, members never metered) is the
 one row still open, now ◐ partial after #738: `identify()` screens a token
 structurally before spending a round trip on it, so malformed garbage is no
 longer amplified 1:1 into Supabase — but a well-formed FORGED token still is

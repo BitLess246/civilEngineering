@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { isEmbedSearch } from '../lib/embed'
+import { isEmbedLocation } from '../lib/embed'
 import { useAuth } from '../lib/auth/authContext'
 import { usePlan } from '../lib/auth/usePlan'
 import { canRun } from '../lib/trialQuota'
@@ -23,14 +23,17 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const { loading, configured, access } = useAuth()
   const plan = usePlan()
   const loc = useLocation()
-  // ?embed=1 — the landing page's scaled-down Model Space, iframed as a demo
-  // poster. The poster carries its own lockdown (inert shell, no persistence,
-  // a generated demo frame — see `EMBED` in ModelSpace), so the gate steps
-  // aside: an anonymous visitor on the landing page must see the model, not a
-  // sign-in form rendered inside a marketing viewport. The door is public on
-  // purpose — the address /model?embed=1 IS the demo mode — and the workbench
-  // address without the flag keeps every check below.
-  if (isEmbedSearch(loc.search)) return <>{children}</>
+  // /model?embed=1 — the landing page's scaled-down Model Space, iframed as a
+  // demo poster. The poster carries its own lockdown (inert shell, no
+  // persistence, a generated demo frame — see `EMBED` in ModelSpace), so the
+  // gate steps aside: an anonymous visitor on the landing page must see the
+  // model, not a sign-in form rendered inside a marketing viewport.
+  //
+  // ROUTE AND FLAG, never the flag alone. That lockdown exists only in
+  // ModelSpace, so on the query string alone this would open every other gated
+  // route with nothing holding it back — and past `gateRoute` and `canRun`
+  // below, which is the only place the trial quota is enforced at all.
+  if (isEmbedLocation(loc)) return <>{children}</>
   if (!configured) return <>{children}</>
   if (loading) {
     return (

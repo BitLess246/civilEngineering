@@ -36,6 +36,38 @@ mechanism was established by reading, not observed.
 | R9 | `update()` is not a functional update | low | latent | ✅ #728 |
 | S6 | `guest-quota` CORS lets any site burn a visitor's trial | low | read | ✅ #735 |
 | E5 | `Cv1` uses the superseded AISC 360-10 form (conservative) | low | read | ✅ #737 |
+| S7 | `?embed=1` bypassed `RequireAuth` on every gated route | high | verified | ✅ #753 |
+
+**Found while reviewing merged work, not in the audit — S7, the embed skeleton
+key.** ✅ SHIPPED (#753). The landing page iframes Model Space as a demo poster
+at `/model?embed=1`, and `RequireAuth` steps aside for it so an anonymous
+visitor sees the model rather than a sign-in form. The bypass was keyed on the
+QUERY STRING alone:
+
+```ts
+if (isEmbedSearch(loc.search)) return <>{children}</>
+```
+
+`RequireAuth` guards 18 routes. Appending `?embed=1` opened the other 17 —
+`/soils`, `/frame`, `/truss`, `/load-path`, `/seismic-wizard`, five
+`/estimate/*`, seven `/schedule*` — to any anonymous visitor. Three things
+compounded: the lockdown that makes the bypass safe (inert shell, no
+persistence, viewport and walkthrough only) is `EMBED` in `ModelSpace.tsx` and
+is read nowhere else, so every other page rendered fully live; `gateRoute` sits
+below the bypass, so the plan paywall opened with it; and `canRun` sits below it
+too, and `RequireAuth` is the ONLY place the trial quota is enforced in the
+whole app, so the quota did not merely leak — it did not run.
+
+The test that was supposed to cover this asserted that `<RequireAuth>` *wraps*
+`/model` in `App.tsx`. True, and it stayed true while the gate yielded: it
+checked the gate was present, not that it held. It is replaced by a sweep that
+reads the gated routes OUT of `App.tsx` and asserts the predicate is false on
+every one but `/model`, so a route added later is covered the day it is added,
+with a guard that fails if the parse ever finds nothing.
+
+Not verified: whether Supabase RLS still protected user data on the pages that
+read it. If it did, the exposure was paywall-and-quota rather than data — but
+that was never the thing holding the door.
 
 **Found while deploying, not in the audit — R10, the double-charged arrival.**
 ✅ SHIPPED (#588). `guest-quota` called `consume_guest_trial` while the

@@ -6,7 +6,7 @@ import { useToolPrefs } from '../lib/useToolPrefs'
 import { visibleGroups } from '../lib/toolPrefs'
 import { CommandPalette } from './CommandPalette'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
-import { isEmbedSearch } from '../lib/embed'
+import { isEmbedLocation } from '../lib/embed'
 import { SiteFooter } from './SiteFooter'
 import { AccountMenu } from './AccountMenu'
 import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
@@ -153,7 +153,7 @@ export function AppShell({ children }: { children: ReactNode }) {
    * palette summoned over it answers a hotkey that was aimed at the page the
    * poster lives on. Both are the same rule: in embed the shell is scenery.
    */
-  const embed = useMemo(() => isEmbedSearch(search), [search])
+  const embed = useMemo(() => isEmbedLocation({ pathname, search }), [pathname, search])
   usePaletteHotkey(setPalette, !embed)
   const tool = useMemo(() => ALL_TOOLS.find((t) => t.to === pathname), [pathname])
 
