@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 551
+export const SOLVER_TEST_COUNT = 552
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -671,6 +671,10 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "sparse free block — scatter-add and connectivity pattern",
         "name": "nonzeros per row stay flat as the mesh grows, while dense storage squares"
+      },
+      {
+        "suite": "P-Δ past the dense-tangent ceiling",
+        "name": "skips the iteration and returns the FIRST-ORDER answer, labelled"
       }
     ]
   },

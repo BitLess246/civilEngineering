@@ -1,11 +1,20 @@
 import { describe, it, expect } from 'vitest'
-import { validateMesh, hasMeshErrors } from './meshValidation'
+import { validateMesh, hasMeshErrors, MESH_DOF_BUDGET } from './meshValidation'
+import { meshNodeBound } from './plateMesh'
 import { generateGridModel } from './modelBuilder'
 import { emptyModel, type RectSection, type StructuralModel } from './model'
 
 const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 
 const codes = (m: StructuralModel) => new Set(validateMesh(m).map((i) => i.code))
+
+/** n x n bays of 6 m, `storeys` storeys of 3 m, slabs on every floor. */
+const bays = (n: number, storeys: number) => generateGridModel({
+  baysX: Array(n).fill(6), baysZ: Array(n).fill(6),
+  storeyH: Array(storeys).fill(3), section, slabThickness: 150,
+})
+const grid6 = () => bays(6, 4)
+const grid8 = () => bays(8, 5)
 
 describe('validateMesh — clean models', () => {
   it('a generated grid has no issues', () => {
@@ -458,25 +467,50 @@ describe('validateMesh — shell mesh quality', () => {
   })
 
   it('MESH_DOF_BUDGET refuses a mesh past the solver budget', () => {
-    // 40 panels at subdivision 6 → 40·49 = 1960 mesh nodes ≈ 11 800 DOF against
-    // the 4 000 budget. The message must name a subdivision that fits, because
-    // "too big" without a number is not actionable.
-    const many: StructuralModel = {
-      ...flat(),
-      shellElements: true,
-      shellSubdiv: 6,
-      plates: Array.from({ length: 40 }, (_, i) => ({
-        id: `p${i}`, corners: ['n0', 'n1', 'n2', 'n3'] as [string, string, string, string], role: 'slab' as const, thickness: 150,
-      })),
-    }
-    const hit = validateMesh(many).find((i) => i.code === 'MESH_DOF_BUDGET')
+    // A real 8x8-bay, 5-storey building: 320 panels, 486 nodes. Subdivision 4
+    // needs 33 156 DOF against the 10 000 budget (measured: 294 MB per solver
+    // worker, 2.6 GB across the pool, 31 s to precompute).
+    const big = (n: number): StructuralModel => ({
+      ...grid8(), shellElements: true, shellSubdiv: n,
+    })
+    const hit = validateMesh(big(4)).find((i) => i.code === 'MESH_DOF_BUDGET')
     expect(hit).toBeDefined()
     expect(hit!.severity).toBe('error')
+    // "too big" without a number is not actionable
     expect(hit!.message).toMatch(/Subdivision \d fits\.|Split this model/)
-    // the same model at subdivision 1 is well inside the budget
-    expect(codes({ ...many, shellSubdiv: 1 })).not.toContain('MESH_DOF_BUDGET')
+    // subdivision 2 on the same building is 9 156 DOF and fits
+    expect(codes(big(2))).not.toContain('MESH_DOF_BUDGET')
     // and the budget is not charged while the mesh is off
-    expect(codes({ ...many, shellElements: false })).not.toContain('MESH_DOF_BUDGET')
+    expect(codes({ ...big(4), shellElements: false })).not.toContain('MESH_DOF_BUDGET')
+  })
+
+  it('the raised budget is what a real building needed — 6x6 bays at n=3', () => {
+    // The point of the raise. A 6x6-bay 4-storey frame meshes to 4 350 DOF at
+    // subdivision 2 and 8 958 at 3, both inside 10 000; the old 4 000 refused
+    // BOTH, so this building could not be meshed at all.
+    const m = (n: number): StructuralModel => ({ ...grid6(), shellElements: true, shellSubdiv: n })
+    expect(codes(m(2))).not.toContain('MESH_DOF_BUDGET')
+    expect(codes(m(3))).not.toContain('MESH_DOF_BUDGET')
+    // subdivision 4 is 15 294 DOF (818 MB across the pool) and is still refused
+    expect(codes(m(4))).toContain('MESH_DOF_BUDGET')
+  })
+
+  it('charges each SHARED panel edge once, not once per panel', () => {
+    // The old bound charged every panel a full (n+1)^2 with no credit for the
+    // nodes its neighbours already paid for. On a 6x6-bay 4-storey building at
+    // subdivision 3 it reads 15 294 DOF against a true 8 958 — so against the
+    // SAME budget the naive count refuses a mesh that fits with room to spare.
+    // `meshNodeBound` is asserted exact against the mesher itself in
+    // plateMesh.test.ts; here it only has to discriminate.
+    const m = grid6()
+    const naive = (n: number) => 6 * (m.nodes.length + m.plates.length * (n + 1) ** 2)
+    const real = (n: number) => 6 * (m.nodes.length + meshNodeBound(m, n))
+    expect(real(3)).toBeLessThanOrEqual(MESH_DOF_BUDGET)
+    expect(naive(3)).toBeGreaterThan(MESH_DOF_BUDGET)
+    expect(naive(3) / real(3)).toBeGreaterThan(1.7)
+    // the gap is the sharing, so it is widest where panels share the most edge:
+    // at subdivision 2 every shared edge is a single node
+    expect(naive(2) / real(2)).toBeGreaterThan(2)
   })
 
   it('the quality rules apply before the mesh is switched on', () => {

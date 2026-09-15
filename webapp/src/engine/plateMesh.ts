@@ -293,3 +293,39 @@ function findEdgeSplits(
   return out
 }
 
+
+/**
+ * Upper bound on how many NEW nodes `meshPlates` will add at subdivision `n`,
+ * computed from the panel topology alone — no meshing, no geometry, O(plates).
+ *
+ * Exact for a conforming quad mesh whose panels name the SAME node ids at a
+ * shared corner, which is every model the builder produces. A panel contributes
+ * (n−1)² strictly interior nodes that no neighbour can reach, and each distinct
+ * panel EDGE contributes (n−1) nodes shared by the (at most two) panels meeting
+ * along it — so edges are counted once, keyed by their unordered corner-id pair.
+ * The four corners are the model's own nodes and are already in `model.nodes`.
+ *
+ * Where it is not exact it is CONSERVATIVE — it over-counts, never under — which
+ * is the only safe direction for a budget check: it may refuse a mesh that would
+ * just have fitted, but never admits one that will not. It over-counts wherever
+ * the mesher merges more than the topology shows: an edge whose two panels name
+ * coincident but DISTINCT node ids (merged on the snapped position key), a model
+ * node the user drew at an edge or interior mesh position (reused rather than
+ * added), and every opening (cells dropped, then orphan nodes removed).
+ *
+ * Panels the mesher skips — a missing corner, zero enclosed area — are counted
+ * here, since both already carry their own validation rule.
+ */
+export function meshNodeBound(model: StructuralModel, n: number): number {
+  if (!(n > 1)) return 0                      // n = 1 adds nothing but the corners
+  const edges = new Set<string>()
+  for (const p of model.plates) {
+    for (let k = 0; k < 4; k++) {
+      const a = p.corners[k], b = p.corners[(k + 1) % 4]
+      // JSON-encoded pair: node ids are user strings, so a plain join could
+      // collide (`"a|b" + "c"` vs `"a" + "b|c"`); this cannot.
+      edges.add(JSON.stringify(a < b ? [a, b] : [b, a]))
+    }
+  }
+  return model.plates.length * (n - 1) ** 2 + edges.size * (n - 1)
+}

@@ -105,7 +105,29 @@ export interface F3PDeltaStatus {
   singular: boolean    // tangent LU failed (elastic instability) — d is the last iterate
   iterations: number   // iterations performed
   residual: number     // last relative increment ‖Δd‖/‖d‖ (0 when d = 0 exactly)
+  /** Set when the iteration never ran because the model is past
+   *  `PDELTA_DENSE_DOF_MAX`. `d` is then the FIRST-ORDER solution, which is a
+   *  different thing from a diverged one — callers must not report it as
+   *  instability. */
+  skipped?: 'dense-tangent'
 }
+
+/**
+ * Free-DOF ceiling for the second-order solve.
+ *
+ * The elastic block is sparse, but the P-Δ TANGENT is not: it is LU-factored
+ * dense, because the iteration detects elastic instability by `luFactor`
+ * returning null and LDᴸᵀ refuses a non-positive pivot earlier than LU refuses a
+ * singular one — swapping the factoriser would change which iteration reports
+ * divergence. So the tangent costs 8·nf² bytes, once per iteration: 200 MB at
+ * 5 000 DOF and 800 MB at 10 000, which is a dead tab rather than a slow one.
+ *
+ * Past this the iteration is SKIPPED and the first-order solution is returned
+ * with `pDelta.skipped`, so the caller can say which it is. A shell mesh can
+ * reach these counts (`MESH_DOF_BUDGET` allows 10 000 total DOF) while carrying
+ * no geometric stiffness of its own — Kɡ is assembled from frame members only.
+ */
+export const PDELTA_DENSE_DOF_MAX = 5000
 
 export interface F3Result {
   d: number[]
@@ -1008,7 +1030,17 @@ export function solveWithGeometry(
       return (f[6] - f[0]) / 2
     }
 
-    if (opts?.pDelta && opts.fixedAxial) {
+    // Past the dense-tangent ceiling the second-order iteration cannot be
+    // formed at all (see PDELTA_DENSE_DOF_MAX). Return the first-order answer
+    // and SAY so, rather than allocating an nf² array that kills the tab.
+    const denseTangentTooBig = !!opts?.pDelta && free.length > PDELTA_DENSE_DOF_MAX
+    if (denseTangentTooBig) {
+      const Ff_ind = diaT && diaNi !== undefined ? applyTtoLoad(Ff, diaT, diaNi) : Ff
+      const d0 = symSolve(Kff, Ff_ind)
+      const dFull = diaT && diaNi !== undefined ? applyTrecover(d0, diaT) : d0
+      free.forEach((dof, k) => (d[dof] = dFull[k]))
+      pdStatus = { converged: false, singular: false, iterations: 0, residual: Infinity, skipped: 'dense-tangent' }
+    } else if (opts?.pDelta && opts.fixedAxial) {
       // Constant geometric tangent from a prescribed axial state (ETABS-style
       // "P-Δ from gravity"): one solve, no self-consistent iteration. A singular
       // tangent (elastic instability under the preload) returns null.

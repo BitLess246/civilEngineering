@@ -140,6 +140,17 @@ describe('design pipeline — single-bay single-storey grid', () => {
     expect(r.pDeltaIssues).toEqual([])   // first-order runs carry no P-Δ status
     expect(designOK({ ...r, pDeltaIssues: ['1.2D+1.6L+E(+X)'] })).toBe(false)
   })
+
+  it('a SKIPPED P-Δ gates the design too, and is not reported as non-convergence', () => {
+    // Past `PDELTA_DENSE_DOF_MAX` the tangent cannot be factored, so the run
+    // carries first-order forces. That is not instability — reporting it in
+    // `pDeltaIssues` would tell the user their structure may be buckling when
+    // what actually happened is that nobody looked. Separate list, same gate:
+    // the user asked for a second-order analysis and did not get one.
+    expect(r.pDeltaSkipped).toEqual([])
+    expect(designOK({ ...r, pDeltaSkipped: ['1.2D+1.6L+E(+X)'] })).toBe(false)
+    expect(designOK({ ...r, pDeltaSkipped: [], pDeltaIssues: [] })).toBe(designOK(r))
+  })
 })
 
 describe('steel design pipeline (AISC routing + base plates)', () => {

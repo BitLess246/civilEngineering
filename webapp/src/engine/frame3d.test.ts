@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { solveFrame3D, analyzeFrame3D, rectJ, localAxes, precomputeFrame, solveWithGeometry, serializePrecomp, deserializePrecomp, appliedResultant, type F3Node, type F3Member, type F3Support, type F3Load, type F3DiaphragmGroup } from './frame3d'
+import { solveFrame3D, analyzeFrame3D, rectJ, localAxes, precomputeFrame, solveWithGeometry, serializePrecomp, deserializePrecomp, appliedResultant, PDELTA_DENSE_DOF_MAX, type F3Node, type F3Member, type F3Support, type F3Load, type F3DiaphragmGroup } from './frame3d'
 import { solveFrame2D } from './frame2d'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
@@ -280,6 +280,8 @@ describe('frame3d — P-Δ second order (vertical cantilever, L = 4)', () => {
     expect(r.pDelta!.singular).toBe(false)
     expect(r.pDelta!.iterations).toBeGreaterThanOrEqual(1)
     expect(r.pDelta!.residual).toBeLessThan(1e-5)
+    // under the dense-tangent ceiling the iteration really runs
+    expect(r.pDelta!.skipped).toBeUndefined()
     // first-order solve carries no status
     expect(solveFrame3D(colNodes, colMem, sup, lat)!.pDelta).toBeUndefined()
   })
@@ -940,5 +942,36 @@ describe('sparse free block — scatter-add and connectivity pattern', () => {
     // block would have `perRow` grow exactly as nf.
     for (const r of rows) expect(r.perRow).toBeLessThan(40)
     expect(rows[rows.length - 1].perRow).toBeLessThan(2 * rows[0].perRow)
+  })
+})
+
+describe('P-Δ past the dense-tangent ceiling', () => {
+  // The elastic block is sparse; the P-Δ TANGENT is still LU-factored dense, so
+  // it costs 8·nf² bytes per iteration — 800 MB at 10 000 DOF, which the raised
+  // MESH_DOF_BUDGET now allows. Past the limit the iteration is skipped and says
+  // so, rather than being attempted. (The small-model P-Δ tests above are the
+  // control: they assert `skipped` is undefined while the iteration runs.)
+  it('skips the iteration and returns the FIRST-ORDER answer, labelled', () => {
+    const count = Math.ceil(PDELTA_DENSE_DOF_MAX / 6) + 40
+    const nodes: F3Node[] = Array.from({ length: count + 1 }, (_, i) => ({ id: `n${i}`, x: 0, y: 0.5 * i, z: 0 }))
+    const members: F3Member[] = Array.from({ length: count }, (_, i) => (
+      { id: `m${i}`, i: `n${i}`, j: `n${i + 1}`, E, G, A, Iz, Iy, J }
+    ))
+    const p = precomputeFrame(nodes, members, [{ node: 'n0', fixity: 'fixed' }])
+    expect(p.free.length).toBeGreaterThan(PDELTA_DENSE_DOF_MAX)
+
+    const loads: F3Load[] = [{ kind: 'node', node: `n${count}`, Fx: 8, Fy: -40, cat: 'D' }]
+    const second = solveWithGeometry(p, loads, { pDelta: true })!
+    const first = solveWithGeometry(p, loads)!
+    expect(second.pDelta).toBeDefined()
+    expect(second.pDelta!.skipped).toBe('dense-tangent')
+    expect(second.pDelta!.iterations).toBe(0)
+    // NOT instability — the distinction the UI has to report, since a diverged
+    // run means "possibly unstable" and this one means "we didn't look"
+    expect(second.pDelta!.singular).toBe(false)
+    expect(second.pDelta!.converged).toBe(false)
+    // and what comes back is the first-order field, not a half-iterated one
+    for (let i = 0; i < first.d.length; i++) expect(second.d[i]).toBeCloseTo(first.d[i], 12)
+    expect(first.pDelta).toBeUndefined()
   })
 })

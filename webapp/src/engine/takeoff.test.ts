@@ -168,7 +168,7 @@ describe('structural steel — per-shape unit weight + costed BOM line items (A2
     woodBeams: [], woodColumns: [],
     basePlates: [], joints: [], beamJoints: [], slabs: [], woodSlabs: [], walls: [], stairs: [], footings: [], combined: [], scwb: [],
     totals: { concreteMembers: 0, concreteSlabs: 0, concrete: 0, steelKg: 0, woodVolume: 0 }, orphanEdges: 0,
-    unchecked: [], pDeltaIssues: [],
+    unchecked: [], pDeltaIssues: [], pDeltaSkipped: [],
   }
   // Two steel members: one 6 m W200x46.1 beam, two 4 m W250x49.1 columns.
   const steelBeam: RectSection = {

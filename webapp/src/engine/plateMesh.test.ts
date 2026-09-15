@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { meshPlates, meshPrefix, emptyPlateMesh } from './plateMesh'
+import { meshPlates, meshPrefix, emptyPlateMesh, meshNodeBound } from './plateMesh'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { solveFrame3D } from './frame3d'
@@ -378,5 +378,60 @@ describe('meshPlates — openings are cut out of the mesh', () => {
     expect(m.droppedCells).toBe(0)
     expect(m.shells).toHaveLength(2 * 36)
     expect(area(m)).toBeCloseTo(A * B, 9)
+  })
+})
+
+describe('meshNodeBound — the budget check must not lie about the cost', () => {
+  const grid = (bx: number, bz: number, storeys: number) => generateGridModel({
+    baysX: Array(bx).fill(6), baysZ: Array(bz).fill(6),
+    storeyH: Array(storeys).fill(3), section, slabThickness: 150,
+  })
+
+  it('is EXACT for a conforming mesh, at every density and building size', () => {
+    // Predicting the node count without meshing is only useful if it is right.
+    // Panel interiors are (n−1)² each; every shared edge is paid for ONCE.
+    for (const [bx, bz, st] of [[1, 1, 1], [2, 2, 2], [4, 4, 3], [6, 6, 4]] as const) {
+      const m = grid(bx, bz, st)
+      for (const n of [1, 2, 3, 4, 6]) {
+        const actual = meshPlates(m, { subdiv: n, ...MAT }).nodes.length
+        expect(meshNodeBound(m, n)).toBe(actual)
+      }
+    }
+  })
+
+  it('n = 1 adds nothing, because two triangles on four corners need no new node', () => {
+    const m = grid(4, 4, 3)
+    expect(meshNodeBound(m, 1)).toBe(0)
+    expect(meshPlates(m, { subdiv: 1, ...MAT }).nodes.length).toBe(0)
+  })
+
+  it('over-counts, never under-counts, when the mesher drops orphans in a hole', () => {
+    // The bound does not model openings, so every node the mesher removes as an
+    // orphan makes it high — the safe direction for a budget check. A k×k block
+    // of dropped cells strands exactly (k−1)² nodes, and that is the gap.
+    const one = grid(1, 1, 1)
+    const holed = (x: number, y: number, w: number, h: number): StructuralModel => ({
+      ...one,
+      plates: one.plates.map((p) => ({ ...p, openings: [{ id: 'o1', kind: 'rect', x, y, w, h } as SlabOpening] })),
+    })
+    // a 4 × 4 m hole in the 6 × 6 m panel at subdivision 8 drops a 6 × 6 block
+    const m = holed(1, 1, 4, 4), mesh = meshPlates(m, { subdiv: 8, ...MAT })
+    expect(mesh.droppedCells).toBe(36)
+    expect(meshNodeBound(m, 8) - mesh.nodes.length).toBe(25)   // (6−1)²
+    // and it is high, never low, across every hole and density tried
+    for (const [x, y, w, h] of [[1.5, 1.5, 3, 3], [2, 2, 2, 2], [1, 1, 4, 4], [2, 2, 3, 3]] as const)
+      for (const n of [4, 6, 8]) {
+        const q = holed(x, y, w, h)
+        expect(meshNodeBound(q, n)).toBeGreaterThan(meshPlates(q, { subdiv: n, ...MAT }).nodes.length)
+      }
+  })
+
+  it('counts a shared edge once — two panels are cheaper than twice one panel', () => {
+    const one = grid(1, 1, 1), two = grid(2, 1, 1)
+    expect(two.plates.length).toBe(2 * one.plates.length)
+    // Two panels side by side share one edge, so at subdivision 4 they cost
+    // 2·(3² interior) + 7·3 edge nodes = 39, not 2 × 21 = 42.
+    expect(meshNodeBound(two, 4)).toBeLessThan(2 * meshNodeBound(one, 4))
+    expect(meshNodeBound(two, 4)).toBe(meshPlates(two, { subdiv: 4, ...MAT }).nodes.length)
   })
 })

@@ -20,6 +20,7 @@
 // valid model with a false error.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel } from './model'
+import { meshNodeBound } from './plateMesh'
 import { SHELL_SUBDIV_MIN, SHELL_SUBDIV_MAX } from './model'
 import { RHO_MIN, RHO_MAX } from './columnDesign'
 import { barContinuityGroups } from './modelBuilder'
@@ -36,11 +37,33 @@ export interface MeshIssue {
 
 const COINCIDENT_TOL = 1e-6  // m
 
-/** Free-DOF ceiling for the shell mesh. `frame3d` assembles the free block as a
- *  DENSE nf×nf array (`Kff_raw`) and structured-clones it into every pool
- *  worker, so the memory is 8·nf² bytes per copy — 4 000 DOF is 128 MB, 8 000 is
- *  512 MB. Raising this is a solver change (sparse assembly), not a constant. */
-export const MESH_DOF_BUDGET = 4000
+/**
+ * Total-DOF ceiling for the shell mesh.
+ *
+ * The old 4 000 came from the free stiffness block being a DENSE nf×nf array
+ * (8·nf² bytes, structured-cloned into every pool worker). That block is sparse
+ * as of #751, so this is re-measured against what actually binds now: the
+ * SKYLINE FACTOR and the element geometry, which `serializePrecomp` copies to
+ * each of up to `min(hardwareConcurrency, 8)` workers plus the main thread.
+ *
+ * Measured on meshed grid frames (per-worker payload × 9 copies, and the
+ * one-off precompute):
+ *
+ *     ndof    per worker    ×9 total    precompute
+ *     4 350      18.1 MB       163 MB       0.7 s
+ *     8 958      44.7 MB       402 MB       2.4 s
+ *    10 236      57.2 MB       515 MB       3.5 s     ← the budget sits here
+ *    15 294      90.8 MB       818 MB       6.0 s
+ *    19 236     143.8 MB     1 294 MB      11.6 s
+ *
+ * 10 000 keeps the aggregate near half a gigabyte and the precompute inside a
+ * few seconds. It is a measured point, not an extrapolation — the row above it
+ * was measured too, and is where the aggregate stops being defensible.
+ *
+ * The second-order solve has its OWN, lower ceiling: the P-Δ tangent is still
+ * factored dense, so it stops at `PDELTA_DENSE_DOF_MAX` and says so.
+ */
+export const MESH_DOF_BUDGET = 10000
 
 export function validateMesh(model: StructuralModel): MeshIssue[] {
   const issues: MeshIssue[] = []
@@ -449,18 +472,23 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
       }
     }
 
-    // DOF BUDGET. Upper bound (no credit for nodes shared between panels), so
-    // it never under-reports the cost.
+    // DOF BUDGET. `meshNodeBound` counts each panel's interior nodes plus each
+    // DISTINCT shared edge, so it is exact for a conforming mesh and otherwise
+    // over-counts — it never under-reports the cost. The old bound charged every
+    // panel a full (n+1)² with no credit for sharing, which on a 6×6-bay
+    // 4-storey building reads 15 294 DOF at subdivision 3 against a true 8 958:
+    // against the same budget it refuses a mesh that fits with room to spare.
     if (model.shellElements) {
-      const est = 6 * (model.nodes.length + model.plates.length * (n + 1) * (n + 1))
+      const dofAt = (k: number) => 6 * (model.nodes.length + meshNodeBound(model, k))
+      const est = dofAt(n)
       if (est > MESH_DOF_BUDGET) {
         const fits = (() => {
           for (let k = n - 1; k >= SHELL_SUBDIV_MIN; k--)
-            if (6 * (model.nodes.length + model.plates.length * (k + 1) * (k + 1)) <= MESH_DOF_BUDGET) return k
+            if (dofAt(k) <= MESH_DOF_BUDGET) return k
           return 0
         })()
         issues.push({ severity: 'error', code: 'MESH_DOF_BUDGET', refs: [],
-          message: `Subdivision ${n} over ${model.plates.length} panels needs about ${est.toLocaleString()} degrees of freedom, past the ${MESH_DOF_BUDGET.toLocaleString()} this solver can hold (the factorised stiffness fills in beyond the mesh's own connectivity, so memory grows faster than the DOF count). ${fits >= SHELL_SUBDIV_MIN ? `Subdivision ${fits} fits.` : 'Split this model or turn shell elements off.'}` })
+          message: `Subdivision ${n} over ${model.plates.length} panels needs about ${est.toLocaleString()} degrees of freedom, past the ${MESH_DOF_BUDGET.toLocaleString()} this solver can hold (the factorised stiffness fills in beyond the mesh's own connectivity, and a copy of it goes to every solver worker, so memory grows faster than the DOF count). ${fits >= SHELL_SUBDIV_MIN ? `Subdivision ${fits} fits.` : 'Split this model or turn shell elements off.'}` })
       }
     }
   }
