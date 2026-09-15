@@ -216,12 +216,29 @@ All shipped.
     selectable in the modal panel and reported in both the appendix and the
     report's assumptions.
 
+11. **The dense free block caps the plate mesh at n = 2.** The plate-mesh series
+    (#743–#748) meshes each panel n×n, splits the edge beams at the mesh nodes
+    so the panel is actually held, cuts openings out, and offers the mesh to the
+    design solve opt-in. It converges from above onto Timoshenko's clamped
+    plate — but `frame3d` assembles the free block as a DENSE `nf × nf` array
+    (`Kff_raw`, `frame3d.ts:765`), retains it on the precomp and
+    structured-clones it into every pool worker, so the cost is `8·nf²` bytes
+    PER COPY: 4 000 DOF is 128 MB and 8 000 is 512 MB.
+    `meshValidation`'s `MESH_DOF_BUDGET` hard-stops past 4 000 with a message
+    naming a subdivision that fits, which is why **n > 2 is not usable on a real
+    building**. Sparse assembly is the unlock and it is NOT a drive-by: six
+    consumers read `Kff_raw` — `symFactor`, `applyTtoK` (diaphragm), the P-Δ
+    tangent's dense copy (`frame3d.ts:979`), `buckling`'s `matVec`,
+    `directTimeHistory`'s `C = αM + βK`, and `serializePrecomp` — and two of
+    them genuinely want a dense matrix. L3 is frozen infrastructure, so this
+    needs its own stated justification and the full statics re-check.
+
 ## P4 — design & geotech capability
 
-11. ~~Steel **moment connections, shear tabs, block shear, prying**~~ — ✔ shipped:
+12. ~~Steel **moment connections, shear tabs, block shear, prying**~~ — ✔ shipped:
     `steelConnections.ts` (shear-tab, moment-flange-weld, moment-web-plate) +
     `steelDesign.ts` block shear §J4.3 (`shearTabBlockShear`) and prying §J3.9.
-12. ~~Thread cracked deflection (`beamDeflection`/`slabDeflection`) into
+13. ~~Thread cracked deflection (`beamDeflection`/`slabDeflection`) into
     model-space serviceability results.~~ — ✔ shipped (#446):
     `memberDeflection.ts` double-integrates each beam's own FEM moment diagram
     (D-only and L-only service solves) over Ec·Ie with Branson's Ie, so §424.2
@@ -230,18 +247,18 @@ All shipped.
     report; per §409.3.1.1 a row passes on EITHER h ≥ hMin or the computed
     check. **Open follow-up:** proper T-section gross properties — the web
     rectangle is used, which is the conservative side.
-13. ~~**Slope stability by method of slices**~~ — ✔ shipped: `slopeStability.ts`
+14. ~~**Slope stability by method of slices**~~ — ✔ shipped: `slopeStability.ts`
     — Fellenius/OMS, Bishop's Simplified and Janbu's Simplified over one set of
     vertical slices, with a grid search for the critical circle.
-14. ~~**Settlement** (immediate + consolidation) and **laterally loaded piles**~~
+15. ~~**Settlement** (immediate + consolidation) and **laterally loaded piles**~~
     — ✔ shipped: `settlement.ts` (stress distribution, elastic settlement,
     1-D consolidation and its time rate) and `lateralPile.ts` (Broms ultimate
     capacity for short/long piles in clay and sand, plus p-y analysis).
-15. **Pressure grouting** — the last Roadmap Phase 3 item with no module. Note
+16. **Pressure grouting** — the last Roadmap Phase 3 item with no module. Note
     that `soilNail`, `micropile` and `rockAnchor` all already size grouted bond
     lengths, so the gap is the grouting operation itself (pressures, takes,
     stage design), not grout-bond capacity.
-16. **Offset framing / beam-on-girder-flange bearing** — `designBeamBeamJoints`
+17. **Offset framing / beam-on-girder-flange bearing** — `designBeamBeamJoints`
     assumes every supported beam meets the girder WEB (coplanar nodes). A beam
     bearing on a girder TOP FLANGE (seat/bearing detail, stiffener check per
     AISC §J10) can't arise until the model supports vertically offset framing;
@@ -252,7 +269,7 @@ All shipped.
 Both ✔ shipped (#737). Neither was a wrong answer in the shipped app; they were
 claims the map made that its evidence did not support.
 
-17. ~~**E4 — ValidationMap row C003 is an algebraic tautology.**~~ — ✔ shipped
+18. ~~**E4 — ValidationMap row C003 is an algebraic tautology.**~~ — ✔ shipped
     (#737): the assertion restated the implementation as its own expected
     value. The closed form IS the definition of Bresler's method, so there is
     no independent algebra to check it against; six properties replace it
@@ -260,7 +277,7 @@ claims the map made that its evidence did not support.
     in each argument, the Po → ∞ harmonic limit from above), CHECKED against
     three plausible wrong formulas rather than assumed to discriminate. The row
     stays 🔶 — internal evidence made real, not an independent reference.
-18. ~~**E5 — `Cv1` uses the superseded AISC 360-10 form.**~~ — ✔ shipped (#737):
+19. ~~**E5 — `Cv1` uses the superseded AISC 360-10 form.**~~ — ✔ shipped (#737):
     `steelDesign.ts` declares 360-16 in its header and `Cv1` carried 360-10's
     three-branch Cv, whose elastic term 360-16 keeps only for Cv2 (§G2.2,
     tension-field action) — the module contradicted its own stated edition. A
