@@ -28,12 +28,17 @@ const EXTRA: Record<string, string> = {
 const SUFFIX = `${BRAND_MARK} Toolkit`
 
 /**
- * The title for a pathname. Longest prefix wins, so `/estimate/slab` picks its
- * own entry rather than `/estimate`'s.
+ * What this route is CALLED — 'Beam Design', 'Sign in' — or null where nothing
+ * names it. Longest prefix wins, so `/estimate/slab` picks its own entry rather
+ * than `/estimate`'s.
+ *
+ * Separate from `titleFor` because the name has a second reader: the Suspense
+ * fallback, which says what it is fetching. Trimming the brand suffix back off
+ * a finished title would be string surgery on a format that is free to change.
  */
-export function titleFor(pathname: string): string {
+export function routeName(pathname: string): string | null {
   const exact = EXTRA[pathname]
-  if (exact !== undefined) return exact ? `${exact} — ${SUFFIX}` : SUFFIX
+  if (exact !== undefined) return exact || null
 
   let best: { len: number; name: string } | null = null
   for (const t of ALL_TOOLS) {
@@ -41,5 +46,11 @@ export function titleFor(pathname: string): string {
       if (!best || t.to.length > best.len) best = { len: t.to.length, name: t.name }
     }
   }
-  return best ? `${best.name} — ${SUFFIX}` : SUFFIX
+  return best?.name ?? null
+}
+
+/** The document title for a pathname: the route's name, then the brand. */
+export function titleFor(pathname: string): string {
+  const name = routeName(pathname)
+  return name ? `${name} — ${SUFFIX}` : SUFFIX
 }
