@@ -19,18 +19,18 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
+      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
       <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+        className="rounded-md border border-field-line px-2.5 py-1.5" />
     </label>
   )
 }
 
 function Out({ label, value, ok, sub }: { label: string; value: string; ok?: boolean; sub?: string }) {
   return (
-    <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
+    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
       <span className="text-muted">{label}{sub && <span className="ml-1 text-[11px] text-faint">{sub}</span>}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -47,7 +47,7 @@ function PyProfiles({ res, L }: { res: PyResult; L: number }) {
   const Y = (z: number) => padT + ((H - padT - padB) * z) / Math.max(L, 1e-9)
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-slate-200 bg-sheet" style={{ maxHeight: 320 }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-hairline bg-sheet" style={{ maxHeight: 320 }}>
       {series.map((s, si) => {
         const vals = res.stations.map((st) => st[s.key])
         const m = Math.max(...vals.map(Math.abs), 1e-9)
@@ -74,8 +74,8 @@ function PyProfiles({ res, L }: { res: PyResult; L: number }) {
 
 function BromsCard({ r, title }: { r: BromsResult; title: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 p-3">
-      <p className="mb-1 text-[12px] font-bold text-slate-700">{title}</p>
+    <div className="rounded-lg border border-hairline p-3">
+      <p className="mb-1 text-[12px] font-bold text-ink-2">{title}</p>
       <Out label="Ultimate lateral load Hu" value={`${f1(r.Hu)} kN`} />
       <Out label="Short-pile (soil) capacity" value={`${f1(r.shortPile)} kN`}
         ok={r.mode === 'short' ? false : undefined} />
@@ -170,7 +170,7 @@ export default function LateralPile() {
       <CalcBody wide>
         <div className="space-y-5">
       <ReportControls title="Laterally Loaded Pile" badges={['Broms', 'Matlock', 'API RP 2A']} report={report} />
-      <p className="mt-2 text-sm text-slate-600">
+      <p className="mt-2 text-sm text-muted">
         Two questions, two methods. <strong>Broms</strong> gives the ultimate lateral capacity in closed form and
         says whether the soil or the pile section fails first. <strong>p-y</strong> solves the pile as a beam on
         nonlinear soil springs and gives what Broms cannot — head deflection, and where the maximum moment sits.
@@ -185,17 +185,17 @@ export default function LateralPile() {
           <Field label="Lateral load H" unit="kN" value={H} onChange={setH} step="10" />
           <Field label="Load height e" unit="m" value={e} onChange={setE} step="0.25" />
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Head condition</span>
+            <span className="mb-1 font-medium text-muted">Head condition</span>
             <select value={head} onChange={(ev) => setHead(ev.target.value as PileHead)}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5">
+              className="rounded-md border border-field-line px-2.5 py-1.5">
               <option value="free">Free (rotates)</option>
               <option value="fixed">Fixed (capped)</option>
             </select>
           </label>
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Soil type</span>
+            <span className="mb-1 font-medium text-muted">Soil type</span>
             <select value={soilKind} onChange={(ev) => setSoilKind(ev.target.value as 'clay' | 'sand')}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5">
+              className="rounded-md border border-field-line px-2.5 py-1.5">
               <option value="clay">Clay (Matlock)</option>
               <option value="sand">Sand (API)</option>
             </select>

@@ -44,13 +44,13 @@ export function ReactionsPanel({
 
   const tabCls = (on: boolean) =>
     `rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
-      on ? 'bg-brand text-on-solid' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+      on ? 'bg-brand text-on-solid' : 'bg-paper text-muted hover:bg-hairline'
     }`
 
   const axes: [string, 0 | 1 | 2][] = [['X', 0], ['Y', 1], ['Z', 2]]
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+    <div className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
       <h2 className="mb-3 text-[1.02rem] font-bold text-brand">Support Reactions &amp; Statics Check</h2>
 
       <div className="mb-3 flex flex-wrap gap-1">
@@ -82,7 +82,7 @@ export function ReactionsPanel({
           </thead>
           <tbody>
             {axes.map(([name, k]) => (
-              <tr key={name} className="text-slate-700">
+              <tr key={name} className="text-ink-2">
                 <td className="text-left font-mono">{name}</td>
                 <td className="text-right tabular-nums">{f2(applied[k])}</td>
                 <td className="text-right tabular-nums">{f2([rt.Fx, rt.Fy, rt.Fz][k])}</td>
@@ -96,7 +96,7 @@ export function ReactionsPanel({
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-muted">
+            <tr className="border-b border-hairline text-muted">
               <th className="pb-1.5 pr-3 text-left font-semibold">Node</th>
               <th className="pb-1.5 pr-3 text-left font-semibold">Fixity</th>
               <th className="pb-1.5 pr-3 text-right font-semibold">Fx (kN)</th>
@@ -109,19 +109,19 @@ export function ReactionsPanel({
           </thead>
           <tbody>
             {reactions.map((r) => (
-              <tr key={r.node} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                <td className="py-1 pr-3 font-mono text-slate-700">{r.node}</td>
+              <tr key={r.node} className="border-b border-hairline-2 last:border-0 hover:bg-sheet-2">
+                <td className="py-1 pr-3 font-mono text-ink-2">{r.node}</td>
                 <td className="py-1 pr-3 capitalize text-muted">{r.fixity}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.F[0])}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.F[1])}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.F[2])}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.M[0])}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.M[1])}</td>
-                <td className="py-1 text-right tabular-nums text-slate-800">{f1(r.M[2])}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{f1(r.F[0])}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{f1(r.F[1])}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{f1(r.F[2])}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{f1(r.M[0])}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{f1(r.M[1])}</td>
+                <td className="py-1 text-right tabular-nums text-ink">{f1(r.M[2])}</td>
               </tr>
             ))}
-            <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
-              <td className="py-1.5 pr-3 text-slate-700" colSpan={2}>Σ</td>
+            <tr className="border-t-2 border-field-line bg-sheet-2 font-bold">
+              <td className="py-1.5 pr-3 text-ink-2" colSpan={2}>Σ</td>
               <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{f1(rt.Fx)}</td>
               <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{f1(rt.Fy)}</td>
               <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{f1(rt.Fz)}</td>

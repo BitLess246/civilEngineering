@@ -89,7 +89,7 @@ export default function RetainingWall() {
       {/* The section drawing carries what the numbers cannot: which FACE each
           mat of bars goes on, and where the two thrust resultants act. */}
       {r && (
-        <div className="mt-5 rounded-xl border border-slate-200 bg-sheet p-4 print-avoid-break">
+        <div className="mt-5 rounded-xl border border-hairline bg-sheet p-4 print-avoid-break">
           <RetainingWallSection
             Hs={f.Hs} tb={f.tb} ts={f.ts} bt={f.bt} bh={f.bh}
             Pa={r.Pa} Pq={r.Pq} q_sur={f.q_sur}
@@ -233,7 +233,7 @@ export default function RetainingWall() {
             </ResultCard>
           </div>
         ) : (
-          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-muted">
+          <p className="self-start rounded-xl border border-hairline bg-sheet p-6 text-sm text-muted">
             Fill in all inputs to see results.
           </p>
         )}

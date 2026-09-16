@@ -133,7 +133,7 @@ export default function DevLength() {
         <div>
       <PageHeader title="Development & Splice Lengths" badges={['ACI 318-14 §25.4', 'NSCP 2015']} />
       <div className="mx-auto max-w-[1500px] p-6">
-      <p className="no-print mt-1 text-slate-600">
+      <p className="no-print mt-1 text-muted">
         ACI 318-14 §25.4 development + §25.5 splices. SI units (mm, MPa).
         Tension §25.4.2.3 · Compression §25.4.9.2 · Splices §25.5.2/5.
       </p>
@@ -275,7 +275,7 @@ export default function DevLength() {
             </ResultCard>
           </div>
         ) : (
-          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-muted">
+          <p className="self-start rounded-xl border border-hairline bg-sheet p-6 text-sm text-muted">
             Fill in all inputs to see results.
           </p>
         )}

@@ -51,13 +51,13 @@ export function MaterialLibrary({ materials, selectedId, onSelect, onChange }: {
       if (errs.length) setImportErr(errs.join(' · '))
     })
   }
-  const btn = 'rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50'
+  const btn = 'rounded-md border border-field-line px-2 py-1 text-[11px] font-medium text-muted hover:bg-sheet-2'
 
   return (
     <div className="col-span-full">
       <div className="flex flex-wrap items-center gap-2">
         <select value={selectedId} onChange={(e) => onSelect(e.target.value, materials.find((m) => m.id === e.target.value))}
-          className="min-w-[10rem] flex-1 rounded-md border border-slate-300 px-2 py-1 text-sm">
+          className="min-w-[10rem] flex-1 rounded-md border border-field-line px-2 py-1 text-sm">
           <option value="">— select a custom material —</option>
           {materials.map((m) => <option key={m.id} value={m.id}>{m.name}{m.kind === 'glulam' ? ' (GL)' : ''}</option>)}
         </select>
@@ -72,40 +72,40 @@ export function MaterialLibrary({ materials, selectedId, onSelect, onChange }: {
       {importErr && <p className="mt-1 text-[11px] text-fail">{importErr}</p>}
 
       {draft && (
-        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="mt-3 rounded-lg border border-hairline bg-sheet-2 p-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <label className="col-span-2 flex flex-col text-[11px] sm:col-span-2">
-              <span className="mb-0.5 font-medium text-slate-600">Name</span>
+              <span className="mb-0.5 font-medium text-muted">Name</span>
               <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                className="rounded-md border border-slate-300 px-2 py-1" placeholder="e.g. Apitong (80% grade)" />
+                className="rounded-md border border-field-line px-2 py-1" placeholder="e.g. Apitong (80% grade)" />
             </label>
             <label className="flex flex-col text-[11px]">
-              <span className="mb-0.5 font-medium text-slate-600">Kind</span>
+              <span className="mb-0.5 font-medium text-muted">Kind</span>
               <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as WoodKind })}
-                className="rounded-md border border-slate-300 px-2 py-1">
+                className="rounded-md border border-field-line px-2 py-1">
                 <option value="sawn">Sawn</option><option value="glulam">Glulam</option>
               </select>
             </label>
             <label className="flex flex-col text-[11px]">
-              <span className="mb-0.5 font-medium text-slate-600">Seed from</span>
+              <span className="mb-0.5 font-medium text-muted">Seed from</span>
               <select value="" onChange={(e) => { const g = e.target.value; if (g) setDraft({ ...draft, ref: { ...WOOD_SPECIES[g].ref }, kind: WOOD_SPECIES[g].kind }) }}
-                className="rounded-md border border-slate-300 px-2 py-1">
+                className="rounded-md border border-field-line px-2 py-1">
                 <option value="">library…</option>
                 {speciesList().flatMap((sp) => gradesOf(sp.species).map((gr) => <option key={gr.id} value={gr.id}>{gr.label}</option>))}
               </select>
             </label>
             {REF_FIELDS.map(({ k, label, unit }) => (
               <label key={k} className="flex flex-col text-[11px]">
-                <span className="mb-0.5 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
+                <span className="mb-0.5 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
                 <input type="number" step="any" value={draft.ref[k]}
                   onChange={(e) => setDraft({ ...draft, ref: { ...draft.ref, [k]: parseFloat(e.target.value) } })}
-                  className="rounded-md border border-slate-300 px-2 py-1" />
+                  className="rounded-md border border-field-line px-2 py-1" />
               </label>
             ))}
             <label className="col-span-2 flex flex-col text-[11px] sm:col-span-4">
-              <span className="mb-0.5 font-medium text-slate-600">Note / source (optional)</span>
+              <span className="mb-0.5 font-medium text-muted">Note / source (optional)</span>
               <input value={draft.note ?? ''} onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-                className="rounded-md border border-slate-300 px-2 py-1" placeholder="e.g. FPRDI Technical Note, air-dry" />
+                className="rounded-md border border-field-line px-2 py-1" placeholder="e.g. FPRDI Technical Note, air-dry" />
             </label>
           </div>
           {errors.length > 0 && <p className="mt-2 text-[11px] text-fail">{errors.join(' · ')}</p>}

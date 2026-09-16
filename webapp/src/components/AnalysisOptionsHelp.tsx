@@ -12,11 +12,11 @@ import { HintButton } from './LoadHints'
 
 const Opt = ({ name, clause, children }: { name: string; clause?: string; children: ReactNode }) => (
   <div>
-    <h4 className="mb-0.5 font-bold text-slate-800">
+    <h4 className="mb-0.5 font-bold text-ink">
       {name}
       {clause && <span className="ml-1.5 font-medium text-muted">{clause}</span>}
     </h4>
-    <div className="space-y-1.5 text-slate-700">{children}</div>
+    <div className="space-y-1.5 text-ink-2">{children}</div>
   </div>
 )
 
@@ -28,7 +28,7 @@ const Note = ({ children }: { children: ReactNode }) => (
 export function AnalysisOptionsHelp() {
   return (
     <HintButton title="Analysis options — what each one does" label="ⓘ">
-      <p className="text-slate-600">
+      <p className="text-muted">
         Defaults are chosen for a concrete building being designed to NSCP 2015. Every toggle changes the
         stiffness the frame is solved with, the demands it reports, or both — so a result is only comparable
         with another result run on the same settings.
@@ -138,8 +138,8 @@ export function AnalysisOptionsHelp() {
         </p>
       </Opt>
 
-      <div className="border-t border-slate-200 pt-3">
-        <h4 className="mb-1 font-bold text-slate-800">How slab load reaches the frame</h4>
+      <div className="border-t border-hairline pt-3">
+        <h4 className="mb-1 font-bold text-ink">How slab load reaches the frame</h4>
         <p className="mb-1.5">
           Area loads are distributed to the edge beams by <b>45° tributary areas</b>, converted to
           load-conserving equivalent uniform line loads: q·l<sub>x</sub>/4 on the short edges and

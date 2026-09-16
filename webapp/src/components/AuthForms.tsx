@@ -11,9 +11,9 @@ export function AuthCard({ title, subtitle, children, footer }: {
     <div className="mx-auto flex max-w-md flex-col px-5 py-14">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Account</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">{title}</h1>
-      {subtitle && <p className="mt-2 text-sm leading-6 text-slate-600">{subtitle}</p>}
-      <div className="mt-6 rounded-xl border border-slate-200 bg-sheet p-6 shadow-sm">{children}</div>
-      {footer && <div className="mt-4 text-center text-sm text-slate-600">{footer}</div>}
+      {subtitle && <p className="mt-2 text-sm leading-6 text-muted">{subtitle}</p>}
+      <div className="mt-6 rounded-xl border border-hairline bg-sheet p-6 shadow-sm">{children}</div>
+      {footer && <div className="mt-4 text-center text-sm text-muted">{footer}</div>}
     </div>
   )
 }
@@ -25,14 +25,14 @@ export function TextField({ label, type = 'text', value, onChange, error, autoCo
   const id = `f-${label.toLowerCase().replace(/\W+/g, '-')}`
   return (
     <label htmlFor={id} className="mb-4 flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-700">{label}</span>
+      <span className="mb-1 font-medium text-ink-2">{label}</span>
       <input
         id={id} type={type} value={value} disabled={disabled}
         autoComplete={autoComplete} placeholder={placeholder}
         aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined}
         onChange={(e) => onChange(e.target.value)}
-        className={`rounded-md border px-3 py-2 outline-none disabled:bg-slate-50 ${
-          error ? 'border-fail-line focus:border-fail-line' : 'border-slate-300 focus:border-brand'}`}
+        className={`rounded-md border px-3 py-2 outline-none disabled:bg-sheet-2 ${
+          error ? 'border-fail-line focus:border-fail-line' : 'border-field-line focus:border-brand'}`}
       />
       {error && <span id={`${id}-err`} role="alert" className="mt-1 text-[12px] text-fail">{error}</span>}
     </label>
@@ -45,7 +45,7 @@ export function PasswordField(props: Omit<Parameters<typeof TextField>[0], 'type
   const [show, setShow] = useState(false)
   const { meter, ...rest } = props
   const s = meter ? passwordStrength(props.value) : null
-  const tone = ['bg-red-400', 'bg-red-400', 'bg-amber-400', 'bg-lime-500', 'bg-emerald-500']
+  const tone = ['bg-fail', 'bg-fail', 'bg-warn', 'bg-ok', 'bg-ok']
   return (
     <div className="relative">
       <button
@@ -60,7 +60,7 @@ export function PasswordField(props: Omit<Parameters<typeof TextField>[0], 'type
         <div className="-mt-2 mb-4">
           <div className="flex gap-1" aria-hidden>
             {[0, 1, 2, 3].map((i) => (
-              <span key={i} className={`h-1 flex-1 rounded ${i < s.score ? tone[s.score] : 'bg-slate-200'}`} />
+              <span key={i} className={`h-1 flex-1 rounded ${i < s.score ? tone[s.score] : 'bg-hairline'}`} />
             ))}
           </div>
           <p className="mt-1 text-[11px] text-muted">
@@ -79,7 +79,7 @@ export function SubmitButton({ busy, children, disabled }: {
   return (
     <button
       type="submit" disabled={busy || disabled}
-      className="w-full rounded-md bg-brand px-4 py-2 text-sm font-semibold text-on-solid transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-slate-300"
+      className="w-full rounded-md bg-brand px-4 py-2 text-sm font-semibold text-on-solid transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:bg-hairline disabled:text-muted"
     >
       {busy ? 'Working…' : children}
     </button>
@@ -87,8 +87,8 @@ export function SubmitButton({ busy, children, disabled }: {
 }
 
 export function FormAlert({ tone, children }: { tone: 'error' | 'success' | 'info'; children: ReactNode }) {
-  const cls = tone === 'error' ? 'border-red-200 bg-red-50 text-red-800'
-    : tone === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+  const cls = tone === 'error' ? 'border-fail-line bg-fail-tint text-fail'
+    : tone === 'success' ? 'border-ok-line bg-ok-tint text-ok'
       : 'border-sky-200 bg-sky-50 text-sky-900'
   return (
     <div role={tone === 'error' ? 'alert' : 'status'}

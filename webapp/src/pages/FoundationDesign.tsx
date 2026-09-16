@@ -419,16 +419,16 @@ export default function FoundationDesign() {
 
       {batch && (
         <div className="no-print mt-4 overflow-hidden rounded-lg border border-hairline bg-sheet">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-hairline px-4 py-2.5">
             <h2 className="text-[13.5px] font-bold text-ink">
               Batch schedule <span className="text-sm font-normal text-muted">({batch.designed}/{batch.rows.length} designed)</span>
             </h2>
-            <button type="button" onClick={() => setBatch(null)} className="no-print text-xs text-muted hover:text-slate-700 hover:underline">Clear</button>
+            <button type="button" onClick={() => setBatch(null)} className="no-print text-xs text-muted hover:text-ink-2 hover:underline">Clear</button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-muted">
+                <tr className="bg-sheet-2 text-left text-xs uppercase tracking-wide text-muted">
                   <th className="px-4 py-2 font-semibold">Label</th>
                   <th className="px-4 py-2 font-semibold">Type</th>
                   <th className="px-4 py-2 font-semibold">Plan</th>
@@ -439,12 +439,12 @@ export default function FoundationDesign() {
               </thead>
               <tbody>
                 {batch.rows.map((r, i) => (
-                  <tr key={i} className={`border-t border-slate-100 ${r.ok ? '' : 'bg-fail-tint/60'}`}>
-                    <td className="px-4 py-2 font-medium text-slate-700">{r.ok ? '✓' : '✗'} {r.label}</td>
-                    <td className="px-4 py-2 text-slate-600">{r.type}</td>
-                    <td className="px-4 py-2 text-slate-800">{r.size}</td>
-                    <td className="px-4 py-2 text-slate-800">{r.thickness}</td>
-                    <td className="px-4 py-2 text-slate-800">{r.steel}</td>
+                  <tr key={i} className={`border-t border-hairline-2 ${r.ok ? '' : 'bg-fail-tint/60'}`}>
+                    <td className="px-4 py-2 font-medium text-ink-2">{r.ok ? '✓' : '✗'} {r.label}</td>
+                    <td className="px-4 py-2 text-muted">{r.type}</td>
+                    <td className="px-4 py-2 text-ink">{r.size}</td>
+                    <td className="px-4 py-2 text-ink">{r.thickness}</td>
+                    <td className="px-4 py-2 text-ink">{r.steel}</td>
                     <td className="px-4 py-2 text-xs text-muted">{r.note}</td>
                   </tr>
                 ))}
@@ -452,7 +452,7 @@ export default function FoundationDesign() {
             </table>
           </div>
           {batch.unknownHeaders.length > 0 && (
-            <p className="border-t border-slate-100 px-4 py-2 text-xs text-muted">
+            <p className="border-t border-hairline-2 px-4 py-2 text-xs text-muted">
               Ignored headers: {batch.unknownHeaders.join(', ')}
             </p>
           )}

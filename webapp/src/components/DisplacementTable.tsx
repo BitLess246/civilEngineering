@@ -69,11 +69,11 @@ export function DisplacementTable({
 
   const tabCls = (on: boolean) =>
     `rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
-      on ? 'bg-brand text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+      on ? 'bg-brand text-white' : 'bg-paper text-muted hover:bg-hairline'
     }`
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+    <div className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
       <h2 className="mb-1 text-[1.02rem] font-bold text-brand">Nodal Displacements</h2>
       <p className="mb-3 text-[11px] text-muted">Translations in mm, rotations in mrad. Envelope shows the signed extreme across combinations.</p>
 
@@ -96,7 +96,7 @@ export function DisplacementTable({
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-muted">
+            <tr className="border-b border-hairline text-muted">
               <th className="pb-1.5 pr-3 text-left font-semibold">Node</th>
               <th className="pb-1.5 pr-3 text-right font-semibold">Elev (m)</th>
               <th className="pb-1.5 pr-3 text-right font-semibold">ux (mm)</th>
@@ -109,19 +109,19 @@ export function DisplacementTable({
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                <td className="py-1 pr-3 font-mono text-slate-700">{r.id}</td>
+              <tr key={r.id} className="border-b border-hairline-2 last:border-0 hover:bg-sheet-2">
+                <td className="py-1 pr-3 font-mono text-ink-2">{r.id}</td>
                 <td className="py-1 pr-3 text-right tabular-nums text-muted">{r.y.toFixed(2)}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{mm(r.ux)}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{mm(r.uy)}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{mm(r.uz)}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{mr(r.rx)}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{mr(r.ry)}</td>
-                <td className="py-1 text-right tabular-nums text-slate-800">{mr(r.rz)}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{mm(r.ux)}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{mm(r.uy)}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{mm(r.uz)}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{mr(r.rx)}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{mr(r.ry)}</td>
+                <td className="py-1 text-right tabular-nums text-ink">{mr(r.rz)}</td>
               </tr>
             ))}
-            <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
-              <td className="py-1.5 pr-3 text-slate-700" colSpan={2}>MAX |·|</td>
+            <tr className="border-t-2 border-field-line bg-sheet-2 font-bold">
+              <td className="py-1.5 pr-3 text-ink-2" colSpan={2}>MAX |·|</td>
               <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{mm(gmax.ux)}</td>
               <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{mm(gmax.uy)}</td>
               <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{mm(gmax.uz)}</td>

@@ -82,7 +82,7 @@ export default function TorsionDesign() {
         <div>
       <PageHeader title="Torsion Design" badges={['ACI 318-14 §22.7', 'NSCP 2015']} />
       <div className="mx-auto max-w-[1500px] p-6">
-      <p className="no-print mt-1 text-slate-600">
+      <p className="no-print mt-1 text-muted">
         Rectangular RC section — ACI 318-14 §22.7 combined shear + torsion. SI units (mm, kN, MPa).
       </p>
       <ReportControls title="Torsion Design" badges={['ACI 318-14 §22.7', 'NSCP 2015']} report={report} />
@@ -119,7 +119,7 @@ export default function TorsionDesign() {
         {/* ── RESULTS ── */}
         {r ? (
           <div className="flex flex-col gap-6">
-            <section data-pdf-drawing className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm
+            <section data-pdf-drawing className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm
               [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
               <h2 className="mb-2 text-[1.02rem] font-bold text-brand">Section — torsion tube</h2>
               <TorsionSection b={f.b} h={f.h} x1={r.x1} y1={r.y1} barDia={f.barDia}
@@ -188,7 +188,7 @@ export default function TorsionDesign() {
             </ResultCard>
           </div>
         ) : (
-          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-muted">
+          <p className="self-start rounded-xl border border-hairline bg-sheet p-6 text-sm text-muted">
             Fill in all inputs to see results.
           </p>
         )}

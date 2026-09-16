@@ -20,19 +20,19 @@ function Field({ label, value, onChange, unit, step = 'any', min, max }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
+      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
       <input type="number" step={step} min={min} max={max} value={value}
         onChange={(e) => onChange(clampTo(num(e.target.value), min, max))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+        className="rounded-md border border-field-line px-2.5 py-1.5" />
     </label>
   )
 }
 
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
+    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -89,12 +89,12 @@ export default function StairDesign() {
       <PageHeader title="RC stair flight — waist slab" badges={['NSCP 2015', 'ACI 318-14']} />
       <div className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Stair Design" badges={['NSCP 2015', 'ACI 318-14']} report={report} />
-      <p className="mt-2 text-sm text-slate-600">
+      <p className="mt-2 text-sm text-muted">
         One-way waist-slab stair to NSCP 2015 / ACI 318-14. Self-weight of the inclined waist plus
         triangular treads, finishes, and the NSCP 205 stair live load (4.8 kPa), designed per metre width.
       </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <section className="mt-6 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Geometry &amp; loads</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {/* PLAN, not along the slope: the load is kPa of plan area, so the
@@ -109,9 +109,9 @@ export default function StairDesign() {
           <Field label="Finishes" unit="kPa" value={finishes} onChange={setFinishes} min={0} />
           <Field label="Live load" unit="kPa" value={live} onChange={setLive} min={0} />
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Support</span>
+            <span className="mb-1 font-medium text-muted">Support</span>
             <select value={support} onChange={(e) => setSupport(e.target.value as StairSupport)}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5">
+              className="rounded-md border border-field-line px-2.5 py-1.5">
               <option value="simple">Simply supported</option>
               <option value="one-end">One end continuous</option>
               <option value="both-ends">Both ends continuous</option>
@@ -127,7 +127,7 @@ export default function StairDesign() {
         </div>
       </section>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <section className="mt-5 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Results</h2>
         <Out label="Slope θ" value={`${f2(r.geom.thetaDeg)}°`} />
         <Out label="Dead / Live" value={`${f2(r.loads.dead)} / ${f2(r.loads.live)} kPa`} />

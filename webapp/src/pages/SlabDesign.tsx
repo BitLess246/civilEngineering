@@ -68,7 +68,7 @@ function DirCard({ title, dir, barDia, mats }: {
       <div className="mt-2 overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-left uppercase tracking-wide text-muted">
+            <tr className="border-b border-hairline text-left uppercase tracking-wide text-muted">
               <th className="pb-1 pr-2 font-semibold">Location</th>
               <th className="pb-1 pr-2 font-semibold">M (kN·m)</th>
               <th className="pb-1 pr-2 font-semibold">Col strip</th>
@@ -77,17 +77,17 @@ function DirCard({ title, dir, barDia, mats }: {
           </thead>
           <tbody>
             {dir.locations.map((loc) => (
-              <tr key={loc.name} className="border-b border-slate-100 last:border-0">
-                <td className="py-1 pr-2 font-medium text-slate-700">{loc.name}</td>
-                <td className="py-1 pr-2 text-slate-600">{f1(loc.M)}</td>
+              <tr key={loc.name} className="border-b border-hairline-2 last:border-0">
+                <td className="py-1 pr-2 font-medium text-ink-2">{loc.name}</td>
+                <td className="py-1 pr-2 text-muted">{f1(loc.M)}</td>
                 <td className="py-1 pr-2">
-                  <div className="font-semibold text-slate-800">{steelText(loc.column, barDia, mat(loc.name, 'column'))}</div>
+                  <div className="font-semibold text-ink">{steelText(loc.column, barDia, mat(loc.name, 'column'))}</div>
                   <div className="text-muted">{steelSub(loc.column)}</div>
                 </td>
                 <td className="py-1">
                   {loc.middle.b > 0 ? (
                     <>
-                      <div className="font-semibold text-slate-800">{steelText(loc.middle, barDia, mat(loc.name, 'middle'))}</div>
+                      <div className="font-semibold text-ink">{steelText(loc.middle, barDia, mat(loc.name, 'middle'))}</div>
                       <div className="text-muted">{steelSub(loc.middle)}</div>
                     </>
                   ) : <span className="text-muted">—</span>}
@@ -217,7 +217,7 @@ export default function SlabDesign() {
           app-wide horizontal rail, so this container matches it instead of
           sitting 4px off — the mismatch this page used to have. */}
       <div className="mx-auto max-w-[1500px] px-5 py-6 sm:px-7">
-      <p className="no-print mt-1 text-slate-600">
+      <p className="no-print mt-1 text-muted">
         Direct Design Method — NSCP 2015 §408.10 / ACI 318-14 §8.10. Square or rectangular interior and end panels;
         column-strip / middle-strip flexure; temp/shrinkage minimum; §408.7.2.2 spacing; mid-panel deflection by
         crossing-strip method (Branson I_e).
@@ -298,7 +298,7 @@ export default function SlabDesign() {
               {r.notes.length > 0 && (
                 <div className="space-y-1">
                   {r.notes.map((n, i) => (
-                    <p key={i} className="rounded border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+                    <p key={i} className="rounded border border-hairline bg-sheet-2 px-3 py-1.5 text-xs text-muted">
                       {n}
                     </p>
                   ))}

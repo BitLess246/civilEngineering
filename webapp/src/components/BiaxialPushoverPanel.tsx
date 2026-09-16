@@ -49,7 +49,7 @@ export function BiaxialPushoverPanel({ res }: { res: BiaxialPushoverResult }) {
 
   return (
     <ResultCard title={`Biaxial pushover — push at ${res.angleDeg}° in plan`}>
-      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
+      <div className="mb-3 rounded-lg border border-hairline bg-sheet-2 p-2">
         <CapacityCurve res={res} />
       </div>
 
@@ -77,12 +77,12 @@ export function BiaxialPushoverPanel({ res }: { res: BiaxialPushoverResult }) {
 
       {s.worst.length > 0 && (
         <div className="mt-3 overflow-x-auto">
-          <p className="mb-1 text-[11px] font-semibold text-slate-600">
+          <p className="mb-1 text-[11px] font-semibold text-muted">
             Most-utilised hinges — moments are about the member’s own local axes
           </p>
           <table className="w-full text-left text-xs">
             <thead className="text-muted">
-              <tr className="border-b border-slate-200">
+              <tr className="border-b border-hairline">
                 <th className="py-1 pr-2">Member</th>
                 <th className="py-1 pr-2">End</th>
                 <th className="py-1 pr-2">My (kN·m)</th>
@@ -92,9 +92,9 @@ export function BiaxialPushoverPanel({ res }: { res: BiaxialPushoverResult }) {
                 <th className="py-1 pr-2">D/C</th>
               </tr>
             </thead>
-            <tbody className="text-slate-700">
+            <tbody className="text-ink-2">
               {s.worst.map((h) => (
-                <tr key={`${h.member}-${h.end}`} className="border-b border-slate-100 last:border-0">
+                <tr key={`${h.member}-${h.end}`} className="border-b border-hairline-2 last:border-0">
                   <td className="py-1 pr-2">{h.member}</td>
                   <td className="py-1 pr-2 text-muted">{h.end}</td>
                   <td className="py-1 pr-2">{h.My.toFixed(1)}</td>
@@ -103,7 +103,7 @@ export function BiaxialPushoverPanel({ res }: { res: BiaxialPushoverResult }) {
                   <td className="py-1 pr-2 text-muted">
                     {(Math.hypot(h.plasticY, h.plasticZ) * 1000).toFixed(2)}
                   </td>
-                  <td className={`py-1 pr-2 font-semibold ${h.yielded ? 'text-fail' : 'text-slate-700'}`}>
+                  <td className={`py-1 pr-2 font-semibold ${h.yielded ? 'text-fail' : 'text-ink-2'}`}>
                     {Number.isFinite(h.utilisation) ? h.utilisation.toFixed(2) : '∞'}
                   </td>
                 </tr>

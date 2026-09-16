@@ -18,18 +18,18 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
+      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
       <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+        className="rounded-md border border-field-line px-2.5 py-1.5" />
     </label>
   )
 }
 
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
+    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -40,9 +40,9 @@ function CheckCard({ title, sub, c }: {
   c: ReturnType<typeof designWoodSlab>['joist']
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 p-4">
+    <div className="rounded-lg border border-hairline p-4">
       <div className="mb-1 flex items-baseline justify-between">
-        <h3 className="text-sm font-bold text-slate-700">{title}</h3>
+        <h3 className="text-sm font-bold text-ink-2">{title}</h3>
         <span className={`rounded px-2 py-0.5 text-xs font-bold ${c.ok ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
           {c.ok ? 'PASS' : 'FAIL'} · {f2(c.ratio)}
         </span>
@@ -103,7 +103,7 @@ export default function WoodSlab() {
       <CalcBody wide>
         <div className="space-y-5">
       <ReportControls title="Wood Slab Design Report" badges={['NDS 2018 §3', 'NSCP 2015 §6']} />
-      <p className="mt-2 text-sm text-slate-600">
+      <p className="mt-2 text-sm text-muted">
         ASD design of a wood floor slab: decking (planks or bamboo slats) spanning between repetitive
         joists. Both are checked for bending, horizontal shear and service deflection (L/360 live,
         L/240 total); the joist gets the repetitive-member factor Cr and continuous lateral support
@@ -123,16 +123,16 @@ export default function WoodSlab() {
       <Card title="Joists">
         <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Species</span>
+            <span className="mb-1 font-medium text-muted">Species</span>
             <select value={species} onChange={(e) => { setSpecies(e.target.value); const g = gradesOf(e.target.value); if (g.length) setGrade(g[0].grade) }}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5">
+              className="rounded-md border border-field-line px-2.5 py-1.5">
               {speciesOptions.map((s) => <option key={s.species} value={s.species}>{s.label}</option>)}
             </select>
           </label>
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Grade</span>
+            <span className="mb-1 font-medium text-muted">Grade</span>
             <select value={grade} onChange={(e) => setGrade(e.target.value)}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5">
+              className="rounded-md border border-field-line px-2.5 py-1.5">
               {gradeOptions.map((g) => <option key={g.grade} value={g.grade}>{g.gradeLabel}</option>)}
             </select>
           </label>
@@ -140,9 +140,9 @@ export default function WoodSlab() {
           <Field label="Depth d" unit="mm" value={joistD} onChange={setJoistD} />
           <Field label="Spacing" unit="mm" value={joistSpacing} onChange={setJoistSpacing} />
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Support</span>
+            <span className="mb-1 font-medium text-muted">Support</span>
             <select value={joistSupport} onChange={(e) => setJoistSupport(e.target.value as SlabSupport)}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5">
+              className="rounded-md border border-field-line px-2.5 py-1.5">
               <option value="simple">Simple span</option>
               <option value="continuous">Continuous (≥3)</option>
             </select>
@@ -154,9 +154,9 @@ export default function WoodSlab() {
       <Card title="Decking">
         <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Material</span>
+            <span className="mb-1 font-medium text-muted">Material</span>
             <select value={deckMaterial} onChange={(e) => { const m = e.target.value as DeckMaterial; setDeckMaterial(m); setDeckWidth(m === 'bamboo-slat' ? 50 : 140) }}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5">
+              className="rounded-md border border-field-line px-2.5 py-1.5">
               <option value="plank">Plank (sawn)</option>
               <option value="bamboo-slat">Bamboo slat</option>
             </select>
@@ -164,9 +164,9 @@ export default function WoodSlab() {
           <Field label="Thickness t" unit="mm" value={deckThickness} onChange={setDeckThickness} />
           <Field label="Board/slat width" unit="mm" value={deckWidth} onChange={setDeckWidth} />
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Support</span>
+            <span className="mb-1 font-medium text-muted">Support</span>
             <select value={deckSupport} onChange={(e) => setDeckSupport(e.target.value as SlabSupport)}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5">
+              className="rounded-md border border-field-line px-2.5 py-1.5">
               <option value="continuous">Continuous (≥3)</option>
               <option value="simple">Simple span</option>
             </select>
@@ -178,9 +178,9 @@ export default function WoodSlab() {
       <Card title="Service conditions">
         <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Load duration (C_D)</span>
+            <span className="mb-1 font-medium text-muted">Load duration (C_D)</span>
             <select value={duration} onChange={(e) => setDuration(e.target.value as LoadDuration)}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5">
+              className="rounded-md border border-field-line px-2.5 py-1.5">
               <option value="permanent">Permanent (0.9)</option>
               <option value="ten-year">Occupancy live (1.0)</option>
               <option value="two-month">Snow (1.15)</option>
@@ -189,9 +189,9 @@ export default function WoodSlab() {
             </select>
           </label>
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Moisture</span>
+            <span className="mb-1 font-medium text-muted">Moisture</span>
             <select value={wet ? 'wet' : 'dry'} onChange={(e) => setWet(e.target.value === 'wet')}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5">
+              className="rounded-md border border-field-line px-2.5 py-1.5">
               <option value="dry">Dry (MC ≤ 19%)</option>
               <option value="wet">Wet service (C_M)</option>
             </select>
@@ -220,11 +220,11 @@ export default function WoodSlab() {
           </div>
 
           <div className="mb-1 mt-5 flex items-baseline justify-between">
-            <h3 className="text-sm font-bold text-slate-700">Bill of materials <span className="font-normal text-faint">— wood-frame timber costing</span></h3>
+            <h3 className="text-sm font-bold text-ink-2">Bill of materials <span className="font-normal text-faint">— wood-frame timber costing</span></h3>
             <label className="no-print flex items-center gap-1 text-xs text-muted">
               ₱/bd·ft
               <input type="number" step="any" value={timberRate} onChange={(e) => setTimberRate(num(e.target.value, 55))}
-                className="w-16 rounded border border-slate-300 px-1.5 py-0.5 text-right font-mono" />
+                className="w-16 rounded border border-field-line px-1.5 py-0.5 text-right font-mono" />
             </label>
           </div>
           {(() => {
@@ -238,7 +238,7 @@ export default function WoodSlab() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 text-left text-muted">
+                    <tr className="border-b border-hairline text-left text-muted">
                       <th className="py-1 pr-3 font-medium">Item</th>
                       <th className="py-1 pr-3 text-right font-medium">Board feet</th>
                       <th className="py-1 text-right font-medium">Amount (₱)</th>
@@ -246,7 +246,7 @@ export default function WoodSlab() {
                   </thead>
                   <tbody className="font-mono">
                     {rows.map((row, k) => (
-                      <tr key={k} className="border-b border-slate-100">
+                      <tr key={k} className="border-b border-hairline-2">
                         <td className="py-1 pr-3">
                           {row.item}
                           <span className="ml-1 text-[11px] text-faint">
@@ -259,7 +259,7 @@ export default function WoodSlab() {
                         <td className="py-1 text-right">{row.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                       </tr>
                     ))}
-                    <tr className="font-semibold text-slate-700">
+                    <tr className="font-semibold text-ink-2">
                       <td className="py-1 pr-3">Timber sub-total</td>
                       <td className="py-1 pr-3 text-right">{f0(sizes.reduce((s, x) => s + x.boardFeet, 0))}</td>
                       <td className="py-1 text-right">{total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>

@@ -62,14 +62,14 @@ function NumField({ label, unit, value, onChange, step = 'any', min, max }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">
+      <span className="mb-1 font-medium text-muted">
         {label}{unit ? <span className="text-muted"> ({unit})</span> : null}
       </span>
       <input
         type="number" inputMode="decimal" step={step} min={min} max={max}
         value={Number.isFinite(value) ? value : ''}
         onChange={e => onChange(clampTo(parseFloat(e.target.value), min, max))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+        className="rounded-md border border-field-line px-2.5 py-1.5 text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
       />
     </label>
   )
@@ -80,9 +80,9 @@ function SelectField<T extends string | number>({ label, value, onChange, option
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}</span>
+      <span className="mb-1 font-medium text-muted">{label}</span>
       <select value={String(value)} onChange={e => onChange(e.target.value as T)}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none">
+        className="rounded-md border border-field-line px-2.5 py-1.5 text-ink focus:border-brand focus:outline-none">
         {options.map(([v, t]) => <option key={String(v)} value={String(v)}>{t}</option>)}
       </select>
     </label>

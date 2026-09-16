@@ -209,7 +209,7 @@ export default function TrussSpace() {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
         {/* 3D viewport */}
         <div className="no-print lg:sticky lg:top-4">
-          <div className="relative h-[70vh] min-h-[420px] overflow-hidden rounded-xl border border-slate-200 bg-sheet shadow-sm">
+          <div className="relative h-[70vh] min-h-[420px] overflow-hidden rounded-xl border border-hairline bg-sheet shadow-sm">
             <Canvas camera={{ position: [cx - span * 0.35, cyc + height + span * 0.22, Math.max(span, 6) * 1.0], fov: 45 }} onPointerMissed={() => setSelected(null)}>
               <color attach="background" args={['#f8fafc']} />
               <ambientLight intensity={0.9} />
@@ -237,7 +237,7 @@ export default function TrussSpace() {
             {selForce && (
               <div className="no-print absolute left-3 top-3 flex items-center gap-2 rounded-lg border border-brand/30 bg-sheet/90 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
                 <span className="font-semibold text-brand">▣ {selForce.kind} {selForce.id}</span>
-                <span className={selForce.N >= 0 ? 'text-blue-700' : 'text-fail'}>
+                <span className={selForce.N >= 0 ? 'text-brand' : 'text-fail'}>
                   {f1(Math.abs(selForce.N))} kN {selForce.N >= 0 ? 'tension' : 'compression'}
                 </span>
                 {selDes && <span className="text-muted">util {(selDes.util * 100).toFixed(0)}%</span>}
@@ -245,7 +245,7 @@ export default function TrussSpace() {
               </div>
             )}
             <div className="no-print pointer-events-none absolute bottom-2 left-3 text-[10px] text-muted">
-              drag to orbit · scroll to zoom · hold <b>Shift</b> (or right-drag) to pan · <span className="text-blue-700">tension</span> / <span className="text-fail">compression</span>
+              drag to orbit · scroll to zoom · hold <b>Shift</b> (or right-drag) to pan · <span className="text-brand">tension</span> / <span className="text-fail">compression</span>
             </div>
           </div>
         </div>
@@ -342,7 +342,7 @@ export default function TrussSpace() {
             <Num label="Fy" unit="MPa" value={Fy} onChange={setFy} step="5" />
             <Num label="E" unit="MPa" value={E} onChange={setE} step="1000" />
             <Num label="Effective length K" value={K} onChange={setK} step="0.05" />
-            <div className="col-span-full flex items-center gap-3 border-t border-slate-100 pt-2">
+            <div className="col-span-full flex items-center gap-3 border-t border-hairline-2 pt-2">
               {!customSec && <SectionShape sec={eff} />}
               <div className="text-[11px] text-muted">
                 <div className="font-semibold text-brand">{eff.label}</div>
@@ -414,7 +414,7 @@ export default function TrussSpace() {
               {result.determinacy.status} · {opt ? `${opt.groups.length} auto-sized sections` : eff.label} · Fy {Fy} MPa · max util {(design.maxUtil * 100).toFixed(0)}%
             </span>
           </h2>
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+          <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-muted">
@@ -436,13 +436,13 @@ export default function TrussSpace() {
                   const bad = !d.ok
                   return (
                     <tr key={f.id} onClick={() => setSelected(f.id)}
-                      className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-fail-tint text-fail' : ''} ${selected === f.id ? 'bg-warn-tint' : ''}`}>
+                      className={`cursor-pointer border-t border-hairline-2 hover:bg-brand-tint/40 ${bad ? 'bg-fail-tint text-fail' : ''} ${selected === f.id ? 'bg-warn-tint' : ''}`}>
                       <td className="py-1 pr-2 font-medium">{f.id} <span className="text-muted">({f.i}–{f.j})</span></td>
                       <td className="py-1 pr-2">{f.kind}</td>
                       {opt && <td className="py-1 pr-2 font-mono text-[10px]">{sectionOfMember.get(f.id)?.label ?? '—'}</td>}
                       <td className="py-1 pr-2 text-right">{f2(f.L)}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(f.N))}</td>
-                      <td className={`py-1 pr-2 ${f.N >= 0 ? 'text-blue-700' : 'text-fail'}`}>{d.mode === 'zero' ? '—' : f.N >= 0 ? 'T' : 'C'}</td>
+                      <td className={`py-1 pr-2 ${f.N >= 0 ? 'text-brand' : 'text-fail'}`}>{d.mode === 'zero' ? '—' : f.N >= 0 ? 'T' : 'C'}</td>
                       <td className="py-1 pr-2 text-muted">{f.combo}</td>
                       <td className="py-1 pr-2 text-right">{d.mode === 'compression' ? Math.round(d.slenderness) + (d.slenderOK ? '' : ' ⚠') : '—'}</td>
                       <td className="py-1 pr-2 text-right">{f1(d.phiPn)}</td>
@@ -479,7 +479,7 @@ export default function TrussSpace() {
               [`Gusset (${gussetPct}%)`, `${f1(takeoff.gussetKg)} kg`],
               ['Total steel', `${f1(takeoff.totalKg)} kg`],
             ].map(([k, v]) => (
-              <div key={k} className="rounded-lg border border-slate-200 bg-sheet p-2 text-center shadow-sm">
+              <div key={k} className="rounded-lg border border-hairline bg-sheet p-2 text-center shadow-sm">
                 <div className="text-[11px] uppercase tracking-wide text-muted">{k}</div>
                 <div className="text-base font-bold text-brand">{v}</div>
               </div>
@@ -488,7 +488,7 @@ export default function TrussSpace() {
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* Per-member table */}
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+            <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel by member</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
@@ -502,7 +502,7 @@ export default function TrussSpace() {
                 </thead>
                 <tbody>
                   {takeoff.byMember.map((m) => (
-                    <tr key={m.id} className="border-t border-slate-100">
+                    <tr key={m.id} className="border-t border-hairline-2">
                       <td className="py-0.5 pr-2 font-medium">{m.id}</td>
                       <td className="py-0.5 pr-2 capitalize text-muted">{m.kind}</td>
                       <td className="py-0.5 pr-2 text-right">{f2(m.L)}</td>
@@ -510,7 +510,7 @@ export default function TrussSpace() {
                       <td className="py-0.5 text-right">{f2(m.netWeightKg)}</td>
                     </tr>
                   ))}
-                  <tr className="border-t border-slate-200 font-semibold">
+                  <tr className="border-t border-hairline font-semibold">
                     <td colSpan={4} className="py-1 pr-2">Total</td>
                     <td className="py-1 text-right">{f1(takeoff.netSteelKg)} kg</td>
                   </tr>
@@ -520,7 +520,7 @@ export default function TrussSpace() {
 
             {/* By-kind subtotals + priced BOM */}
             <div className="space-y-4">
-              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
                 <h3 className="mb-2 text-[1.02rem] font-bold text-brand">By element kind</h3>
                 <table className="w-full border-collapse text-xs">
                   <thead>
@@ -533,14 +533,14 @@ export default function TrussSpace() {
                   </thead>
                   <tbody>
                     {takeoff.byKind.map((k) => (
-                      <tr key={k.kind} className="border-t border-slate-100">
+                      <tr key={k.kind} className="border-t border-hairline-2">
                         <td className="py-0.5 pr-2 capitalize font-medium">{k.kind}</td>
                         <td className="py-0.5 pr-2 text-right">{k.members}</td>
                         <td className="py-0.5 pr-2 text-right">{f2(k.lengthM)}</td>
                         <td className="py-0.5 text-right">{f2(k.netKg)}</td>
                       </tr>
                     ))}
-                    <tr className="border-t border-slate-200 font-semibold">
+                    <tr className="border-t border-hairline font-semibold">
                       <td className="py-1 pr-2">Total</td>
                       <td className="py-1 pr-2 text-right">{takeoff.byMember.length}</td>
                       <td className="py-1 pr-2 text-right">{f2(takeoff.byKind.reduce((s, k) => s + k.lengthM, 0))}</td>
@@ -551,23 +551,23 @@ export default function TrussSpace() {
               </div>
 
               {/* Priced BOM */}
-              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+              <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-[1.02rem] font-bold text-brand">Priced Bill of Materials</h3>
                   <div className="flex flex-wrap items-center gap-3 text-xs">
-                    <label className="flex items-center gap-1 text-slate-600">
+                    <label className="flex items-center gap-1 text-muted">
                       Steel price
                       <input type="number" value={steelUnitPrice} min={1} step={5}
                         onChange={(e) => setSteelUnitPrice(Math.max(1, Number(e.target.value)))}
-                        className="no-print ml-1 w-20 rounded border border-slate-300 px-1 py-0.5 text-right text-xs"
+                        className="no-print ml-1 w-20 rounded border border-field-line px-1 py-0.5 text-right text-xs"
                       />
                       <span>₱/kg</span>
                     </label>
-                    <label className="flex items-center gap-1 text-slate-600">
+                    <label className="flex items-center gap-1 text-muted">
                       Gusset
                       <input type="number" value={gussetPct} min={0} max={50} step={1}
                         onChange={(e) => setGussetPct(Math.min(50, Math.max(0, Number(e.target.value))))}
-                        className="no-print ml-1 w-16 rounded border border-slate-300 px-1 py-0.5 text-right text-xs"
+                        className="no-print ml-1 w-16 rounded border border-field-line px-1 py-0.5 text-right text-xs"
                       />
                       <span>%</span>
                     </label>
@@ -585,7 +585,7 @@ export default function TrussSpace() {
                   </thead>
                   <tbody>
                     {bill.rows.map((r) => (
-                      <tr key={r.item} className="border-t border-slate-100">
+                      <tr key={r.item} className="border-t border-hairline-2">
                         <td className="py-0.5 pr-2">{r.item}</td>
                         <td className="py-0.5 pr-2 text-right">{f1(r.qty)}</td>
                         <td className="py-0.5 pr-2">{r.unit}</td>
@@ -593,7 +593,7 @@ export default function TrussSpace() {
                         <td className="py-0.5 text-right">{peso(r.amount)}</td>
                       </tr>
                     ))}
-                    <tr className="border-t-2 border-slate-300 font-bold">
+                    <tr className="border-t-2 border-field-line font-bold">
                       <td colSpan={4} className="py-1 pr-2">Total</td>
                       <td className="py-1 text-right">{peso(bill.total)}</td>
                     </tr>

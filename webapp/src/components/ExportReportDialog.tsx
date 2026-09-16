@@ -79,7 +79,7 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
     || (outputs.combined && noReport && noAppendix)
 
   const box = (key: string, checked: boolean, onChange: () => void, label: string, hint?: string, disabled = false) => (
-    <label key={key} className={`flex items-start gap-2 rounded-md px-2 py-1 text-[12px] ${disabled ? 'text-faint' : 'text-slate-700 hover:bg-slate-50'}`}>
+    <label key={key} className={`flex items-start gap-2 rounded-md px-2 py-1 text-[12px] ${disabled ? 'text-faint' : 'text-ink-2 hover:bg-sheet-2'}`}>
       <input type="checkbox" className="mt-0.5" checked={checked} disabled={disabled} onChange={onChange} />
       <span>
         <span className="font-medium">{label}</span>
@@ -93,7 +93,7 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
       onMouseDown={close} role="dialog" aria-modal="true" aria-labelledby="export-title">
       <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-hairline bg-sheet shadow-2xl"
         onMouseDown={(e) => e.stopPropagation()}>
-        <div className="border-b border-slate-100 px-5 py-3">
+        <div className="border-b border-hairline-2 px-5 py-3">
           <h2 id="export-title" className="text-[13px] font-bold uppercase tracking-wide text-brand">Generate report</h2>
           <p className="mt-0.5 text-[11px] text-muted">Choose what the print includes and which PDFs to write. Sections the engine has not produced are greyed out.</p>
         </div>
@@ -116,7 +116,7 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
           </fieldset>
         </div>
 
-        <div className="border-t border-slate-100 px-5 py-3">
+        <div className="border-t border-hairline-2 px-5 py-3">
           <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted">PDFs to generate</p>
           <div className="grid grid-cols-1 gap-1 sm:grid-cols-3">
             {box('report', outputs.report, () => toggleOutput('report'), 'Structure Design Report',
@@ -127,9 +127,9 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
           </div>
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+        <div className="flex items-center justify-between border-t border-hairline-2 bg-sheet-2/60 px-5 py-3">
           <button type="button" onClick={close} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-[12px] font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50">
+            className="rounded-md px-3 py-1.5 text-[12px] font-medium text-muted hover:bg-paper disabled:opacity-50">
             Cancel
           </button>
           <button type="button" disabled={blocked || busy}

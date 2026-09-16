@@ -38,14 +38,14 @@ export type { BeamRowSection, SectionRect, SectionRowDesign } from '../../lib/sc
 export function BeamServiceability({ r, id, L }: { r: MemberDeflectionResult; id: string; L: number }) {
   const serviceOK = r.liveOK && r.totalOK
   const cell = (label: string, value: string, sub?: string, alert?: boolean) => (
-    <div className={`rounded border px-2 py-1 ${alert ? 'border-fail-line bg-fail-tint' : 'border-slate-200 bg-sheet'}`}>
+    <div className={`rounded border px-2 py-1 ${alert ? 'border-fail-line bg-fail-tint' : 'border-hairline bg-sheet'}`}>
       <div className="text-[9px] uppercase tracking-wide text-muted">{label}</div>
-      <div className={`font-mono text-[11px] font-semibold ${alert ? 'text-fail' : 'text-slate-800'}`}>{value}</div>
+      <div className={`font-mono text-[11px] font-semibold ${alert ? 'text-fail' : 'text-ink'}`}>{value}</div>
       {sub && <div className="text-[9px] text-muted">{sub}</div>}
     </div>
   )
   return (
-    <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/70 p-2">
+    <div className="mb-3 rounded-lg border border-hairline bg-sheet-2/70 p-2">
       <p className="mb-1.5 text-[11px] font-semibold text-brand">
         Serviceability — NSCP §424.2 computed deflection · {id} ({f2(L)} m, {r.support})
         <span className={`ml-2 rounded px-1.5 py-px font-mono text-[10px] ${

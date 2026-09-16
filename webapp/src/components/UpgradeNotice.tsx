@@ -39,7 +39,7 @@ export function UpgradeGate({ title, message, blurb }: { title: string; message:
     <div className="mx-auto max-w-2xl px-5 py-16 text-center">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Plan required</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">{title}</h1>
-      <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-600">{message}</p>
+      <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-muted">{message}</p>
       {blurb && <p className="mx-auto mt-2 max-w-lg text-[13px] leading-6 text-muted">{blurb}</p>}
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Link to="/pricing"
@@ -47,7 +47,7 @@ export function UpgradeGate({ title, message, blurb }: { title: string; message:
           Compare plans
         </Link>
         <Link to="/docs"
-          className="rounded-md border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:border-brand hover:text-brand">
+          className="rounded-md border border-field-line px-5 py-2 text-sm font-semibold text-ink-2 hover:border-brand hover:text-brand">
           Browse the calculators
         </Link>
       </div>

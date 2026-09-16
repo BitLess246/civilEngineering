@@ -21,18 +21,18 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
+      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
       <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+        className="rounded-md border border-field-line px-2.5 py-1.5" />
     </label>
   )
 }
 
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
+    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -83,7 +83,7 @@ function SlopeSvg({ ground, res, water }: { ground: Pt[]; res: CircleResult | nu
     ? water.map((p, i) => `${i ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ') : ''
 
   return (
-    <svg viewBox={`0 0 ${W} ${Hpx}`} className="w-full rounded-lg border border-slate-200 bg-sheet" style={{ maxHeight: 340 }}>
+    <svg viewBox={`0 0 ${W} ${Hpx}`} className="w-full rounded-lg border border-hairline bg-sheet" style={{ maxHeight: 340 }}>
       <rect x={0} y={0} width={W} height={Hpx} fill="#fff" />
       {massPath && <path d={massPath} fill="#fca5a5" fillOpacity={0.28} stroke="none" />}
       {slicePts.map((d, i) => <path key={i} d={d} stroke="#94a3b8" strokeWidth={0.5} fill="none" />)}
@@ -173,7 +173,7 @@ export default function SlopeStability() {
       <CalcBody wide>
         <div className="space-y-5">
       <ReportControls title="Slope Stability" badges={['Bishop', 'Fellenius', 'Janbu']} report={report} />
-      <p className="mt-2 text-sm text-slate-600">
+      <p className="mt-2 text-sm text-muted">
         Circular-failure factor of safety by the method of slices — Fellenius/OMS, Bishop&rsquo;s simplified and
         Janbu&rsquo;s simplified — with a grid search for the critical (minimum-FS) circle. Pore pressure via ru.
         The infinite-slope check below covers the other failure mode: a planar slide in a shallow
@@ -214,7 +214,7 @@ export default function SlopeStability() {
           <label className="flex items-center gap-2 text-sm">
             <span className="text-muted">Governing method</span>
             <select value={method} onChange={(e) => setMethod(e.target.value as typeof method)}
-              className="rounded-md border border-slate-300 px-2 py-1">
+              className="rounded-md border border-field-line px-2 py-1">
               <option value="bishop">Bishop simplified</option>
               <option value="fellenius">Fellenius / OMS</option>
               <option value="janbu">Janbu simplified</option>
@@ -235,7 +235,7 @@ export default function SlopeStability() {
             </p>
           </div>
         ) : (
-          <p className="mt-3 rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-faint">
+          <p className="mt-3 rounded-lg border border-dashed border-hairline px-3 py-4 text-center text-xs text-faint">
             No valid slip circle found for this geometry — check the slope height, angle and plateau widths.
           </p>
         )}
@@ -246,14 +246,14 @@ export default function SlopeStability() {
           <div className="overflow-x-auto">
             <table className="w-full text-right text-[12px]">
               <thead className="text-muted">
-                <tr className="border-b border-slate-200">
+                <tr className="border-b border-hairline">
                   <th className="py-1 pr-3 text-left">#</th><th className="py-1 pr-3">x (m)</th><th className="py-1 pr-3">b (m)</th>
                   <th className="py-1 pr-3">h (m)</th><th className="py-1 pr-3">α (°)</th><th className="py-1 pr-3">W (kN/m)</th><th className="py-1 pr-3">u (kPa)</th>
                 </tr>
               </thead>
               <tbody className="font-mono">
                 {crit.slices.map((sl, i) => (
-                  <tr key={i} className="border-b border-slate-100">
+                  <tr key={i} className="border-b border-hairline-2">
                     <td className="py-0.5 pr-3 text-left">{i + 1}</td>
                     <td className="py-0.5 pr-3">{f2(sl.x)}</td><td className="py-0.5 pr-3">{f2(sl.b)}</td>
                     <td className="py-0.5 pr-3">{f2(sl.h)}</td><td className="py-0.5 pr-3">{f2((sl.alpha * 180) / Math.PI)}</td>
@@ -279,17 +279,17 @@ export default function SlopeStability() {
         </p>
         <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Failure depth z (m)</span>
+            <span className="mb-1 font-medium text-muted">Failure depth z (m)</span>
             <input type="number" step="0.5" value={infZ}
               onChange={(e) => setInfZ(parseFloat(e.target.value) || 0)}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+              className="rounded-md border border-field-line px-2.5 py-1.5" />
           </label>
           {infSeepage && (
             <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium text-slate-600">γsat (kN/m³)</span>
+              <span className="mb-1 font-medium text-muted">γsat (kN/m³)</span>
               <input type="number" step="0.5" value={infGammaSat}
                 onChange={(e) => setInfGammaSat(parseFloat(e.target.value) || 0)}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+                className="rounded-md border border-field-line px-2.5 py-1.5" />
             </label>
           )}
         </div>
@@ -297,7 +297,7 @@ export default function SlopeStability() {
           <input type="checkbox" checked={infSeepage} onChange={(e) => setInfSeepage(e.target.checked)} />
           <span>Seepage parallel to the slope (water table at the surface)</span>
         </label>
-        <div className="mt-3 flex items-baseline justify-between border-t border-slate-100 pt-2">
+        <div className="mt-3 flex items-baseline justify-between border-t border-hairline-2 pt-2">
           <span className="text-sm text-muted">Factor of safety</span>
           <span className={`font-mono text-lg font-bold ${infFS >= 1.5 ? 'text-ok' : infFS >= 1 ? 'text-warn' : 'text-fail'}`}>
             {Number.isFinite(infFS) ? infFS.toFixed(2) : '—'}

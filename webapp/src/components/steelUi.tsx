@@ -24,9 +24,9 @@ export function Verdict({ pass, value }: { pass: boolean; value: string }) {
 
 /** Lateral-torsional-buckling zone chip: plastic / inelastic / elastic. */
 export function ZoneBadge({ zone }: { zone: string }) {
-  const cls = zone === 'plastic' ? 'bg-green-100 text-green-800'
-    : zone === 'inelastic' ? 'bg-amber-100 text-amber-800'
-    : 'bg-red-100 text-red-800'
+  const cls = zone === 'plastic' ? 'bg-ok-tint text-ok'
+    : zone === 'inelastic' ? 'bg-warn-tint text-warn'
+    : 'bg-fail-tint text-fail'
   return <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${cls}`}>{zone}</span>
 }
 
@@ -41,7 +41,7 @@ export function CalcBadge({ loading, error, cause }: { loading: boolean; error: 
   if (cause instanceof TrialExhaustedError)
     return <span className="ml-2 rounded bg-warn-tint px-2 py-0.5 text-xs text-warn">free trial used up</span>
   if (error)   return <span className="ml-2 rounded bg-fail-tint px-2 py-0.5 text-xs text-fail">API error — check console</span>
-  if (loading) return <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-muted">computing…</span>
+  if (loading) return <span className="ml-2 rounded bg-paper px-2 py-0.5 text-xs text-muted">computing…</span>
   return null
 }
 
@@ -79,7 +79,7 @@ export function ShapePick({ value, onChange }: { value: string; onChange: (v: st
     <label className="col-span-full flex flex-col text-sm">
       <span className="mb-1 text-[11.5px] font-semibold text-muted">W-shape</span>
       <select value={value} onChange={e => onChange(e.target.value)}
-        className="rounded-md border border-field-line px-2.5 py-1.5 text-[13px] text-slate-800 focus:border-brand focus:outline-none">
+        className="rounded-md border border-field-line px-2.5 py-1.5 text-[13px] text-ink focus:border-brand focus:outline-none">
         {W_SHAPES.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
       </select>
     </label>
@@ -99,7 +99,7 @@ export function BasisPick({ value, onChange }: { value: DesignBasis; onChange: (
     <label className="flex flex-col text-sm">
       <span className="mb-1 text-[11.5px] font-semibold text-muted">Design basis</span>
       <select value={value} onChange={e => onChange(e.target.value as DesignBasis)}
-        className="rounded-md border border-field-line px-2.5 py-1.5 text-[13px] text-slate-800 focus:border-brand focus:outline-none">
+        className="rounded-md border border-field-line px-2.5 py-1.5 text-[13px] text-ink focus:border-brand focus:outline-none">
         <option value="LRFD">LRFD — φRn vs 1.2D + 1.6L</option>
         <option value="ASD">ASD — Rn/Ω vs D + L</option>
       </select>

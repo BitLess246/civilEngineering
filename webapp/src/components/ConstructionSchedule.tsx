@@ -100,7 +100,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
         <span className="flex items-center gap-3 text-sm text-muted">
           <span>auto-derived from the model · {base.frame} frame</span>
           {edited && <button type="button" onClick={resetAll}
-            className="no-print rounded border border-slate-300 px-2 py-0.5 text-xs font-semibold text-brand hover:bg-blue-50">↺ reset edits</button>}
+            className="no-print rounded border border-field-line px-2 py-0.5 text-xs font-semibold text-brand hover:bg-brand-tint">↺ reset edits</button>}
           <button type="button" onClick={openInScheduler} title={linked ? 'Refresh the linked scheduler project (keeps calendar, resources, baselines & actuals)' : 'Create a scheduler project from this schedule'}
             className="no-print rounded-md bg-brand px-3 py-1 text-xs font-bold text-on-solid hover:bg-brand-hover">{linked ? 'Update in Scheduler →' : 'Open in Scheduler →'}</button>
         </span>
@@ -114,7 +114,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
           ['P80 finish', `${f1(solved.projectDays + 0.842 * solved.projectSd)} days`],
           ['Activities', `${activities.length} · ${solved.criticalPath.length} critical`],
         ].map(([k, v]) => (
-          <div key={k} className="rounded-lg border border-slate-200 bg-sheet p-3">
+          <div key={k} className="rounded-lg border border-hairline bg-sheet p-3">
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{k}</p>
             <p className="mt-0.5 font-mono text-[15px] font-bold text-ink">{v}</p>
           </div>
@@ -126,7 +126,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
       <CriticalPathDiagram activities={activities} cpm={cpm} critical={crit} onEditDuration={setDuration} />
 
       {/* Mini-Gantt on the working-day axis */}
-      <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+      <div className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
         <h3 className="mb-3 text-[1.02rem] font-bold text-brand">Timeline (working days)</h3>
         <div className="space-y-1.5">
           {activities.map((a) => {
@@ -135,8 +135,8 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
             const isCrit = crit.has(a.id)
             return (
               <div key={a.id} className="flex items-center gap-2 text-[11px]">
-                <span className="w-44 shrink-0 truncate text-slate-600" title={a.name}>{a.name}</span>
-                <div className="relative h-4 flex-1 rounded bg-slate-50">
+                <span className="w-44 shrink-0 truncate text-muted" title={a.name}>{a.name}</span>
+                <div className="relative h-4 flex-1 rounded bg-sheet-2">
                   <div className="absolute top-0 h-4 rounded" style={{
                     left: `${left}%`, width: `${width}%`,
                     background: isCrit ? '#c2402a' : TRADE_COLOR[a.trade], opacity: isCrit ? 0.95 : 0.8,
@@ -151,7 +151,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
       </div>
 
       {/* Activity table — editable duration */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
         <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Activity network (CPM / PERT)</h3>
         {depErr && <p className="no-print mb-2 rounded border border-fail-line bg-fail-tint px-2 py-1 text-[11px] font-semibold text-fail">{depErr}</p>}
         <table className="w-full border-collapse text-xs">
@@ -175,28 +175,28 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
               const c = cpm.get(a.id)!
               const isCrit = crit.has(a.id)
               return (
-                <tr key={a.id} className={`border-t border-slate-100 ${isCrit ? 'bg-fail-tint/60' : ''}`}>
+                <tr key={a.id} className={`border-t border-hairline-2 ${isCrit ? 'bg-fail-tint/60' : ''}`}>
                   <td className="py-1 pr-2 font-semibold">{a.id}</td>
-                  <td className="py-1 pr-2 font-sans text-slate-700">{a.name}</td>
+                  <td className="py-1 pr-2 font-sans text-ink-2">{a.name}</td>
                   <td className="py-1 pr-2 text-muted">{a.quantity} {a.unit}</td>
                   <td className="py-1 pr-2 align-top">
                     <div className="flex flex-col gap-0.5">
                       {a.predecessors.map((l) => (
                         <div key={l.id} className="flex items-center gap-1">
-                          <span className="w-12 font-semibold text-slate-600">{l.id}</span>
+                          <span className="w-12 font-semibold text-muted">{l.id}</span>
                           <select value={l.type} onChange={(e) => patchLink(a.id, l.id, { type: e.target.value as RelationType })}
-                            className="rounded border border-slate-200 px-0.5 py-px text-[10px]">
+                            className="rounded border border-hairline px-0.5 py-px text-[10px]">
                             {REL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                           </select>
                           <input type="number" value={l.lag} title="lead/lag (days)"
                             onChange={(e) => patchLink(a.id, l.id, { lag: Math.round(+e.target.value || 0) })}
-                            className="w-9 rounded border border-slate-200 px-0.5 py-px text-right text-[10px]" />
+                            className="w-9 rounded border border-hairline px-0.5 py-px text-right text-[10px]" />
                           <button type="button" onClick={() => removeLink(a.id, l.id)} title="remove link"
                             className="no-print px-0.5 text-fail hover:text-fail-hover">×</button>
                         </div>
                       ))}
                       <select value="" onChange={(e) => { if (e.target.value) addLink(a.id, e.target.value) }}
-                        className="no-print w-24 rounded border border-dashed border-slate-300 px-0.5 py-px text-[10px] text-muted">
+                        className="no-print w-24 rounded border border-dashed border-field-line px-0.5 py-px text-[10px] text-muted">
                         <option value="">+ add…</option>
                         {activities.filter((x) => x.id !== a.id && !a.predecessors.some((l) => l.id === x.id)).map((x) => <option key={x.id} value={x.id}>{x.id}</option>)}
                       </select>
@@ -205,7 +205,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
                   <td className="py-1 pr-1 text-right">
                     <input type="number" min={1} value={a.duration}
                       onChange={(e) => setDuration(a.id, Math.max(1, Math.round(+e.target.value || 1)))}
-                      className={`w-12 rounded border px-1 py-0.5 text-right ${durOverride[a.id] != null ? 'border-brand bg-blue-50 text-brand' : 'border-slate-200'}`} />
+                      className={`w-12 rounded border px-1 py-0.5 text-right ${durOverride[a.id] != null ? 'border-brand bg-brand-tint text-brand' : 'border-hairline'}`} />
                   </td>
                   <td className="py-1 pr-2 text-right">{fmtDay(c.es)}</td>
                   <td className="py-1 pr-2 text-right">{fmtDay(c.ef)}</td>

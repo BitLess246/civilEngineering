@@ -52,7 +52,7 @@ export default function LoadPath() {
         <div>
       <PageHeader title="Slab Load Path (Tributary)" badges={['NSCP 2015', 'ACI 318-14']} />
       <div className="mx-auto max-w-[1500px] p-6">
-      <p className="no-print mt-1 text-slate-600">
+      <p className="no-print mt-1 text-muted">
         Distribute a slab panel's area loads to its edge beams — one-way (UDL on the long edges) or two-way
         (45° tributary triangles & trapezoids) — with categories preserved for the NSCP combinations. Send any
         edge straight into Beam Analysis. Phase 3 of the 3D model-space roadmap.
@@ -74,7 +74,7 @@ export default function LoadPath() {
               className="no-print mb-3 rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">+ Area load</button>
             <div className="space-y-3">
               {areaLoads.map((l) => (
-                <div key={l.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div key={l.id} className="rounded-lg border border-hairline bg-sheet-2 p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-xs font-bold uppercase tracking-wide text-muted">{l.cat} load</span>
                     <button type="button" onClick={() => setAreaLoads((ls) => ls.filter((q) => q.id !== l.id))}
@@ -121,7 +121,7 @@ export default function LoadPath() {
                       {e.edge} ({e.kind}, {f2(e.length)} m)
                       {e.loads.length > 0 && (
                         <button type="button" onClick={() => sendToBeam(i)}
-                          className="no-print rounded border border-brand px-1.5 py-0.5 text-[10px] font-semibold text-brand hover:bg-blue-50">
+                          className="no-print rounded border border-brand px-1.5 py-0.5 text-[10px] font-semibold text-brand hover:bg-brand-tint">
                           analyze →
                         </button>
                       )}

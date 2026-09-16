@@ -111,20 +111,20 @@ export function GuidedTour({
           stays crisp at any zoom and the anchor underneath is still clickable. */}
       {rect ? (
         <>
-          <div className="absolute left-0 right-0 top-0 bg-slate-900/55" style={{ height: Math.max(rect.top, 0) }} onClick={onClose} />
-          <div className="absolute left-0 bg-slate-900/55" style={{ top: rect.top, width: Math.max(rect.left, 0), height: rect.height }} onClick={onClose} />
-          <div className="absolute right-0 bg-slate-900/55" style={{ top: rect.top, left: rect.left + rect.width, height: rect.height }} onClick={onClose} />
-          <div className="absolute bottom-0 left-0 right-0 bg-slate-900/55" style={{ top: rect.top + rect.height }} onClick={onClose} />
+          <div className="absolute left-0 right-0 top-0 bg-rail/55" style={{ height: Math.max(rect.top, 0) }} onClick={onClose} />
+          <div className="absolute left-0 bg-rail/55" style={{ top: rect.top, width: Math.max(rect.left, 0), height: rect.height }} onClick={onClose} />
+          <div className="absolute right-0 bg-rail/55" style={{ top: rect.top, left: rect.left + rect.width, height: rect.height }} onClick={onClose} />
+          <div className="absolute bottom-0 left-0 right-0 bg-rail/55" style={{ top: rect.top + rect.height }} onClick={onClose} />
           <div
             className="pointer-events-none absolute rounded-lg ring-2 ring-brand ring-offset-2 ring-offset-transparent"
             style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }} />
         </>
       ) : (
-        <div className="absolute inset-0 bg-slate-900/55" onClick={onClose} />
+        <div className="absolute inset-0 bg-rail/55" onClick={onClose} />
       )}
 
       <div
-        className={`absolute w-[min(26rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-sheet p-4 shadow-2xl ${
+        className={`absolute w-[min(26rem,calc(100vw-2rem))] rounded-xl border border-hairline bg-sheet p-4 shadow-2xl ${
           rect ? '' : 'left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2'}`}
         style={{
           maxHeight: 'calc(100vh - 2rem)',
@@ -138,7 +138,7 @@ export function GuidedTour({
           Step {index + 1} of {total}
         </p>
         <h2 className="mt-1 text-[15px] font-bold text-brand">{step.title}</h2>
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-700">{step.body}</p>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-2">{step.body}</p>
         {step.why && <p className="mt-2 text-[11px] leading-relaxed text-muted">{step.why}</p>}
 
         {/* The step names a control that is not on screen. Saying so beats a
@@ -151,13 +151,13 @@ export function GuidedTour({
         )}
 
         <div className="mt-3 flex items-center justify-between gap-2">
-          <button onClick={onClose} className="text-[11px] text-muted hover:text-slate-800">
+          <button onClick={onClose} className="text-[11px] text-muted hover:text-ink">
             Close (Esc)
           </button>
           <div className="flex gap-2">
             {index > 0 && (
               <button onClick={onPrev}
-                className="rounded-md border border-slate-300 px-2.5 py-1 text-[12px] text-slate-700 hover:bg-slate-50">
+                className="rounded-md border border-field-line px-2.5 py-1 text-[12px] text-ink-2 hover:bg-sheet-2">
                 Back
               </button>
             )}
@@ -170,7 +170,7 @@ export function GuidedTour({
 
         <div className="mt-3 flex gap-1">
           {Array.from({ length: total }, (_, i) => (
-            <span key={i} className={`h-1 flex-1 rounded-full ${i <= index ? 'bg-brand' : 'bg-slate-200'}`} />
+            <span key={i} className={`h-1 flex-1 rounded-full ${i <= index ? 'bg-brand' : 'bg-hairline'}`} />
           ))}
         </div>
       </div>

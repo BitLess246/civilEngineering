@@ -21,19 +21,19 @@ function Field({ label, value, onChange, unit, step = 'any', min, max }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
+      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
       <input type="number" step={step} min={min} max={max} value={value}
         onChange={(e) => onChange(clampTo(num(e.target.value), min, max))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+        className="rounded-md border border-field-line px-2.5 py-1.5" />
     </label>
   )
 }
 
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
+    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -90,13 +90,13 @@ export default function WaterTank() {
       <PageHeader title="Circular RC water tank — wall" badges={['IS 3370', 'ACI 350']} />
       <div className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Circular Water Tank" badges={['IS 3370', 'ACI 350']} report={report} />
-      <p className="mt-2 text-sm text-slate-600">
+      <p className="mt-2 text-sm text-muted">
         Permissible-stress (working-stress) wall design for a circular liquid-retaining tank, following the
         crack-control philosophy of IS 3370 / ACI 350. Hoop (ring) tension governs the horizontal steel;
         the base cantilever moment governs the vertical steel; the wall is checked against concrete cracking.
       </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <section className="mt-6 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Geometry</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Water depth H" unit="m" value={H} onChange={setH} min={0.1} />
@@ -114,7 +114,7 @@ export default function WaterTank() {
         </div>
       </section>
 
-      <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm
+      <section data-pdf-drawing className="mt-5 rounded-xl border border-hairline bg-sheet p-5 shadow-sm
         [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
         <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Wall section &amp; ring plan</h2>
         <TankSection H={H} D={D} t={t} freeboard={freeboard} T={r.T}
@@ -122,7 +122,7 @@ export default function WaterTank() {
           vertBars={`⌀${barDia} @ ${f0(r.vertSpacing)} mm`} />
       </section>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <section className="mt-5 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Results</h2>
         <Out label="Max hoop tension T = γw·H·D/2" value={`${f2(r.T)} kN/m`} />
         <Out label="Ring (hoop) steel As" value={`${f0(r.hoopAs)} mm²/m — ⌀${barDia} @ ${f0(r.hoopSpacing)} mm (each face)`} />

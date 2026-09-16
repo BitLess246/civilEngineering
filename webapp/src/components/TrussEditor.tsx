@@ -8,9 +8,9 @@ import type { TrussModel, TNode, TMember, ChordKind } from '../engine/truss'
 
 const KINDS: ChordKind[] = ['top', 'bottom', 'vertical', 'diagonal']
 
-const numCls = 'w-16 rounded border border-slate-300 px-1 py-0.5 text-right text-xs'
-const selCls = 'rounded border border-slate-300 px-1 py-0.5 text-xs'
-const delBtn = 'rounded px-1.5 text-red-500 hover:bg-red-50'
+const numCls = 'w-16 rounded border border-field-line px-1 py-0.5 text-right text-xs'
+const selCls = 'rounded border border-field-line px-1 py-0.5 text-xs'
+const delBtn = 'rounded px-1.5 text-fail hover:bg-fail-tint'
 const addBtn = 'mt-1 rounded-md border border-brand/40 bg-brand/5 px-2 py-0.5 text-xs font-semibold text-brand hover:bg-brand/10'
 
 export function TrussEditor({ model, onChange, onReset }: {
@@ -52,7 +52,7 @@ export function TrussEditor({ model, onChange, onReset }: {
     <fieldset className="no-print rounded-xl border border-warn-line bg-warn-tint/40 p-4 shadow-sm">
       <legend className="flex items-center gap-2 px-2 text-[1.02rem] font-bold text-brand">
         ✎ Free-form editor
-        <button type="button" onClick={onReset} className="rounded-md border border-slate-300 bg-sheet px-2 py-0.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">↺ Back to parametric</button>
+        <button type="button" onClick={onReset} className="rounded-md border border-field-line bg-sheet px-2 py-0.5 text-xs font-semibold text-muted hover:bg-sheet-2">↺ Back to parametric</button>
       </legend>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

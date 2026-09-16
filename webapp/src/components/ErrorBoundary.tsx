@@ -52,7 +52,7 @@ export class ErrorBoundary extends Component<Props, State> {
           This page stopped
         </p>
         <h1 className="mt-1 text-2xl font-bold text-brand">Something broke while drawing this page</h1>
-        <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-slate-600">
+        <p className="mx-auto mt-3 max-w-lg text-sm leading-6 text-muted">
           Your saved work is not affected — everything is stored separately from
           the screen that failed. Try the page again, or go somewhere else and
           come back.
@@ -64,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
             Try again
           </button>
           <Link to="/"
-            className="rounded-md border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:border-brand hover:text-brand">
+            className="rounded-md border border-field-line px-5 py-2 text-sm font-semibold text-ink-2 hover:border-brand hover:text-brand">
             Go to the tools
           </Link>
         </div>

@@ -206,7 +206,7 @@ function BoltedConnectionCalc() {
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-[11.5px] font-semibold text-muted">Bolt coordinates (mm, from the plate corner)</span>
                   <button type="button" onClick={addBolt}
-                    className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-brand hover:bg-blue-50">+ Add bolt</button>
+                    className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">+ Add bolt</button>
                 </div>
                 <div className="max-h-60 overflow-auto">
                   <table className="w-full text-xs">
@@ -219,12 +219,12 @@ function BoltedConnectionCalc() {
                         const force = res?.eccentric.bolts.find(f => f.id === b.id)
                         const crit = force && res && b.id === res.eccentric.critical
                         return (
-                          <tr key={b.id} className={`border-t border-slate-100 ${crit ? 'font-semibold text-warn' : ''}`}>
+                          <tr key={b.id} className={`border-t border-hairline-2 ${crit ? 'font-semibold text-warn' : ''}`}>
                             <td className="py-1 pr-2 font-medium">{b.id}</td>
                             {(['x','y'] as const).map(k => (
                               <td key={k} className="pr-2">
                                 <input type="number" value={b[k]} onChange={e => setBolt(i, k, Number(e.target.value))}
-                                  className="w-16 rounded border border-slate-200 px-1 py-0.5" />
+                                  className="w-16 rounded border border-hairline px-1 py-0.5" />
                               </td>
                             ))}
                             <td className="pr-2 text-right font-mono">{force ? f2(force.R) : '—'}</td>
@@ -426,7 +426,7 @@ export default function BoltedConnection() {
     <div>
       <PageHeader title="Bolted Connection" badges={['AISC 360-16']} />
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <p className="no-print mt-1 text-slate-600">
+        <p className="no-print mt-1 text-muted">
           Eccentrically-loaded bolt group by the elastic method — φRn per bolt in shear and
           bearing (§J3.6 / §J3.10), block shear on the shear tab (§J4.3), out-of-plane tension
           with the §J3.7 interaction, and prying (§J3.9). 2D layout and a
