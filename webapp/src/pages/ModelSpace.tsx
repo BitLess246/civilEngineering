@@ -26,7 +26,7 @@ import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck, StairLanding } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
-import { type F3Analysis, type F3MemberResult } from '../engine/frame3d'
+import { defaultAxisRotation, type F3Analysis, type F3MemberResult, type V3 } from '../engine/frame3d'
 import { type ActiveSetAnalysis, type AxialMode } from '../engine/axialOnly'
 import { diagramScale, type DiagramComp } from '../engine/memberDiagram3d'
 import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
@@ -84,6 +84,11 @@ import { ShellStress3D } from '../components/modelSpace/shellStress'
 import { contourData } from '../lib/shellContour'
 import { STRESS_KEYS, rampSwatches, rampTicks, formatStress, isMembrane, unitFor, labelFor, type StressKey } from '../lib/stressScale'
 import { parseCase, describeCase, caseNodePeak, caseLoads, caseBaseShear } from '../lib/lateralCases'
+import { MemberStress3D } from '../components/modelSpace/memberStressLayer'
+import { stressSection, type StressSection } from '../engine/memberStress'
+import {
+  MEMBER_STRESS_KEYS, memberContourDomain, memberPeak, type ContourMember, type MemberStressKey,
+} from '../lib/memberContour'
 import { RecordedSpectrumPanel } from '../components/RecordedSpectrumPanel'
 import { elasticResponseSpectrum, nscp208DesignCurve, type AccelSpectrum, type DesignSpectrumPoint } from '../engine/accelSpectrum'
 import { parseAccelerogram } from '../engine/accelerogram'
@@ -104,7 +109,7 @@ import { usePlanGate } from '../lib/auth/usePlan'
 import { UpgradeNotice } from '../components/UpgradeNotice'
 import type { SolverKind } from '../lib/featureGate'
 import { Footing3D, GridBubbles3D, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
-import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR } from '../components/modelSpace/sceneTokens'
+import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/modelSpace/sceneTokens'
 import { DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
 import {
@@ -315,6 +320,12 @@ export default function ModelSpace() {
   // My peak 8.39. Opening on von Mises means the feature opens showing nothing
   // on the commonest case it exists for.
   const [stressKey, setStressKey] = useState<StressKey>('Mx')
+  // BEAM/COLUMN stress, the frame counterpart of the plate contour above.
+  // Default OFF: the plate contour needs an explicit stress recovery to exist
+  // at all, but this one would appear the moment anyone analyses, on top of a
+  // model they were looking at for another reason.
+  const [showMemStress, setShowMemStress] = useState(false)
+  const [memStressKey, setMemStressKey] = useState<MemberStressKey>('sigma')
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
   const [showConns, setShowConns] = useState(true)         // designed steel joint hardware
   const [showRebar, setShowRebar] = useState(false)        // the designed bar cages, in 3D
@@ -1569,6 +1580,55 @@ export default function ModelSpace() {
     return { byId, scale, maxAbs }
   }, [forceDiag, forceDiagScale, govRes, modelBox])
 
+  /**
+   * The members ready to contour, with ONE domain across all of them.
+   *
+   * Three things are resolved here rather than in the drawing code, because
+   * all three are places the picture can quietly stop matching the analysis:
+   *
+   *  • the FORCES are `govRes.members` — the very objects `MemberForceDiagram3D`
+   *    draws, not a recomputation, so the contour and the diagram cannot
+   *    disagree about what a member carries;
+   *  • the LOCAL-AXIS ROTATION is `defaultAxisRotation`, the bridge's own
+   *    resolution, so the section is oriented the way the solver had it —
+   *    verticals default to 90° and a contour that ignored that would paint
+   *    the tension face on the wrong side of every column;
+   *  • the DROP is `levelDrop`, the same offset the solid member uses, because
+   *    a beam's node is the TOP of its section and a contour on the centroid
+   *    would float half a depth above the beam.
+   */
+  const memStressInfo = useMemo(() => {
+    if (!model || !govRes || !showMemStress) return null
+    const byId = new Map<string, F3MemberResult>(govRes.members.map((m) => [m.id, m]))
+    const secById = new Map(model.sections.map((sx) => [sx.id, sx]))
+    const cache = new Map<string, StressSection>()
+    const members: ContourMember[] = []
+    let approximated = 0
+    for (const m of model.members) {
+      const fr = byId.get(m.id)
+      const a = nodePos.get(m.i), bb = nodePos.get(m.j)
+      const sec = secById.get(m.section)
+      if (!fr || !a || !bb || !sec) continue
+      let ss = cache.get(m.section)
+      if (!ss) { ss = stressSection(sec); cache.set(m.section, ss) }
+      if (!ss.exact) approximated++
+      const dir: V3 = [bb.x - a.x, bb.y - a.y, bb.z - a.z]
+      members.push({
+        id: m.id, a: [a.x, a.y, a.z], b: [bb.x, bb.y, bb.z],
+        rotDeg: defaultAxisRotation(dir, m.axisRotation),
+        section: ss, forces: fr,
+        drop: levelDrop(m.role, sec.h / 1000, a, bb),
+      })
+    }
+    if (members.length === 0) return null
+    return {
+      members,
+      domain: memberContourDomain(members, memStressKey),
+      peak: memberPeak(members, memStressKey),
+      approximated,
+    }
+  }, [model, govRes, showMemStress, memStressKey, nodePos])
+
   // Members switched OFF by the active set of the GOVERNING combo. Each combo
   // settles on its own set, so this is combo-specific — the table below the
   // viewport lists every combo.
@@ -1952,6 +2012,10 @@ export default function ModelSpace() {
                 {showStress && shellStress && (
                   <ShellStress3D nodes={shellStress.nodes} elems={shellStress.elems}
                     stresses={shellStress.stresses} contourKey={stressKey} />
+                )}
+                {memStressInfo && (
+                  <MemberStress3D members={memStressInfo.members}
+                    contourKey={memStressKey} domain={memStressInfo.domain} />
                 )}
                 {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} kinds={cageKinds} />}
                 {forceDiag && forceDiagInfo && forceDiagInfo.scale > 0 && model.members.map((m) => {
@@ -4589,6 +4653,85 @@ export default function ModelSpace() {
                           {shellStress.elems.length} elements · {shellStress.nodes.length} nodes,
                           smoothed to the nodes. Service (unfactored) load field.
                         </p>
+                      </div>
+                    )
+                  })()}
+                </div>
+                {/* BEAM / COLUMN STRESS.
+                    The frame counterpart of the plate contour above. It is the
+                    same internal forces the force diagrams draw — this module
+                    consumes `govRes.members` itself — expressed as stress on
+                    the section, so the two views cannot disagree. */}
+                <div>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={showMemStress} disabled={!govRes}
+                      onChange={(e) => setShowMemStress(e.target.checked)} />
+                    Show beam / column stresses on the model
+                  </label>
+                  {!govRes ? (
+                    <p className="mt-1 text-[11px] leading-snug text-muted">
+                      Analyse the model first — the stresses are the governing combo&apos;s own
+                      member forces put on the section, so there is nothing to draw until
+                      those exist.
+                    </p>
+                  ) : showMemStress && memStressInfo && (() => {
+                    const { domain, peak, members, approximated } = memStressInfo
+                    const ticks = rampTicks(domain, 5)
+                    const meta = MEMBER_STRESS_KEYS.find((k) => k.key === memStressKey)!
+                    return (
+                      <div className="mt-1.5">
+                        <select value={memStressKey} aria-label="Member stress quantity"
+                          onChange={(e) => setMemStressKey(e.target.value as MemberStressKey)}
+                          className="w-full rounded border border-field-line bg-field px-2 py-1 text-xs text-ink">
+                          {MEMBER_STRESS_KEYS.map(({ key, label }) => (
+                            <option key={key} value={key}>{label} (MPa)</option>
+                          ))}
+                        </select>
+                        {/* A FLAT FIELD GETS A SENTENCE, NOT A BAR — the same
+                            rule the plate contour follows, for the same reason:
+                            the fallback domain spans 0…1 and a bar labelled
+                            0.00–1.00 over a uniform field reads as a real scale. */}
+                        {domain.flat ? (
+                          <p className="mt-1.5 rounded border border-hairline bg-sheet-2 px-2 py-1.5 text-[11px] leading-snug text-muted">
+                            {meta.label} is <span className="font-mono">
+                            {formatStress(peak?.value ?? 0, domain)}</span> MPa on every member —
+                            no variation to contour, so there is no scale to draw.
+                          </p>
+                        ) : (<>
+                          <div className="mt-1.5 flex h-3 overflow-hidden rounded-sm">
+                            {rampSwatches(24, domain.signed).map((c, i) => (
+                              <div key={i} className="flex-1" style={{ background: c }} />
+                            ))}
+                          </div>
+                          <div className="mt-0.5 flex justify-between font-mono text-[9.5px] tabular-nums text-faint">
+                            {ticks.map((t, i) => <span key={i}>{t}</span>)}
+                          </div>
+                          <p className="mt-1 text-[11px] leading-snug text-muted">
+                            {meta.label} in MPa — {meta.hint}.
+                          </p>
+                          {peak && (
+                            <p className="mt-1 text-[11px] leading-snug text-muted">
+                              Peak <span className="font-mono">{formatStress(peak.value, domain)}</span> MPa
+                              on <span className="font-mono">{peak.id}</span> at{' '}
+                              <span className="font-mono tabular-nums">{f2(peak.x)}</span> m along it.
+                            </p>
+                          )}
+                        </>)}
+                        <p className="mt-1 text-[11px] leading-snug text-muted">
+                          {members.length} member{members.length === 1 ? '' : 's'} from the governing
+                          combo ({gov?.combo.name ?? '—'}) — the same forces the diagrams draw, on the
+                          GROSS section. Cracked-section factors change how force distributes, not the
+                          section that carries it.
+                        </p>
+                        {/* A BOUNDING BOX IS NOT THE SECTION, and the difference
+                            has to be visible rather than silently averaged in. */}
+                        {approximated > 0 && (
+                          <p className="mt-1 rounded border border-warn-line bg-warn-tint px-2 py-1 text-[11px] leading-snug text-ink">
+                            {approximated} section{approximated === 1 ? ' has' : 's have'} no fibre
+                            model in the shape library (single angles and similar) — those members are
+                            contoured on their bounding box, so read them as indicative.
+                          </p>
+                        )}
                       </div>
                     )
                   })()}
