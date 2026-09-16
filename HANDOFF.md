@@ -658,6 +658,211 @@ now. A source-text guard is only as good as the span it reads.
 - The case preview shows a case's **loads, not its results**. Finding which case
   governs a given column still means reading the design output.
 
+## Stress on the frame, and the shell around it (PRs #768–#772, Sep 2026)
+
+Five PRs in one session: a new engine layer, its viewport, a contour-rendering
+rewrite that fixed a real colour defect in BOTH contours, and the nav rail.
+Read the last two sections first — this continues them.
+
+### The member stress engine (#768) — layer 6
+
+`frame3d` recovers N, Vy, Vz, T, My, Mz at 25+ stations on every member and the
+viewport drew them as force ribbons. `engine/memberStress.ts` expresses the
+SAME arrays as stress on the section. It consumes `F3MemberResult`
+structurally and never re-derives an internal force, so the contour and the
+diagram cannot disagree about what a member carries.
+
+**SIGNS WERE MEASURED, NOT REASONED, and this is the thing to remember.**
+`frame3d` recovers the two bending planes with OPPOSITE conventions —
+`dMz/dx = +Vy` but `dMy/dx = −Vz`, visible in `postprocessMember` as
+`mz = −f[5] + f[1]x` against `my = −f[4] − f[2]x`. A formula symmetric in the
+two axes is therefore wrong in exactly one of them: plausible on a gravity
+frame, INVERTED on every lateral case. The first draft was symmetric. What the
+solver actually says, on the repo's own cantilever fixture and now pinned as
+tests: a downward tip load P = 20 gives `Mz(base) = −60` kN·m and hogging must
+put the TOP fibre in tension → the Mz term takes a minus; a tip load of −15
+along z gives `My(base) = +45` and the beam bends toward −z so the +z fibre is
+in tension → the My term takes a plus. So
+
+    σ = N/A − Mz·y/Iz + My·z/Iy
+
+A propped cantilever carries both signs on ONE member (−wL²/8 hogging,
++9wL²/128 sagging at 5L/8) and the tension face is asserted to swap. Not a
+simply supported beam: in 3D two pins leave the torsional DOF unrestrained and
+the solve is singular, which is worth knowing rather than working around.
+
+**Equilibrium is the closing check and is deliberately NOT a tautology.**
+`sectionResultants` integrates the stress field back over the section. The
+field is built from the section LIBRARY's A/Iy/Iz; the integration runs over an
+outline built from the shape's DIMENSIONS. Rectangle: the two routes agree to
+**3.5e-13 %** — the `member-stress-equilibrium` benchmark closes hand wL²/8 →
+3D FEM → σ field → numerical integration → back. W-shape: genuinely
+independent, because the tabulated A and Ix include the web-to-flange fillets
+and the three-rectangle outline does not, so the residual IS the fillet
+contribution. Its SIZE is the evidence — a few percent means the geometry and
+the signs are right; a sign error reads as 200 %. Cells carry their own second
+moments so the round-trip is EXACT for straight-sided shapes rather than merely
+convergent; midpoint alone left a (dy/h)² residual, 0.02 % at 64 divisions,
+small enough to hide behind a tolerance and large enough that the tolerance
+hiding it would hide a real error too.
+
+**The section is the GROSS section on purpose.** `crackedSections` hands the
+solver 0.35Ig / 0.70Ig (ACI §6.6.3.1.1) — a stiffness idealisation that changes
+how force distributes round a redundant frame, not the piece of concrete.
+σ = Mc/I on the cracked I would report ~3× the real stress on every beam.
+
+Also: VQ/(I·t) at real fibres per family (rect, W/WT/C, rect HSS, round), and
+St-Venant torsion with Roark's **α — NOT the β that gives J**, which at a/b = 1
+are 0.208 and 0.1406; using one for the other understates every square column
+by 48 %, unconservatively. **α is deliberately not a `validation.ts` row**:
+Roark's closed form is an approximation to the exact series and the published
+0.208 is 3 s.f., so it agrees to 0.071 % against that table's 0.01 % contract.
+Loosening the contract for one row loosens it for all of them, so it is pinned
+in the unit test instead of forced into a contract it cannot meet.
+
+### Beam/column contours in the viewport (#769)
+
+Two things a plausible implementation gets wrong, both caught before shipping:
+
+1. **The local axes are the SOLVER's, not the renderer's.** `Member3D` orients
+   with `setFromUnitVectors(+X, dir)`, which maps a COLUMN's local y to global
+   −X; `localAxes(dir, rot)` — what the stiffness was integrated in and what
+   `memberStress` means by "the y′ fibre" — maps it to global +Z. They agree on
+   a horizontal beam and differ by 90° on every column, so the render basis
+   looks right on the beams and paints the tension face on the wrong side of
+   every column. The rotation is `defaultAxisRotation`, the bridge's own
+   resolution, not `m.axisRotation` raw (usually absent; verticals default 90°).
+2. **It varies AROUND the section, not only along it.** σ at the four corners,
+   vertex-shared so the field interpolates around the outline. One scalar per
+   station draws a beam in hogging identically to one in sagging.
+
+One domain across every member (a per-member domain makes a lightly stressed
+member look like a heavily stressed one — the same defect the lateral-case
+preview had). τ is the section ENVELOPE, constant around the outline, because
+the largest shear is at the neutral axis and not at a corner; a corner's own τ
+is zero on any member without torsion, which would be a picture of shear
+showing no shear.
+
+### The contour rendering was wrong, and not only cosmetically (#771)
+
+Reported as "the contours are not continuous". **The stresses were right** — a
+column corner runs 1.094 → −1.896 MPa linearly with its moment reversing, a
+beam's top fibre 1.1 → −0.6 → 1.3, median member peak 64.9 % of the global
+peak. Also worth recording what it was NOT, because the obvious diagnosis is
+about a pipeline this code does not have: **no texture anywhere**, no mipmaps,
+no nearest-neighbour, no global averaging.
+
+Two faults, the second a correctness defect:
+
+1. **No iso-boundaries.** Drawn as a continuous blend, a field has nothing to
+   read — the boundary between two bands IS the iso-line. 12 bands now, 8/12/20
+   /Smooth selectable, ONE setting shared by the plate and member contours.
+2. **IT INTERPOLATED THE COLOUR INSTEAD OF THE VALUE.** Both layers shipped a
+   per-vertex colour and let `vertexColors` blend it. Across a section the two
+   extreme fibres are the two ENDS of the diverging ramp, and the GPU walks a
+   straight RGB line between them: midpoint **(54, 24, 64)**, luminance 34,
+   where the ramp's centre is **(238, 236, 230)**, luminance 236. **The zero
+   crossing was painted the wrong colour on every side face of every member.**
+   Both numbers are pinned as a test.
+
+`lib/contourMaterial.ts` is the fix: the normalised SCALAR is a vertex
+attribute, the ramp is evaluated per FRAGMENT from nine uniform stops — the
+same nine `stressScale` gives the legend, so bar and surface cannot drift.
+Banding is a quantisation of that scalar, so a boundary lands on the true
+iso-level rather than wherever a vertex happened to be. `bandCenter` snaps to
+the band CENTRE, not its lower edge (edge-snapping draws every band half a step
+darker than the values it contains). Still no texture: the GLSL loop has
+constant bounds and a loop-counter index so it unrolls on GLSL ES 1.0.
+Verified by counting canvas pixels: 1951 distinct colours smooth → 986 at 12
+bands → 849 at 8.
+
+### The nav rail (#770)
+
+230 px of every route, including model space where the width IS the drawing.
+Collapses to a 60 px icon rail; 1380 px of content gained at 1440.
+
+Icons are DRAWN, not typed: at 60 px the icon is the only thing identifying a
+group, so an emoji (a different typeface per platform, no stroke weight of its
+own) and a generic library glyph (a gear for "geotechnical") are both out. The
+eleven are drawing vocabulary — a beam section with its bars, a W-shape end
+view, a footing on hatched ground, a bore log, an accelerogram, a log end with
+its drying check, a flanged elbow, Gantt bars, a folding rule, an open
+codebook. Same mark in BOTH states, same place, so the rail is the expanded row
+with the words taken away rather than a second navigation. The flyout (hover
+AND focus, Escape returns focus, mounted only while open) is what keeps all 53
+tools one gesture away.
+
+**Two defects the pixels found and the DOM did not.** The flyout was CLIPPED at
+the rail's edge — a box with `overflow-y: auto` computes `overflow-x` as `auto`
+too however you write it, and the rail scrolls; the element was at the right
+coordinates so `getBoundingClientRect` reported it visible and the probe passed.
+`position: fixed` escapes the clip. And on a 620 px window the last group's
+panel ran 81 px below the fold; it is measured after render and clamped,
+measured because a panel's height is its tool count.
+
+### Columns stopped half a beam above the roof (#772)
+
+Every roof column stood a **0.25 m block proud of its own slab** — exactly half
+the framing beam depth. The viewport took a terminating column's rise from
+`autoRigidOffsets`, which measures node → support FACE, i.e. half the framing
+depth. Right while a beam was drawn CENTRED on its node and its top sat h/2
+above; once beams were dropped so their top IS the node (`levelDrop`,
+`beamAxisOffsets`), the same number became pure overshoot.
+
+`lib/columnCap.ts` measures what is DRAWN instead: for each member framing into
+the node, how far its own solid reaches above it. A hanging beam contributes
+zero; a brace still contributes its half-extent, so the general case keeps
+working rather than being special-cased to nothing. `autoRigidOffsets` is
+untouched — it feeds the ANALYSIS rigid zones, where the half-depth is right.
+This was a drawing bug and the fix stays in the drawing layer.
+
+### The lesson this session kept re-teaching
+
+**A guard is only as good as its model of the thing it guards, and the way to
+find out is to sabotage it.** Four guards passed a sabotage they should have
+failed, and each one is now a case:
+
+- deleting the torsion term from `shearStress` left the suite green, because
+  every other shear case was pure VQ/It;
+- a wiring guard searched the whole page for `caseLoads(model, shownCase)`,
+  which the swatch legend also calls, so cutting the overlay's own prop left
+  the string present — it is anchored to the `<Loads3D>` element now;
+- deleting the "the storey above fills this joint" guard from `columnCap` left
+  everything green, because on an ordinary frame every intermediate node
+  carries only hanging beams and the rise is zero for that reason anyway; a
+  brace at an intermediate node separates the two;
+- the icon-set grid check read `h-9` (a legal 9-unit move LEFT) as the
+  coordinate −9 and called it off-grid, so the icons are absolute-command-only
+  and the guard tests the drawing rather than the notation.
+
+**And a fixture can pass for the wrong reason:** `generateGridModel` gives every
+member its OWN section id, so a test that spreads that model and references
+`'S1'` resolves to no section and silently measures a ZERO-DEPTH member.
+
+### Open follow-ups from these five
+
+- **T-section gross properties** for `memberStress` — the web rectangle stands
+  in, which is the conservative side, same gap `memberDeflection` has.
+- **Warping torsion is not modelled**; open shapes get pure St-Venant, the same
+  assumption the solver's own J makes.
+- Shapes with **no fibre model** (single angles) fall back to a bounding box.
+  Flagged `exact: false` and the panel counts them rather than averaging an
+  approximation in silently.
+- τ is drawn **constant around the section**, so the picture carries the
+  magnitude but not where on the section it acts — truthful simplification, not
+  a resolved shear-flow plot.
+- The **round section's cells** are annular sectors without their own second
+  moments, so it converges at O(n⁻²) rather than being exact.
+- The **contour prism spans node to node** even where a column's solid now
+  rises above it (a brace). The cap is joint-block concrete the solver never
+  analysed, so painting member stress on it would be wrong.
+- The nav rail has **no width animation** between its two states — genuinely
+  different markup, so there is no shared element to animate and faking one
+  means markup in which neither state is readable. A deliberate trade.
+- Impeccable detector flags a `border-b-2` on the RESULTS TABS. **Not acted
+  on**: it is the conventional active-tab underline with no fill behind it, and
+  removing it leaves colour as the only active marker.
+
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
 1. Open **claude.ai/code** (mobile browser) or the **Claude app**, same account.
