@@ -41,7 +41,7 @@ export function SiteFooter() {
             ['/refunds', 'Refund Policy'], ['/contact', 'Contact'],
           ].map(([to, label], i) => (
             <span key={to} className="inline-flex items-center gap-3">
-              {i > 0 && <span aria-hidden="true" className="text-hairline-2">·</span>}
+              {i > 0 && <span aria-hidden="true" className="text-faint">·</span>}
               <Link to={to} className="inline-flex min-h-[24px] items-center text-muted hover:text-brand">{label}</Link>
             </span>
           ))}
