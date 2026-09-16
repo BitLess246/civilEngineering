@@ -28,6 +28,22 @@ const words = BRAND_NAME.trim().split(/\s+/)
 /** The heavy half of the wordmark: `CIVENGG`. */
 export const BRAND_MARK = (words[0] ?? '').toUpperCase()
 
+/**
+ * The wordmark reduced to a monogram, for the collapsed 60 px nav rail.
+ *
+ * The CAPITALS of the first word, which for `CivEngg` gives `CE` — a monogram
+ * that reads as civil engineering. Not the first two letters: that route gives
+ * `CI`, which is a truncation rather than a mark and abbreviates nothing.
+ *
+ * Falls back to the first letter when the word carries only one capital, so a
+ * one-cap trade name degrades to a legitimate single-letter lockup instead of
+ * to an empty box.
+ */
+export const BRAND_MONOGRAM = (() => {
+  const caps = (words[0] ?? '').replace(/[^A-Z]/g, '')
+  return caps.length >= 2 ? caps.slice(0, 2) : (words[0] ?? '').slice(0, 1).toUpperCase()
+})()
+
 /** The light half that sits beside it: `TOOLKIT`. Empty for a one-word name. */
 export const BRAND_TAIL = words.slice(1).join(' ').toUpperCase()
 
