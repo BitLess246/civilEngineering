@@ -80,6 +80,9 @@ import type { PushoverModelResult } from '../engine/pushoverModel'
 import type { BiaxialPushoverResult } from '../engine/biaxialFrameModel'
 import { TimeHistoryPanel } from '../components/TimeHistoryPanel'
 import { ShellContourPanel } from '../components/ShellContourPanel'
+import { ShellStress3D } from '../components/modelSpace/shellStress'
+import { contourData } from '../lib/shellContour'
+import { STRESS_KEYS, rampSwatches, rampTicks, formatStress, isMembrane, unitFor, labelFor, type StressKey } from '../lib/stressScale'
 import { RecordedSpectrumPanel } from '../components/RecordedSpectrumPanel'
 import { elasticResponseSpectrum, nscp208DesignCurve, type AccelSpectrum, type DesignSpectrumPoint } from '../engine/accelSpectrum'
 import { parseAccelerogram } from '../engine/accelerogram'
@@ -296,6 +299,16 @@ export default function ModelSpace() {
   const [designShells, setDesignShells] = useState(false)
   const [tryBars, setTryBars] = useState(b('tryBars', true))        // let design/optimize pick bar Ø from a ladder
   const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
+  // The recovered stress field, painted on the mesh it came from. Default ON
+  // once a solve exists: the reason to run it is to look at it.
+  const [showStress, setShowStress] = useState(true)
+  // Mx, NOT von Mises. A flat shell's membrane and bending actions are
+  // decoupled (CST + DKT), so an ordinary gravity slab — transverse pressure
+  // only — has IDENTICALLY ZERO membrane stress and von Mises is 0 everywhere.
+  // Measured on the demo grid model: vonMises peak 0.00, Mx peak 16.01,
+  // My peak 8.39. Opening on von Mises means the feature opens showing nothing
+  // on the commonest case it exists for.
+  const [stressKey, setStressKey] = useState<StressKey>('Mx')
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
   const [showConns, setShowConns] = useState(true)         // designed steel joint hardware
   const [showRebar, setShowRebar] = useState(false)        // the designed bar cages, in 3D
@@ -1916,6 +1929,10 @@ export default function ModelSpace() {
                     line, and the count of elements is not visible at all. */}
                 {skeleton && <Nodes3D nodePos={nodePos} />}
                 {showLoads && <Loads3D model={model} nodePos={nodePos} />}
+                {showStress && shellStress && (
+                  <ShellStress3D nodes={shellStress.nodes} elems={shellStress.elems}
+                    stresses={shellStress.stresses} contourKey={stressKey} />
+                )}
                 {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} kinds={cageKinds} />}
                 {forceDiag && forceDiagInfo && forceDiagInfo.scale > 0 && model.members.map((m) => {
                   const mr = forceDiagInfo.byId.get(m.id)
@@ -4378,6 +4395,93 @@ export default function ModelSpace() {
                     <Swatches items={[...new Set(model.loads.map((l) => l.cat))]
                       .map((cat) => [LOAD_COLOR[cat] ?? '#64748b', cat] as const)} />
                   )}
+                </div>
+                {/* PLATE STRESS CONTOUR.
+                    The control stays visible with nothing to show and says so,
+                    rather than appearing only once a solve exists — a checkbox
+                    that materialises is a feature you have to already know
+                    about to find. */}
+                <div>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={showStress} disabled={!shellStress}
+                      onChange={(e) => setShowStress(e.target.checked)} />
+                    Show plate stresses on the model
+                  </label>
+                  {!shellStress ? (
+                    <p className="mt-1 text-[11px] leading-snug text-muted">
+                      Nothing recovered yet — run <span className="font-medium">Recover shell
+                      stresses</span> in the Analysis tab. Needs shell elements on.
+                    </p>
+                  ) : showStress && (() => {
+                    const { domain, peak } = contourData(
+                      shellStress.nodes, shellStress.elems, shellStress.stresses, stressKey)
+                    const ticks = rampTicks(domain, 5)
+                    return (
+                      <div className="mt-1.5">
+                        <select value={stressKey} aria-label="Contour quantity"
+                          onChange={(e) => setStressKey(e.target.value as StressKey)}
+                          className="w-full rounded border border-field-line bg-field px-2 py-1 text-xs text-ink">
+                          {STRESS_KEYS.map(({ key, label, unit }) => (
+                            <option key={key} value={key}>{label} ({unit})</option>
+                          ))}
+                        </select>
+                        {/* A FLAT FIELD GETS A SENTENCE, NOT A BAR. The
+                            fallback domain spans 0…1, and a bar labelled
+                            0.00–1.00 over a uniformly zero field reads as a
+                            real scale you can look values up on. This is not a
+                            corner case: membrane stress is identically zero on
+                            every flat slab carrying only transverse pressure,
+                            so it is what σx/σy/τxy/von Mises show on the
+                            commonest model in the app. */}
+                        {domain.flat ? (
+                          <p className="mt-1.5 rounded border border-hairline bg-sheet-2 px-2 py-1.5 text-[11px] leading-snug text-muted">
+                            {labelFor(stressKey)} is <span className="font-mono">
+                            {(peak?.value ?? 0).toFixed(2)}</span> {unitFor(stressKey)} across the
+                            whole mesh — no variation to contour, so there is no scale to draw.
+                            {isMembrane(stressKey) && ' Membrane and bending are decoupled in a flat shell, so a slab under transverse pressure alone carries no in-plane stress at all — the bending quantities Mx / My / Mxy are where its field is.'}
+                          </p>
+                        ) : (<>
+                          {/* The colour bar, low → high, labelled at the
+                              magnitude of THIS field. */}
+                          <div className="mt-1.5 flex h-3 overflow-hidden rounded-sm">
+                            {rampSwatches(24, domain.signed).map((c, i) => (
+                              <div key={i} className="flex-1" style={{ background: c }} />
+                            ))}
+                          </div>
+                          <div className="mt-0.5 flex justify-between font-mono text-[9.5px] tabular-nums text-faint">
+                            {ticks.map((t, i) => <span key={i}>{t}</span>)}
+                          </div>
+                          <p className="mt-1 text-[11px] leading-snug text-muted">
+                            {labelFor(stressKey)} in {unitFor(stressKey)}
+                            {domain.signed && ' — diverging about zero, so compression and tension read apart'}
+                          </p>
+                          {/* THE BAR AND THE PEAK ARE TWO DIFFERENT NUMBERS and
+                              the read-out has to say which is which. The bar
+                              spans the SMOOTHED NODAL field the mesh is painted
+                              with; the peak is the worst ELEMENT, before
+                              averaging. Smoothing pulls an extreme toward its
+                              neighbours, so the peak is routinely OUTSIDE the
+                              bar (measured: element 16.01 against a nodal bar
+                              ending at 12.7) — quoting them side by side with
+                              no distinction reads as an off-scale error. It is
+                              the element value that governs design. */}
+                          {peak && (
+                            <p className="mt-1 text-[11px] leading-snug text-muted">
+                              Worst element <span className="font-mono">{formatStress(peak.value, domain)}</span> at
+                              {' '}{peak.id} — that is the unsmoothed element value, so it can sit
+                              outside the bar, which spans the smoothed nodal range{' '}
+                              <span className="font-mono tabular-nums">{ticks[0]}</span> …{' '}
+                              <span className="font-mono tabular-nums">{ticks[ticks.length - 1]}</span>.
+                            </p>
+                          )}
+                        </>)}
+                        <p className="mt-1 text-[11px] leading-snug text-muted">
+                          {shellStress.elems.length} elements · {shellStress.nodes.length} nodes,
+                          smoothed to the nodes. Service (unfactored) load field.
+                        </p>
+                      </div>
+                    )
+                  })()}
                 </div>
                 {!design && (
                   <p className="rounded border border-hairline bg-sheet-2 px-2 py-1.5 text-[11px] leading-snug text-muted">
