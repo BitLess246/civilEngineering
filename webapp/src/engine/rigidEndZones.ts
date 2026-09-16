@@ -20,7 +20,11 @@ const dot = (a: V3, b: V3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
 /** Cross-section depth (along local y′) and width (along local z′) in metres.
  *  Steel resolves the AISC shape (d × bf / h × b / D); concrete uses h × b. */
-function depthWidth(sec: RectSection | undefined): { depth: number; width: number } {
+/** Section depth and width in METRES, resolving a steel shape to its real
+ *  dimensions. Exported so the drawn column cap measures a framing member the
+ *  same way the rigid zone does — two opinions about how deep a W310 is would
+ *  put the concrete somewhere the panel zone is not. */
+export function depthWidth(sec: RectSection | undefined): { depth: number; width: number } {
   if (sec?.material === 'steel') {
     const shp = sec.shape ? shapeByName(sec.shape) : undefined
     if (shp) {
