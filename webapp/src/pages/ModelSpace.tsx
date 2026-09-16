@@ -54,6 +54,7 @@ import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
 import { freqFromDeflection, dg11Walking, DG11_OCCUPANCY } from '../engine/floorVibration'
 import { buildSeismicMass, GRAVITY } from '../engine/modal'
 import { autoRigidOffsets } from '../engine/rigidEndZones'
+import { columnCapRise } from '../lib/columnCap'
 import { AnalysisOptionsHelp } from '../components/AnalysisOptionsHelp'
 import { computeWind, computeCladding, type WindResult, type WindEnclosure, type CladdingResult } from '../engine/wind'
 import { LetterheadCard, type LetterheadState } from '../components/calc'
@@ -1566,6 +1567,12 @@ export default function ModelSpace() {
   // concrete: the joint block belongs to the column pour), and a column whose
   // stack ends extends UP to the top of the deepest framing beam.
   const faceOff = useMemo(() => (model ? autoRigidOffsets(model, 1) : null), [model])
+  // How far a TERMINATING column's solid reaches above its top node — measured
+  // from what the framing members are actually DRAWN as, not from their rigid
+  // zone. The two agreed until beams were dropped so their top is the node;
+  // after that the rigid-zone half-depth was pure overshoot and every roof
+  // column stood 0.25 m proud of its own slab. See `lib/columnCap`.
+  const capRise = useMemo(() => (model ? columnCapRise(model) : null), [model])
   // model bounds → zoom-to-extents on load / after generate
   const modelBox = useMemo(() => {
     if (!model || model.nodes.length === 0) return null
@@ -1896,9 +1903,30 @@ export default function ModelSpace() {
                   const fo = faceOff?.get(m.id)
                   let aV: THREE.Vector3, bV: THREE.Vector3
                   if (m.role === 'column') {
+                    // THE TOP CAP IS THE DRAWN RISE, NOT THE RIGID ZONE. A
+                    // rigid end zone runs from the node to the face of the
+                    // supporting member — half the framing depth — which was
+                    // the right rise while a beam was drawn CENTRED on its
+                    // node. Beams now hang below it, so their top IS the node
+                    // and that same number became a stub standing above the
+                    // roof. `capRise` measures what the framing member is
+                    // actually drawn as, so a hanging beam asks for nothing and
+                    // a brace still gets its half-extent.
+                    //
+                    // ONLY the upper end changes. The lower end keeps the face
+                    // offset it always had: it is buried in the joint block or
+                    // the pedestal below, nobody reported it, and the footing
+                    // interface below is tuned against it.
                     const contAt = (nid: string) => model.members.some((o) => o.id !== m.id && o.role === 'column' && (o.i === nid || o.j === nid))
-                    aV = manI ? a.clone().add(v3(manI)) : (fo?.offI && !contAt(m.i) ? a.clone().sub(v3(fo.offI)) : a)
-                    bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ && !contAt(m.j) ? bb.clone().sub(v3(fo.offJ)) : bb)
+                    const rise = capRise?.get(m.id) ?? 0
+                    const upperIsJ = bb.y >= a.y
+                    const capped = (p: THREE.Vector3) => (rise > 0 ? p.clone().setY(p.y + rise) : p)
+                    const footed = (p: THREE.Vector3, off: [number, number, number] | undefined, nid: string) =>
+                      (off && !contAt(nid) ? p.clone().sub(v3(off)) : p)
+                    aV = manI ? a.clone().add(v3(manI))
+                      : upperIsJ ? footed(a, fo?.offI, m.i) : capped(a)
+                    bV = manJ ? bb.clone().add(v3(manJ))
+                      : upperIsJ ? capped(bb) : footed(bb, fo?.offJ, m.j)
                     // …and down to the TOP OF THE PAD, which is the founding
                     // depth less the pad's own thickness below the base node.
                     // Drawn from the node, the column floated above a footing
