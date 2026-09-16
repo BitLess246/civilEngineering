@@ -77,9 +77,9 @@ function IssueList({ issues }: { issues: ValidationIssue[] }) {
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-sheet px-3 py-2">
+    <div className="rounded-lg border border-hairline bg-sheet px-3 py-2">
       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted">{label}</p>
-      <p className="mt-0.5 font-mono text-[15px] font-semibold text-slate-800">{value}</p>
+      <p className="mt-0.5 font-mono text-[15px] font-semibold text-ink">{value}</p>
       {sub && <p className="text-[10px] text-muted">{sub}</p>}
     </div>
   )
@@ -100,32 +100,32 @@ function LayerRow({
   layer, onChange, onRemove,
 }: { layer: SoilLayer; onChange: (patch: Partial<SoilLayer>) => void; onRemove: () => void }) {
   return (
-    <tr className="border-b border-slate-100">
+    <tr className="border-b border-hairline-2">
       <td className="py-0.5 pr-2">
         <input type="number" step="0.1" value={layer.depthTop}
           onChange={(e) => onChange({ depthTop: num(e.target.value) })}
-          className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+          className="w-16 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
       </td>
       <td className="py-0.5 pr-2">
         <input type="number" step="0.1" value={layer.depthBottom}
           onChange={(e) => onChange({ depthBottom: num(e.target.value) })}
-          className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+          className="w-16 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
       </td>
       <td className="py-0.5 pr-2 text-right font-mono text-muted">{f2(layerThickness(layer))}</td>
       <td className="py-0.5 pr-2">
         <input value={layer.symbol ?? ''} placeholder="—"
           onChange={(e) => onChange({ symbol: e.target.value.toUpperCase() || undefined })}
-          className="w-16 rounded border border-slate-200 px-1 py-0.5 font-mono uppercase" />
+          className="w-16 rounded border border-hairline px-1 py-0.5 font-mono uppercase" />
       </td>
       <td className="py-0.5 pr-2">
         <input value={layer.name}
           onChange={(e) => onChange({ name: e.target.value })}
-          className="w-full min-w-[8rem] rounded border border-slate-200 px-1 py-0.5" />
+          className="w-full min-w-[8rem] rounded border border-hairline px-1 py-0.5" />
       </td>
       <td className="py-0.5 pr-2">
         <input value={layer.description ?? ''}
           onChange={(e) => onChange({ description: e.target.value || undefined })}
-          className="w-full min-w-[12rem] rounded border border-slate-200 px-1 py-0.5" />
+          className="w-full min-w-[12rem] rounded border border-hairline px-1 py-0.5" />
       </td>
       <td className="py-0.5 text-right">
         <button onClick={onRemove} className="rounded px-1.5 py-0.5 text-[11px] text-fail hover:bg-fail-tint">
@@ -167,10 +167,10 @@ function SampleRow({
     && sample.tests.some((t) => t.type === 'consolidation' || t.type === 'triaxial' || t.type === 'ucs')
 
   return (
-    <tr className="border-b border-slate-100">
+    <tr className="border-b border-hairline-2">
       <td className="py-0.5 pr-2">
         <input value={sample.name} onChange={(e) => onChange({ name: e.target.value })}
-          className="w-20 rounded border border-slate-200 px-1 py-0.5 font-mono" />
+          className="w-20 rounded border border-hairline px-1 py-0.5 font-mono" />
       </td>
       <td className="py-0.5 pr-2">
         <select value={sample.type} title={spec?.hint}
@@ -178,29 +178,29 @@ function SampleRow({
             const next = SAMPLE_TYPES.find((t) => t.type === e.target.value)!
             onChange({ type: next.type, standard: next.standard })
           }}
-          className="rounded border border-slate-200 px-1 py-0.5">
+          className="rounded border border-hairline px-1 py-0.5">
           {SAMPLE_TYPES.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
         </select>
       </td>
       <td className="py-0.5 pr-2">
         <input type="number" step="0.1" value={sample.depthTop}
           onChange={(e) => onChange({ depthTop: num(e.target.value) })}
-          className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+          className="w-16 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
       </td>
       <td className="py-0.5 pr-2">
         <input type="number" step="0.1" value={sample.depthBottom}
           onChange={(e) => onChange({ depthBottom: num(e.target.value) })}
-          className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+          className="w-16 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
       </td>
       <td className="py-0.5 pr-2">
         <input type="number" step="0.01" value={sample.recoveryLength ?? ''} placeholder="—"
           onChange={(e) => onChange({ recoveryLength: e.target.value === '' ? undefined : num(e.target.value) })}
-          className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+          className="w-16 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
       </td>
       <td className="py-0.5 pr-2">
         <input type="number" step="0.01" value={sample.driveLength ?? ''} placeholder="—"
           onChange={(e) => onChange({ driveLength: e.target.value === '' ? undefined : num(e.target.value) })}
-          className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+          className="w-16 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
       </td>
       <td className={`py-0.5 pr-2 text-right font-mono ${rec != null && rec < 50 ? 'text-warn' : 'text-muted'}`}>
         {rec == null ? '—' : `${f0(rec)} %`}
@@ -208,12 +208,12 @@ function SampleRow({
       <td className="py-0.5 pr-2">
         <select value={sample.layerId ?? ''}
           onChange={(e) => onChange({ layerId: e.target.value || undefined })}
-          className="max-w-[9rem] rounded border border-slate-200 px-1 py-0.5">
+          className="max-w-[9rem] rounded border border-hairline px-1 py-0.5">
           <option value="">— unattributed —</option>
           {layers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
       </td>
-      <td className="py-0.5 pr-2 text-[11px] text-slate-600">
+      <td className="py-0.5 pr-2 text-[11px] text-muted">
         {sample.tests.length ? `${sample.tests.length} booked` : '—'}
         {disturbedWithUndisturbedTest && (
           <span className="ml-1 font-bold text-warn" title="Strength and compressibility need an undisturbed specimen.">!</span>
@@ -307,12 +307,12 @@ export default function SoilInvestigation() {
       <div className="mx-auto max-w-3xl px-5 py-10">
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Geotechnical</p>
         <h1 className="mt-1 text-2xl font-bold text-brand">Soil investigation</h1>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-muted">
           Enter a site investigation once — boreholes, strata, samples and field tests — and reuse it across the
           bearing-capacity, settlement, slope and pile calculators instead of retyping soil properties on each.
         </p>
 
-        <section className="mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <section className="mt-6 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
           <h2 className="text-[1.05rem] font-bold text-brand">Start</h2>
           <div className="mt-3 flex flex-wrap gap-2">
             <button onClick={() => api.newInvestigation()}
@@ -320,7 +320,7 @@ export default function SoilInvestigation() {
               New investigation
             </button>
             <button onClick={api.loadSample}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              className="rounded-md border border-field-line px-3 py-1.5 text-sm font-medium text-ink-2 hover:bg-sheet-2">
               Load the example
             </button>
           </div>
@@ -341,7 +341,7 @@ export default function SoilInvestigation() {
       <h1 className="mt-1 text-2xl font-bold text-brand">
         {inv.meta.title || 'Untitled investigation'}
       </h1>
-      <p className="mt-1 text-sm text-slate-600">
+      <p className="mt-1 text-sm text-muted">
         {inv.meta.investigationNo || 'no reference'} · {inv.meta.site.projectName || 'no project name'}
         {inv.meta.site.location ? ` · ${inv.meta.site.location}` : ''}
       </p>
@@ -349,11 +349,11 @@ export default function SoilInvestigation() {
       <div className="mt-4 flex flex-wrap items-center gap-2" data-tour="header-actions">
         <TourButton onClick={tour.start} />
         <button onClick={() => api.newInvestigation()}
-          className="rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50">
+          className="rounded-md border border-field-line px-2.5 py-1 text-[12px] font-medium text-ink-2 hover:bg-sheet-2">
           New
         </button>
         <button onClick={api.loadSample}
-          className="rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50">
+          className="rounded-md border border-field-line px-2.5 py-1 text-[12px] font-medium text-ink-2 hover:bg-sheet-2">
           Load example
         </button>
         <button
@@ -365,7 +365,7 @@ export default function SoilInvestigation() {
             a.click()
             URL.revokeObjectURL(a.href)
           }}
-          className="rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50">
+          className="rounded-md border border-field-line px-2.5 py-1 text-[12px] font-medium text-ink-2 hover:bg-sheet-2">
           Export JSON
         </button>
         <button
@@ -385,7 +385,7 @@ export default function SoilInvestigation() {
           data-tour="report-button">
           Report PDF
         </button>
-        <label className="cursor-pointer rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50">
+        <label className="cursor-pointer rounded-md border border-field-line px-2.5 py-1 text-[12px] font-medium text-ink-2 hover:bg-sheet-2">
           Import JSON
           <input type="file" accept="application/json" className="hidden"
             onChange={async (e) => {
@@ -399,7 +399,7 @@ export default function SoilInvestigation() {
         </label>
         {api.investigations.length > 1 && (
           <select value={api.activeId ?? ''} onChange={(e) => api.open(e.target.value)}
-            className="rounded-md border border-slate-300 px-2 py-1 text-[12px]">
+            className="rounded-md border border-field-line px-2 py-1 text-[12px]">
             {api.investigations.map((s) => (
               <option key={s.id} value={s.id}>{s.investigationNo || s.title}</option>
             ))}
@@ -413,11 +413,11 @@ export default function SoilInvestigation() {
         </p>
       )}
 
-      <nav className="mt-6 flex flex-wrap gap-1 border-b border-slate-200">
+      <nav className="mt-6 flex flex-wrap gap-1 border-b border-hairline">
         {(['overview', 'boreholes', 'profile', 'spt', 'cpt', 'lab', 'liquefaction', 'parameters', 'classification'] as Tab[]).map((t) => (
           <button key={t} onClick={() => { setTab(t); scrollTop() }}
             className={`rounded-t-md px-3 py-1.5 text-[13px] font-medium capitalize ${
-              tab === t ? 'border-b-2 border-brand text-brand' : 'text-slate-600 hover:text-slate-900'
+              tab === t ? 'border-b-2 border-brand text-brand' : 'text-muted hover:text-ink'
             }`}>
             {t === 'spt' ? 'SPT' : t === 'cpt' ? 'CPT' : t === 'lab' ? 'Laboratory' : t}
           </button>
@@ -436,7 +436,7 @@ export default function SoilInvestigation() {
               value={String(inv.boreholes.reduce((n, b) => n + b.samples.reduce((m, s) => m + s.tests.length, 0), 0))} />
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm" data-tour="meta-card">
+          <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm" data-tour="meta-card">
             <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Investigation</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {([
@@ -448,16 +448,16 @@ export default function SoilInvestigation() {
                 ['Engineer', inv.meta.engineer ?? '', (v: string) => set((d) => { d.meta.engineer = v })],
               ] as [string, string, (v: string) => void][]).map(([label, value, onChange]) => (
                 <label key={label} className="flex flex-col text-sm">
-                  <span className="mb-1 font-medium text-slate-600">{label}</span>
+                  <span className="mb-1 font-medium text-muted">{label}</span>
                   <input value={value} onChange={(e) => onChange(e.target.value)}
-                    className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+                    className="rounded-md border border-field-line px-2.5 py-1.5" />
                 </label>
               ))}
               <label className="flex flex-col text-sm">
-                <span className="mb-1 font-medium text-slate-600">Status</span>
+                <span className="mb-1 font-medium text-muted">Status</span>
                 <select value={inv.meta.status}
                   onChange={(e) => set((d) => { d.meta.status = e.target.value as typeof d.meta.status })}
-                  className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                  className="rounded-md border border-field-line px-2.5 py-1.5">
                   {['draft', 'fieldwork', 'laboratory', 'analysis', 'review', 'completed'].map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
@@ -466,7 +466,7 @@ export default function SoilInvestigation() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+          <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
             <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Data integrity</h2>
             <IssueList issues={issues} />
             <p className="mt-3 text-[11px] text-muted">
@@ -486,7 +486,7 @@ export default function SoilInvestigation() {
             {inv.boreholes.map((b, i) => (
               <button key={b.id} onClick={() => setHoleIdx(i)}
                 className={`rounded-md px-2.5 py-1 text-[12px] font-medium ${
-                  i === holeIdx ? 'bg-brand text-white' : 'border border-slate-300 text-slate-700 hover:bg-slate-50'
+                  i === holeIdx ? 'bg-brand text-white' : 'border border-field-line text-ink-2 hover:bg-sheet-2'
                 }`}>
                 {b.name}
               </button>
@@ -504,7 +504,7 @@ export default function SoilInvestigation() {
                 })
                 setHoleIdx(inv.boreholes.length)
               }}
-              className="rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
+              className="rounded-md border border-dashed border-field-line px-2.5 py-1 text-[12px] text-muted hover:bg-sheet-2"
               data-tour="add-borehole">
               + borehole
             </button>
@@ -512,7 +512,7 @@ export default function SoilInvestigation() {
 
           {bh && (
             <>
-              <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+              <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
                 <h2 className="mb-3 text-[1.05rem] font-bold text-brand">{bh.name}</h2>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {([
@@ -527,10 +527,10 @@ export default function SoilInvestigation() {
                       (v: string) => set((d) => { d.boreholes[holeIdx].groundwaterDepth = v === '' ? undefined : num(v) })],
                   ] as [string, string | number, string, (v: string) => void][]).map(([label, value, type, onChange]) => (
                     <label key={label} className="flex flex-col text-sm">
-                      <span className="mb-1 font-medium text-slate-600">{label}</span>
+                      <span className="mb-1 font-medium text-muted">{label}</span>
                       <input type={type} step="any" value={value}
                         onChange={(e) => onChange(e.target.value)}
-                        className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+                        className="rounded-md border border-field-line px-2.5 py-1.5" />
                     </label>
                   ))}
                 </div>
@@ -540,7 +540,7 @@ export default function SoilInvestigation() {
                 </p>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+              <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
                 <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Borehole log</h2>
                 <LogView bh={bh} />
                 <p className="mt-2 text-[11px] text-muted">
@@ -558,7 +558,7 @@ export default function SoilInvestigation() {
       {tab === 'profile' && bh && (
         <section className="mt-5 space-y-4">
           <SectionPanel boreholes={inv.boreholes} />
-          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+          <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[1.05rem] font-bold text-brand">{bh.name} — stratigraphy</h2>
               <button
@@ -570,7 +570,7 @@ export default function SoilInvestigation() {
                     depthTop: top, depthBottom: top + 1, name: 'New layer',
                   })
                 })}
-                className="rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
+                className="rounded-md border border-dashed border-field-line px-2.5 py-1 text-[12px] text-muted hover:bg-sheet-2"
                 data-tour="add-layer">
                 + layer
               </button>
@@ -578,7 +578,7 @@ export default function SoilInvestigation() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[12px]">
                 <thead className="text-muted">
-                  <tr className="border-b border-slate-200">
+                  <tr className="border-b border-hairline">
                     <th className="py-1 pr-2">Top (m)</th><th className="py-1 pr-2">Base (m)</th>
                     <th className="py-1 pr-2 text-right">Thk</th><th className="py-1 pr-2">USCS</th>
                     <th className="py-1 pr-2">Name</th><th className="py-1 pr-2">Description</th><th />
@@ -600,7 +600,7 @@ export default function SoilInvestigation() {
             )}
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+          <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[1.05rem] font-bold text-brand">{bh.name} — samples</h2>
               <button
@@ -624,7 +624,7 @@ export default function SoilInvestigation() {
                     tests: [],
                   })
                 })}
-                className="rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
+                className="rounded-md border border-dashed border-field-line px-2.5 py-1 text-[12px] text-muted hover:bg-sheet-2"
                 data-tour="add-sample">
                 + sample
               </button>
@@ -632,7 +632,7 @@ export default function SoilInvestigation() {
             <div className="overflow-x-auto" data-tour="samples-table">
               <table className="w-full text-left text-[12px]">
                 <thead className="text-muted">
-                  <tr className="border-b border-slate-200">
+                  <tr className="border-b border-hairline">
                     <th className="py-1 pr-2">Sample</th><th className="py-1 pr-2">Type</th>
                     <th className="py-1 pr-2">Top (m)</th><th className="py-1 pr-2">Base (m)</th>
                     <th className="py-1 pr-2">Rec. (m)</th><th className="py-1 pr-2">Drive (m)</th>
@@ -664,7 +664,7 @@ export default function SoilInvestigation() {
       {/* ── SPT ── */}
       {tab === 'spt' && bh && profile && (
         <section className="mt-5 space-y-4" data-tour="spt-panel">
-          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+          <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
             <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Unit weights for the stress profile</h2>
             <p className="mb-3 text-[11px] text-muted">
               (N₁)₆₀ needs the effective stress at each test depth, which needs a unit weight per layer. These are an
@@ -676,24 +676,24 @@ export default function SoilInvestigation() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[12px]">
                 <thead className="text-muted">
-                  <tr className="border-b border-slate-200">
+                  <tr className="border-b border-hairline">
                     <th className="py-1 pr-3">Layer</th><th className="py-1 pr-3">γ (kN/m³)</th>
                     <th className="py-1 pr-3">γsat (kN/m³)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {bh.layers.map((l) => (
-                    <tr key={l.id} className="border-b border-slate-100">
+                    <tr key={l.id} className="border-b border-hairline-2">
                       <td className="py-0.5 pr-3">{l.name}</td>
                       <td className="py-0.5 pr-3">
                         <input type="number" step="0.5" value={unitWeights[l.id]?.gamma ?? ''}
                           onChange={(e) => setUnitWeight(l.id, 'gamma', num(e.target.value))}
-                          className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                          className="w-20 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                       </td>
                       <td className="py-0.5 pr-3">
                         <input type="number" step="0.5" value={unitWeights[l.id]?.gammaSat ?? ''}
                           onChange={(e) => setUnitWeight(l.id, 'gammaSat', num(e.target.value))}
-                          className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                          className="w-20 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                       </td>
                     </tr>
                   ))}
@@ -702,12 +702,12 @@ export default function SoilInvestigation() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+          <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
             <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Corrected blow counts</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-right text-[12px]">
                 <thead className="text-muted">
-                  <tr className="border-b border-slate-200">
+                  <tr className="border-b border-hairline">
                     <th className="py-1 pr-3 text-left">Depth (m)</th><th className="py-1 pr-3 text-left">Layer</th>
                     <th className="py-1 pr-3">N</th><th className="py-1 pr-3">C_R</th>
                     <th className="py-1 pr-3">N₆₀</th><th className="py-1 pr-3">σ′ᵥ₀</th>
@@ -717,7 +717,7 @@ export default function SoilInvestigation() {
                 </thead>
                 <tbody className="font-mono">
                   {profile.rows.map((r) => (
-                    <tr key={r.testId} className={`border-b border-slate-100 ${r.refusal ? 'bg-warn-tint' : ''}`}>
+                    <tr key={r.testId} className={`border-b border-hairline-2 ${r.refusal ? 'bg-warn-tint' : ''}`}>
                       <td className="py-0.5 pr-3 text-left">{f2(r.depth)}</td>
                       <td className="py-0.5 pr-3 text-left font-sans">{r.layerName ?? '—'}</td>
                       <td className="py-0.5 pr-3">{r.N}{r.refusal ? '*' : ''}</td>
@@ -726,7 +726,7 @@ export default function SoilInvestigation() {
                       <td className="py-0.5 pr-3">{f0(r.effectiveStress)}</td>
                       <td className="py-0.5 pr-3">{f2(r.cn)}</td>
                       <td className="py-0.5 pr-3 font-semibold">{f1(r.n160)}</td>
-                      <td className="py-0.5 pr-3 text-left font-sans text-slate-600">
+                      <td className="py-0.5 pr-3 text-left font-sans text-muted">
                         {r.refusal
                           ? 'refusal'
                           : describeN60(r.n60, bh.layers.find((l) => l.id === r.layerId))}
@@ -849,12 +849,12 @@ function SyncPanel() {
   const [open, setOpen] = useState(false)
 
   const badge =
-    s.availability.kind === 'ready' ? { text: 'signed in', cls: 'bg-emerald-100 text-emerald-800' }
-      : s.availability.kind === 'signed-out' ? { text: 'signed out', cls: 'bg-amber-100 text-amber-900' }
-      : { text: 'not configured', cls: 'bg-slate-200 text-slate-700' }
+    s.availability.kind === 'ready' ? { text: 'signed in', cls: 'bg-ok-tint text-ok' }
+      : s.availability.kind === 'signed-out' ? { text: 'signed out', cls: 'bg-warn-tint text-warn' }
+      : { text: 'not configured', cls: 'bg-hairline text-ink-2' }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+    <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-[1.05rem] font-bold text-brand">
@@ -870,7 +870,7 @@ function SyncPanel() {
         </div>
         <div className="flex gap-2">
           <button onClick={() => { setOpen(true); void s.check() }} disabled={s.busy || s.availability.kind === 'not-configured'}
-            className="rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+            className="rounded-md border border-field-line px-2.5 py-1 text-[12px] font-medium text-ink-2 hover:bg-sheet-2 disabled:opacity-40">
             Check connection
           </button>
           <button onClick={() => { setOpen(true); void s.sync() }} disabled={s.busy || s.availability.kind !== 'ready'}
@@ -881,7 +881,7 @@ function SyncPanel() {
       </div>
 
       {s.availability.kind === 'not-configured' && (
-        <p className="mt-2 text-[11px] text-slate-600">
+        <p className="mt-2 text-[11px] text-muted">
           Cloud storage is not configured for this deployment, so everything stays local. Export JSON is the backup.
         </p>
       )}
@@ -897,8 +897,8 @@ function SyncPanel() {
       )}
 
       {open && s.diagnostics && (
-        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p className="mb-1.5 text-[11px] font-semibold text-slate-700">
+        <div className="mt-3 rounded-lg border border-hairline bg-sheet-2 p-3">
+          <p className="mb-1.5 text-[11px] font-semibold text-ink-2">
             Connection check {s.diagnostics.ok ? '— all clear' : '— PROBLEMS FOUND'}
           </p>
           <ul className="space-y-1">
@@ -906,10 +906,10 @@ function SyncPanel() {
               <li key={r.name} className="flex items-baseline gap-2 text-[11px]">
                 <span className={`rounded px-1 text-[9px] font-bold ${
                   r.status === 'pass' ? 'bg-ok-tint text-ok'
-                    : r.status === 'fail' ? 'bg-fail-tint text-fail' : 'bg-slate-200 text-slate-600'
+                    : r.status === 'fail' ? 'bg-fail-tint text-fail' : 'bg-hairline text-muted'
                 }`}>{r.status.toUpperCase()}</span>
-                <span className="font-medium text-slate-700">{r.name}</span>
-                <span className="text-slate-600">{r.detail}</span>
+                <span className="font-medium text-ink-2">{r.name}</span>
+                <span className="text-muted">{r.detail}</span>
               </li>
             ))}
           </ul>
@@ -918,10 +918,10 @@ function SyncPanel() {
 
       {open && s.report && (
         <div className="mt-3">
-          <p className="text-[11px] font-semibold text-slate-700">Last sync</p>
+          <p className="text-[11px] font-semibold text-ink-2">Last sync</p>
           <ul className="mt-1 space-y-0.5 text-[11px]">
             {s.report.outcomes.map((o) => (
-              <li key={`${o.kind}-${o.id}`} className="text-slate-600">
+              <li key={`${o.kind}-${o.id}`} className="text-muted">
                 <span className="font-mono">{o.id}</span> — {o.kind === 'failed' ? `failed: ${o.error}` : o.kind}
               </li>
             ))}
@@ -940,20 +940,20 @@ function SyncPanel() {
               </p>
               {s.report.conflicts.map((c) => (
                 <div key={c.id} className="mt-2 rounded border border-warn-line bg-sheet p-2">
-                  <p className="font-mono text-[11px] font-semibold text-slate-800">
+                  <p className="font-mono text-[11px] font-semibold text-ink">
                     {c.local.meta.investigationNo || c.id}
                   </p>
-                  <p className="text-[10px] text-slate-600">
+                  <p className="text-[10px] text-muted">
                     This browser: {c.local.boreholes.length} hole(s) · Server: {c.remote.investigation.boreholes.length} hole(s),
                     saved {new Date(c.remote.updatedAt).toLocaleString()}
                   </p>
                   <div className="mt-1 flex gap-2">
                     <button onClick={() => void s.resolve(c.id, 'local')} disabled={s.busy}
-                      className="rounded border border-slate-300 px-2 py-0.5 text-[11px] hover:bg-slate-50 disabled:opacity-40">
+                      className="rounded border border-field-line px-2 py-0.5 text-[11px] hover:bg-sheet-2 disabled:opacity-40">
                       Keep this browser&apos;s
                     </button>
                     <button onClick={() => void s.resolve(c.id, 'remote')} disabled={s.busy}
-                      className="rounded border border-slate-300 px-2 py-0.5 text-[11px] hover:bg-slate-50 disabled:opacity-40">
+                      className="rounded border border-field-line px-2 py-0.5 text-[11px] hover:bg-sheet-2 disabled:opacity-40">
                       Keep the server&apos;s
                     </button>
                   </div>
@@ -1008,7 +1008,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
 
   if (!layers.length) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Cone penetration test</h2>
         <p className="text-[12px] text-warn">
           Every normalised cone quantity needs the effective stress at the reading depth, which needs a logged
@@ -1021,7 +1021,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-[1.05rem] font-bold text-brand">Cone penetration test</h2>
@@ -1031,16 +1031,16 @@ function CptPanel({ bh, unitWeights, onChange }: {
             </p>
           </div>
           <label className="flex flex-col text-[11px]">
-            <span className="mb-0.5 text-slate-600">N<sub>kt</sub> for s<sub>u</sub></span>
+            <span className="mb-0.5 text-muted">N<sub>kt</sub> for s<sub>u</sub></span>
             <input type="number" step="1" value={nkt} onChange={(e) => setNkt(num(e.target.value, 15))}
-              className="w-20 rounded border border-slate-300 px-1.5 py-1 text-right font-mono" />
+              className="w-20 rounded border border-field-line px-1.5 py-1 text-right font-mono" />
           </label>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[12px]">
             <thead className="text-muted">
-              <tr className="border-b border-slate-200">
+              <tr className="border-b border-hairline">
                 <th className="py-1 pr-2 text-left">Depth (m)</th>
                 <th className="py-1 pr-2">q<sub>c</sub> (MPa)</th>
                 <th className="py-1 pr-2">f<sub>s</sub> (kPa)</th>
@@ -1055,28 +1055,28 @@ function CptPanel({ bh, unitWeights, onChange }: {
               {rows.map((r, i) => {
                 const out = sounding.rows[i]
                 return (
-                  <tr key={i} className="border-b border-slate-100">
+                  <tr key={i} className="border-b border-hairline-2">
                     <td className="py-0.5 pr-2">
                       <input type="number" step="0.25" value={r.depth}
                         onChange={(e) => patch(i, 'depth', num(e.target.value))}
-                        className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                        className="w-20 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                     </td>
                     <td className="py-0.5 pr-2">
                       <input type="number" step="0.1" value={r.qc}
                         onChange={(e) => patch(i, 'qc', num(e.target.value))}
-                        className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                        className="w-20 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                     </td>
                     <td className="py-0.5 pr-2">
                       <input type="number" step="1" value={r.fs}
                         onChange={(e) => patch(i, 'fs', num(e.target.value))}
-                        className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                        className="w-20 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                     </td>
                     <td className="py-0.5 pr-2">
                       <input type="number" step="1" value={r.u2 ?? ''} placeholder="—"
                         onChange={(e) => patch(i, 'u2', e.target.value === '' ? undefined : num(e.target.value))}
-                        className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                        className="w-20 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                     </td>
-                    <td className="py-0.5 pr-2 font-mono text-slate-600">
+                    <td className="py-0.5 pr-2 font-mono text-muted">
                       {out ? f2(out.qt) : '—'}{out && !out.corrected ? '*' : ''}
                     </td>
                     <td className="py-0.5 pr-2 font-mono font-semibold">
@@ -1095,7 +1095,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
         </div>
         <button
           onClick={() => onChange([...rows, { depth: rows.length ? rows[rows.length - 1].depth + 0.5 : 1, qc: 5, fs: 50 }])}
-          className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50">
+          className="mt-1 rounded border border-dashed border-field-line px-2 py-0.5 text-[11px] text-muted hover:bg-sheet-2">
           + reading
         </button>
         {sounding.rows.some((r) => !r.corrected) && (
@@ -1108,14 +1108,14 @@ function CptPanel({ bh, unitWeights, onChange }: {
       </div>
 
       {zones.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
           <h2 className="mb-2 text-[1.05rem] font-bold text-brand">Behaviour over the sounding</h2>
           <ul className="space-y-0.5 text-[12px]">
             {zones.map((z) => (
               <li key={z.zone} className="flex items-baseline gap-2">
                 <span className="font-mono text-muted">zone {z.zone}</span>
-                <span className="text-slate-800">{z.label}</span>
-                <span className="font-mono text-slate-600">{(z.fraction * 100).toFixed(0)}%</span>
+                <span className="text-ink">{z.label}</span>
+                <span className="font-mono text-muted">{(z.fraction * 100).toFixed(0)}%</span>
               </li>
             ))}
           </ul>
@@ -1123,7 +1123,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
       )}
 
       {sounding.rows.some((r) => r.normalised) && (
-        <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
           <h2 className="mb-2 text-[1.05rem] font-bold text-brand">Correlations</h2>
           <p className="mb-2 text-[11px] text-muted">
             Each is refused outside the soil it applies to, with the reason — the same rule the SPT correlations follow.
@@ -1131,7 +1131,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[12px]">
               <thead className="text-muted">
-                <tr className="border-b border-slate-200">
+                <tr className="border-b border-hairline">
                   <th className="py-1 pr-3">Depth</th><th className="py-1 pr-3">D<sub>r</sub></th>
                   <th className="py-1 pr-3">φ′</th><th className="py-1 pr-3">s<sub>u</sub></th>
                 </tr>
@@ -1146,7 +1146,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
                       ? <span className="font-mono">{f1(c.value)} {c.unit}</span>
                       : <span className="text-[10px] text-muted">{c.refusal}</span>
                   return (
-                    <tr key={r.depth} className="border-b border-slate-100 align-top">
+                    <tr key={r.depth} className="border-b border-hairline-2 align-top">
                       <td className="py-0.5 pr-3 font-mono">{f2(r.depth)}</td>
                       <td className="py-0.5 pr-3">{cell(dr)}</td>
                       <td className="py-0.5 pr-3">{cell(phi)}</td>
@@ -1176,16 +1176,16 @@ function SectionPanel({ boreholes }: { boreholes: Borehole[] }) {
   )
   if (!svg) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Correlated section</h2>
-        <p className="text-[12px] text-slate-600">
+        <p className="text-[12px] text-muted">
           A section needs at least two boreholes. With one there is nothing to correlate.
         </p>
       </div>
     )
   }
   return (
-    <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+    <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
       <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Correlated section</h2>
       <p className="mb-3 text-[11px] text-muted">
         Only the vertical hole traces are measured. Every boundary between holes is inferred and is drawn
@@ -1235,7 +1235,7 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Design earthquake</h2>
         <p className="mb-3 text-[11px] text-muted">
           a_max is the peak acceleration at the GROUND SURFACE. A site-specific hazard or site-response study is the
@@ -1244,46 +1244,46 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col text-[11px]">
-            <span className="mb-0.5 text-slate-600">a_max (g)</span>
+            <span className="mb-0.5 text-muted">a_max (g)</span>
             <input type="number" step="0.05" min="0" value={amax}
               onChange={(e) => setAmax(num(e.target.value))}
-              className="w-24 rounded border border-slate-300 px-1.5 py-1 text-right font-mono" />
+              className="w-24 rounded border border-field-line px-1.5 py-1 text-right font-mono" />
           </label>
           <label className="flex flex-col text-[11px]">
-            <span className="mb-0.5 text-slate-600">Magnitude M<sub>w</sub></span>
+            <span className="mb-0.5 text-muted">Magnitude M<sub>w</sub></span>
             <input type="number" step="0.1" min="0" value={magnitude}
               onChange={(e) => setMagnitude(num(e.target.value))}
-              className="w-24 rounded border border-slate-300 px-1.5 py-1 text-right font-mono" />
+              className="w-24 rounded border border-field-line px-1.5 py-1 text-right font-mono" />
           </label>
-          <div className="flex items-end gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2">
+          <div className="flex items-end gap-2 rounded-lg border border-dashed border-field-line px-3 py-2">
             <label className="flex flex-col text-[11px]">
-              <span className="mb-0.5 text-slate-600">NSCP zone</span>
+              <span className="mb-0.5 text-muted">NSCP zone</span>
               <select value={zone} onChange={(e) => setZone(Number(e.target.value) as SeismicZone)}
-                className="rounded border border-slate-300 px-1.5 py-1">
+                className="rounded border border-field-line px-1.5 py-1">
                 <option value={2}>2</option><option value={4}>4</option>
               </select>
             </label>
             <label className="flex flex-col text-[11px]">
-              <span className="mb-0.5 text-slate-600">Soil profile</span>
+              <span className="mb-0.5 text-muted">Soil profile</span>
               <select value={soil} onChange={(e) => setSoil(e.target.value as SoilProfile)}
-                className="rounded border border-slate-300 px-1.5 py-1">
+                className="rounded border border-field-line px-1.5 py-1">
                 {(['SA', 'SB', 'SC', 'SD', 'SE'] as SoilProfile[]).map((x) => (
                   <option key={x} value={x}>{x}</option>
                 ))}
               </select>
             </label>
             <button onClick={() => setAmax(Number(ca.toFixed(2)))}
-              className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50">
+              className="rounded-md border border-field-line px-2 py-1 text-[11px] font-medium text-ink-2 hover:bg-sheet-2">
               use Ca = {ca.toFixed(2)}
             </button>
           </div>
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Fines content</h2>
         {fines.length ? (
-          <ul className="text-[11px] text-slate-600">
+          <ul className="text-[11px] text-muted">
             {fines.map((f) => (
               <li key={f.layerId} className="font-mono">
                 {bh.layers.find((l) => l.id === f.layerId)?.name ?? f.layerId}: {f.fines.toFixed(1)}%
@@ -1302,16 +1302,16 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
         )}
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: svg }} />
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Triggering by test</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[12px]">
             <thead className="text-muted">
-              <tr className="border-b border-slate-200">
+              <tr className="border-b border-hairline">
                 <th className="py-1 pr-3 text-left">Depth (m)</th>
                 <th className="py-1 pr-3 text-left">Layer</th>
                 <th className="py-1 pr-3">(N₁)₆₀cs</th>
@@ -1322,7 +1322,7 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
             </thead>
             <tbody>
               {profile.rows.map((r) => (
-                <tr key={r.testId} className="border-b border-slate-100">
+                <tr key={r.testId} className="border-b border-hairline-2">
                   <td className="py-0.5 pr-3 text-left font-mono">{f2(r.depth)}</td>
                   <td className="py-0.5 pr-3 text-left">{r.layerName ?? '—'}</td>
                   {r.result ? (
@@ -1393,7 +1393,7 @@ function ClassificationPanel() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Gradation and plasticity</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {([
@@ -1401,21 +1401,21 @@ function ClassificationPanel() {
             ['Cu', cu, setCu], ['Cc', cc, setCc], ['LL (%)', ll, setLl], ['PL (%)', pl, setPl],
           ] as [string, number, (v: number) => void][]).map(([label, value, onChange]) => (
             <label key={label} className="flex flex-col text-sm">
-              <span className="mb-1 font-medium text-slate-600">{label}</span>
+              <span className="mb-1 font-medium text-muted">{label}</span>
               <input type="number" step="any" value={value}
                 onChange={(e) => onChange(num(e.target.value))}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+                className="rounded-md border border-field-line px-2.5 py-1.5" />
             </label>
           ))}
           <label className="flex items-end gap-2 text-sm">
             <input type="checkbox" checked={organic} onChange={(e) => setOrganic(e.target.checked)}
               className="mb-2 h-4 w-4" />
-            <span className="mb-1.5 font-medium text-slate-600">Organic</span>
+            <span className="mb-1.5 font-medium text-muted">Organic</span>
           </label>
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-2 text-[1.05rem] font-bold text-brand">USCS — ASTM D2487</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Group symbol" value={result.symbol ?? '—'} sub={result.dual ? 'dual symbol' : undefined} />
@@ -1423,13 +1423,13 @@ function ClassificationPanel() {
           <Stat label="Fines" value={`${f0(fines)} %`} sub={result.coarseGrained ? 'coarse-grained' : 'fine-grained'} />
           <Stat label="Group name" value={result.name ?? '—'} />
         </div>
-        <p className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] text-slate-700">
+        <p className="mt-3 rounded-md border border-hairline bg-sheet-2 px-3 py-2 text-[12px] text-ink-2">
           {result.reason}
         </p>
         {result.notes.map((n, k) => (
           <p key={k} className={n.severity === 'warning'
             ? 'mt-2 rounded-md border border-warn-line bg-warn-tint px-3 py-2 text-[11px] text-warn'
-            : 'mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600'}>
+            : 'mt-2 rounded-md border border-hairline bg-sheet-2 px-3 py-2 text-[11px] text-muted'}>
             {n.text}
           </p>
         ))}
@@ -1483,15 +1483,15 @@ function TestCard({
   const implemented = isImplemented(test.type)
 
   return (
-    <div className={`rounded-lg border p-3 ${test.status === 'void' ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-slate-200 bg-sheet'}`}>
+    <div className={`rounded-lg border p-3 ${test.status === 'void' ? 'border-hairline bg-sheet-2 opacity-70' : 'border-hairline bg-sheet'}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <span className="text-[13px] font-semibold text-slate-800">{spec?.label ?? test.type}</span>
+          <span className="text-[13px] font-semibold text-ink">{spec?.label ?? test.type}</span>
           <span className="ml-2 font-mono text-[10px] text-muted">{cite(test.standard)}</span>
         </div>
         <div className="flex items-center gap-2">
           <select value={test.status} onChange={(e) => onStatus(e.target.value as LabTestStatus)}
-            className="rounded border border-slate-300 px-1.5 py-0.5 text-[11px]">
+            className="rounded border border-field-line px-1.5 py-0.5 text-[11px]">
             {(['planned', 'in-progress', 'complete', 'void'] as LabTestStatus[]).map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
@@ -1505,7 +1505,7 @@ function TestCard({
       {spec?.purpose && <p className="mt-1 text-[11px] text-muted">{spec.purpose}</p>}
 
       {!implemented ? (
-        <p className="mt-2 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
+        <p className="mt-2 rounded border border-hairline bg-sheet-2 px-2 py-1.5 text-[11px] text-muted">
           Booked against this sample. No data form yet — this test&rsquo;s engine has not shipped, and the schedule
           shows it rather than hiding it.
         </p>
@@ -1532,11 +1532,11 @@ function TestCard({
           {spec!.formKind === 'swell-reload' && (
             <>
               <label className="mt-2 flex flex-col text-[11px]">
-                <span className="mb-0.5 text-slate-600">Method</span>
+                <span className="mb-0.5 text-muted">Method</span>
                 <select
                   value={(test.data?.method as string | undefined) ?? 'A'}
                   onChange={(e) => onChoice('method', e.target.value)}
-                  className="rounded border border-slate-300 px-1.5 py-1">
+                  className="rounded border border-field-line px-1.5 py-1">
                   <option value="A">A — wetted at a seating pressure (free swell)</option>
                   <option value="B">B — wetted at the in-situ vertical stress</option>
                   <option value="C">C — height held constant (swelling pressure measured)</option>
@@ -1561,11 +1561,11 @@ function TestCard({
           {spec!.formKind === 'cbr-points' && (
             <>
               <label className="mt-2 flex flex-col text-[11px]">
-                <span className="mb-0.5 text-slate-600">Condition</span>
+                <span className="mb-0.5 text-muted">Condition</span>
                 <select
                   value={(test.data?.soaked as string | undefined) ?? 'false'}
                   onChange={(e) => onChoice('soaked', e.target.value)}
-                  className="rounded border border-slate-300 px-1.5 py-1">
+                  className="rounded border border-field-line px-1.5 py-1">
                   <option value="false">Unsoaked</option>
                   <option value="true">Soaked — four days (D1883 §10)</option>
                 </select>
@@ -1581,11 +1581,11 @@ function TestCard({
 
           {test.type === 'permeability' && (
             <label className="mt-2 flex flex-col text-[11px]">
-              <span className="mb-0.5 text-slate-600">Method</span>
+              <span className="mb-0.5 text-muted">Method</span>
               <select
                 value={(test.data?.method as string | undefined) ?? 'constant-head'}
                 onChange={(e) => onChoice('method', e.target.value)}
-                className="rounded border border-slate-300 px-1.5 py-1">
+                className="rounded border border-field-line px-1.5 py-1">
                 <option value="constant-head">Constant head — D2434 (sands, k &gt; 1e-5 m/s)</option>
                 <option value="falling-head">Falling head — D5084 (fines, k &lt; 1e-6 m/s)</option>
               </select>
@@ -1598,11 +1598,11 @@ function TestCard({
           {spec!.formKind === 'triaxial-specimens' && (
             <>
               <label className="mt-2 flex flex-col text-[11px]">
-                <span className="mb-0.5 text-slate-600">Test type</span>
+                <span className="mb-0.5 text-muted">Test type</span>
                 <select
                   value={(test.data?.testType as string | undefined) ?? 'UU'}
                   onChange={(e) => onChoice('testType', e.target.value)}
-                  className="rounded border border-slate-300 px-1.5 py-1">
+                  className="rounded border border-field-line px-1.5 py-1">
                   <option value="UU">UU — unconsolidated undrained (D2850)</option>
                   <option value="CU">CU — consolidated undrained, u measured (D4767)</option>
                   <option value="CD">CD — consolidated drained (D7181)</option>
@@ -1621,11 +1621,11 @@ function TestCard({
           {spec!.formKind === 'compaction-points' && (
             <>
               <label className="mt-2 flex flex-col text-[11px]">
-                <span className="mb-0.5 text-slate-600">Compaction effort</span>
+                <span className="mb-0.5 text-muted">Compaction effort</span>
                 <select
                   value={(test.data?.effort as string | undefined) ?? 'standard'}
                   onChange={(e) => onChoice('effort', e.target.value)}
-                  className="rounded border border-slate-300 px-1.5 py-1">
+                  className="rounded border border-field-line px-1.5 py-1">
                   <option value="standard">Standard — D698 (600 kN·m/m³)</option>
                   <option value="modified">Modified — D1557 (2 700 kN·m/m³)</option>
                 </select>
@@ -1641,11 +1641,11 @@ function TestCard({
 
           {test.type === 'ucs' && (
             <label className="mt-2 flex flex-col text-[11px]">
-              <span className="mb-0.5 text-slate-600">Soil condition</span>
+              <span className="mb-0.5 text-muted">Soil condition</span>
               <select
                 value={(test.data?.soil as string | undefined) ?? 'saturated-cohesive'}
                 onChange={(e) => onChoice('soil', e.target.value)}
-                className="rounded border border-slate-300 px-1.5 py-1">
+                className="rounded border border-field-line px-1.5 py-1">
                 <option value="saturated-cohesive">Saturated cohesive (cu = qu/2 applies)</option>
                 <option value="fissured">Fissured</option>
                 <option value="partly-saturated">Partly saturated</option>
@@ -1660,14 +1660,14 @@ function TestCard({
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {spec!.fields.map((f) => (
               <label key={f.key} className="flex flex-col text-[11px]">
-                <span className="mb-0.5 text-slate-600">
+                <span className="mb-0.5 text-muted">
                   {f.label}{f.unit ? ` (${f.unit})` : ''}{f.optional ? '' : ' *'}
                 </span>
                 <input type="number" step="any"
                   value={(test.data?.[f.key] as number | undefined) ?? ''}
                   placeholder={f.placeholder != null ? String(f.placeholder) : ''}
                   onChange={(e) => onData(f.key, num(e.target.value))}
-                  className="rounded border border-slate-300 px-1.5 py-1 text-right font-mono" />
+                  className="rounded border border-field-line px-1.5 py-1 text-right font-mono" />
               </label>
             ))}
           </div>
@@ -1716,8 +1716,8 @@ function LabPanel({
 }) {
   if (!bh.samples.length) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
-        <p className="text-[12px] text-slate-600">
+      <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
+        <p className="text-[12px] text-muted">
           No samples in {bh.name}. Laboratory tests are booked against a sample, not a layer — a sample recovered
           across a stratigraphic boundary belongs to the hole at a depth.
         </p>
@@ -1728,7 +1728,7 @@ function LabPanel({
   return (
     <div className="space-y-4">
       {bh.samples.map((s) => (
-        <div key={s.id} className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+        <div key={s.id} className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-[1.05rem] font-bold text-brand">
               {s.name}
@@ -1737,7 +1737,7 @@ function LabPanel({
               </span>
             </h2>
             <select value="" onChange={(e) => { if (e.target.value) onAdd(s.id, e.target.value as LabTestType) }}
-              className="rounded-md border border-slate-300 px-2 py-1 text-[12px]">
+              className="rounded-md border border-field-line px-2 py-1 text-[12px]">
               <option value="">+ add a test…</option>
               {LAB_TESTS.map((t) => (
                 <option key={t.type} value={t.type}>
@@ -1806,7 +1806,7 @@ function SieveStack({
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
         <thead className="text-muted">
-          <tr className="border-b border-slate-200">
+          <tr className="border-b border-hairline">
             <th className="py-1 pr-2">Sieve</th>
             <th className="py-1 pr-2">Opening (mm)</th>
             <th className="py-1 pr-2 text-right">Mass retained (g)</th>
@@ -1815,21 +1815,21 @@ function SieveStack({
         </thead>
         <tbody>
           {stack.map((r, i) => (
-            <tr key={i} className="border-b border-slate-100">
+            <tr key={i} className="border-b border-hairline-2">
               <td className="py-0.5 pr-2">
                 <input value={r.designation ?? ''} placeholder="—"
                   onChange={(e) => set(i, { designation: e.target.value || undefined })}
-                  className="w-20 rounded border border-slate-200 px-1 py-0.5" />
+                  className="w-20 rounded border border-hairline px-1 py-0.5" />
               </td>
               <td className="py-0.5 pr-2">
                 <input type="number" step="any" value={r.size}
                   onChange={(e) => set(i, { size: num(e.target.value) })}
-                  className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                  className="w-20 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
               </td>
               <td className="py-0.5 pr-2 text-right">
                 <input type="number" step="any" value={r.massRetained}
                   onChange={(e) => set(i, { massRetained: num(e.target.value) })}
-                  className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                  className="w-24 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
               </td>
               <td className="py-0.5 text-right">
                 <button onClick={() => onChange(stack.filter((_, k) => k !== i))}
@@ -1841,7 +1841,7 @@ function SieveStack({
       </table>
       <button
         onClick={() => onChange([...stack, { size: 0.075, massRetained: 0 }])}
-        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        className="mt-1 rounded border border-dashed border-field-line px-2 py-0.5 text-[10px] text-muted hover:bg-sheet-2">
         + sieve
       </button>
     </div>
@@ -1886,7 +1886,7 @@ function SampleClassificationCard({
   const symbol = c.uscs?.symbol
 
   return (
-    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="mt-3 rounded-lg border border-hairline bg-sheet-2 p-3">
       <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">
         Classification from this sample
       </p>
@@ -1894,19 +1894,19 @@ function SampleClassificationCard({
       {symbol ? (
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="font-mono text-[16px] font-semibold text-brand">{symbol}</span>
-          <span className="text-[12px] text-slate-700">{c.uscs!.name}</span>
+          <span className="text-[12px] text-ink-2">{c.uscs!.name}</span>
         </div>
       ) : (
-        <p className="mt-1 text-[12px] text-slate-600">
+        <p className="mt-1 text-[12px] text-muted">
           {c.uscs?.reason ?? 'Not enough laboratory data to classify this sample yet.'}
         </p>
       )}
 
       {/* The two other systems, each answering its own question. They are shown
           side by side and never reconciled — see the engine headers. */}
-      <dl className="mt-2 grid grid-cols-[64px_1fr] gap-x-2 gap-y-1 border-t border-slate-200 pt-2 text-[11px]">
+      <dl className="mt-2 grid grid-cols-[64px_1fr] gap-x-2 gap-y-1 border-t border-hairline pt-2 text-[11px]">
         <dt className="font-semibold text-muted">AASHTO</dt>
-        <dd className="text-slate-700">
+        <dd className="text-ink-2">
           {c.aashto?.label ? (
             <>
               <span className="font-mono">{c.aashto.label}</span>
@@ -1917,7 +1917,7 @@ function SampleClassificationCard({
           )}
         </dd>
         <dt className="font-semibold text-muted">USDA</dt>
-        <dd className="text-slate-700">
+        <dd className="text-ink-2">
           {c.usda ? (
             <>
               <span className="font-medium">{c.usda.name}</span>
@@ -1934,13 +1934,13 @@ function SampleClassificationCard({
       </dl>
 
       {c.missing.length > 0 && (
-        <p className="mt-1.5 text-[11px] text-slate-600">
+        <p className="mt-1.5 text-[11px] text-muted">
           Run to complete it: <strong>{c.missing.join(', ')}</strong>
         </p>
       )}
 
       {symbol && c.uscs!.reason && (
-        <p className="mt-1.5 text-[11px] text-slate-600">{c.uscs!.reason}</p>
+        <p className="mt-1.5 text-[11px] text-muted">{c.uscs!.reason}</p>
       )}
 
       {c.curve?.combined && <CombinedCurve curve={c.curve} />}
@@ -2001,7 +2001,7 @@ function ShearPoints({
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
         <thead className="text-muted">
-          <tr className="border-b border-slate-200">
+          <tr className="border-b border-hairline">
             <th className="py-1 pr-2">Specimen</th>
             <th className="py-1 pr-2 text-right">σ′n (kPa)</th>
             <th className="py-1 pr-2 text-right">τ peak (kPa)</th>
@@ -2011,8 +2011,8 @@ function ShearPoints({
         </thead>
         <tbody>
           {pts.map((r, i) => (
-            <tr key={i} className="border-b border-slate-100">
-              <td className="py-0.5 pr-2 text-slate-600">{i + 1}</td>
+            <tr key={i} className="border-b border-hairline-2">
+              <td className="py-0.5 pr-2 text-muted">{i + 1}</td>
               {([
                 ['normalStress', r.normalStress] as const,
                 ['peakShear', r.peakShear] as const,
@@ -2024,7 +2024,7 @@ function ShearPoints({
                     onChange={(e) => set(i, {
                       [key]: e.target.value === '' ? undefined : num(e.target.value),
                     } as Partial<ShearRow>)}
-                    className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                    className="w-24 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                 </td>
               ))}
               <td className="py-0.5 text-right">
@@ -2036,7 +2036,7 @@ function ShearPoints({
         </tbody>
       </table>
       <button onClick={() => onChange([...pts, { normalStress: 0, peakShear: 0 }])}
-        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        className="mt-1 rounded border border-dashed border-field-line px-2 py-0.5 text-[10px] text-muted hover:bg-sheet-2">
         + specimen
       </button>
     </div>
@@ -2046,9 +2046,9 @@ function ShearPoints({
 // ── Design parameters ─────────────────────────────────────────────────────
 
 const PROVENANCE_STYLE: Record<string, string> = {
-  measured: 'bg-emerald-100 text-emerald-800',
+  measured: 'bg-ok-tint text-ok',
   derived: 'bg-sky-100 text-sky-800',
-  correlated: 'bg-amber-100 text-amber-900',
+  correlated: 'bg-teal-100 text-teal-800',
   assumed: 'bg-violet-100 text-violet-800',
 }
 
@@ -2087,7 +2087,7 @@ function ParametersPanel({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <div className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Design parameters</h2>
         <p className="text-[11px] text-muted">
           Resolved once per layer from every piece of evidence available, each carrying where it came from. A stated
@@ -2107,7 +2107,7 @@ function ParametersPanel({
       {resolutions.map(({ layer, r }) => {
         const bearing = bearingInputs(r, unitWeights[layer.id]?.gamma)
         return (
-          <div key={layer.id} className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+          <div key={layer.id} className="rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="text-[1rem] font-bold text-brand">
                 {layer.name}
@@ -2121,7 +2121,7 @@ function ParametersPanel({
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-[12px]">
                   <thead className="text-muted">
-                    <tr className="border-b border-slate-200">
+                    <tr className="border-b border-hairline">
                       <th className="py-1 pr-3">Parameter</th>
                       <th className="py-1 pr-3 text-right">Value</th>
                       <th className="py-1 pr-3">Source</th>
@@ -2130,7 +2130,7 @@ function ParametersPanel({
                   </thead>
                   <tbody>
                     {r.resolved.map((p) => (
-                      <tr key={p.key} className="border-b border-slate-100 align-top">
+                      <tr key={p.key} className="border-b border-hairline-2 align-top">
                         <td className="py-1 pr-3">{PARAMETER_LABEL[p.key] ?? p.key}</td>
                         <td className="py-1 pr-3 text-right font-mono font-semibold">
                           {formatParameter(p.value)}
@@ -2140,7 +2140,7 @@ function ParametersPanel({
                             {PROVENANCE_LABEL[p.value.provenance.kind]}
                           </span>
                         </td>
-                        <td className="py-1 pr-3 text-[11px] text-slate-600">
+                        <td className="py-1 pr-3 text-[11px] text-muted">
                           {describeProvenance(p.value.provenance)}
                           {p.value.note && <span className="block text-muted">{p.value.note}</span>}
                           {p.alternatives.length > 0 && (
@@ -2157,7 +2157,7 @@ function ParametersPanel({
                 </table>
               </div>
             ) : (
-              <p className="text-[12px] text-slate-600">
+              <p className="text-[12px] text-muted">
                 No evidence for any parameter in this layer yet — no laboratory tests on its samples and no usable
                 field tests within it.
               </p>
@@ -2172,7 +2172,7 @@ function ParametersPanel({
             )}
 
             {r.notes.map((n, k) => (
-              <p key={k} className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700">
+              <p key={k} className="mt-2 rounded-md border border-hairline bg-sheet-2 px-3 py-2 text-[11px] text-ink-2">
                 {n}
               </p>
             ))}
@@ -2200,7 +2200,7 @@ function LoadIncrements({
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
         <thead className="text-muted">
-          <tr className="border-b border-slate-200">
+          <tr className="border-b border-hairline">
             <th className="py-1 pr-2 text-right">σ′ (kPa)</th>
             <th className="py-1 pr-2 text-right">Compression (mm)</th>
             <th className="py-1 pr-2 text-right">t₅₀ (min)</th>
@@ -2209,7 +2209,7 @@ function LoadIncrements({
         </thead>
         <tbody>
           {pts.map((r, i) => (
-            <tr key={i} className="border-b border-slate-100">
+            <tr key={i} className="border-b border-hairline-2">
               {([['stress', r.stress] as const, ['compression', r.compression] as const, ['t50', r.t50] as const])
                 .map(([key, v]) => (
                   <td key={key} className="py-0.5 pr-2 text-right">
@@ -2218,7 +2218,7 @@ function LoadIncrements({
                       onChange={(e) => set(i, {
                         [key]: e.target.value === '' ? undefined : num(e.target.value),
                       } as Partial<LoadRow>)}
-                      className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                      className="w-24 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                   </td>
                 ))}
               <td className="py-0.5 text-right">
@@ -2233,7 +2233,7 @@ function LoadIncrements({
         Without t₅₀ the magnitude of settlement can be computed but not its rate.
       </p>
       <button onClick={() => onChange([...pts, { stress: 0, compression: 0 }])}
-        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        className="mt-1 rounded border border-dashed border-field-line px-2 py-0.5 text-[10px] text-muted hover:bg-sheet-2">
         + increment
       </button>
     </div>
@@ -2263,7 +2263,7 @@ function CompactionPoints({
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
         <thead className="text-muted">
-          <tr className="border-b border-slate-200">
+          <tr className="border-b border-hairline">
             <th className="py-1 pr-2 text-right">w (%)</th>
             <th className="py-1 pr-2 text-right">Mould + wet soil (g)</th>
             <th />
@@ -2271,7 +2271,7 @@ function CompactionPoints({
         </thead>
         <tbody>
           {pts.map((r, i) => (
-            <tr key={i} className="border-b border-slate-100">
+            <tr key={i} className="border-b border-hairline-2">
               {([['moisture', r.moisture] as const, ['mouldSoilMass', r.mouldSoilMass] as const])
                 .map(([key, v]) => (
                   <td key={key} className="py-0.5 pr-2 text-right">
@@ -2279,7 +2279,7 @@ function CompactionPoints({
                       onChange={(e) => set(i, {
                         [key]: e.target.value === '' ? undefined : num(e.target.value),
                       } as Partial<ProctorRow>)}
-                      className="w-28 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                      className="w-28 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                   </td>
                 ))}
               <td className="py-0.5 text-right">
@@ -2295,7 +2295,7 @@ function CompactionPoints({
         Two points either side of the peak, or the optimum rests on a single measurement.
       </p>
       <button onClick={() => onChange([...pts, { moisture: 0, mouldSoilMass: 0 }])}
-        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        className="mt-1 rounded border border-dashed border-field-line px-2 py-0.5 text-[10px] text-muted hover:bg-sheet-2">
         + point
       </button>
     </div>
@@ -2326,7 +2326,7 @@ function TriaxialSpecimens({
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
         <thead className="text-muted">
-          <tr className="border-b border-slate-200">
+          <tr className="border-b border-hairline">
             <th className="py-1 pr-2 text-right">σ₃ cell (kPa)</th>
             <th className="py-1 pr-2 text-right">Δσ at failure (kPa)</th>
             <th className="py-1 pr-2 text-right">u at failure (kPa)</th>
@@ -2335,7 +2335,7 @@ function TriaxialSpecimens({
         </thead>
         <tbody>
           {pts.map((r, i) => (
-            <tr key={i} className="border-b border-slate-100">
+            <tr key={i} className="border-b border-hairline-2">
               {([['cellPressure', r.cellPressure] as const,
                  ['deviatorStress', r.deviatorStress] as const,
                  ['porePressure', r.porePressure] as const])
@@ -2346,7 +2346,7 @@ function TriaxialSpecimens({
                       onChange={(e) => set(i, {
                         [key]: e.target.value === '' ? undefined : num(e.target.value),
                       } as Partial<SpecimenRow>)}
-                      className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                      className="w-24 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                   </td>
                 ))}
               <td className="py-0.5 text-right">
@@ -2362,7 +2362,7 @@ function TriaxialSpecimens({
         load over the initial area overstates strength by 10–20% at failure strains.
       </p>
       <button onClick={() => onChange([...pts, { cellPressure: 0, deviatorStress: 0 }])}
-        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        className="mt-1 rounded border border-dashed border-field-line px-2 py-0.5 text-[10px] text-muted hover:bg-sheet-2">
         + specimen
       </button>
     </div>
@@ -2388,7 +2388,7 @@ function CbrPoints({
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
         <thead className="text-muted">
-          <tr className="border-b border-slate-200">
+          <tr className="border-b border-hairline">
             <th className="py-1 pr-2 text-right">Penetration (mm)</th>
             <th className="py-1 pr-2 text-right">Plunger stress (MPa)</th>
             <th />
@@ -2396,7 +2396,7 @@ function CbrPoints({
         </thead>
         <tbody>
           {pts.map((r, i) => (
-            <tr key={i} className="border-b border-slate-100">
+            <tr key={i} className="border-b border-hairline-2">
               {([['penetration', r.penetration] as const, ['stress', r.stress] as const])
                 .map(([key, v]) => (
                   <td key={key} className="py-0.5 pr-2 text-right">
@@ -2404,7 +2404,7 @@ function CbrPoints({
                       onChange={(e) => set(i, {
                         [key]: e.target.value === '' ? undefined : num(e.target.value),
                       } as Partial<PenetrationRow>)}
-                      className="w-28 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                      className="w-28 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                   </td>
                 ))}
               <td className="py-0.5 text-right">
@@ -2420,7 +2420,7 @@ function CbrPoints({
         before either ordinate is read — that correction is drawn on the chart.
       </p>
       <button onClick={() => onChange([...pts, { penetration: 0, stress: 0 }])}
-        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        className="mt-1 rounded border border-dashed border-field-line px-2 py-0.5 text-[10px] text-muted hover:bg-sheet-2">
         + reading
       </button>
     </div>
@@ -2446,7 +2446,7 @@ function HydrometerReadings({
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
         <thead className="text-muted">
-          <tr className="border-b border-slate-200">
+          <tr className="border-b border-hairline">
             <th className="py-1 pr-2 text-right">Time (min)</th>
             <th className="py-1 pr-2 text-right">Reading (g/L)</th>
             <th className="py-1 pr-2 text-right">Temperature (°C)</th>
@@ -2455,7 +2455,7 @@ function HydrometerReadings({
         </thead>
         <tbody>
           {pts.map((r, i) => (
-            <tr key={i} className="border-b border-slate-100">
+            <tr key={i} className="border-b border-hairline-2">
               {([['time', r.time] as const, ['reading', r.reading] as const, ['temperature', r.temperature] as const])
                 .map(([key, v]) => (
                   <td key={key} className="py-0.5 pr-2 text-right">
@@ -2463,7 +2463,7 @@ function HydrometerReadings({
                       onChange={(e) => set(i, {
                         [key]: e.target.value === '' ? undefined : num(e.target.value),
                       } as Partial<SedimentRow>)}
-                      className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                      className="w-24 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                   </td>
                 ))}
               <td className="py-0.5 text-right">
@@ -2480,7 +2480,7 @@ function HydrometerReadings({
         readings of 10–50 it is a tenth of the sample, not a rounding.
       </p>
       <button onClick={() => onChange([...pts, { time: 0, reading: 0, temperature: 20 }])}
-        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        className="mt-1 rounded border border-dashed border-field-line px-2 py-0.5 text-[10px] text-muted hover:bg-sheet-2">
         + reading
       </button>
     </div>
@@ -2501,7 +2501,7 @@ function SwellReload({
     <div className="mt-2">
       <table className="w-full text-left text-[11px]">
         <thead className="text-muted">
-          <tr className="border-b border-slate-200">
+          <tr className="border-b border-hairline">
             <th className="py-1 pr-2 text-right">Stress (kPa)</th>
             <th className="py-1 pr-2 text-right">Height (mm)</th>
             <th />
@@ -2509,14 +2509,14 @@ function SwellReload({
         </thead>
         <tbody>
           {pts.map((r, i) => (
-            <tr key={i} className="border-b border-slate-100">
+            <tr key={i} className="border-b border-hairline-2">
               {([['stress', r.stress] as const, ['height', r.height] as const]).map(([key, v]) => (
                 <td key={key} className="py-0.5 pr-2 text-right">
                   <input type="number" step="any" value={v ?? ''}
                     onChange={(e) => set(i, {
                       [key]: e.target.value === '' ? undefined : num(e.target.value),
                     } as Partial<ReloadRow>)}
-                    className="w-28 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                    className="w-28 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                 </td>
               ))}
               <td className="py-0.5 text-right">
@@ -2533,7 +2533,7 @@ function SwellReload({
         whole result.
       </p>
       <button onClick={() => onChange([...pts, { stress: 0, height: 0 }])}
-        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        className="mt-1 rounded border border-dashed border-field-line px-2 py-0.5 text-[10px] text-muted hover:bg-sheet-2">
         + step
       </button>
     </div>
@@ -2568,11 +2568,11 @@ function MohrFailureTable({ result }: { result: TriaxialResult }) {
     <div className="mt-2 space-y-2">
       {blocks.map((b) => (
         <div key={b.label}>
-          <p className="mb-0.5 text-[11px] font-semibold text-slate-700">{b.label} — at failure</p>
+          <p className="mb-0.5 text-[11px] font-semibold text-ink-2">{b.label} — at failure</p>
           <div className="overflow-x-auto">
             <table className="w-full text-right text-[11px]">
               <thead className="text-muted">
-                <tr className="border-b border-slate-200">
+                <tr className="border-b border-hairline">
                   <th className="py-1 pr-2 text-left">Specimen</th>
                   <th className="py-1 pr-2">σ₃</th>
                   <th className="py-1 pr-2">σ₁</th>
@@ -2585,7 +2585,7 @@ function MohrFailureTable({ result }: { result: TriaxialResult }) {
               </thead>
               <tbody className="font-mono">
                 {b.circles.map((c, i) => (
-                  <tr key={i} className="border-b border-slate-100">
+                  <tr key={i} className="border-b border-hairline-2">
                     <td className="py-0.5 pr-2 text-left">#{i + 1}</td>
                     <td className="py-0.5 pr-2">{c.sigma3.toFixed(1)}</td>
                     <td className="py-0.5 pr-2">{c.sigma1.toFixed(1)}</td>
