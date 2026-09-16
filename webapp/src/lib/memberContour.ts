@@ -29,7 +29,7 @@ import {
   normalStress, fibreStress, shearStress, stationStress,
   type StressSection, type MemberForceArrays, type MemberForces,
 } from '../engine/memberStress'
-import { stressDomain, normalise, stressColorRGB, type Domain } from './stressScale'
+import { stressDomain, normalise, type Domain } from './stressScale'
 
 /** The quantities a member contour can paint. */
 export type MemberStressKey = 'sigma' | 'vonMises' | 'tau'
@@ -138,7 +138,9 @@ export function memberPeak(
 
 export interface MemberContourGeometry {
   position: Float32Array
-  color: Float32Array
+  /** NORMALISED value per vertex, 0–1 — see `lib/contourMaterial` for why this
+   *  is not a colour. */
+  value: Float32Array
   index: number[]
 }
 
@@ -157,7 +159,7 @@ const PROUD = 1.015
 export function memberContourGeometry(
   ms: readonly ContourMember[], key: MemberStressKey, domain: Domain,
 ): MemberContourGeometry | null {
-  const pos: number[] = [], col: number[] = [], idx: number[] = []
+  const pos: number[] = [], val: number[] = [], idx: number[] = []
   for (const m of ms) {
     const n = m.forces.xs.length
     if (n < 2) continue
@@ -184,8 +186,7 @@ export function memberContourGeometry(
           py + yp[1] * oy + zp[1] * oz,
           pz + yp[2] * oy + zp[2] * oz,
         )
-        const [r, g, b] = stressColorRGB(normalise(vals[i]?.[c] ?? 0, domain), domain.signed)
-        col.push(r, g, b)
+        val.push(normalise(vals[i]?.[c] ?? 0, domain))
       }
     }
     // Four faces per bay, two triangles each. The corner vertices are SHARED
@@ -201,7 +202,7 @@ export function memberContourGeometry(
     }
   }
   if (idx.length === 0) return null
-  return { position: new Float32Array(pos), color: new Float32Array(col), index: idx }
+  return { position: new Float32Array(pos), value: new Float32Array(val), index: idx }
 }
 
 export { shearStress }

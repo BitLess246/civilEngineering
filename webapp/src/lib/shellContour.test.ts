@@ -17,7 +17,7 @@ import {
   type ShellNode, type ShellElem, type ShellSupport,
 } from '../engine/shell'
 import { contourData, contourGeometry } from './shellContour'
-import { normalise, stressColorRGB } from './stressScale'
+import { normalise } from './stressScale'
 
 /** A 4 × 3 m plate, meshed 4×3, clamped on all four edges, under pressure. */
 function plate() {
@@ -79,7 +79,7 @@ describe('contourGeometry', () => {
   it('emits one vertex per node and one triangle per element', () => {
     expect(g).toBeTruthy()
     expect(g.position).toHaveLength(nodes.length * 3)
-    expect(g.color).toHaveLength(nodes.length * 3)
+    expect(g.value, 'one SCALAR per node, not three colour channels').toHaveLength(nodes.length)
     expect(g.index).toHaveLength(elems.length * 3)
   })
 
@@ -92,17 +92,17 @@ describe('contourGeometry', () => {
     })
   })
 
-  it('colours every vertex from the shared ramp', () => {
+  it('carries each node’s NORMALISED value, for the shader to colour', () => {
+    // Not a colour: the GPU interpolates this scalar across the element and
+    // `contourMaterial` maps it to the ramp per fragment. Interpolating the
+    // colour instead blends two ramp colours along a straight RGB line, which
+    // does not pass through the ramp's middle — so an element spanning the
+    // zero crossing was drawn without its pale band.
     nodes.forEach((n, i) => {
-      const want = stressColorRGB(normalise(nodal.get(n.id)!, domain), domain.signed)
-      for (let c = 0; c < 3; c++) {
-        // 6 dp, not more: the buffer is a Float32Array and cannot carry the
-        // float64 the ramp returns. Asking for 9 is asking the storage type
-        // for precision it does not have.
-        expect(g.color[i * 3 + c], `${n.id} ch${c}`).toBeCloseTo(want[c], 6)
-        expect(g.color[i * 3 + c]).toBeGreaterThanOrEqual(0)
-        expect(g.color[i * 3 + c]).toBeLessThanOrEqual(1)
-      }
+      // 6 dp, not more: the buffer is a Float32Array and cannot carry float64.
+      expect(g.value[i], n.id).toBeCloseTo(normalise(nodal.get(n.id)!, domain), 6)
+      expect(g.value[i]).toBeGreaterThanOrEqual(0)
+      expect(g.value[i]).toBeLessThanOrEqual(1)
     })
   })
 
@@ -132,14 +132,10 @@ describe('contourGeometry', () => {
     expect(contourGeometry(nodes, [orphan], nodal, domain)).toBeNull()
   })
 
-  it('spans the ramp — a real field is not painted one flat colour', () => {
+  it('spans the ramp — a real field is not painted one flat value', () => {
     // Guards the case where the domain collapses and every vertex takes the
-    // same colour, which looks like a working contour and carries no
+    // same value, which looks like a working contour and carries no
     // information at all.
-    const seen = new Set<string>()
-    for (let i = 0; i < nodes.length; i++) {
-      seen.add([0, 1, 2].map((c) => g.color[i * 3 + c].toFixed(3)).join(','))
-    }
-    expect(seen.size).toBeGreaterThan(3)
+    expect(new Set([...g.value].map((v) => v.toFixed(3))).size).toBeGreaterThan(3)
   })
 })

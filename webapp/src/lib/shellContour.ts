@@ -9,7 +9,7 @@
 import type { ShellNode, ShellElem, ElementStress } from '../engine/shell'
 import { shellNodalContour } from '../engine/shell'
 import {
-  isSigned, stressDomain, normalise, stressColorRGB, type Domain, type StressKey,
+  isSigned, stressDomain, normalise, type Domain, type StressKey,
 } from './stressScale'
 
 export interface ContourData {
@@ -46,8 +46,16 @@ export function contourData(
 export interface ContourGeometry {
   /** xyz per node, metres. */
   position: Float32Array
-  /** rgb per node, 0–1. */
-  color: Float32Array
+  /**
+   * NORMALISED value per node, 0–1 — not a colour.
+   *
+   * The colour is evaluated per FRAGMENT by `contourMaterial`. Handing the GPU
+   * a colour to interpolate blends two ramp colours along a straight RGB line,
+   * which does not pass through the ramp's own middle: on an element spanning
+   * the zero crossing the pale band was simply not drawn. Interpolating the
+   * value and mapping afterwards puts every colour where its value is.
+   */
+  value: Float32Array
   /** Triangle indices into the node arrays. */
   index: number[]
 }
@@ -72,11 +80,10 @@ export function contourGeometry(
   if (nodes.length === 0 || elems.length === 0) return null
   const index = new Map(nodes.map((n, i) => [n.id, i]))
   const position = new Float32Array(nodes.length * 3)
-  const color = new Float32Array(nodes.length * 3)
+  const value = new Float32Array(nodes.length)
   nodes.forEach((n, i) => {
     position[i * 3] = n.x; position[i * 3 + 1] = n.y; position[i * 3 + 2] = n.z
-    const [r, g, b] = stressColorRGB(normalise(nodal.get(n.id) ?? 0, domain), domain.signed)
-    color[i * 3] = r; color[i * 3 + 1] = g; color[i * 3 + 2] = b
+    value[i] = normalise(nodal.get(n.id) ?? 0, domain)
   })
   // An element naming a node the mesh does not carry is SKIPPED rather than
   // indexed as undefined: three.js turns that into a triangle at the origin,
@@ -87,5 +94,5 @@ export function contourGeometry(
     if (a === undefined || b === undefined || c === undefined) continue
     tri.push(a, b, c)
   }
-  return tri.length ? { position, color, index: tri } : null
+  return tri.length ? { position, value, index: tri } : null
 }

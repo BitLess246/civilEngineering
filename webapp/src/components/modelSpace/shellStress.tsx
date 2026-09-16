@@ -16,11 +16,12 @@
 //
 // Units: model space in metres; stresses kN/m² (membrane) and kN·m/m (bending).
 // ─────────────────────────────────────────────────────────────────────────
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import type { ShellNode, ShellElem, ElementStress } from '../../engine/shell'
 import { type StressKey } from '../../lib/stressScale'
 import { contourData, contourGeometry } from '../../lib/shellContour'
+import { contourMaterial } from '../../lib/contourMaterial'
 
 /**
  * The contour mesh.
@@ -35,11 +36,13 @@ import { contourData, contourGeometry } from '../../lib/shellContour'
  * lit. Shading it would multiply the ramp by the lighting and the colour would
  * no longer mean the number it is keyed to.
  */
-export function ShellStress3D({ nodes, elems, stresses, contourKey, opacity = 0.95 }: {
+export function ShellStress3D({ nodes, elems, stresses, contourKey, bands, opacity = 0.95 }: {
   nodes: readonly ShellNode[]
   elems: readonly ShellElem[]
   stresses: readonly ElementStress[]
   contourKey: StressKey
+  /** Discrete colour bands; 0 draws the field smooth. */
+  bands: number
   opacity?: number
 }) {
   const geo = useMemo(() => {
@@ -48,26 +51,24 @@ export function ShellStress3D({ nodes, elems, stresses, contourKey, opacity = 0.
     if (!built) return null
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.BufferAttribute(built.position, 3))
-    g.setAttribute('color', new THREE.BufferAttribute(built.color, 3))
+    g.setAttribute('aValue', new THREE.BufferAttribute(built.value, 1))
     g.setIndex(built.index)
     g.computeVertexNormals()
     return g
   }, [nodes, elems, stresses, contourKey])
 
+  // The ramp is signed for everything except von Mises; the material needs to
+  // know which, and it is the same question `contourData` already answered for
+  // the domain, so ask it the same way.
+  const signed = useMemo(
+    () => contourData(nodes, elems, stresses, contourKey).domain.signed,
+    [nodes, elems, stresses, contourKey])
+  // DoubleSide (set by the factory): a slab contour has to be readable from
+  // underneath, which is where you look at a soffit from. Disposed on replace —
+  // a ShaderMaterial is a compiled GPU program.
+  const mat = useMemo(() => contourMaterial({ signed, bands, opacity }), [signed, bands, opacity])
+  useEffect(() => () => { mat.dispose() }, [mat])
+
   if (!geo) return null
-  return (
-    <mesh geometry={geo} renderOrder={2}>
-      {/* DoubleSide: a slab contour has to be readable from underneath, which
-          is where you look at a soffit from. */}
-      <meshBasicMaterial
-        vertexColors
-        side={THREE.DoubleSide}
-        transparent={opacity < 1}
-        opacity={opacity}
-        depthWrite={opacity >= 1}
-        polygonOffset
-        polygonOffsetFactor={-1}
-      />
-    </mesh>
-  )
+  return <mesh geometry={geo} material={mat} renderOrder={2} />
 }

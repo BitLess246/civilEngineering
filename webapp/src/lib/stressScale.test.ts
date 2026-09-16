@@ -9,7 +9,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   isSigned, stressDomain, normalise, stressColor, stressColorRGB,
-  rampSwatches, rampTicks, formatStress, isMembrane, unitFor, labelFor, STRESS_KEYS, type StressKey,
+  rampSwatches, rampTicks, formatStress, isMembrane, unitFor, labelFor, STRESS_KEYS,
+  bandCenter, bandEdges, rampStops, DEFAULT_BANDS, type StressKey,
 } from './stressScale'
 
 describe('signedness', () => {
@@ -219,5 +220,109 @@ describe('keys are exhaustive against the engine', () => {
       'sigmaX', 'sigmaY', 'tauXY', 'sigma1', 'sigma2', 'vonMises', 'Mx', 'My', 'Mxy',
     ]
     expect(STRESS_KEYS.map((k) => k.key).sort()).toEqual([...fromEngine].sort())
+  })
+})
+
+
+describe('bands — what makes a contour a contour', () => {
+  it('snaps to the band CENTRE, not its lower edge', () => {
+    // Edge-snapping draws each band half a step darker than the values it
+    // contains, so the legend swatch and the surface disagree everywhere by
+    // half a band — which is exactly the error that is hardest to notice and
+    // most annoying once seen.
+    expect(bandCenter(0.00, 4)).toBeCloseTo(0.125, 12)
+    expect(bandCenter(0.24, 4)).toBeCloseTo(0.125, 12)
+    expect(bandCenter(0.26, 4)).toBeCloseTo(0.375, 12)
+    expect(bandCenter(1.00, 4)).toBeCloseTo(0.875, 12)
+  })
+
+  it('puts every value in exactly one band, with no value falling off the top', () => {
+    // t = 1 is the classic off-by-one: floor(1 * n) = n, one past the last
+    // band, which on a shader reads as a black or wrapped fringe along the
+    // single most stressed edge of the model.
+    for (const n of [4, 8, 12, 20]) {
+      for (let i = 0; i <= 100; i++) {
+        const c = bandCenter(i / 100, n)
+        expect(c, `t=${i / 100} n=${n}`).toBeGreaterThan(0)
+        expect(c).toBeLessThan(1)
+        // it is a band centre of THIS n
+        expect(Math.abs(c * n - Math.round(c * n - 0.5) - 0.5)).toBeLessThan(1e-9)
+      }
+    }
+  })
+
+  it('passes a value through untouched when banding is off', () => {
+    for (const t of [0, 0.37, 1]) expect(bandCenter(t, 0)).toBeCloseTo(t, 12)
+    expect(bandCenter(-1, 0)).toBe(0)
+    expect(bandCenter(2, 0)).toBe(1)
+  })
+
+  it('labels band boundaries as the iso-levels they are', () => {
+    const d = stressDomain([-10, 10], true)
+    const e = bandEdges(d, 4)
+    expect(e).toHaveLength(5)
+    expect(e[0]).toBeCloseTo(-10, 9)
+    expect(e[2]).toBeCloseTo(0, 9)      // a signed field's middle boundary IS zero
+    expect(e[4]).toBeCloseTo(10, 9)
+  })
+
+  it('makes the legend show the SAME colours the surface is drawn in', () => {
+    // The bar is a key to the picture or it is decoration. With bands on,
+    // there is one swatch per band and each is that band's own colour.
+    const sw = rampSwatches(24, true, 8)
+    expect(sw).toHaveLength(8)
+    sw.forEach((c, i) => expect(c).toBe(stressColor(bandCenter((i + 0.5) / 8, 8), true)))
+    // Adjacent bands are genuinely different colours — otherwise the boundary
+    // the reader is meant to see is not there.
+    expect(new Set(sw).size).toBe(8)
+  })
+
+  it('still gives a smooth bar when banding is off', () => {
+    expect(rampSwatches(24, true, 0)).toHaveLength(24)
+  })
+
+  it('hands the shader the same nine stops the legend uses', () => {
+    // The shader evaluates the ramp in GLSL from these; if they were a second
+    // transcription the surface and the bar would drift apart silently.
+    for (const signed of [true, false]) {
+      const stops = rampStops(signed)
+      expect(stops).toHaveLength(9)
+      expect(stressColor(0, signed)).toBe(`rgb(${stops[0].map(Math.round).join(',')})`)
+      expect(stressColor(1, signed)).toBe(`rgb(${stops[8].map(Math.round).join(',')})`)
+    }
+  })
+
+  it('defaults to a band count in the range post-processors actually use', () => {
+    expect(DEFAULT_BANDS).toBeGreaterThanOrEqual(8)
+    expect(DEFAULT_BANDS).toBeLessThanOrEqual(20)
+  })
+})
+
+
+describe('why the colour must be evaluated per fragment, not interpolated', () => {
+  it('measures how wrong a straight RGB blend is at the zero crossing', () => {
+    // THE DEFECT THIS QUANTIFIES. The first cut handed the GPU a COLOUR per
+    // vertex and let `vertexColors` blend it. Across a member's section the two
+    // extreme fibres are the two ENDS of the diverging ramp, and the GPU walks
+    // a straight line between them in RGB — it does not pass through the
+    // ramp's own middle. So the zero crossing, which is the one contour line
+    // an engineer looks for, was painted the wrong colour on every side face.
+    const lo = rampStops(true)[0], hi = rampStops(true)[8]
+    const blend = [0, 1, 2].map((k) => (lo[k] + hi[k]) / 2)   // what the GPU drew
+    const truth = rampStops(true)[4]                          // what the ramp says
+    const dist = Math.hypot(...[0, 1, 2].map((k) => blend[k] - truth[k]))
+    // Not a rounding difference: a dark purple where a pale band belongs.
+    expect(dist, `RGB distance ${dist.toFixed(0)} of a possible 441`).toBeGreaterThan(250)
+    const lum = (c: number[]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+    expect(lum(truth)).toBeGreaterThan(200)     // the ramp's centre is pale
+    expect(lum(blend)).toBeLessThan(80)         // the blend's centre is dark
+  })
+
+  it('is fixed by interpolating the VALUE — 0.5 lands on the ramp centre', () => {
+    // With a scalar varying, the midpoint between the two extremes is t = 0.5,
+    // and the shader evaluates the ramp there. That IS the pale band.
+    const mid = stressColor(0.5, true).match(/\d+/g)!.map(Number)
+    const truth = rampStops(true)[4]
+    for (let k = 0; k < 3; k++) expect(mid[k]).toBe(Math.round(truth[k]))
   })
 })
