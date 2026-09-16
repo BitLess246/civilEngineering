@@ -49,6 +49,7 @@ import { designSepticTank } from './septicTank'
 import { cyclicStressRatio, crr75 } from './soils/liquefaction'
 import { nGamma, generalBearingCapacity } from './bearingGeneral'
 import { coulombKa, mononobeOkabe } from './coulomb'
+import { stressSection, sectionResultants } from './memberStress'
 import type { RectSection } from './model'
 
 export interface ValidationCase {
@@ -580,6 +581,36 @@ const pryingT0 = (() => {
   return { manual: Math.sqrt((4 * 60 * 1000 * 35) / (0.9 * 248 * 70)), software: r.t_no_prying }
 })()
 
+// ── Member stress ↔ internal force equilibrium ──────────────────────────────
+const memberStressEquilibrium = (() => {
+  // The closed loop the member-stress contour rests on: a propped cantilever's
+  // hogging moment by hand (wL²/8), through the solver, into a stress field on
+  // the 300×500 section, and back out by NUMERICALLY INTEGRATING that field
+  // over the section outline.
+  //
+  // Independent at every step: the manual side is the textbook coefficient, the
+  // software side is a 3D FEM solve followed by a midpoint-rule integration
+  // over 48 divisions of the section. A sign error in σ, a wrong I, or a
+  // transposed axis all break the chain.
+  const b = 300, h = 500, w = 12, L = 6
+  const E = 25000
+  const sec: RectSection = {
+    id: 'V', name: '300x500', b, h, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40,
+  }
+  const r = solveFrame3D(
+    [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }],
+    [{
+      id: 'm', i: 'a', j: 'b', E, G: E / 2.4, A: b * h,
+      Iz: (b * h ** 3) / 12, Iy: (h * b ** 3) / 12, J: rectJ(b, h),
+    }],
+    [{ node: 'a', fixity: 'fixed' }, { node: 'b', fixity: 'pin' }],
+    [{ kind: 'member-udl', member: 'm', w, cat: 'D' }],
+  )
+  const Mz = r ? r.members[0].Mz[0] : 0
+  const back = sectionResultants(stressSection(sec), { N: 0, Vy: 0, Vz: 0, T: 0, My: 0, Mz })
+  return { manual: -(w * L * L) / 8, software: back.Mz }
+})()
+
 // ── Slab opening trimmer bars — NSCP §408.5.4.2 + §425.4.2.3 ────────────────
 const slabOpeningTrimmer = (() => {
   // 6.0 × 5.0 m panel, h = 150 mm, ⌀12 @ 200 mat both ways, f'c 21 / fy 415,
@@ -970,6 +1001,14 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'prying-t0', category: 'Connections', title: 'Prying — thickness eliminating prying',
     reference: 'AISC Manual Part 9 / §J3.9', formula: 't₀ = √(4·φBn·b′ / (φf·Fy·p))',
     manual: pryingT0.manual, software: pryingT0.software, unit: 'mm', tol: 1e-9,
+  },
+  {
+    id: 'member-stress-equilibrium', category: 'Analysis',
+    title: 'Member stress ↔ internal force (section equilibrium)',
+    reference: 'Beam theory / propped cantilever closed form',
+    formula: 'Mz = −∫σ·y dA,  σ = N/A − Mz·y/Iz + My·z/Iy;  hand: M = −wL²/8',
+    manual: memberStressEquilibrium.manual, software: memberStressEquilibrium.software,
+    unit: 'kN·m', tol: 1e-3,
   },
   {
     id: 'slab-opening-trimmer', category: 'RC', title: 'Slab opening — trimmer bar length',
