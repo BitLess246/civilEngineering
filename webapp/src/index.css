@@ -234,3 +234,25 @@ body { counter-reset: calccard; }
 @media print {
   [data-pdf-drawing] svg, [data-drawing-sheet] svg { filter: none !important; }
 }
+
+/* ── The nav rail's flyout ────────────────────────────────────────────────
+   ONE authored moment, on the interaction that repeats. The rail's two
+   states have genuinely different markup — a list of named links against
+   eleven targets with flyouts — so there is no shared element to animate a
+   width across, and faking one would mean markup in which neither state is
+   readable. The flyout is where the motion earns its keep: it appears under
+   the pointer dozens of times a session.
+
+   Exponential ease-out from an ALREADY-VISIBLE default: the panel starts at
+   96% opacity and 4px left of rest, so a dropped frame or a disabled
+   animation still shows a finished panel rather than an empty box. */
+@keyframes rail-flyout-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+[data-rail-flyout] {
+  animation: rail-flyout-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-rail-flyout] { animation: none; }
+}
