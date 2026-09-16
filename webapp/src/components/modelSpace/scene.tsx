@@ -16,7 +16,7 @@ import { Edges } from '@react-three/drei'
 import { surfaceKey, surfaceMaterial, WIRE_OPACITY, type SurfaceStyle } from './viewMode'
 import { flightSolid, type PlacedStair } from '../../engine/stairPlacement'
 import * as THREE from 'three'
-import type { StructuralModel, WoodDeck } from '../../engine/model'
+import type { StructuralModel, WoodDeck, ModelLoad } from '../../engine/model'
 import { type V3 } from '../../engine/frame3d'
 import { dashSpans } from '../../engine/dashPattern'
 import { memberDiagramRibbon, type DiagramComp } from '../../engine/memberDiagram3d'
@@ -838,11 +838,25 @@ export function TribPoly({ pts, kind }: { pts: THREE.Vector3[]; kind: TribKind }
 /** Loading diagrams drawn on the elements: member UDL (a bar of arrows), member
  *  point loads, slab tributary footprints (triangle/trapezoid/rectangle) and
  *  node loads (E/W). */
-export function Loads3D({ model, nodePos }: { model: StructuralModel; nodePos: Map<string, THREE.Vector3> }) {
+export function Loads3D({ model, nodePos, loads = model.loads, nodeScale }: {
+  model: StructuralModel
+  nodePos: Map<string, THREE.Vector3>
+  /** The loads to DRAW. Defaults to the model's own; a lateral-case preview
+   *  passes a substituted set so a case can be shown without committing it. */
+  loads?: readonly ModelLoad[]
+  /**
+   * Reference node force for arrow length, kN. Defaults to the largest in
+   * `loads`, which is right for a single fixed set and WRONG for stepping
+   * through cases: each case would re-normalise to its own peak, so a wind
+   * case would draw exactly as big as the earthquake it is a fraction of.
+   * The case preview passes the peak across every case instead.
+   */
+  nodeScale?: number
+}) {
   const DOWN = useMemo(() => new THREE.Vector3(0, -1, 0), [])
   // per-type magnitude maxima for gentle length scaling
-  const max = { udl: 1e-9, point: 1e-9, area: 1e-9, node: 1e-9 }
-  for (const l of model.loads) {
+  const max = { udl: 1e-9, point: 1e-9, area: 1e-9, node: Math.max(1e-9, nodeScale ?? 0) }
+  for (const l of loads) {
     if (l.kind === 'member-udl') max.udl = Math.max(max.udl, Math.abs(l.w))
     else if (l.kind === 'member-point') max.point = Math.max(max.point, Math.abs(l.P))
     else if (l.kind === 'area') max.area = Math.max(max.area, Math.abs(l.q))
@@ -853,7 +867,7 @@ export function Loads3D({ model, nodePos }: { model: StructuralModel; nodePos: M
   const glyphs: ReactNode[] = []
 
   // slab tributary footprints — once per loaded plate (not per area load)
-  const loadedPlates = new Set(model.loads.filter((l) => l.kind === 'area').map((l) => (l as { plate: string }).plate))
+  const loadedPlates = new Set(loads.filter((l) => l.kind === 'area').map((l) => (l as { plate: string }).plate))
   for (const pid of loadedPlates) {
     const p = model.plates.find((pp) => pp.id === pid)
     const cs = p?.corners.map((c) => nodePos.get(c))
@@ -862,8 +876,8 @@ export function Loads3D({ model, nodePos }: { model: StructuralModel; nodePos: M
       glyphs.push(<TribPoly key={`trib-${pid}-${k}`} pts={poly.pts} kind={poly.kind} />))
   }
 
-  for (let i = 0; i < model.loads.length; i++) {
-    const l = model.loads[i]
+  for (let i = 0; i < loads.length; i++) {
+    const l = loads[i]
     const color = LOAD_COLOR[l.cat] ?? '#64748b'
     if (l.kind === 'member-udl') {
       const m = model.members.find((mm) => mm.id === l.member)
