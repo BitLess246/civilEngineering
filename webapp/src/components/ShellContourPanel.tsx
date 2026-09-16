@@ -1,29 +1,16 @@
 import { useState } from 'react'
 import { ResultCard, Row } from './qty'
 import type { ShellNode, ShellElem, ElementStress } from '../engine/shell'
-import { shellNodalContour } from '../engine/shell'
+import { contourData } from '../lib/shellContour'
+import {
+  STRESS_KEYS, stressColor, normalise, unitFor, labelFor, type StressKey,
+} from '../lib/stressScale'
 
-type StressKey = 'vonMises' | 'sigmaX' | 'sigmaY' | 'tauXY' | 'sigma1' | 'sigma2' | 'Mx' | 'My' | 'Mxy'
-const KEYS: [StressKey, string][] = [
-  ['vonMises', 'Von Mises σvm (kN/m²)'],
-  ['sigmaX',  'σx (kN/m²)'],
-  ['sigmaY',  'σy (kN/m²)'],
-  ['tauXY',   'τxy (kN/m²)'],
-  ['sigma1',  'σ₁ principal (kN/m²)'],
-  ['sigma2',  'σ₂ principal (kN/m²)'],
-  ['Mx',      'Mx (kN·m/m)'],
-  ['My',      'My (kN·m/m)'],
-  ['Mxy',     'Mxy (kN·m/m)'],
-]
-
-// ── Colour map: blue (low) → cyan → green → yellow → red (high) ──────────────
-function heatColor(t: number): string {
-  const c = Math.max(0, Math.min(1, t))
-  const r = Math.round(255 * Math.min(1, 2 * c))
-  const g = Math.round(255 * Math.min(1, 2 * (1 - Math.abs(c - 0.5))))
-  const b = Math.round(255 * Math.max(0, 1 - 2 * c))
-  return `rgb(${r},${g},${b})`
-}
+// The ramp, the domain and the key list all come from `lib/stressScale`, which
+// the 3D contour layer also uses. The local copies this replaces were a
+// rainbow (perceptually non-uniform, and unreadable under red–green colour
+// deficiency) over a linear min→max domain, which put the zero of a signed
+// field wherever it happened to land.
 
 interface Props {
   nodes: ShellNode[]
@@ -33,7 +20,7 @@ interface Props {
 
 export function ShellContourPanel({ nodes, elems, stresses }: Props) {
   const [key, setKey] = useState<StressKey>('vonMises')
-  const nodal = shellNodalContour(nodes, elems, stresses, key)
+  const { nodal, domain, peak } = contourData(nodes, elems, stresses, key)
 
   // ── Build projected 2D geometry (use global x,z as the 2D plane if mostly horizontal,
   //    or x,y otherwise — pick the two axes with the most spread). ───────────────────
@@ -60,19 +47,10 @@ export function ShellContourPanel({ nodes, elems, stresses }: Props) {
 
   const nodeXY = new Map(nodes.map((n) => [n.id, [sx(coord(n)[0]), sy(coord(n)[1])] as [number, number]]))
 
-  // Min/max of nodal contour (for scaling colours)
-  const vals = [...nodal.values()]
-  const vMin = Math.min(...vals), vMax = Math.max(...vals)
-  const vRange = vMax - vMin || 1
-  const norm = (v: number) => (v - vMin) / vRange
-
+  const vMin = domain.min, vMax = domain.max
+  const norm = (v: number) => normalise(v, domain)
   const maxAbs = Math.max(Math.abs(vMax), Math.abs(vMin))
-  const peakElem = stresses.reduce((a, b) => {
-    const av = Math.abs(a[key] as number), bv = Math.abs(b[key] as number)
-    return bv > av ? b : a
-  }, stresses[0])
-
-  const keyLabel = KEYS.find(([k]) => k === key)?.[1] ?? key
+  const keyLabel = `${labelFor(key)} (${unitFor(key)})`
 
   return (
     <ResultCard title="Shell stress contour">
@@ -80,7 +58,9 @@ export function ShellContourPanel({ nodes, elems, stresses }: Props) {
       <div className="col-span-full mb-2">
         <select value={key} onChange={(e) => setKey(e.target.value as StressKey)}
           className="rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-slate-700">
-          {KEYS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          {STRESS_KEYS.map(({ key: k, label, unit }) => (
+            <option key={k} value={k}>{label} ({unit})</option>
+          ))}
         </select>
       </div>
 
@@ -97,7 +77,7 @@ export function ShellContourPanel({ nodes, elems, stresses }: Props) {
             const cv = e.nodes.reduce((s, id) => s + (nodal.get(id) ?? 0), 0) / 3
             return (
               <polygon key={e.id} points={pts}
-                fill={heatColor(norm(cv))} stroke="#94a3b8" strokeWidth={0.4} opacity={0.92} />
+                fill={stressColor(norm(cv), domain.signed)} stroke="#94a3b8" strokeWidth={0.4} opacity={0.92} />
             )
           })}
           {/* Colour bar */}
@@ -106,7 +86,7 @@ export function ShellContourPanel({ nodes, elems, stresses }: Props) {
             const bx = W - 28, bw = 14, bh = (H - padT - padB) / 20
             return (
               <rect key={i} x={bx} y={H - padB - (i + 1) * bh} width={bw} height={bh + 0.5}
-                fill={heatColor(t)} />
+                fill={stressColor(t, domain.signed)} />
             )
           })}
           <text x={W - 14} y={padT + 4} fontSize={8} fill="#334155" textAnchor="middle">{vMax.toFixed(0)}</text>
@@ -116,7 +96,7 @@ export function ShellContourPanel({ nodes, elems, stresses }: Props) {
 
       {/* Summary rows */}
       <Row label={`Max |${key}|`} value={`${maxAbs.toFixed(1)} ${key.startsWith('M') ? 'kN·m/m' : 'kN/m²'}`}
-        sub={`element ${peakElem?.id ?? '—'}`} />
+        sub={`element ${peak?.id ?? '—'}`} />
       <Row label="Max von Mises" value={`${Math.max(...stresses.map((s) => s.vonMises)).toFixed(1)} kN/m²`} />
       <Row label="Max Mx bending" value={`${Math.max(...stresses.map((s) => Math.abs(s.Mx))).toFixed(3)} kN·m/m`} />
       <Row label="Elements / nodes" value={`${elems.length} / ${nodes.length}`}
