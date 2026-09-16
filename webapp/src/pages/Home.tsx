@@ -46,7 +46,6 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
   // AFTER the filter, so a trimmed directory reads 01, 02, 03 rather than
   // skipping the numbers of hidden groups.
   const groups = useMemo(() => visibleGroups(SIDEBAR_GROUPS, prefs).map((g, i) => ({
-    num: String(i + 1).padStart(2, '0'),
     heading: g.label === 'Analysis' ? 'Analysis & Modelling' : g.label === 'Steel' ? 'Steel & Connections' : g.label === 'Estimates' ? 'Quantity Take-Off' : g.label,
     anchor: `dir-${i}`,
     tools: g.tools,
@@ -57,7 +56,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
 
   const searchBox = (big: boolean) => (
     <button type="button" onClick={() => setPalette(true)}
-      className={`flex items-center gap-2.5 rounded-lg border border-white/20 bg-sheet/[.07] text-left hover:border-rail-accent ${big ? 'w-full px-4 py-3 sm:flex-1' : 'w-[220px] rounded-md border-white/15 bg-sheet/5 px-2.5 py-1.5'}`}>
+      className={`flex items-center gap-2.5 rounded-lg border border-white/20 bg-sheet/[.07] text-left transition-colors hover:border-rail-accent ${big ? 'w-full px-4 py-3 sm:flex-1' : 'w-full min-w-0 max-w-[340px] rounded-md px-2.5 py-1.5'}`}>
       <svg className="flex-none" viewBox="0 0 24 24" width={big ? 16 : 13} height={big ? 16 : 13} fill="none" stroke="#7d8ea3" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
       {/* The examples are the point of the long label — they teach what the
           palette accepts — but at 390px they wrapped it to four lines and
@@ -88,14 +87,21 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
             <span className="text-[15px] font-extrabold tracking-[.14em] text-rail-ink">{BRAND_MARK}</span>
             <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-rail-muted">{BRAND_TAIL}</span>
           </Link>
-          <div className="hidden items-center gap-0.5 md:flex">
-            <a href="#tools" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-rail-muted hover:bg-sheet/5 hover:text-rail-ink">Tools</a>
-            <Link to="/docs" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-rail-muted hover:bg-sheet/5 hover:text-rail-ink">Docs</Link>
-            <Link to="/validation" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-rail-muted hover:bg-sheet/5 hover:text-rail-ink">Validation</Link>
-            <Link to="/pricing" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-rail-muted hover:bg-sheet/5 hover:text-rail-ink">Plans</Link>
-          </div>
-          <div className="ml-auto flex items-center gap-2.5">
-            <div className="hidden sm:block">{searchBox(false)}</div>
+          {/* SEARCH IS THE NAV. Wordmark-left + four inline links + a control
+              on the right is the most-recognised generated-nav fingerprint,
+              and it was carrying four destinations while the ⌘K palette — the
+              thing this product is actually navigated with — sat shrunk in the
+              corner. The pill moves inline and becomes the primary object;
+              Docs and Validation come out, because both are already ENTRIES IN
+              THAT PALETTE (the Reference group) and both are in the footer, so
+              nothing became less reachable. What stays is the one link the
+              palette cannot serve — the directory anchor on this page — and
+              Plans, which is a commercial destination and does not belong
+              behind a search box. */}
+          <div className="ml-auto flex min-w-0 items-center gap-2.5">
+            <div className="hidden min-w-0 flex-1 sm:block">{searchBox(false)}</div>
+            <a href="#tools" className="hidden whitespace-nowrap rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-rail-muted hover:bg-sheet/5 hover:text-rail-ink md:inline-block">Tools</a>
+            <Link to="/pricing" className="hidden whitespace-nowrap rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-rail-muted hover:bg-sheet/5 hover:text-rail-ink md:inline-block">Plans</Link>
             <AccountMenu dark />
           </div>
         </div>
@@ -143,7 +149,11 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       </section>
 
       <section className="mx-auto max-w-[1200px] px-6 pt-10">
-        <div className="mb-3.5 flex items-baseline gap-3.5">
+        {/* Single column: a mono label sharing a row with its heading is the
+            templated-editorial tell (hallmark gate 54). Caption under the
+            heading, same column — it reads as the heading’s own subtitle
+            rather than as a decorative tag pinned beside it. */}
+        <div className="mb-3.5 flex flex-col gap-0.5">
           <h2 className="text-[19px] font-extrabold tracking-tight">Every number, defensible</h2>
           <span className="font-mono text-[11px] text-faint">one schedule row, opened</span>
         </div>
@@ -151,7 +161,11 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       </section>
 
       <section className="mx-auto max-w-[1200px] px-6 pt-10">
-        <div className="mb-3.5 flex items-baseline gap-3.5">
+        {/* Single column: a mono label sharing a row with its heading is the
+            templated-editorial tell (hallmark gate 54). Caption under the
+            heading, same column — it reads as the heading’s own subtitle
+            rather than as a decorative tag pinned beside it. */}
+        <div className="mb-3.5 flex flex-col gap-0.5">
           <h2 className="text-[19px] font-extrabold tracking-tight">What it looks like doing the work</h2>
           <span className="font-mono text-[11px] text-faint">real output · not mockups</span>
         </div>
@@ -159,7 +173,11 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       </section>
 
       <section className="mx-auto max-w-[1200px] px-6 pt-10">
-        <div className="mb-3.5 flex items-baseline gap-3.5">
+        {/* Single column: a mono label sharing a row with its heading is the
+            templated-editorial tell (hallmark gate 54). Caption under the
+            heading, same column — it reads as the heading’s own subtitle
+            rather than as a decorative tag pinned beside it. */}
+        <div className="mb-3.5 flex flex-col gap-0.5">
           <h2 className="text-[19px] font-extrabold tracking-tight">It resizes what failed, then re-issues</h2>
           <span className="font-mono text-[11px] text-faint">the same report, twice</span>
         </div>
@@ -175,7 +193,12 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           live here is gone: the section no longer asks you to go run it, it
           IS running, and going is one click on the viewport's Guide. */}
       <section className="mx-auto max-w-[1200px] px-6 pt-10">
-        <div className="grid items-center gap-7 rounded-lg border border-hairline bg-sheet p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)]">
+        {/* NO OUTER CARD. `ModelSpacePreview` already draws itself as a framed
+            object (rounded-lg + border-hairline), so wrapping it in a second
+            card of the same border token nested one frame inside another for
+            no semantic reason. One containment layer, and it is the inner one —
+            the preview is the thing being framed. */}
+        <div className="grid items-center gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,560px)]">
           <div className="min-w-[260px]">
             <div className="flex flex-wrap items-center gap-2.5">
               <h2 className="text-[19px] font-extrabold tracking-tight">3D Model Space</h2>
@@ -202,21 +225,38 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         </div>
       </section>
 
-      {/* Sample cards */}
+      {/* Sample cards — A LEAD AND TWO, NOT THREE EQUAL THIRDS.
+          Three equal cards across the full width is the most-emitted feature
+          rhythm there is, and it says all three samples are equally the place
+          to start. They are not: the RC beam is the one most readers came for.
+          It takes the wide column and carries its description; the other two
+          stack beside it as a shorter list. Same three destinations, a
+          hierarchy instead of a row. */}
       <section className="mx-auto max-w-[1200px] px-6 pb-2 pt-9">
-        <div className="grid gap-3.5 md:grid-cols-3">
-          {SAMPLES.map((s) => (
-            <Link key={s.to} to={s.to}
-              className="flex flex-col rounded-lg border border-hairline bg-sheet p-5 transition-[border-color,box-shadow] hover:border-brand-hover hover:shadow-[0_2px_10px_rgba(15,27,42,.07)]">
-              <div className="flex items-center justify-between">
-                <span className="rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[10px] font-semibold tracking-wide text-brand">{s.tag}</span>
-                <span className="font-mono text-[10px] text-faint">{s.time}</span>
-              </div>
-              <span className="mt-3 text-[15.5px] font-bold text-ink">{s.title}</span>
-              <span className="mt-1.5 text-[12.5px] leading-relaxed text-muted">{s.desc}</span>
-              <span className="mt-3.5 text-xs font-bold text-brand">Run this example →</span>
-            </Link>
-          ))}
+        <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+          <Link to={SAMPLES[0].to}
+            className="flex flex-col rounded-lg border border-hairline bg-sheet p-5 transition-[border-color,box-shadow] hover:border-brand-hover hover:shadow-[0_2px_10px_rgba(15,27,42,.07)] sm:p-6">
+            <div className="flex items-center gap-2.5">
+              <span className="rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[10px] font-semibold tracking-wide text-brand">{SAMPLES[0].tag}</span>
+              <span className="font-mono text-[10px] text-faint">{SAMPLES[0].time}</span>
+            </div>
+            <span className="mt-3 text-[19px] font-bold leading-tight text-ink">{SAMPLES[0].title}</span>
+            <span className="mt-2 max-w-[46ch] text-[13px] leading-relaxed text-muted">{SAMPLES[0].desc}</span>
+            <span className="mt-auto pt-4 text-xs font-bold text-brand">Run this example →</span>
+          </Link>
+          <div className="flex flex-col gap-3.5">
+            {SAMPLES.slice(1).map((s) => (
+              <Link key={s.to} to={s.to}
+                className="flex flex-1 flex-col rounded-lg border border-hairline bg-sheet p-5 transition-[border-color,box-shadow] hover:border-brand-hover hover:shadow-[0_2px_10px_rgba(15,27,42,.07)]">
+                <div className="flex items-center gap-2.5">
+                  <span className="rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[10px] font-semibold tracking-wide text-brand">{s.tag}</span>
+                  <span className="font-mono text-[10px] text-faint">{s.time}</span>
+                </div>
+                <span className="mt-2.5 text-[15px] font-bold text-ink">{s.title}</span>
+                <span className="mt-auto pt-3 text-xs font-bold text-brand">Run this example →</span>
+              </Link>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -251,8 +291,12 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           <div className="flex flex-col gap-6">
             {groups.map((g) => (
               <div key={g.anchor} id={g.anchor} className="scroll-mt-16">
+                {/* The 01/02/03 prefix is gone. It was POSITIONAL, not ordinal —
+                    Concrete does not come "before" Steel, and the numbers moved
+                    whenever a discipline was hidden by preferences. A number
+                    beside a heading is also gate 54's tell. The rule stays: it
+                    is a divider, not a label. */}
                 <div className="mb-2.5 flex items-baseline gap-2.5">
-                  <span className="font-mono text-[10px] font-semibold text-faint">{g.num}</span>
                   <h3 className="text-[13px] font-bold uppercase tracking-wider text-ink-2">{g.heading}</h3>
                   <div className="h-px flex-1 bg-hairline" />
                 </div>
@@ -275,7 +319,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       <section className="bg-rail">
         <div className="mx-auto flex max-w-[1200px] flex-col items-start justify-between gap-5 px-6 py-10 sm:flex-row sm:items-center">
           <div>
-            <h2 className="text-xl font-extrabold text-white">Every calculation, code-referenced.</h2>
+            <h2 className="text-xl font-extrabold text-rail-ink">Every calculation, code-referenced.</h2>
             <p className="mt-1 text-[13px] text-rail-muted">Clause citations on every worked step. Validated against hand calcs — <Link to="/validation" className="text-rail-accent underline underline-offset-2 decoration-rail-accent/40 hover:decoration-rail-accent">see the validation suite</Link>.</p>
           </div>
           {/* The ask depends on who is reading. A member has no account left

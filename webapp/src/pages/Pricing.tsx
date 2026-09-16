@@ -67,19 +67,19 @@ function PlanChangeDialog({ plan, priceId, onClose }: {
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Switch to ${plan.name}`}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
-      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-sheet p-5 shadow-lg">
+      className="fixed inset-0 z-50 flex items-center justify-center bg-rail/40 px-4">
+      <div className="w-full max-w-md rounded-xl border border-hairline bg-sheet p-5 shadow-lg">
         <h2 className="text-[1.05rem] font-bold text-brand">
           {state === 'done' ? 'Switch confirmed' : `Switch to ${plan.name}`}
         </h2>
 
         {state === 'loading' && (
-          <p className="mt-3 text-[13px] leading-6 text-slate-600">Asking Paddle what this costs…</p>
+          <p className="mt-3 text-[13px] leading-6 text-muted">Asking Paddle what this costs…</p>
         )}
 
         {state !== 'loading' && state !== 'done' && (
           <>
-            {change && <p className="mt-3 text-[13px] leading-6 text-slate-700">{describeChange(change)}</p>}
+            {change && <p className="mt-3 text-[13px] leading-6 text-ink-2">{describeChange(change)}</p>}
             {change?.direction === 'downgrade' && (
               <p className="mt-2 text-[12px] leading-5 text-muted">
                 You keep your current plan until then — nothing is refunded and nothing is lost today.
@@ -90,7 +90,7 @@ function PlanChangeDialog({ plan, priceId, onClose }: {
         )}
 
         {state === 'done' && (
-          <p className="mt-3 text-[13px] leading-6 text-slate-700">
+          <p className="mt-3 text-[13px] leading-6 text-ink-2">
             Paddle has accepted the change. Your plan is granted by our billing server once Paddle confirms it,
             usually within a few seconds — sign out and back in to refresh your session if this page still shows
             the old tier.
@@ -99,7 +99,7 @@ function PlanChangeDialog({ plan, priceId, onClose }: {
 
         <div className="mt-5 flex flex-wrap justify-end gap-3">
           <button type="button" onClick={onClose}
-            className="rounded-md border border-slate-300 px-3 py-1.5 text-[13px] font-semibold text-slate-700 hover:border-brand hover:text-brand">
+            className="rounded-md border border-field-line px-3 py-1.5 text-[13px] font-semibold text-ink-2 hover:border-brand hover:text-brand">
             {state === 'done' ? 'Close' : 'Cancel'}
           </button>
           {state !== 'done' && change && (
@@ -149,7 +149,7 @@ function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeri
 
   if (!CHECKOUT_ENABLED) {
     return (
-      <div className="rounded-md border border-dashed border-slate-300 px-3 py-2 text-center text-[12px] text-muted">
+      <div className="rounded-md border border-dashed border-field-line px-3 py-2 text-center text-[12px] text-muted">
         Not open for sign-up yet
       </div>
     )
@@ -244,8 +244,8 @@ function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeri
  */
 function PriceLine({ plan, period, prices }: { plan: Plan; period: BillingPeriod; prices: PriceTable }) {
   const price = priceFor(plan, period)
-  if (price === null) return <p className="mt-3 text-2xl font-bold text-slate-800">—</p>
-  if (price === 0) return <p className="mt-3 text-2xl font-bold text-slate-800">Free</p>
+  if (price === null) return <p className="mt-3 text-2xl font-bold text-ink">—</p>
+  if (price === 0) return <p className="mt-3 text-2xl font-bold text-ink">Free</p>
 
   const line = lineFor(prices, plan.id, period)
   const perMonth = line ? line.perMonth : formatUsd(monthlyEquivalent(plan, period)!)
@@ -254,7 +254,7 @@ function PriceLine({ plan, period, prices }: { plan: Plan; period: BillingPeriod
 
   return (
     <div className="mt-3">
-      <p className="text-2xl font-bold text-slate-800">
+      <p className="text-2xl font-bold text-ink">
         {perMonth}
         <span className="text-sm font-medium text-muted"> /month</span>
       </p>
@@ -276,7 +276,7 @@ function PlanCard({ plan, current, period, prices }: {
   const isCurrent = current === plan.id
   return (
     <div className={`flex flex-col rounded-xl border bg-sheet p-5 shadow-sm ${
-      featured ? 'border-brand ring-1 ring-brand/20' : 'border-slate-200'}`}>
+      featured ? 'border-brand ring-1 ring-brand/20' : 'border-hairline'}`}>
       <div className="flex items-baseline justify-between">
         <h2 className="text-[1.05rem] font-bold text-brand">{plan.name}</h2>
         {isCurrent && (
@@ -285,11 +285,11 @@ function PlanCard({ plan, current, period, prices }: {
           </span>
         )}
       </div>
-      <p className="mt-1 text-[13px] leading-5 text-slate-600">{plan.tagline}</p>
+      <p className="mt-1 text-[13px] leading-5 text-muted">{plan.tagline}</p>
       <PriceLine plan={plan} period={period} prices={prices} />
       <ul className="mt-4 flex-1 space-y-1.5">
         {plan.highlights.map((h) => (
-          <li key={h} className="flex gap-2 text-[13px] leading-5 text-slate-700">
+          <li key={h} className="flex gap-2 text-[13px] leading-5 text-ink-2">
             <span className="text-ok">✓</span><span>{h}</span>
           </li>
         ))}
@@ -307,13 +307,13 @@ function PeriodToggle({ period, onChange }: { period: BillingPeriod; onChange: (
     <button key={p} type="button" onClick={() => onChange(p)}
       aria-pressed={period === p}
       className={`rounded-md px-4 py-1.5 text-[13px] font-semibold transition ${
-        period === p ? 'bg-sheet text-brand shadow-sm' : 'text-slate-600 hover:text-brand'}`}>
+        period === p ? 'bg-sheet text-brand shadow-sm' : 'text-muted hover:text-brand'}`}>
       {label}
     </button>
   )
   return (
     <div className="mt-5 flex flex-wrap items-center gap-3">
-      <div className="inline-flex rounded-lg bg-slate-100 p-1">
+      <div className="inline-flex rounded-lg bg-sheet-2 p-1">
         {btn('monthly', 'Monthly')}
         {btn('annual', 'Annual')}
       </div>
@@ -372,7 +372,7 @@ export default function Pricing() {
     <div className="mx-auto max-w-5xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Plans</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">Pricing</h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
         Every calculator is free, with or without an account — a free account only removes the trial counter and
         lets you save work. The paid tiers are for project-scale tools: Pro opens the 3D Model Space and everything
         built on it, and Max adds the nonlinear and dynamic solvers plus construction scheduling.
@@ -414,13 +414,13 @@ export default function Pricing() {
       </p>
 
       <h2 className="mt-10 text-[1.05rem] font-bold text-brand">What counts as a &ldquo;calculator&rdquo;</h2>
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
         The single-purpose pages — beam, column, footing, retaining wall, settlement, lateral pile, connections,
         slope stability and the rest. Each gives one answer from one set of inputs, and every one of them stays
         free. The 3D Model Space, the frame and truss workbenches, estimating and scheduling are project-scale
         tools that hold state across a whole building, and those are what the paid tiers are for.
       </p>
-      <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
+      <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
         Documentation and the{' '}
         <Link to="/validation" className="text-brand underline">validation page</Link>{' '}
         are open to everyone, always. Being able to check the engine against hand calculations should never be
