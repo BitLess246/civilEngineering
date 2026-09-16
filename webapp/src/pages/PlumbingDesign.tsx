@@ -34,7 +34,7 @@ function Out({ label, value, ok }: { label: string; value: string; ok?: boolean 
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -218,7 +218,7 @@ export default function PlumbingDesign() {
             <Out label="Vent" value={`${f0(drainage.ventMm)} mm`} ok={drainage.ventOK} />
             <Out label="Max developed length" value={`drain ${f0(drainage.maxDrainM)} m · vent ${f0(drainage.maxVentM)} m`} />
             <Out label="Building-sewer min slope" value={`${f1(drainage.sewer.minPct)}% (${f1(drainage.sewer.mmPerM)} mm/m)`} />
-            {drainage.wcStackWarn && <p className="mt-1 text-[11px] text-amber-600">⚠ {drainage.wcCount} water closets on one stack — the code allows max 4 per stack; split the stack.</p>}
+            {drainage.wcStackWarn && <p className="mt-1 text-[11px] text-warn">⚠ {drainage.wcCount} water closets on one stack — the code allows max 4 per stack; split the stack.</p>}
             <p className="mt-2 text-[10px] text-muted">
               Drain/vent size &amp; max length from Table 7-5; a vent is ≥ 32 mm and ≥ ½ the drain. No water closet
               into a drain &lt; 75 mm. Slope per §1206. Set the fixture schedule above.

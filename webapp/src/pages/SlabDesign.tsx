@@ -282,7 +282,7 @@ export default function SlabDesign() {
               {/* Summary */}
               <ResultCard title="Summary">
                 {!r.applicable && (
-                  <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <div className="mb-2 rounded border border-warn-line bg-warn-tint px-3 py-2 text-xs text-warn">
                     ⚠ DDM not fully applicable — review notes below.
                   </div>
                 )}

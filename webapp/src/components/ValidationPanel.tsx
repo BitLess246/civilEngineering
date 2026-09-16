@@ -13,7 +13,7 @@ export function ValidationPanel({ issues, onSelect }: {
   const Item = ({ i }: { i: MeshIssue }) => {
     const err = i.severity === 'error'
     return (
-      <li className={`flex items-start gap-2 rounded px-2 py-1.5 text-xs ${err ? 'text-red-700' : 'text-amber-700'}`}>
+      <li className={`flex items-start gap-2 rounded px-2 py-1.5 text-xs ${err ? 'text-fail' : 'text-warn'}`}>
         <span aria-hidden className="mt-px font-bold">{err ? '✗' : '⚠'}</span>
         <span className="flex-1">
           {i.message}
@@ -29,12 +29,12 @@ export function ValidationPanel({ issues, onSelect }: {
   }
 
   return (
-    <div className={`rounded-xl border p-4 shadow-sm ${errors.length ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
-      <h2 className={`mb-1 text-[1.02rem] font-bold ${errors.length ? 'text-red-700' : 'text-amber-700'}`}>
+    <div className={`rounded-xl border p-4 shadow-sm ${errors.length ? 'border-fail-line bg-fail-tint' : 'border-warn-line bg-warn-tint'}`}>
+      <h2 className={`mb-1 text-[1.02rem] font-bold ${errors.length ? 'text-fail' : 'text-warn'}`}>
         Mesh validation — {errors.length} error{errors.length === 1 ? '' : 's'}, {warnings.length} warning{warnings.length === 1 ? '' : 's'}
       </h2>
       {errors.length > 0 && (
-        <p className="mb-2 text-[11px] text-red-600">Fix the errors below before analysing — they would make the stiffness matrix singular.</p>
+        <p className="mb-2 text-[11px] text-fail">Fix the errors below before analysing — they would make the stiffness matrix singular.</p>
       )}
       <ul className="space-y-0.5">
         {errors.map((i, k) => <Item key={`e${k}`} i={i} />)}

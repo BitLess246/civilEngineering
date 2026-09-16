@@ -145,7 +145,7 @@ export function GuidedTour({
             centred card that reads as though the tour lost its place — the
             control usually appears once the PREVIOUS step has been done. */}
         {!rect && step.anchor && (
-          <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">
+          <p className="mt-2 rounded-md border border-warn-line bg-warn-tint px-2 py-1.5 text-[11px] text-warn">
             This control is not on screen yet — it appears once the previous step has been done.
           </p>
         )}

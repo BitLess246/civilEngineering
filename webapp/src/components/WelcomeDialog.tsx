@@ -107,7 +107,7 @@ export function WelcomeDialog({ onClose }: { onClose: () => void }) {
           {none && (
             // Rather than silently accepting an empty answer and ignoring it
             // later, which would look like the setting did nothing.
-            <span className="text-[12px] font-medium text-amber-700">
+            <span className="text-[12px] font-medium text-warn">
               Pick at least one, or use “Show me everything”.
             </span>
           )}

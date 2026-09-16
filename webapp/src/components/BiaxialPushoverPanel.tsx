@@ -66,9 +66,9 @@ export function BiaxialPushoverPanel({ res }: { res: BiaxialPushoverResult }) {
           : `${s.nonConverged} short of tolerance — worst ${s.worstResidual.toExponential(1)}`} />
 
       {s.warnings.length > 0 && (
-        <ul className="mt-3 space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-2">
+        <ul className="mt-3 space-y-1 rounded-lg border border-warn-line bg-warn-tint p-2">
           {s.warnings.map((w) => (
-            <li key={w} className="flex gap-2 text-[11px] leading-5 text-amber-900">
+            <li key={w} className="flex gap-2 text-[11px] leading-5 text-warn">
               <span aria-hidden>⚠</span><span>{w}</span>
             </li>
           ))}
@@ -103,7 +103,7 @@ export function BiaxialPushoverPanel({ res }: { res: BiaxialPushoverResult }) {
                   <td className="py-1 pr-2 text-muted">
                     {(Math.hypot(h.plasticY, h.plasticZ) * 1000).toFixed(2)}
                   </td>
-                  <td className={`py-1 pr-2 font-semibold ${h.yielded ? 'text-red-600' : 'text-slate-700'}`}>
+                  <td className={`py-1 pr-2 font-semibold ${h.yielded ? 'text-fail' : 'text-slate-700'}`}>
                     {Number.isFinite(h.utilisation) ? h.utilisation.toFixed(2) : '∞'}
                   </td>
                 </tr>

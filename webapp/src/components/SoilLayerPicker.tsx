@@ -138,7 +138,7 @@ export function SoilLayerPicker({
           {title}
         </button>
         {applied && (
-          <span className="text-[11px] text-emerald-700">Applied from {applied}.</span>
+          <span className="text-[11px] text-ok">Applied from {applied}.</span>
         )}
       </div>
     )
@@ -213,7 +213,7 @@ export function SoilLayerPicker({
                 )}
 
                 {missing.length > 0 && (
-                  <p className="mt-1 text-[10px] text-amber-800">
+                  <p className="mt-1 text-[10px] text-warn">
                     Not available for this layer: {missing.join(', ')}. Those fields are left as you have them —
                     nothing is filled in that the investigation cannot support.
                   </p>

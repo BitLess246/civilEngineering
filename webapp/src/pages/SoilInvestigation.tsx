@@ -52,7 +52,7 @@ function num(v: string, d = 0): number { const n = parseFloat(v); return Number.
 function IssueList({ issues }: { issues: ValidationIssue[] }) {
   if (!issues.length) {
     return (
-      <p className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-800">
+      <p className="rounded-md border border-ok-line bg-ok-tint px-3 py-2 text-[12px] text-ok">
         No integrity issues.
       </p>
     )
@@ -62,12 +62,12 @@ function IssueList({ issues }: { issues: ValidationIssue[] }) {
   return (
     <div className="space-y-1.5">
       {errors.map((i, k) => (
-        <p key={`e${k}`} className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
+        <p key={`e${k}`} className="rounded-md border border-fail-line bg-fail-tint px-3 py-2 text-[12px] text-fail">
           <strong className="font-semibold">Error</strong> — {i.message}
         </p>
       ))}
       {warnings.map((i, k) => (
-        <p key={`w${k}`} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+        <p key={`w${k}`} className="rounded-md border border-warn-line bg-warn-tint px-3 py-2 text-[12px] text-warn">
           <strong className="font-semibold">Check</strong> — {i.message}
         </p>
       ))}
@@ -128,7 +128,7 @@ function LayerRow({
           className="w-full min-w-[12rem] rounded border border-slate-200 px-1 py-0.5" />
       </td>
       <td className="py-0.5 text-right">
-        <button onClick={onRemove} className="rounded px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50">
+        <button onClick={onRemove} className="rounded px-1.5 py-0.5 text-[11px] text-fail hover:bg-fail-tint">
           remove
         </button>
       </td>
@@ -202,7 +202,7 @@ function SampleRow({
           onChange={(e) => onChange({ driveLength: e.target.value === '' ? undefined : num(e.target.value) })}
           className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
       </td>
-      <td className={`py-0.5 pr-2 text-right font-mono ${rec != null && rec < 50 ? 'text-amber-700' : 'text-muted'}`}>
+      <td className={`py-0.5 pr-2 text-right font-mono ${rec != null && rec < 50 ? 'text-warn' : 'text-muted'}`}>
         {rec == null ? '—' : `${f0(rec)} %`}
       </td>
       <td className="py-0.5 pr-2">
@@ -216,11 +216,11 @@ function SampleRow({
       <td className="py-0.5 pr-2 text-[11px] text-slate-600">
         {sample.tests.length ? `${sample.tests.length} booked` : '—'}
         {disturbedWithUndisturbedTest && (
-          <span className="ml-1 font-bold text-amber-700" title="Strength and compressibility need an undisturbed specimen.">!</span>
+          <span className="ml-1 font-bold text-warn" title="Strength and compressibility need an undisturbed specimen.">!</span>
         )}
       </td>
       <td className="py-0.5 text-right">
-        <button onClick={onRemove} className="rounded px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50">
+        <button onClick={onRemove} className="rounded px-1.5 py-0.5 text-[11px] text-fail hover:bg-fail-tint">
           remove
         </button>
       </td>
@@ -408,7 +408,7 @@ export default function SoilInvestigation() {
       </div>
 
       {importError && (
-        <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
+        <p className="mt-3 rounded-md border border-fail-line bg-fail-tint px-3 py-2 text-[12px] text-fail">
           {importError}
         </p>
       )}
@@ -717,7 +717,7 @@ export default function SoilInvestigation() {
                 </thead>
                 <tbody className="font-mono">
                   {profile.rows.map((r) => (
-                    <tr key={r.testId} className={`border-b border-slate-100 ${r.refusal ? 'bg-amber-50' : ''}`}>
+                    <tr key={r.testId} className={`border-b border-slate-100 ${r.refusal ? 'bg-warn-tint' : ''}`}>
                       <td className="py-0.5 pr-3 text-left">{f2(r.depth)}</td>
                       <td className="py-0.5 pr-3 text-left font-sans">{r.layerName ?? '—'}</td>
                       <td className="py-0.5 pr-3">{r.N}{r.refusal ? '*' : ''}</td>
@@ -738,7 +738,7 @@ export default function SoilInvestigation() {
             </div>
             {!profile.rows.length && <p className="mt-3 text-[12px] text-muted">No SPT results recorded.</p>}
             {profile.notes.map((n, k) => (
-              <p key={k} className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+              <p key={k} className="mt-2 rounded-md border border-warn-line bg-warn-tint px-3 py-2 text-[11px] text-warn">
                 {n}
               </p>
             ))}
@@ -886,14 +886,14 @@ function SyncPanel() {
         </p>
       )}
       {s.availability.kind === 'signed-out' && (
-        <p className="mt-2 text-[11px] text-amber-800">
+        <p className="mt-2 text-[11px] text-warn">
           Sign in to sync. The connection check still runs signed out, but it can only verify the schema and the
           security policies — not a real save.
         </p>
       )}
 
       {s.error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[12px] text-red-800">{s.error}</p>
+        <p className="mt-3 rounded border border-fail-line bg-fail-tint px-2 py-1.5 text-[12px] text-fail">{s.error}</p>
       )}
 
       {open && s.diagnostics && (
@@ -905,8 +905,8 @@ function SyncPanel() {
             {s.diagnostics.results.map((r) => (
               <li key={r.name} className="flex items-baseline gap-2 text-[11px]">
                 <span className={`rounded px-1 text-[9px] font-bold ${
-                  r.status === 'pass' ? 'bg-emerald-100 text-emerald-800'
-                    : r.status === 'fail' ? 'bg-red-100 text-red-800' : 'bg-slate-200 text-slate-600'
+                  r.status === 'pass' ? 'bg-ok-tint text-ok'
+                    : r.status === 'fail' ? 'bg-fail-tint text-fail' : 'bg-slate-200 text-slate-600'
                 }`}>{r.status.toUpperCase()}</span>
                 <span className="font-medium text-slate-700">{r.name}</span>
                 <span className="text-slate-600">{r.detail}</span>
@@ -929,17 +929,17 @@ function SyncPanel() {
           </ul>
 
           {s.report.conflicts.length > 0 && (
-            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
-              <p className="text-[12px] font-bold text-amber-900">
+            <div className="mt-3 rounded-lg border border-warn-line bg-warn-tint p-3">
+              <p className="text-[12px] font-bold text-warn">
                 {s.report.conflicts.length} conflict{s.report.conflicts.length === 1 ? '' : 's'} — nothing was changed
               </p>
-              <p className="mt-0.5 text-[11px] text-amber-900">
+              <p className="mt-0.5 text-[11px] text-warn">
                 These were edited in both places. Choose which version to keep; the other is discarded, so export
                 first if you are not sure. There is no automatic merge — deciding which of two readings is right is
                 yours to make.
               </p>
               {s.report.conflicts.map((c) => (
-                <div key={c.id} className="mt-2 rounded border border-amber-200 bg-sheet p-2">
+                <div key={c.id} className="mt-2 rounded border border-warn-line bg-sheet p-2">
                   <p className="font-mono text-[11px] font-semibold text-slate-800">
                     {c.local.meta.investigationNo || c.id}
                   </p>
@@ -1010,7 +1010,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
     return (
       <div className="rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
         <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Cone penetration test</h2>
-        <p className="text-[12px] text-amber-800">
+        <p className="text-[12px] text-warn">
           Every normalised cone quantity needs the effective stress at the reading depth, which needs a logged
           layer with a unit weight. Log the strata and enter unit weights on the SPT tab first — nothing here is
           computed from an assumed profile.
@@ -1085,7 +1085,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
                     <td className="py-0.5 pr-3 text-left">{out?.sbt?.label ?? out?.skipped ?? '—'}</td>
                     <td className="py-0.5">
                       <button onClick={() => onChange(rows.filter((_, k) => k !== i))}
-                        className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+                        className="rounded px-1 text-[10px] text-fail hover:bg-fail-tint">×</button>
                     </td>
                   </tr>
                 )
@@ -1103,7 +1103,7 @@ function CptPanel({ bh, unitWeights, onChange }: {
         )}
 
         {sounding.notes.map((n, k) => (
-          <p key={k} className="mt-2 text-[11px] text-amber-900">{n}</p>
+          <p key={k} className="mt-2 text-[11px] text-warn">{n}</p>
         ))}
       </div>
 
@@ -1195,7 +1195,7 @@ function SectionPanel({ boreholes }: { boreholes: Borehole[] }) {
       </p>
       <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: svg }} />
       {section.notes.map((n, k) => (
-        <p key={k} className="mt-2 text-[11px] text-amber-900">{n}</p>
+        <p key={k} className="mt-2 text-[11px] text-warn">{n}</p>
       ))}
     </div>
   )
@@ -1295,7 +1295,7 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
             ))}
           </ul>
         ) : (
-          <p className="text-[11px] text-amber-800">
+          <p className="text-[11px] text-warn">
             No sieve analysis on any sample, so every layer is corrected as CLEAN SAND. That overstates the resistance
             of a silty sand — run a sieve on the samples in the liquefiable layers before relying on these numbers.
           </p>
@@ -1332,8 +1332,8 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
                       <td className="py-0.5 pr-3 font-mono">{r.result.crr != null ? r.result.crr.toFixed(3) : '—'}</td>
                       <td className={`py-0.5 pr-3 font-mono font-semibold ${
                         r.result.factorOfSafety == null ? 'text-muted'
-                          : r.result.factorOfSafety < 1 ? 'text-red-700'
-                          : r.result.factorOfSafety < 1.3 ? 'text-amber-700' : 'text-emerald-700'
+                          : r.result.factorOfSafety < 1 ? 'text-fail'
+                          : r.result.factorOfSafety < 1.3 ? 'text-warn' : 'text-ok'
                       }`}>
                         {r.result.factorOfSafety != null ? r.result.factorOfSafety.toFixed(2) : 'too dense'}
                       </td>
@@ -1352,12 +1352,12 @@ function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
         {profile.rows.flatMap((r) => r.result?.notes ?? []).length > 0 && (
           <ul className="mt-3 space-y-1">
             {[...new Set(profile.rows.flatMap((r) => r.result?.notes ?? []))].map((n, k) => (
-              <li key={k} className="text-[10px] text-amber-900">{n}</li>
+              <li key={k} className="text-[10px] text-warn">{n}</li>
             ))}
           </ul>
         )}
         {profile.notes.map((n, k) => (
-          <p key={k} className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">{n}</p>
+          <p key={k} className="mt-2 rounded border border-warn-line bg-warn-tint px-2 py-1.5 text-[11px] text-warn">{n}</p>
         ))}
 
         <p className="mt-3 text-[10px] text-muted">
@@ -1428,7 +1428,7 @@ function ClassificationPanel() {
         </p>
         {result.notes.map((n, k) => (
           <p key={k} className={n.severity === 'warning'
-            ? 'mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900'
+            ? 'mt-2 rounded-md border border-warn-line bg-warn-tint px-3 py-2 text-[11px] text-warn'
             : 'mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600'}>
             {n.text}
           </p>
@@ -1496,7 +1496,7 @@ function TestCard({
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
-          <button onClick={onRemove} className="rounded px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50">
+          <button onClick={onRemove} className="rounded px-1.5 py-0.5 text-[11px] text-fail hover:bg-fail-tint">
             remove
           </button>
         </div>
@@ -1673,7 +1673,7 @@ function TestCard({
           </div>
 
           {error && (
-            <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-800">
+            <p className="mt-2 rounded border border-fail-line bg-fail-tint px-2 py-1.5 text-[11px] text-fail">
               {error}
             </p>
           )}
@@ -1683,8 +1683,8 @@ function TestCard({
           {outcome?.kind === 'triaxial' && <MohrFailureTable result={outcome.result} />}
 
           {outcome && (
-            <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5">
-              <p className="font-mono text-[13px] font-semibold text-emerald-900">
+            <div className="mt-2 rounded border border-ok-line bg-ok-tint px-2 py-1.5">
+              <p className="font-mono text-[13px] font-semibold text-ok">
                 {formatOutcome(summarise(outcome))}
               </p>
               <EngineNotes notes={outcome.result.notes} />
@@ -1750,7 +1750,7 @@ function LabPanel({
           {/* A strength or compressibility test needs an undisturbed specimen. */}
           {s.tests.some((t) => labSpec(t.type)?.needsUndisturbed && t.status !== 'void')
             && !['undisturbed', 'shelby-tube', 'core'].includes(s.type) && (
-            <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+            <p className="mb-3 rounded-md border border-warn-line bg-warn-tint px-3 py-2 text-[11px] text-warn">
               A strength or compressibility test is booked on a <strong>{s.type}</strong> sample. Those need an
               undisturbed specimen — the result will understate the in-situ soil.
             </p>
@@ -1833,7 +1833,7 @@ function SieveStack({
               </td>
               <td className="py-0.5 text-right">
                 <button onClick={() => onChange(stack.filter((_, k) => k !== i))}
-                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+                  className="rounded px-1 text-[10px] text-fail hover:bg-fail-tint">×</button>
               </td>
             </tr>
           ))}
@@ -1862,7 +1862,7 @@ function EngineNotes({ notes, className = '' }: { notes: LabNote[]; className?: 
     <div className={className}>
       {notes.map((n, k) => (
         <p key={k} className={n.severity === 'warning'
-          ? 'mt-1 text-[10px] text-amber-900'
+          ? 'mt-1 text-[10px] text-warn'
           : 'mt-1 text-[10px] text-muted'}>
           {n.severity === 'warning' && <span className="font-bold">! </span>}
           {n.text}
@@ -1949,7 +1949,7 @@ function SampleClassificationCard({
 
       {symbol && layer && (
         layer.symbol === symbol ? (
-          <p className="mt-2 text-[11px] text-emerald-700">
+          <p className="mt-2 text-[11px] text-ok">
             Layer &ldquo;{layer.name}&rdquo; already carries {symbol}.
           </p>
         ) : (
@@ -2029,7 +2029,7 @@ function ShearPoints({
               ))}
               <td className="py-0.5 text-right">
                 <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
-                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+                  className="rounded px-1 text-[10px] text-fail hover:bg-fail-tint">×</button>
               </td>
             </tr>
           ))}
@@ -2164,7 +2164,7 @@ function ParametersPanel({
             )}
 
             {bearing.missing.length > 0 && (
-              <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+              <p className="mt-3 rounded-md border border-warn-line bg-warn-tint px-3 py-2 text-[11px] text-warn">
                 A bearing-capacity check on this layer still needs:{' '}
                 <strong>{bearing.missing.map((k) => PARAMETER_LABEL[k] ?? k).join(', ')}</strong>. Nothing has been
                 assumed on your behalf.
@@ -2223,7 +2223,7 @@ function LoadIncrements({
                 ))}
               <td className="py-0.5 text-right">
                 <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
-                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+                  className="rounded px-1 text-[10px] text-fail hover:bg-fail-tint">×</button>
               </td>
             </tr>
           ))}
@@ -2284,7 +2284,7 @@ function CompactionPoints({
                 ))}
               <td className="py-0.5 text-right">
                 <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
-                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+                  className="rounded px-1 text-[10px] text-fail hover:bg-fail-tint">×</button>
               </td>
             </tr>
           ))}
@@ -2351,7 +2351,7 @@ function TriaxialSpecimens({
                 ))}
               <td className="py-0.5 text-right">
                 <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
-                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+                  className="rounded px-1 text-[10px] text-fail hover:bg-fail-tint">×</button>
               </td>
             </tr>
           ))}
@@ -2409,7 +2409,7 @@ function CbrPoints({
                 ))}
               <td className="py-0.5 text-right">
                 <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
-                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+                  className="rounded px-1 text-[10px] text-fail hover:bg-fail-tint">×</button>
               </td>
             </tr>
           ))}
@@ -2468,7 +2468,7 @@ function HydrometerReadings({
                 ))}
               <td className="py-0.5 text-right">
                 <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
-                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+                  className="rounded px-1 text-[10px] text-fail hover:bg-fail-tint">×</button>
               </td>
             </tr>
           ))}
@@ -2521,7 +2521,7 @@ function SwellReload({
               ))}
               <td className="py-0.5 text-right">
                 <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
-                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+                  className="rounded px-1 text-[10px] text-fail hover:bg-fail-tint">×</button>
               </td>
             </tr>
           ))}

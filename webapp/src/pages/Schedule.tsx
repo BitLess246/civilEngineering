@@ -388,15 +388,15 @@ function ProjectBar({ api }: { api: ReturnType<typeof useScheduleProject> }) {
           existed; nothing had ever called it. */}
       {api.activeId && (confirmDel
         ? (
-          <span className="inline-flex items-center gap-1.5 rounded border border-red-200 bg-red-50 px-2 py-1">
-            <span className="text-[11.5px] text-red-900">Delete “{api.projects.find((p) => p.id === api.activeId)?.name}”?</span>
+          <span className="inline-flex items-center gap-1.5 rounded border border-fail-line bg-fail-tint px-2 py-1">
+            <span className="text-[11.5px] text-fail">Delete “{api.projects.find((p) => p.id === api.activeId)?.name}”?</span>
             <button type="button" onClick={() => { api.remove(api.activeId!); setConfirmDel(false) }}
-              className="rounded bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-red-700">Delete</button>
+              className="rounded bg-fail px-2 py-0.5 text-[11px] font-semibold text-on-solid hover:bg-fail-hover">Delete</button>
             <button type="button" onClick={() => setConfirmDel(false)} className={btn}>Keep</button>
           </span>
         )
         : <button type="button" onClick={() => setConfirmDel(true)}
-            className="rounded-md border border-red-200 px-2 py-1.5 text-[12px] font-semibold text-red-700 hover:bg-red-50">Delete</button>
+            className="rounded-md border border-fail-line px-2 py-1.5 text-[12px] font-semibold text-fail hover:bg-fail-tint">Delete</button>
       )}
       <button type="button" onClick={() => fileRef.current?.click()} className={btn}>Import</button>
       <button type="button" onClick={onExport} className={btn}>Export</button>

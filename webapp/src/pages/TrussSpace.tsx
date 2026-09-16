@@ -237,15 +237,15 @@ export default function TrussSpace() {
             {selForce && (
               <div className="no-print absolute left-3 top-3 flex items-center gap-2 rounded-lg border border-brand/30 bg-sheet/90 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
                 <span className="font-semibold text-brand">▣ {selForce.kind} {selForce.id}</span>
-                <span className={selForce.N >= 0 ? 'text-blue-700' : 'text-red-600'}>
+                <span className={selForce.N >= 0 ? 'text-blue-700' : 'text-fail'}>
                   {f1(Math.abs(selForce.N))} kN {selForce.N >= 0 ? 'tension' : 'compression'}
                 </span>
                 {selDes && <span className="text-muted">util {(selDes.util * 100).toFixed(0)}%</span>}
-                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-muted hover:text-red-500">✕</button>
+                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-muted hover:text-fail">✕</button>
               </div>
             )}
             <div className="no-print pointer-events-none absolute bottom-2 left-3 text-[10px] text-muted">
-              drag to orbit · scroll to zoom · hold <b>Shift</b> (or right-drag) to pan · <span className="text-blue-700">tension</span> / <span className="text-red-600">compression</span>
+              drag to orbit · scroll to zoom · hold <b>Shift</b> (or right-drag) to pan · <span className="text-blue-700">tension</span> / <span className="text-fail">compression</span>
             </div>
           </div>
         </div>
@@ -388,14 +388,14 @@ export default function TrussSpace() {
                   sub={opt.uniformWeightKg ? `${(opt.uniformWeightKg - opt.totalWeightKg).toFixed(0)} kg` : undefined} />
               )}
               {opt.groups.some((g) => g.section && !g.tensionSlendernessOK) && (
-                <p className="mt-2 text-[11px] text-amber-700">
+                <p className="mt-2 text-[11px] text-warn">
                   ⚠ A tension group exceeds L/r = 300. §D1 states that as a <b>preference</b>, not a
                   limit — the member is strong enough, but it will sag, vibrate and is easy to damage
                   in handling. Pick a stiffer section by hand if that matters here.
                 </p>
               )}
               {!opt.ok && (
-                <p className="mt-2 text-[11px] text-red-600">
+                <p className="mt-2 text-[11px] text-fail">
                   At least one group has no adequate section in the families searched — widen
                   the search, or the truss geometry needs changing.
                 </p>
@@ -436,13 +436,13 @@ export default function TrussSpace() {
                   const bad = !d.ok
                   return (
                     <tr key={f.id} onClick={() => setSelected(f.id)}
-                      className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''} ${selected === f.id ? 'bg-amber-50' : ''}`}>
+                      className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-fail-tint text-fail' : ''} ${selected === f.id ? 'bg-warn-tint' : ''}`}>
                       <td className="py-1 pr-2 font-medium">{f.id} <span className="text-muted">({f.i}–{f.j})</span></td>
                       <td className="py-1 pr-2">{f.kind}</td>
                       {opt && <td className="py-1 pr-2 font-mono text-[10px]">{sectionOfMember.get(f.id)?.label ?? '—'}</td>}
                       <td className="py-1 pr-2 text-right">{f2(f.L)}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(f.N))}</td>
-                      <td className={`py-1 pr-2 ${f.N >= 0 ? 'text-blue-700' : 'text-red-600'}`}>{d.mode === 'zero' ? '—' : f.N >= 0 ? 'T' : 'C'}</td>
+                      <td className={`py-1 pr-2 ${f.N >= 0 ? 'text-blue-700' : 'text-fail'}`}>{d.mode === 'zero' ? '—' : f.N >= 0 ? 'T' : 'C'}</td>
                       <td className="py-1 pr-2 text-muted">{f.combo}</td>
                       <td className="py-1 pr-2 text-right">{d.mode === 'compression' ? Math.round(d.slenderness) + (d.slenderOK ? '' : ' ⚠') : '—'}</td>
                       <td className="py-1 pr-2 text-right">{f1(d.phiPn)}</td>

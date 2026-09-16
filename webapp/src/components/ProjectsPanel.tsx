@@ -130,7 +130,7 @@ export function ProjectsPanel() {
           </p>
         )}
         {!target && !api.canCreate.ok && (
-          <p className="mt-1.5 text-[11.5px] leading-5 text-amber-800">
+          <p className="mt-1.5 text-[11.5px] leading-5 text-warn">
             🔒 {api.canCreate.message}{' '}
             <Link to="/pricing" className="font-semibold underline">See plans</Link>
           </p>
@@ -171,7 +171,7 @@ export function ProjectsPanel() {
                       onClick={() => { setRenaming(p.id); setRenameTo(p.name) }}>Rename</button>
                     <button type="button"
                       onClick={() => setConfirming(p.id)}
-                      className="rounded border border-red-200 px-2 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-50">
+                      className="rounded border border-fail-line px-2 py-1 text-[11px] font-semibold text-fail hover:bg-fail-tint">
                       Delete
                     </button>
                   </div>
@@ -191,14 +191,14 @@ export function ProjectsPanel() {
                     is no undo — not even a sync will bring it back, because a
                     sync never resurrects what you deleted on purpose. */}
                 {confirming === p.id && (
-                  <div className="mt-2 rounded border border-red-200 bg-red-50 px-2.5 py-2">
-                    <p className="text-[12px] text-red-900">
+                  <div className="mt-2 rounded border border-fail-line bg-fail-tint px-2.5 py-2">
+                    <p className="text-[12px] text-fail">
                       Delete “{p.name}” from this browser? This cannot be undone.
                     </p>
                     <div className="mt-1.5 flex gap-1.5">
                       <button type="button"
                         onClick={() => del(p.id)}
-                        className="rounded bg-red-600 px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-red-700">
+                        className="rounded bg-fail px-2.5 py-1 text-[11.5px] font-semibold text-on-solid hover:bg-fail-hover">
                         Delete it
                       </button>
                       <button type="button" className={BTN_QUIET} onClick={() => setConfirming(null)}>Keep it</button>
@@ -239,28 +239,28 @@ export function ProjectsPanel() {
               </p>
             )}
             {api.report?.outcomes.filter((o) => o.kind === 'failed').map((o) => (
-              <p key={o.id} className="mt-1.5 text-[11.5px] text-amber-800">
+              <p key={o.id} className="mt-1.5 text-[11.5px] text-warn">
                 ⚠ {o.kind === 'failed' && o.message}
               </p>
             ))}
           </>
         )}
-        {api.error && <p className="mt-1.5 text-[11.5px] text-red-700">{api.error}</p>}
+        {api.error && <p className="mt-1.5 text-[11.5px] text-fail">{api.error}</p>}
       </div>
 
       {/* ── Conflicts ───────────────────────────────────────────────── */}
       {conflicts.length > 0 && (
-        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2.5">
-          <p className="text-[12.5px] font-semibold text-amber-900">
+        <div className="rounded border border-warn-line bg-warn-tint px-3 py-2.5">
+          <p className="text-[12.5px] font-semibold text-warn">
             {conflicts.length} project{conflicts.length === 1 ? '' : 's'} changed in two places
           </p>
-          <p className="mt-1 text-[11.5px] leading-5 text-amber-900">
+          <p className="mt-1 text-[11.5px] leading-5 text-warn">
             Nothing has been overwritten. Choose which version to keep — there is no
             field-by-field merge, because deciding which member size is right is yours to make.
           </p>
           <ul className="mt-2 space-y-2">
             {conflicts.map((c) => (
-              <li key={c.id} className="rounded border border-amber-200 bg-sheet px-2.5 py-2">
+              <li key={c.id} className="rounded border border-warn-line bg-sheet px-2.5 py-2">
                 <p className="text-[12px] font-semibold text-ink">{c.local.meta.name}</p>
                 <p className="text-[11px] text-faint">
                   This browser: saved {when(c.local.meta.updatedAt)}, {c.local.model?.members.length ?? 0} members ·

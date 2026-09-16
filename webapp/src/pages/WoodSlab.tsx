@@ -29,7 +29,7 @@ function Out({ label, value, ok }: { label: string; value: string; ok?: boolean 
   return (
     <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-emerald-600' : 'text-red-600'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -43,7 +43,7 @@ function CheckCard({ title, sub, c }: {
     <div className="rounded-lg border border-slate-200 p-4">
       <div className="mb-1 flex items-baseline justify-between">
         <h3 className="text-sm font-bold text-slate-700">{title}</h3>
-        <span className={`rounded px-2 py-0.5 text-xs font-bold ${c.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+        <span className={`rounded px-2 py-0.5 text-xs font-bold ${c.ok ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
           {c.ok ? 'PASS' : 'FAIL'} · {f2(c.ratio)}
         </span>
       </div>
@@ -203,7 +203,7 @@ export default function WoodSlab() {
         <ResultCard title={
           <span className="flex w-full items-baseline justify-between gap-3">
             Results
-            <span className={`rounded px-2.5 py-1 text-[11px] font-bold ${r.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            <span className={`rounded px-2.5 py-1 text-[11px] font-bold ${r.ok ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
               {r.ok ? 'SLAB OK' : 'INADEQUATE'} · governing {f2(r.ratio)}
             </span>
           </span>

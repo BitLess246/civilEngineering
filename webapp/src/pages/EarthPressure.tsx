@@ -111,7 +111,7 @@ export default function EarthPressure() {
           </ResultCard>
 
           {coulomb.error && (
-            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{coulomb.error}</p>
+            <p className="rounded-md border border-fail-line bg-fail-tint px-3 py-2 text-[12px] text-fail">{coulomb.error}</p>
           )}
           {coulomb.active && (
             <ResultCard title="Coulomb">
@@ -127,7 +127,7 @@ export default function EarthPressure() {
           )}
 
           {seismic.error && (
-            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{seismic.error}</p>
+            <p className="rounded-md border border-fail-line bg-fail-tint px-3 py-2 text-[12px] text-fail">{seismic.error}</p>
           )}
           {seismic.r && (
             <ResultCard title="Mononobe–Okabe (seismic)">
@@ -142,8 +142,8 @@ export default function EarthPressure() {
           )}
 
           {notes.length > 0 && (
-            <ul className="space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-3">
-              {notes.map((n, k) => <li key={k} className="text-[11px] text-amber-900">{n}</li>)}
+            <ul className="space-y-1 rounded-lg border border-warn-line bg-warn-tint p-3">
+              {notes.map((n, k) => <li key={k} className="text-[11px] text-warn">{n}</li>)}
             </ul>
           )}
         </div>

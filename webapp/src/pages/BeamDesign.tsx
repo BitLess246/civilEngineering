@@ -382,7 +382,7 @@ export default function BeamDesign() {
                         className="w-1/2 rounded border border-transparent bg-transparent px-1 text-xs font-bold uppercase tracking-wide text-slate-600 focus:border-slate-300 focus:bg-sheet" />
                       <span className="flex gap-3">
                         <button type="button" onClick={() => setSelId(s.id)} className="text-xs text-brand hover:underline">view</button>
-                        <button type="button" onClick={() => setSections((ss) => ss.filter((q) => q.id !== s.id))} className="text-xs text-red-500 hover:underline">remove</button>
+                        <button type="button" onClick={() => setSections((ss) => ss.filter((q) => q.id !== s.id))} className="text-xs text-fail hover:underline">remove</button>
                       </span>
                     </div>
                     <div className="grid grid-cols-3 gap-3">
@@ -438,7 +438,7 @@ export default function BeamDesign() {
                       return (
                         <tr key={s.id} onClick={() => setSelId(s.id)}
                           className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${
-                            bad ? 'bg-red-50 text-red-700' : ''} ${s.id === active?.id ? 'outline outline-1 outline-brand' : ''}`}>
+                            bad ? 'bg-fail-tint text-fail' : ''} ${s.id === active?.id ? 'outline outline-1 outline-brand' : ''}`}>
                           <td className="py-1 pr-2">{s.label}{s.Mu < 0 ? ' (hog)' : ''}</td>
                           <td className="py-1 pr-2">{d ? d.mode : '—'}</td>
                           <td className="py-1 pr-2">{d ? `${d.bars}⌀${fd.barDia}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}` : '—'}</td>

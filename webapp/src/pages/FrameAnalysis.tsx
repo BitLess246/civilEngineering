@@ -46,7 +46,7 @@ function Shell({ title, onRemove, children }: { title: string; onRemove: () => v
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-wide text-muted">{title}</span>
-        <button type="button" onClick={onRemove} className="text-xs text-red-500 hover:underline">remove</button>
+        <button type="button" onClick={onRemove} className="text-xs text-fail hover:underline">remove</button>
       </div>
       <div className="flex flex-wrap gap-3 [&>label]:w-32">{children}</div>
     </div>
@@ -197,7 +197,7 @@ export default function FrameAnalysis() {
           <ResultCard title="Model">
             <FrameSketch nodes={nodes} members={members.map((m) => ({ ...m, E: 0, A: 0, I: 0 }))}
               supports={supports} loads={loads} selected={selMember} />
-            {!res && valid && <p className="mt-1 text-sm text-red-600">⚠ Unstable or singular — check supports/connectivity.</p>}
+            {!res && valid && <p className="mt-1 text-sm text-fail">⚠ Unstable or singular — check supports/connectivity.</p>}
           </ResultCard>
 
           {res && (
@@ -216,7 +216,7 @@ export default function FrameAnalysis() {
                     {res.perCombo.map((pc, i) => (
                       <tr key={pc.combo.name} onClick={() => pc.result && setSelCombo(i)}
                         className={`border-t border-slate-100 ${pc.result ? 'cursor-pointer hover:bg-blue-50' : 'text-slate-300'} ${
-                          i === res.govIdx ? 'bg-amber-50 font-semibold' : ''} ${i === shownIdx ? 'outline outline-1 outline-brand' : ''}`}>
+                          i === res.govIdx ? 'bg-warn-tint font-semibold' : ''} ${i === shownIdx ? 'outline outline-1 outline-brand' : ''}`}>
                         <td className="py-1 pr-2">{pc.combo.name}{i === res.govIdx ? ' ★' : ''}</td>
                         <td className="py-1 pr-2 text-right">{pc.result ? f1(pc.result.Nmax) : '—'}</td>
                         <td className="py-1 pr-2 text-right">{pc.result ? f1(pc.result.Vmax) : '—'}</td>

@@ -21,7 +21,7 @@ const Opt = ({ name, clause, children }: { name: string; clause?: string; childr
 )
 
 const Note = ({ children }: { children: ReactNode }) => (
-  <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-900">{children}</p>
+  <p className="rounded-md border border-warn-line bg-warn-tint px-2.5 py-2 text-[11px] text-warn">{children}</p>
 )
 
 /** ⓘ button for the Analysis options card header, with the full write-up. */

@@ -11,7 +11,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 const Unset = ({ what }: { what: string }) => (
-  <span className="rounded bg-red-50 px-1 font-mono text-[12px] font-semibold text-red-700">
+  <span className="rounded bg-fail-tint px-1 font-mono text-[12px] font-semibold text-fail">
     [{what} not set]
   </span>
 )
@@ -29,7 +29,7 @@ export default function Contact() {
       </p>
 
       {missing.length > 0 && (
-        <div className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] leading-6 text-red-900">
+        <div className="mt-5 rounded-lg border border-fail-line bg-fail-tint px-4 py-3 text-[13px] leading-6 text-fail">
           <strong>Contact details incomplete.</strong> Missing: {missing.join(', ')}. Set them in{' '}
           <code className="rounded bg-sheet/70 px-1">webapp/src/lib/siteConfig.ts</code>.
         </div>

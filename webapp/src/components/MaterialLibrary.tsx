@@ -69,7 +69,7 @@ export function MaterialLibrary({ materials, selectedId, onSelect, onChange }: {
         <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); e.target.value = '' }} />
       </div>
-      {importErr && <p className="mt-1 text-[11px] text-red-600">{importErr}</p>}
+      {importErr && <p className="mt-1 text-[11px] text-fail">{importErr}</p>}
 
       {draft && (
         <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -108,8 +108,8 @@ export function MaterialLibrary({ materials, selectedId, onSelect, onChange }: {
                 className="rounded-md border border-slate-300 px-2 py-1" placeholder="e.g. FPRDI Technical Note, air-dry" />
             </label>
           </div>
-          {errors.length > 0 && <p className="mt-2 text-[11px] text-red-600">{errors.join(' · ')}</p>}
-          <p className="mt-2 text-[10px] text-amber-600">User-defined values are unverified — you are responsible for their source and validity.</p>
+          {errors.length > 0 && <p className="mt-2 text-[11px] text-fail">{errors.join(' · ')}</p>}
+          <p className="mt-2 text-[10px] text-warn">User-defined values are unverified — you are responsible for their source and validity.</p>
           <div className="mt-2 flex gap-2">
             <button type="button" className="rounded-md bg-brand px-3 py-1 text-[11px] font-semibold text-on-solid disabled:opacity-40"
               onClick={save} disabled={errors.length > 0 || !draft.name.trim()}>Save</button>

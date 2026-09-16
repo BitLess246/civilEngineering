@@ -161,7 +161,7 @@ export default function PunchingShear() {
                 value={r.ok ? 'OK — No shear reinf. required ✓' : 'FAIL — Shear reinforcement required ✗'}
                 alert={!r.ok} />
               {!r.ok && (
-                <p className="mt-2 rounded bg-red-50 px-3 py-2 text-xs text-red-700">
+                <p className="mt-2 rounded bg-fail-tint px-3 py-2 text-xs text-fail">
                   φVc {'<'} Vu — increase slab thickness, column size, or add stud rails / closed stirrups per §22.6.7.
                 </p>
               )}

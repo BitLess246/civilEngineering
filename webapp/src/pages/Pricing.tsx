@@ -85,7 +85,7 @@ function PlanChangeDialog({ plan, priceId, onClose }: {
                 You keep your current plan until then — nothing is refunded and nothing is lost today.
               </p>
             )}
-            {error && <p role="alert" className="mt-3 text-[13px] leading-6 text-red-700">{error}</p>}
+            {error && <p role="alert" className="mt-3 text-[13px] leading-6 text-fail">{error}</p>}
           </>
         )}
 
@@ -162,7 +162,7 @@ function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeri
   if (current === plan.id) {
     return (
       <div>
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-[12px] font-semibold text-emerald-700">
+        <div className="rounded-md border border-ok-line bg-ok-tint px-3 py-2 text-center text-[12px] font-semibold text-ok">
           Your current plan
         </div>
         {/*
@@ -228,7 +228,7 @@ function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeri
       <button type="button" onClick={buy} disabled={busy} className={btn}>
         {busy ? 'Opening…' : `Choose ${plan.name}`}
       </button>
-      {error && <p role="alert" className="mt-2 text-[12px] leading-5 text-red-700">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-[12px] leading-5 text-fail">{error}</p>}
     </div>
   )
 }
@@ -280,7 +280,7 @@ function PlanCard({ plan, current, period, prices }: {
       <div className="flex items-baseline justify-between">
         <h2 className="text-[1.05rem] font-bold text-brand">{plan.name}</h2>
         {isCurrent && (
-          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+          <span className="rounded-full bg-ok-tint px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ok">
             Your plan
           </span>
         )}
@@ -290,7 +290,7 @@ function PlanCard({ plan, current, period, prices }: {
       <ul className="mt-4 flex-1 space-y-1.5">
         {plan.highlights.map((h) => (
           <li key={h} className="flex gap-2 text-[13px] leading-5 text-slate-700">
-            <span className="text-emerald-600">✓</span><span>{h}</span>
+            <span className="text-ok">✓</span><span>{h}</span>
           </li>
         ))}
       </ul>
@@ -317,7 +317,7 @@ function PeriodToggle({ period, onChange }: { period: BillingPeriod; onChange: (
         {btn('monthly', 'Monthly')}
         {btn('annual', 'Annual')}
       </div>
-      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11.5px] font-semibold text-emerald-700">
+      <span className="rounded-full bg-ok-tint px-2.5 py-1 text-[11.5px] font-semibold text-ok">
         Save {Math.round(ANNUAL_DISCOUNT * 100)}% paying yearly
       </span>
     </div>
@@ -338,7 +338,7 @@ function CheckoutReturn() {
   const [params, setParams] = useSearchParams()
   if (params.get('checkout') !== 'success') return null
   return (
-    <div className="mt-5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-[13px] leading-6 text-emerald-900">
+    <div className="mt-5 rounded-lg border border-ok-line bg-ok-tint px-4 py-3 text-[13px] leading-6 text-ok">
       <strong>Payment received — thank you.</strong> Your plan is granted by our billing server the moment
       Paddle confirms the payment, which is usually within a few seconds. If this page still shows your old
       plan, sign out and back in to refresh your session; if it has not changed in a few minutes, email us and
@@ -383,7 +383,7 @@ export default function Pricing() {
       <CheckoutReturn />
 
       {!CHECKOUT_ENABLED && (
-        <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] leading-6 text-amber-900">
+        <div className="mt-5 rounded-lg border border-warn-line bg-warn-tint px-4 py-3 text-[13px] leading-6 text-warn">
           <strong>Paid plans are not open for sign-up yet.</strong> Payments will be handled by Paddle, and the
           server that verifies a payment is in place — but this deployment has no checkout configured, so no card
           details are collected anywhere in this app. Pro and Max are listed so you can see what they cover. Guest

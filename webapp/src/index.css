@@ -49,12 +49,15 @@
   --color-focus: var(--t-focus);
 
   --color-ok: var(--t-ok);
+  --color-ok-hover: var(--t-ok-hover);
   --color-ok-tint: var(--t-ok-tint);
   --color-ok-line: var(--t-ok-line);
   --color-warn: var(--t-warn);
+  --color-warn-hover: var(--t-warn-hover);
   --color-warn-tint: var(--t-warn-tint);
   --color-warn-line: var(--t-warn-line);
   --color-fail: var(--t-fail);
+  --color-fail-hover: var(--t-fail-hover);
   --color-fail-tint: var(--t-fail-tint);
   --color-fail-line: var(--t-fail-line);
 }

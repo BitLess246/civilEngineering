@@ -107,7 +107,7 @@ function CheckRow({ label, Vu, phiVc, ok }: { label: ReactNode; Vu: number; phiV
       label={label}
       value={`${f2(Vu)} kN`}
       check={
-        <span className={ok ? 'text-emerald-600' : 'text-rose-600'}>
+        <span className={ok ? 'text-ok' : 'text-fail'}>
           φVc = {f2(phiVc)} kN {ok ? '✓' : '✗'}
         </span>
       }
@@ -272,7 +272,7 @@ export default function PileCapDesign() {
             <>
               {/* Summary banner */}
               <div className={`rounded-lg border p-3 text-center text-[12.5px] font-semibold ${
-                allOK ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'
+                allOK ? 'border-ok-line bg-ok-tint text-ok' : 'border-fail-line bg-fail-tint text-fail'
               }`}>
                 {allOK ? '✓ All checks pass' : '✗ One or more checks fail — review results below'}
               </div>
@@ -294,7 +294,7 @@ export default function PileCapDesign() {
                     label={`Pile ${i + 1} (${(result.coords[i].x / 1000).toFixed(2)}, ${(result.coords[i].y / 1000).toFixed(2)}) m`}
                     value={`${f2(r)} kN`}
                     check={
-                      <span className={r <= form.pileCapacity ? 'text-emerald-600' : 'text-rose-600'}>
+                      <span className={r <= form.pileCapacity ? 'text-ok' : 'text-fail'}>
                         ≤ {form.pileCapacity} kN {r <= form.pileCapacity ? '✓' : '✗'}
                       </span>
                     }
@@ -331,7 +331,7 @@ export default function PileCapDesign() {
                   label="Available (column face to bar end)"
                   value={`${f0(result.ldAvailable)} mm`}
                   check={
-                    <span className={result.ldOK ? 'text-emerald-600' : 'text-rose-600'}>
+                    <span className={result.ldOK ? 'text-ok' : 'text-fail'}>
                       {result.ldOK ? '✓ OK' : '✗ Hooks required'}
                     </span>
                   }
