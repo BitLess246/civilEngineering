@@ -15,64 +15,55 @@ export function SiteFooter() {
   const incomplete = missingSiteFields().length > 0
   return (
     <footer className="no-print mt-12 border-t border-hairline bg-sheet">
-      <div className="mx-auto grid max-w-[1200px] gap-6 px-6 py-8 sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-[13px] font-extrabold tracking-[.14em] text-ink">{BRAND_MARK}</span>
-            <span className="text-[8.5px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>
-          </div>
-          <p className="mt-2 text-[12px] leading-5 text-muted">
+      {/* A DENSE COLOPHON, NOT A FOUR-COLUMN SITEMAP.
+          Product / Legal / Contact columns over a hairline strip with a tiny
+          copyright tail is the most-reproduced footer shape on the web, and
+          this site has nine links — not a sitemap worth four columns. Every
+          link, the business identity, the address and the disclaimer are all
+          still here; they are set as one block that closes the page instead of
+          cataloguing it. The legal links stay together and stay obvious, which
+          is what a payment provider reviewing the site is looking for. */}
+      <div className="mx-auto max-w-[1200px] px-6 py-8">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-[13px] font-extrabold tracking-[.14em] text-ink">{BRAND_MARK}</span>
+          <span className="text-[8.5px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>
+          <span className="text-[12px] leading-5 text-muted">
             Structural and geotechnical calculation software to NSCP 2015, ACI 318-14 and AISC 360-16.
-          </p>
-        </div>
-
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Product</p>
-          <ul className="mt-2 space-y-0.5 text-[12.5px]">
-            <li><Link to="/pricing" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Plans and pricing</Link></li>
-            <li><Link to="/docs" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Documentation</Link></li>
-            <li><Link to="/validation" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Validation</Link></li>
-          </ul>
-        </div>
-
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Legal</p>
-          <ul className="mt-2 space-y-0.5 text-[12.5px]">
-            <li><Link to="/terms" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Terms and Conditions</Link></li>
-            <li><Link to="/privacy" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Privacy Policy</Link></li>
-            <li><Link to="/refunds" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Refund Policy</Link></li>
-            <li><Link to="/contact" className="inline-flex min-h-[24px] items-center text-slate-600 hover:text-brand">Contact</Link></li>
-          </ul>
-        </div>
-
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-wide text-muted">Contact</p>
-          <address className="mt-2 space-y-0.5 text-[12.5px] not-italic leading-5 text-slate-600">
-            {SITE.legalName.trim() && <div className="font-semibold text-slate-700">{SITE.legalName}</div>}
-            {addr.map((l) => <div key={l}>{l}</div>)}
-            <div>
-              <a href={`mailto:${SITE.supportEmail}`} className="inline-flex min-h-[24px] items-center hover:text-brand">{SITE.supportEmail}</a>
-            </div>
-          </address>
-        </div>
-      </div>
-
-      <div className="border-t border-hairline-2">
-        <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-4 gap-y-1 px-6 py-3 text-[11.5px] text-muted">
-          <span>© {new Date().getFullYear()} {businessName()}. All rights reserved.</span>
-          <span className="hidden sm:inline">·</span>
-          <span>Prices in Philippine pesos.</span>
-          <span className="hidden sm:inline">·</span>
-          <span>
-            Results are computed from your inputs and must be checked by a licensed engineer before
-            construction use.
           </span>
-          {incomplete && (
-            <span className="rounded bg-fail-tint px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-fail">
-              business details incomplete — see /contact
-            </span>
-          )}
         </div>
+
+        {/* One run of links. `min-h` keeps each a 24px pointer target
+            (WCAG 2.5.8) without turning the run into a stack of buttons. */}
+        <nav aria-label="Site" className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12.5px]">
+          {[
+            ['/pricing', 'Plans and pricing'], ['/docs', 'Documentation'], ['/validation', 'Validation'],
+            ['/terms', 'Terms and Conditions'], ['/privacy', 'Privacy Policy'],
+            ['/refunds', 'Refund Policy'], ['/contact', 'Contact'],
+          ].map(([to, label], i) => (
+            <span key={to} className="inline-flex items-center gap-3">
+              {i > 0 && <span aria-hidden="true" className="text-hairline-2">·</span>}
+              <Link to={to} className="inline-flex min-h-[24px] items-center text-muted hover:text-brand">{label}</Link>
+            </span>
+          ))}
+        </nav>
+
+        <address className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] not-italic leading-5 text-muted">
+          {SITE.legalName.trim() && <span className="font-semibold text-ink-2">{SITE.legalName}</span>}
+          {addr.map((l) => <span key={l}>{l}</span>)}
+          <a href={`mailto:${SITE.supportEmail}`} className="inline-flex min-h-[24px] items-center hover:text-brand">{SITE.supportEmail}</a>
+        </address>
+
+        <p className="mt-3 max-w-[92ch] text-[11.5px] leading-5 text-faint">
+          © {new Date().getFullYear()} {businessName()}. All rights reserved. Prices in Philippine pesos.
+          Results are computed from your inputs and must be checked by a licensed engineer before
+          construction use.
+        </p>
+
+        {incomplete && (
+          <p className="mt-2 inline-block rounded bg-fail-tint px-1.5 py-0.5 font-mono text-[10.5px] font-semibold text-fail">
+            business details incomplete — see /contact
+          </p>
+        )}
       </div>
     </footer>
   )
