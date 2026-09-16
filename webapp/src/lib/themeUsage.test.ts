@@ -46,6 +46,7 @@ const classStrings = (src: string): string[] =>
  * this glob does not read.
  */
 const PROPS = 'text|bg|border|ring|divide|fill|stroke|decoration|from|via|to|placeholder|accent|outline|shadow|caret'
+const STATUS_FAMILIES = 'emerald|green|lime|red|rose|amber|yellow|orange'
 
 /**
  * There is no ratchet any more.
@@ -160,7 +161,7 @@ describe('verdict colour comes from the status roles', () => {
   // "derived", "field" — not a verdict, and no role names that, so they keep
   // the (complete, inverted) stock ramp. A rule that swept them up would be
   // demanding a token that does not exist.
-  const STATUS = 'emerald|green|lime|red|rose|amber|yellow|orange'
+  const STATUS = STATUS_FAMILIES
 
   const stockStatus = () => scan(STATUS)
 
@@ -263,27 +264,47 @@ describe('colour is never written as a literal in a class', () => {
     'CriticalPathDiagram.tsx',
   ]
 
+  // THE WHOLE FILE, for the same reason the status rule reads the whole file.
+  // The first cut of this rule used `classStrings`, and a sabotage caught it
+  // within the hour: the eight literals it allowlists are arguments to a `cell`
+  // helper, not `className=` attributes, so pointing the allowlist at a
+  // NON-EXISTENT file left the rule green. Writing the identical span bug into
+  // the rule standing next to the one that documents that span bug is why this
+  // comment exists.
+  const hexes = (src: string) =>
+    [...src.matchAll(/(?<![\w:-])[a-z-]+-\[#[0-9a-fA-F]{3,8}\](?![\w-])/g)].map((m) => m[0])
+
   it('uses no arbitrary colour value outside the drawing keys', () => {
     const found: string[] = []
     for (const [file, src] of Object.entries(SOURCES)) {
       if (FIXED.some((f) => file.endsWith(f))) continue
-      for (const c of classStrings(src)) {
-        for (const m of c.matchAll(/(?<![\w:-])[a-z-]+-\[#[0-9a-fA-F]{3,8}\](?![\w-])/g)) {
-          found.push(`${file}: ${m[0]}`)
-        }
-      }
+      for (const h of hexes(src)) found.push(`${file}: ${h}`)
     }
     expect(found, 'name a token or a family instead').toEqual([])
   })
 
+  it('has no stale or unnecessary allowlist entry', () => {
+    // Read OUT OF `FIXED`, not spelled again here. The first version asserted a
+    // hardcoded filename, so renaming the entry left it green — a staleness
+    // check that could not see the list it guards. The second assertion is the
+    // other direction: an entry whose file no longer contains a literal is an
+    // exemption nothing needs, and those are how an allowlist grows.
+    for (const entry of FIXED) {
+      const hit = Object.entries(SOURCES).find(([f]) => f.endsWith(entry))
+      expect(hit, `allowlisted "${entry}" matches no file`).toBeTruthy()
+      expect(hexes(hit![1]).length, `"${entry}" no longer needs the allowlist`)
+        .toBeGreaterThan(0)
+    }
+  })
+
   it('still watches the allowlisted files for everything else', () => {
-    // An allowlist that silences a whole file is how the status rule went blind.
-    // This one is scoped to ONE spelling: the neutral and status rules above
-    // run over `CriticalPathDiagram.tsx` like any other file, and did in fact
-    // catch its `bg-red-500` and `bg-slate-400`.
-    const cpd = Object.entries(SOURCES).find(([f]) => f.endsWith('CriticalPathDiagram.tsx'))
-    expect(cpd, 'the allowlisted file must exist, or the entry is stale').toBeTruthy()
-    expect(scan('slate|gray|zinc|neutral|stone').filter((h) => h.includes('CriticalPath')))
-      .toEqual([])
+    // An allowlist that silences a whole FILE is how the status rule went
+    // blind. This one is scoped to one SPELLING: the neutral and status rules
+    // run over every allowlisted file like any other, and did in fact catch
+    // this one's `bg-red-500` and `bg-slate-400` in phase 1.
+    const stock = [...scan('slate|gray|zinc|neutral|stone'), ...scan(STATUS_FAMILIES)]
+    for (const entry of FIXED) {
+      expect(stock.filter((h) => h.includes(entry.replace('.tsx', ''))), entry).toEqual([])
+    }
   })
 })
