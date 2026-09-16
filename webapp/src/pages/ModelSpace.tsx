@@ -82,7 +82,7 @@ import { TimeHistoryPanel } from '../components/TimeHistoryPanel'
 import { ShellContourPanel } from '../components/ShellContourPanel'
 import { ShellStress3D } from '../components/modelSpace/shellStress'
 import { contourData } from '../lib/shellContour'
-import { STRESS_KEYS, rampSwatches, rampTicks, formatStress, isMembrane, unitFor, labelFor, type StressKey } from '../lib/stressScale'
+import { STRESS_KEYS, rampSwatches, rampTicks, formatStress, isMembrane, unitFor, labelFor, DEFAULT_BANDS, type StressKey } from '../lib/stressScale'
 import { parseCase, describeCase, caseNodePeak, caseLoads, caseBaseShear } from '../lib/lateralCases'
 import { MemberStress3D } from '../components/modelSpace/memberStressLayer'
 import { stressSection, type StressSection } from '../engine/memberStress'
@@ -325,6 +325,11 @@ export default function ModelSpace() {
   // at all, but this one would appear the moment anyone analyses, on top of a
   // model they were looking at for another reason.
   const [showMemStress, setShowMemStress] = useState(false)
+  // ONE band count for BOTH contours. Two settings would let the plate and the
+  // member plot be drawn at different resolutions in the same picture, and a
+  // reader comparing a slab band against a beam band would be comparing two
+  // different quantisations of the same ramp.
+  const [bands, setBands] = useState(DEFAULT_BANDS)
   const [memStressKey, setMemStressKey] = useState<MemberStressKey>('sigma')
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
   const [showConns, setShowConns] = useState(true)         // designed steel joint hardware
@@ -2011,11 +2016,11 @@ export default function ModelSpace() {
                 )}
                 {showStress && shellStress && (
                   <ShellStress3D nodes={shellStress.nodes} elems={shellStress.elems}
-                    stresses={shellStress.stresses} contourKey={stressKey} />
+                    stresses={shellStress.stresses} contourKey={stressKey} bands={bands} />
                 )}
                 {memStressInfo && (
                   <MemberStress3D members={memStressInfo.members}
-                    contourKey={memStressKey} domain={memStressInfo.domain} />
+                    contourKey={memStressKey} domain={memStressInfo.domain} bands={bands} />
                 )}
                 {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} kinds={cageKinds} />}
                 {forceDiag && forceDiagInfo && forceDiagInfo.scale > 0 && model.members.map((m) => {
@@ -4570,6 +4575,35 @@ export default function ModelSpace() {
                     )
                   })()}
                 </div>
+                {/* HOW MANY BANDS. Shared by both contours below.
+                    Bands are what make a contour plot a contour plot: the
+                    boundary between two of them IS the iso-line. Drawn smooth,
+                    a stress field has nothing to read — a reader cannot tell
+                    40% of peak from 55% anywhere on the model, which is what
+                    "the contours are not continuous" turns out to mean. Every
+                    FEA post-processor bands for the same reason. */}
+                {(shellStress || govRes) && (
+                  <div>
+                    <p className="text-[11px] font-medium text-ink">Contour bands</p>
+                    <div className="mt-1 flex gap-1">
+                      {[0, 8, 12, 20].map((n) => (
+                        <button key={n} type="button" onClick={() => setBands(n)}
+                          aria-pressed={bands === n}
+                          className={`flex-1 rounded border px-2 py-1 text-[11px] font-medium ${
+                            bands === n
+                              ? 'border-brand bg-brand text-on-solid'
+                              : 'border-field-line bg-field text-ink hover:border-brand-hover'}`}>
+                          {n === 0 ? 'Smooth' : n}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[11px] leading-snug text-muted">
+                      {bands === 0
+                        ? 'Smooth — a continuous blend, with no iso-boundary to read a value against.'
+                        : `${bands} bands — every boundary is an iso-line, so a region on the model can be matched to a swatch on the bar.`}
+                    </p>
+                  </div>
+                )}
                 {/* PLATE STRESS CONTOUR.
                     The control stays visible with nothing to show and says so,
                     rather than appearing only once a solve exists — a checkbox
@@ -4618,7 +4652,7 @@ export default function ModelSpace() {
                           {/* The colour bar, low → high, labelled at the
                               magnitude of THIS field. */}
                           <div className="mt-1.5 flex h-3 overflow-hidden rounded-sm">
-                            {rampSwatches(24, domain.signed).map((c, i) => (
+                            {rampSwatches(24, domain.signed, bands).map((c, i) => (
                               <div key={i} className="flex-1" style={{ background: c }} />
                             ))}
                           </div>
@@ -4699,7 +4733,7 @@ export default function ModelSpace() {
                           </p>
                         ) : (<>
                           <div className="mt-1.5 flex h-3 overflow-hidden rounded-sm">
-                            {rampSwatches(24, domain.signed).map((c, i) => (
+                            {rampSwatches(24, domain.signed, bands).map((c, i) => (
                               <div key={i} className="flex-1" style={{ background: c }} />
                             ))}
                           </div>

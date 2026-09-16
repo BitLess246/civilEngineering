@@ -14,6 +14,7 @@ import {
   type ContourMember, type MemberStressKey,
 } from './memberContour'
 import { stressSection, type StressSection } from '../engine/memberStress'
+import { normalise } from './stressScale'
 import { solveFrame3D, rectJ, localAxes, type F3Node, type F3Member, type F3Support, type F3Load } from '../engine/frame3d'
 import type { RectSection } from '../engine/model'
 
@@ -143,7 +144,7 @@ describe('geometry', () => {
   it('emits four vertices per station and four faces per bay', () => {
     const n = BEAM.forces.xs.length
     expect(g.position).toHaveLength(n * 4 * 3)
-    expect(g.color).toHaveLength(n * 4 * 3)
+    expect(g.value, 'one SCALAR per vertex, not three colour channels').toHaveLength(n * 4)
     expect(g.index).toHaveLength((n - 1) * 4 * 2 * 3)
   })
 
@@ -156,13 +157,28 @@ describe('geometry', () => {
     }
   })
 
-  it('keeps every colour channel in range and uses more than one colour', () => {
-    for (const c of g.color) { expect(c).toBeGreaterThanOrEqual(0); expect(c).toBeLessThanOrEqual(1) }
-    const seen = new Set<string>()
-    for (let i = 0; i < g.color.length; i += 3) {
-      seen.add([0, 1, 2].map((k) => g.color[i + k].toFixed(3)).join(','))
+  it('normalises every vertex into 0…1 and spans a real range', () => {
+    for (const v of g.value) { expect(v).toBeGreaterThanOrEqual(0); expect(v).toBeLessThanOrEqual(1) }
+    expect(new Set([...g.value].map((v) => v.toFixed(3))).size,
+      'a real stress field is not one flat value').toBeGreaterThan(3)
+  })
+
+  it('puts the ZERO of a signed field at 0.5, where the ramp is pale', () => {
+    // The defect the value attribute exists for: handing the GPU two COLOURS
+    // to blend walks a straight line through RGB and never passes through the
+    // ramp's own middle, so a member spanning the sign change was drawn
+    // without its pale zero band at all. Interpolating the VALUE puts 0.5
+    // exactly where σ = 0 is, and the fragment shader colours it from there.
+    const vals = memberValues(BEAM, 'sigma')
+    let crossed = false
+    for (let i = 1; i < vals.length; i++) {
+      if (Math.sign(vals[i][0]) !== Math.sign(vals[i - 1][0])) crossed = true
     }
-    expect(seen.size, 'a real stress field is not one flat colour').toBeGreaterThan(3)
+    expect(crossed, 'fixture must contain a sign change').toBe(true)
+    // Somewhere along the top fibre the normalised value passes through 0.5.
+    const top = vals.map((r) => normalise(r[0], dom))
+    expect(Math.min(...top)).toBeLessThan(0.5)
+    expect(Math.max(...top)).toBeGreaterThan(0.5)
   })
 
   it('puts the prism on the member, at the section half-width', () => {
@@ -239,7 +255,7 @@ describe('keys that do not blow up', () => {
       const d = memberContourDomain([BEAM, COLUMN], key as MemberStressKey)
       const geo = memberContourGeometry([BEAM, COLUMN], key as MemberStressKey, d)
       expect(geo, key).toBeTruthy()
-      expect(geo!.color.every((c) => Number.isFinite(c)), key).toBe(true)
+      expect([...geo!.value].every((c) => Number.isFinite(c)), key).toBe(true)
     }
   })
 

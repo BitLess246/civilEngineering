@@ -160,6 +160,46 @@ const DIVERGING: readonly RGB[] = [
   [244, 165, 130], [214, 96, 77], [178, 24, 43], [103, 0, 31],
 ]
 
+/**
+ * The ramp's control points, for whoever needs to sample it somewhere other
+ * than JavaScript — the contour shader takes these as a uniform so the picture
+ * and the legend are the SAME nine numbers rather than two transcriptions.
+ */
+export const rampStops = (signed: boolean): readonly RGB[] => (signed ? DIVERGING : VIRIDIS)
+
+/**
+ * How many discrete colour bands a contour is drawn in. 0 = smooth.
+ *
+ * Bands are what make a contour plot a CONTOUR plot. A continuously blended
+ * field has no iso-boundaries to read, which is why every FEA post-processor
+ * (ETABS, STAAD, ANSYS) bands its stress plots: the boundary between two bands
+ * IS the iso-line, and without it the reader cannot tell 40% of peak from 55%
+ * anywhere on the model. 12 is the usual default and the one used here.
+ */
+export const DEFAULT_BANDS = 12
+
+/**
+ * Snap a normalised position to the CENTRE of its band.
+ *
+ * Centre, not edge: a band drawn in its own lower-edge colour is half a band
+ * darker than the values it contains, so the legend swatch and the surface
+ * disagree by half a step everywhere. Shared by the legend swatches and the
+ * shader, so the two cannot drift.
+ */
+export function bandCenter(t: number, bands: number): number {
+  if (!(bands > 0)) return Math.max(0, Math.min(1, t))
+  const c = Math.max(0, Math.min(1, t))
+  const i = Math.min(bands - 1, Math.floor(c * bands))
+  return (i + 0.5) / bands
+}
+
+/** The value boundaries between bands, low → high — the iso-levels a reader
+ *  looks a value up against. `bands + 1` entries. */
+export function bandEdges(d: Domain, bands: number): number[] {
+  const n = Math.max(1, bands)
+  return Array.from({ length: n + 1 }, (_, i) => d.min + ((d.max - d.min) * i) / n)
+}
+
 /** `rgb(r,g,b)` for a normalised position on the ramp this domain calls for. */
 export function stressColor(t: number, signed: boolean): string {
   const [r, g, b] = sample(signed ? DIVERGING : VIRIDIS, t)
@@ -172,8 +212,18 @@ export function stressColorRGB(t: number, signed: boolean): RGB {
   return [r / 255, g / 255, b / 255]
 }
 
-/** `n` evenly spaced swatches, low → high, for a colour-bar legend. */
-export function rampSwatches(n: number, signed: boolean): string[] {
+/**
+ * Swatches for the colour bar, low → high.
+ *
+ * With `bands > 0` this returns EXACTLY the band colours the surface is drawn
+ * in — one swatch per band, each at its band centre — so the bar is a key to
+ * the picture rather than a decorative gradient beside it. A legend that
+ * cannot be matched to a region is not a legend.
+ */
+export function rampSwatches(n: number, signed: boolean, bands = 0): string[] {
+  if (bands > 0) {
+    return Array.from({ length: bands }, (_, i) => stressColor(bandCenter((i + 0.5) / bands, bands), signed))
+  }
   if (n < 2) return [stressColor(0.5, signed)]
   return Array.from({ length: n }, (_, i) => stressColor(i / (n - 1), signed))
 }
