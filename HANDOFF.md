@@ -863,6 +863,74 @@ member its OWN section id, so a test that spreads that model and references
   on**: it is the conventional active-tab underline with no fill behind it, and
   removing it leaves colour as the only active marker.
 
+## The stock palette is gone (PRs #775, #776, #777 — Sep 2026)
+
+1 083 stock `slate-*` utilities across 72 files, 67 stock status utilities and
+30 `blue-*` now name semantic roles. Three phases, one PR each: the long tail
+(70 files), `SoilInvestigation.tsx`, `ModelSpace.tsx`.
+
+**It was NOT an accessibility fix, and two measurements said otherwise before
+one was right.** Blueprint inverts the stock slate ramp, so `text-slate-600` on
+`bg-sheet` is 6.01:1 there and 7.56:1 on Drafting — both pass AA. Hex arithmetic
+against the *stock* ramp ignored the inversion (2.22:1); parsing
+`getComputedStyle`'s `oklch(…)` as RGB was worse (1.86:1). **The only reliable
+way to read a computed colour back is to paint it into a canvas `fillStyle` and
+read the sRGB** — write that down, it comes up every time contrast is measured
+in this app. The real reason to migrate is consistency: naming the stock ramp
+inherits whatever the inversion gives you; naming a role inherits what the theme
+meant.
+
+Mapping (by luminance against Drafting): `text-slate-600/700/800/900` →
+`muted / ink-2 / ink / ink`; `text-slate-300` → `faint`; `border-slate-50/100`
+→ `hairline-2`; `border-slate-200` → `hairline`; `border-slate-300` →
+`field-line`; `bg-slate-50/100/200` → `sheet-2 / paper / hairline`;
+`bg-slate-900/NN` → `rail/NN`.
+
+**What stays stock, and why.** `sky`, `violet`, `teal` and `purple` carry
+INFORMATIONAL tags — provenance, rigid-offset panels, shear-vs-gravity walls —
+not verdicts, and no role names that. They keep the (now complete, inverted)
+stock ramp. The CPM diagram's eight literal hexes are its early/late date-block
+key, a drawing convention with a printed legend. Everything else that paints
+colour names a token.
+
+**Four defects surfaced on the way, all fixed:**
+
+1. **The status guard was reading one attribute.** It asserted "no stock status
+   colour anywhere" and was GREEN while 37 shipped — `classStrings()` reads
+   `className=`, and all 37 lived in lookup tables, module constants and helper
+   arguments. Tailwind scans the source; the guard now scans the source.
+2. **`teal` and `purple` had no inversion block at all**, so two components kept
+   their stock LIGHT values on Blueprint's dark ground. Both generated, plus a
+   rule asking from the component side: every family a `.tsx` names must have a
+   block.
+3. **`ModelSpace` hardcoded `text-[#7c3aed]` seven times** — an arbitrary hex
+   follows NO theme, where a stock family at least inverts. All seven meant
+   `text-violet-600`; naming the family IS the fix. A fourth rule now bans
+   colour literals outside the drawing keys.
+4. **The footer's `·` was a LINE token used as TEXT** (`text-hairline-2`,
+   1.18:1) — invisible. From #774, caught by the browser sweep.
+
+**Two lessons, both earned the hard way in this session:**
+
+- **A guard is only as good as the SPAN it reads.** After diagnosing #1, I wrote
+  the identical bug into the new hex rule an hour later — it used
+  `classStrings`, and the literals it allowlists are helper arguments, so
+  pointing the allowlist at a non-existent file left it green. If you add a
+  source-scanning rule here, scan the file, and sabotage it by breaking its
+  ALLOWLIST as well as its subject.
+- **`git checkout <file>` during a sabotage will silently revert uncommitted
+  work.** It cost two rounds. **Commit first, then sabotage.**
+
+The migration's own verification: `themeUsage.test.ts` carries four absolute
+rules (no stock neutral, no stock status, no uninverted family, no colour
+literal) with no ratchet left; and a Playwright sweep over 10 routes × Drafting
+and Blueprint — including a populated ModelSpace across its Properties, Analysis
+and Design tabs, and `/soils` driven to its loaded parameters table — reports
+**0 text nodes below AA**. Note the sweep's own trap: a probe that SKIPS a
+translucent background instead of compositing it reported the viewport's overlay
+label at exactly 1.00:1. An exact tie is the signature of that bug, not a real
+finding.
+
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
 1. Open **claude.ai/code** (mobile browser) or the **Claude app**, same account.
