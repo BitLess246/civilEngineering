@@ -48,22 +48,21 @@ const classStrings = (src: string): string[] =>
 const PROPS = 'text|bg|border|ring|divide|fill|stroke|decoration|from|via|to|placeholder|accent|outline|shadow|caret'
 
 /**
- * The one file whose migration is still in flight. This is a RATCHET, not an
- * exemption: `ModelSpace.tsx` (232 neutrals, 30 blue/teal/purple) is phase 3 of
- * the same migration, and that phase deletes this constant. `SoilInvestigation`
- * came off the list in phase 2. Every other file in the app is held to the rule
- * now, which is the point of landing the guard with the first phase rather than
- * after the last one.
+ * There is no ratchet any more.
+ *
+ * This constant held `ModelSpace.tsx` and `SoilInvestigation.tsx` while their
+ * 422 neutrals were migrated in phases 2 and 3 — landed WITH the first phase
+ * rather than after the last, so every other file was held to the rule from the
+ * day it existed instead of the day the debt cleared. Phase 3 emptied it. The
+ * rules below are absolute; if one ever needs an exemption again, it belongs
+ * here, named, with the phase that will remove it.
  */
-const DEBT = ['ModelSpace.tsx']
-const inDebt = (file: string) => DEBT.some((d) => file.endsWith(d))
 
-/** Every `<prop>-<family>-<step>` in the app, outside the in-flight files. */
+/** Every `<prop>-<family>-<step>` in the app. */
 const scan = (families: string) => {
   const re = new RegExp(`(?<![\\w:-])(?:${PROPS})-(?:${families})-\\d{2,3}(?![\\w-])`, 'g')
   const found: string[] = []
   for (const [file, src] of Object.entries(SOURCES)) {
-    if (inDebt(file)) continue
     for (const m of src.matchAll(re)) found.push(`${file}: ${m[0]}`)
   }
   return found
@@ -232,12 +231,59 @@ describe('every stock family the app still names is inverted for Blueprint', () 
     const inverted = new Set(
       [...bp.matchAll(/--color-([a-z]+)-\d{2,3}:/g)].map((m) => m[1]))
     const named = new Set<string>()
-    for (const [file, src] of Object.entries(SOURCES)) {
-      if (inDebt(file)) continue
+    for (const src of Object.values(SOURCES)) {
       for (const m of src.matchAll(
         new RegExp(`(?<![\\w:-])(?:${PROPS})-([a-z]+)-\\d{2,3}(?![\\w-])`, 'g'))) named.add(m[1])
     }
     const orphans = [...named].filter((f) => !inverted.has(f))
     expect(orphans, 'named in a component, absent from the inversion block').toEqual([])
+  })
+})
+
+describe('colour is never written as a literal in a class', () => {
+  /**
+   * An arbitrary value — `text-[#7c3aed]` — is the one spelling that follows NO
+   * theme at all. A stock family at least inverts on Blueprint; a literal hex is
+   * the same pixels on every ground, which is how the modal panel's accent came
+   * out as stock violet-600 on a near-black sheet. `ModelSpace.tsx` carried
+   * seven of them, all the same colour, all of which simply meant
+   * `text-violet-600` — and naming the family was the whole fix, because the
+   * inversion then applies for free.
+   *
+   * This rule is broader than the migration that prompted it, on purpose: the
+   * point of a token layer is that nothing outside it states a colour.
+   */
+  const FIXED = [
+    // The CPM precedence diagram's date-block key: early dates green, late
+    // dates teal, on white cells inside the drawn node. A drawing convention
+    // with a printed legend, not a theme surface — the same call the migration
+    // made for the other screen drawings. It has to stay legible against its
+    // own fill in every theme, which is exactly what NOT following the theme
+    // buys. Its verdict colours (critical vs not) are roles, not literals.
+    'CriticalPathDiagram.tsx',
+  ]
+
+  it('uses no arbitrary colour value outside the drawing keys', () => {
+    const found: string[] = []
+    for (const [file, src] of Object.entries(SOURCES)) {
+      if (FIXED.some((f) => file.endsWith(f))) continue
+      for (const c of classStrings(src)) {
+        for (const m of c.matchAll(/(?<![\w:-])[a-z-]+-\[#[0-9a-fA-F]{3,8}\](?![\w-])/g)) {
+          found.push(`${file}: ${m[0]}`)
+        }
+      }
+    }
+    expect(found, 'name a token or a family instead').toEqual([])
+  })
+
+  it('still watches the allowlisted files for everything else', () => {
+    // An allowlist that silences a whole file is how the status rule went blind.
+    // This one is scoped to ONE spelling: the neutral and status rules above
+    // run over `CriticalPathDiagram.tsx` like any other file, and did in fact
+    // catch its `bg-red-500` and `bg-slate-400`.
+    const cpd = Object.entries(SOURCES).find(([f]) => f.endsWith('CriticalPathDiagram.tsx'))
+    expect(cpd, 'the allowlisted file must exist, or the entry is stale').toBeTruthy()
+    expect(scan('slate|gray|zinc|neutral|stone').filter((h) => h.includes('CriticalPath')))
+      .toEqual([])
   })
 })
