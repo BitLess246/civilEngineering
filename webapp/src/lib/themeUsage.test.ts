@@ -48,14 +48,14 @@ const classStrings = (src: string): string[] =>
 const PROPS = 'text|bg|border|ring|divide|fill|stroke|decoration|from|via|to|placeholder|accent|outline|shadow|caret'
 
 /**
- * The two files whose migration is still in flight. This is a RATCHET, not an
- * exemption: `ModelSpace.tsx` (232 neutrals) and `SoilInvestigation.tsx` (190)
- * are phases 2 and 3 of the same migration, and the phase that empties them
- * deletes this constant. Every other file in the app is held to the rule now,
- * which is the point of landing the guard with the first phase rather than
+ * The one file whose migration is still in flight. This is a RATCHET, not an
+ * exemption: `ModelSpace.tsx` (232 neutrals, 30 blue/teal/purple) is phase 3 of
+ * the same migration, and that phase deletes this constant. `SoilInvestigation`
+ * came off the list in phase 2. Every other file in the app is held to the rule
+ * now, which is the point of landing the guard with the first phase rather than
  * after the last one.
  */
-const DEBT = ['ModelSpace.tsx', 'SoilInvestigation.tsx']
+const DEBT = ['ModelSpace.tsx']
 const inDebt = (file: string) => DEBT.some((d) => file.endsWith(d))
 
 /** Every `<prop>-<family>-<step>` in the app, outside the in-flight files. */
