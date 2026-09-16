@@ -83,6 +83,7 @@ import { ShellContourPanel } from '../components/ShellContourPanel'
 import { ShellStress3D } from '../components/modelSpace/shellStress'
 import { contourData } from '../lib/shellContour'
 import { STRESS_KEYS, rampSwatches, rampTicks, formatStress, isMembrane, unitFor, labelFor, type StressKey } from '../lib/stressScale'
+import { parseCase, describeCase, caseNodePeak, caseLoads, caseBaseShear } from '../lib/lateralCases'
 import { RecordedSpectrumPanel } from '../components/RecordedSpectrumPanel'
 import { elasticResponseSpectrum, nscp208DesignCurve, type AccelSpectrum, type DesignSpectrumPoint } from '../engine/accelSpectrum'
 import { parseAccelerogram } from '../engine/accelerogram'
@@ -299,6 +300,11 @@ export default function ModelSpace() {
   const [designShells, setDesignShells] = useState(false)
   const [tryBars, setTryBars] = useState(b('tryBars', true))        // let design/optimize pick bar Ø from a ladder
   const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
+  // WHICH lateral case the load diagram is showing. null = the model as
+  // committed. A preview NEVER writes to the model: the committed primary is
+  // what the drift check, the design envelope and the report are based on, and
+  // a picture you clicked to look at must not quietly change any of them.
+  const [previewCase, setPreviewCase] = useState<string | null>(null)
   // The recovered stress field, painted on the mesh it came from. Default ON
   // once a solve exists: the reason to run it is to look at it.
   const [showStress, setShowStress] = useState(true)
@@ -678,6 +684,16 @@ export default function ModelSpace() {
   const primAxis: 'x' | 'z' = (eDirs[0] ?? '+X').includes('X') ? 'x' : 'z'
   const seis = seisXZ?.[primAxis] ?? null
   const lateral = [...eCases, ...wCases]
+  // The case being previewed — resolved by NAME, so regenerating the cases
+  // with different options (dirs, orth30, torsion) drops a stale selection
+  // back to the committed model instead of showing a case that no longer
+  // exists.
+  const shownCase = lateral.find((c) => c.name === previewCase) ?? null
+  // ONE arrow scale for every case. `Loads3D` normalises against the largest
+  // force it is given, so a case drawn alone always renders its peak at full
+  // length — step from a seismic case to a wind case that way and the wind
+  // draws exactly as big as the earthquake whatever the two base shears are.
+  const lateralPeak = caseNodePeak(lateral)
   // Infer seismic lateral system from R for column tie-detailing.
   // Only applies when E loads are present (user clicked "Generate E cases").
   const hasELoads = model?.loads.some((l) => l.cat === 'E') ?? false
@@ -1928,7 +1944,11 @@ export default function ModelSpace() {
                 {/* The joints. Without them two collinear beams read as one
                     line, and the count of elements is not visible at all. */}
                 {skeleton && <Nodes3D nodePos={nodePos} />}
-                {showLoads && <Loads3D model={model} nodePos={nodePos} />}
+                {showLoads && (
+                  <Loads3D model={model} nodePos={nodePos}
+                    loads={caseLoads(model, shownCase)}
+                    nodeScale={lateralPeak > 0 ? lateralPeak : undefined} />
+                )}
                 {showStress && shellStress && (
                   <ShellStress3D nodes={shellStress.nodes} elems={shellStress.elems}
                     stresses={shellStress.stresses} contourKey={stressKey} />
@@ -4392,9 +4412,99 @@ export default function ModelSpace() {
                     Show load diagrams on the model
                   </label>
                   {showLoads && model && model.loads.length > 0 && (
-                    <Swatches items={[...new Set(model.loads.map((l) => l.cat))]
+                    <Swatches items={[...new Set(caseLoads(model, shownCase).map((l) => l.cat))]
                       .map((cat) => [LOAD_COLOR[cat] ?? '#64748b', cat] as const)} />
                   )}
+                  {/* WHICH LATERAL CASE.
+                      `buildECases` expands the seismic pattern into dirs ×
+                      ±0.3·perpendicular (§208.8.1) × ⟳/⟲ accidental torsion
+                      (§208.7.2.7) — up to SIXTEEN cases — and the design
+                      envelope solves every one. Only the primary direction is
+                      committed to `model.loads`, so until now fifteen of the
+                      sixteen were drawn nowhere. */}
+                  {showLoads && model && lateral.length > 0 && (() => {
+                    const i = shownCase ? lateral.indexOf(shownCase) : -1
+                    const step = (d: number) => {
+                      const n = i + d
+                      setPreviewCase(n < 0 || n >= lateral.length ? null : lateral[n].name)
+                    }
+                    const V = shownCase ? caseBaseShear(shownCase) : null
+                    const p = shownCase ? parseCase(shownCase.name) : null
+                    return (
+                      <div className="mt-1.5">
+                        <div className="flex items-center gap-1">
+                          <select value={shownCase?.name ?? ''} aria-label="Lateral case to preview"
+                            onChange={(e) => setPreviewCase(e.target.value || null)}
+                            className="min-w-0 flex-1 rounded border border-field-line bg-field px-2 py-1 text-xs text-ink">
+                            <option value="">Model as committed ({eDirs[0] ?? '+X'} primary)</option>
+                            {eCases.length > 0 && (
+                              <optgroup label={`Earthquake — ${eCases.length} case${eCases.length === 1 ? '' : 's'} (§208)`}>
+                                {eCases.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                              </optgroup>
+                            )}
+                            {wCases.length > 0 && (
+                              <optgroup label={`Wind — ${wCases.length} case${wCases.length === 1 ? '' : 's'} (§207)`}>
+                                {wCases.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                              </optgroup>
+                            )}
+                          </select>
+                          {/* Stepping is the point: these cases are read by
+                              COMPARING them, and hunting the next one in a
+                              sixteen-row dropdown each time defeats that. */}
+                          <button type="button" onClick={() => step(-1)} disabled={i < 0}
+                            aria-label="Previous lateral case"
+                            className="rounded border border-field-line px-2 py-1 text-xs text-ink disabled:opacity-40">‹</button>
+                          <button type="button" onClick={() => step(1)} disabled={i >= lateral.length - 1}
+                            aria-label="Next lateral case"
+                            className="rounded border border-field-line px-2 py-1 text-xs text-ink disabled:opacity-40">›</button>
+                        </div>
+                        {shownCase ? (
+                          <>
+                            <p className="mt-1 text-[11px] leading-snug text-muted">
+                              {describeCase(shownCase.name)} Case {i + 1} of {lateral.length}.
+                            </p>
+                            <p className="mt-1 text-[11px] leading-snug text-muted">
+                              Resultant <span className="font-mono tabular-nums">ΣFx {f1(V!.Fx)}</span>,
+                              {' '}<span className="font-mono tabular-nums">ΣFz {f1(V!.Fz)}</span> kN
+                              {p?.torsion && ' — accidental torsion is a couple, so it moves where the storey force acts without changing either resultant'}.
+                            </p>
+                            {/* A PREVIEW, NOT A CHANGE. Said out loud because
+                                every other control in this panel that changes
+                                the picture also changes the model. */}
+                            <p className="mt-1 text-[11px] leading-snug text-muted">
+                              Preview only — the model still carries the committed
+                              {' '}{eDirs[0] ?? '+X'} pattern, and the drift check, design
+                              envelope and report are unchanged. All {lateral.length} cases
+                              are solved by the envelope either way.
+                            </p>
+                            {/* HONEST ABOUT THE ARROWS. One scale across every
+                                case is what stops a weak case re-normalising to
+                                its own peak and drawing the same size as a
+                                strong one. But `lenOf` runs 0.5–1.2 m, a floor
+                                that exists so a small load stays visible, so
+                                the mapping is not proportional: measured on
+                                this fixture a 7× force ratio (seismic 175 kN
+                                against wind 25 kN) draws as a 2× length ratio.
+                                The resultant above is the exact number; say so
+                                rather than inviting anyone to measure the
+                                picture. */}
+                            <p className="mt-1 text-[11px] leading-snug text-muted">
+                              Arrow length uses one scale across all {lateral.length} cases, so a
+                              weaker case draws shorter — but a visibility floor keeps small
+                              forces drawable, so length is indicative rather than proportional.
+                              Read the resultant above for the number.
+                            </p>
+                          </>
+                        ) : (
+                          <p className="mt-1 text-[11px] leading-snug text-muted">
+                            {lateral.length} lateral case{lateral.length === 1 ? '' : 's'} generated
+                            and enveloped. Pick one to see it on the model — the committed pattern
+                            is the primary direction only.
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
                 {/* PLATE STRESS CONTOUR.
                     The control stays visible with nothing to show and says so,
