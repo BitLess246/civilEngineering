@@ -241,9 +241,17 @@ design in `lib/planDetails.ts` and listed in `PlansPanel`.
   steel at 1.25fy, not the single product `1.25fyAs`. `ldhInputs` travels with
   the result so the printed ℓdh can be checked against its own fy/db/f'c/λ.
   Benchmark `joint-shear-ratio`; suite **4487**.
-- **Remaining**: Phase 6b — fold the detail steel (opening trimmers, wall corner
-  and U-bars, diagonal corner bars, and the wall curtains, which the BOM counts
-  as ZERO today) into `takeoff.ts`.
+- **Phase 6b — ✔ shipped (#764)**, and the series is closed. Four kinds of
+  reinforcement had been on the DRAWINGS since #598/#599 and in the BOM never:
+  opening trimmers, the re-entrant diagonals, wall curtains and wall corner
+  bars. The worst was not a few kilos — `byElement` pushed `steelKg: 0` for
+  every wall in the structure, and a shear wall's curtains are the largest
+  single item of reinforcement in a core (hand-checked on the fixture: lw 6 m,
+  hw 3 m, s 226.19 → 14 horizontals + 27 verticals, **146.5 kg where the bill
+  read 0**). `slabOpeningBundles` moved from `lib/planDetails.ts` into
+  `engine/slabOpening.ts` (re-exported, callers unchanged) and the take-off
+  reads THAT rather than re-walking `plate.openings` — three lines that would
+  have been exactly the two-walks-of-one-truth failure #600 exists to prevent.
 - **Drafting lesson, paid for three times**: assert on primitives and every sheet
   looks fine. RENDER it (headless Chromium at
   `/opt/pw-browsers/chromium-1194/chrome-linux/chrome --no-sandbox`, write the SVG
@@ -561,6 +569,94 @@ because the original `buildSeismicMass` did. That overstates the seismic mass
 of a wood-frame model several-fold. It is a one-line fix with a wide blast
 radius — every seismic weight, base shear and period on a timber model — so it
 wants its own PR and its own before/after numbers.
+
+## The viewport shows what the analysis already knew (Sep 2026)
+
+Two PRs, same shape of defect: the engine had computed something for a long
+time and the 3D view drew none of it, or drew it in a way that lost what
+mattered. Both are **layer 9 — presentation only**; neither touched a solver,
+the bridge, or the design envelope.
+
+### Plate stress contours in 3D (#765)
+
+`recoverShellStress` has produced a per-element field since the shell phase and
+`ShellContourPanel` has drawn it — as ONE FLAT 2D PROJECTION of every plate at
+once. It picks the two axes with the widest spread and drops the third, so a
+three-storey frame stacks its slabs at y = 3, 6, 9 on top of each other and any
+wall lands on the picture edge-on. Fine on one isolated panel; on a real model
+it is a picture of everything superimposed.
+
+- `lib/stressScale.ts` — ONE ramp and domain, shared by the 2D panel and the 3D
+  layer, so an element cannot read amber on the plan and red in the model.
+  Signed quantities get a domain **symmetric about zero**: on a linear min→max
+  scale a slab running −40 … +10 kN·m/m puts the sign change at 80% of the bar
+  and hogging reads as "medium" rather than "the other sign", which is where the
+  top steel goes. Von Mises is the only unsigned quantity and runs 0 → max.
+- The sequential ramp is **viridis, not a rainbow**. A rainbow is not
+  perceptually uniform: it invents a hard edge at cyan and at yellow that no
+  gradient in the data put there, so readers see contour bands that are
+  artefacts of the palette, and it collapses under the common red–green
+  deficiencies. The ramp is deliberately NOT a theme token — a data colour
+  encodes a magnitude, not a brand.
+- `lib/shellContour.ts` is pure and separate from the component because **a
+  WebGL screenshot is not evidence in this repo** (the capture reads black often
+  enough). The mesh is checked as numbers: one vertex per node, one triangle per
+  element, every index in range, and an element naming a missing node DROPPED
+  rather than indexed as undefined — three.js turns that into a triangle at the
+  origin, a stray shard that reads as broken geometry.
+
+**Three defects only the browser run could find**, all fixed before merge:
+the default quantity was von Mises, which is IDENTICALLY ZERO on a flat slab
+under transverse pressure (CST and DKT are decoupled) — measured `vonMises peak
+0.00` against `Mx peak 16.01`, so the feature opened blank on the commonest case
+it exists for; a flat field drew a 0.00–1.00 bar over uniformly zero data, which
+reads as a scale you can look values up on; and the bar spans the smoothed
+**nodal** field while the peak quotes the worst **element** (16.01 against a bar
+ending at 12.7), which side by side reads as an off-scale error.
+
+### Every earthquake and wind case, previewable (#766)
+
+`buildECases` expands to up to SIXTEEN cat-E cases (dirs × ±0.3·perpendicular
+§208.8.1 × ⟳/⟲ accidental torsion §208.7.2.7) and `generateW` to four. The
+envelope solves all twenty. But `commitECases` / `generateW` commit the PRIMARY
+direction alone and `Loads3D` drew `model.loads`, so **nineteen of the twenty
+cases governing the design were drawn nowhere at all.**
+
+`lib/lateralCases.ts` + a grouped selector with ‹ › stepping in the Display tab.
+Two things the obvious implementation gets wrong:
+
+- **One arrow scale across all cases.** `Loads3D` normalises against the largest
+  force it is handed, so a case drawn ALONE always renders its own peak at full
+  length — step from seismic to wind and the wind draws exactly as big as the
+  earthquake whatever the base shears are. `caseNodePeak` passes the peak across
+  every case. Measured: seismic 175.4 kN vs wind 25.0 kN now draw 1.20 m vs
+  0.60 m — directionally true but NOT proportional, because `lenOf` maps force
+  onto 0.5–1.2 m and that floor exists so a small load stays drawable. The panel
+  says so and points at the exact resultant rather than inviting anyone to
+  measure the picture. (The first draft of that sentence claimed the cases were
+  "comparable"; measuring the scaling is what corrected it.)
+- **A preview never commits.** The committed primary is what the drift check,
+  the envelope and the report are based on. Selecting a seismic case also strips
+  the committed WIND primary — E and W are alternative cases, no NSCP
+  combination contains both, so leaving wind on screen under a seismic preview
+  draws a loading the structure is never checked for.
+
+**Guard lesson, again:** one of the three wiring guards **passed its sabotage**.
+It searched the whole page for `caseLoads(model, shownCase)`, which the swatch
+legend also calls, so cutting the overlay's own prop back to `model.loads` left
+the string present and the test green. It is anchored to the `<Loads3D>` element
+now. A source-text guard is only as good as the span it reads.
+
+### Open follow-ups from these two
+
+- The contour paints the **service (unfactored)** field `recoverShellStress`
+  returns, the same one the 2D panel always showed. Wood-Armer design uses the
+  factored field separately; the panel says which it is.
+- Nodal smoothing is unweighted element-count averaging. Identical to
+  area-weighted on the uniform meshes the mesher produces; on a graded mesh it
+  would bias slightly toward the small elements.
+- The case preview shows a case's **loads, not its results**. Finding which case
+  governs a given column still means reading the design output.
 
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
