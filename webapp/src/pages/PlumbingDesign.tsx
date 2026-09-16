@@ -22,9 +22,9 @@ function Field({ label, value, onChange, unit, step = 'any', hint }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
+      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
       <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+        className="rounded-md border border-field-line px-2.5 py-1.5" />
       {hint && <span className="mt-0.5 text-[10px] text-faint">{hint}</span>}
     </label>
   )
@@ -32,9 +32,9 @@ function Field({ label, value, onChange, unit, step = 'any', hint }: {
 
 function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
   return (
-    <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
+    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
       <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -91,7 +91,7 @@ export default function PlumbingDesign() {
 
   const tabBtn = (id: Tab, label: string) => (
     <button type="button" onClick={() => { setTab(id); scrollTop() }}
-      className={`border-b-2 px-1 pb-1.5 text-sm font-semibold ${tab === id ? 'border-brand text-brand' : 'border-transparent text-faint hover:text-slate-600'}`}>
+      className={`border-b-2 px-1 pb-1.5 text-sm font-semibold ${tab === id ? 'border-brand text-brand' : 'border-transparent text-faint hover:text-muted'}`}>
       {label}
     </button>
   )
@@ -102,7 +102,7 @@ export default function PlumbingDesign() {
       <CalcBody wide>
         <div className="space-y-5">
       <ReportControls title="Plumbing Design Report" badges={['RNPCP 2000']} />
-      <p className="mt-2 text-sm text-slate-600">
+      <p className="mt-2 text-sm text-muted">
         Water supply, sanitary drainage (DWV) and on-site sewage treatment to the Revised National Plumbing Code
         of the Philippines (RNPCP 2000). Set the fixture schedule once; every tab reads from it.
       </p>
@@ -112,9 +112,9 @@ export default function PlumbingDesign() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[13.5px] font-bold text-ink">Fixture schedule</h2>
           <label className="flex items-center gap-2 text-sm">
-            <span className="font-medium text-slate-600">Occupancy</span>
+            <span className="font-medium text-muted">Occupancy</span>
             <select value={occ} onChange={(e) => setOcc(e.target.value as Occupancy)}
-              className="rounded-md border border-slate-300 px-2 py-1">
+              className="rounded-md border border-field-line px-2 py-1">
               <option value="private">Private</option>
               <option value="public">Public</option>
             </select>
@@ -123,21 +123,21 @@ export default function PlumbingDesign() {
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
           {FIXTURE_LIST.map((f) => (
             <label key={f.id} className="flex items-center justify-between gap-2 text-sm">
-              <span className="text-slate-600" title={`WSFU ${f.wsfu[occ]} · DFU ${f.dfu[occ]}`}>{f.label}</span>
+              <span className="text-muted" title={`WSFU ${f.wsfu[occ]} · DFU ${f.dfu[occ]}`}>{f.label}</span>
               <input type="number" min={0} step={1} value={counts[f.id] ?? 0}
                 onChange={(e) => setCount(f.id, num(e.target.value))}
-                className="w-16 rounded-md border border-slate-300 px-2 py-1 text-right" />
+                className="w-16 rounded-md border border-field-line px-2 py-1 text-right" />
             </label>
           ))}
         </div>
-        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-slate-100 pt-2 text-sm">
-          <span className="text-muted">Total supply units <b className="font-mono text-slate-800">{f0(wsfu)} WSFU</b></span>
-          <span className="text-muted">Total drainage units <b className="font-mono text-slate-800">{f0(dfu)} DFU</b></span>
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-hairline-2 pt-2 text-sm">
+          <span className="text-muted">Total supply units <b className="font-mono text-ink">{f0(wsfu)} WSFU</b></span>
+          <span className="text-muted">Total drainage units <b className="font-mono text-ink">{f0(dfu)} DFU</b></span>
         </div>
       </section>
 
       {/* Tabs */}
-      <div className="mt-6 flex items-center gap-5 border-b border-slate-200">
+      <div className="mt-6 flex items-center gap-5 border-b border-hairline">
         {tabBtn('supply', 'Water Supply')}
         {tabBtn('drainage', 'Drainage (DWV)')}
         {tabBtn('septic', 'Septic Tank')}
@@ -153,9 +153,9 @@ export default function PlumbingDesign() {
               <Field label="Fittings (equiv. L)" unit="m" value={fittingLength} onChange={setFittingLength} hint="Table A-2" />
               <Field label="Highest fixture rise Z" unit="m" value={riseZ} onChange={setRiseZ} />
               <label className="flex flex-col text-sm">
-                <span className="mb-1 font-medium text-slate-600">System (Chart A-2/A-3)</span>
+                <span className="mb-1 font-medium text-muted">System (Chart A-2/A-3)</span>
                 <select value={hunterSystem} onChange={(e) => setHunterSystem(e.target.value as HunterSystem)}
-                  className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                  className="rounded-md border border-field-line px-2.5 py-1.5">
                   <option value="tank">Flush tanks (A-2)</option>
                   <option value="valve">Flush valves (A-3)</option>
                 </select>
@@ -165,9 +165,9 @@ export default function PlumbingDesign() {
               <Field label="Meter drop" unit="kPa" value={pMeter} onChange={setPMeter} hint="Chart A-1" />
               <Field label="Residual (fixture)" unit="kPa" value={pFixture} onChange={setPFixture} hint={`${f0(pFixture / 6.89476)} psi`} />
               <label className="flex flex-col text-sm">
-                <span className="mb-1 font-medium text-slate-600">Pipe material</span>
+                <span className="mb-1 font-medium text-muted">Pipe material</span>
                 <select value={material} onChange={(e) => setMaterial(e.target.value as keyof typeof HAZEN_C)}
-                  className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                  className="rounded-md border border-field-line px-2.5 py-1.5">
                   {Object.keys(HAZEN_C).map((m) => <option key={m} value={m}>{m} (C = {HAZEN_C[m]})</option>)}
                 </select>
               </label>
@@ -201,9 +201,9 @@ export default function PlumbingDesign() {
             <h2 className="mb-3 text-[13.5px] font-bold text-ink">Drainage run</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <label className="flex flex-col text-sm">
-                <span className="mb-1 font-medium text-slate-600">Sewer slope</span>
+                <span className="mb-1 font-medium text-muted">Sewer slope</span>
                 <select value={slopePct} onChange={(e) => setSlopePct(num(e.target.value))}
-                  className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                  className="rounded-md border border-field-line px-2.5 py-1.5">
                   <option value={2}>2% (21 mm/m)</option>
                   <option value={1}>1% (10.5 mm/m)</option>
                   <option value={0.5}>0.5% (5.3 mm/m)</option>

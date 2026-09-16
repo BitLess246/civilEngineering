@@ -22,18 +22,18 @@ function Field({ label, value, onChange, unit, step = 'any' }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
+      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
       <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+        className="rounded-md border border-field-line px-2.5 py-1.5" />
     </label>
   )
 }
 
 function Out({ label, value, ok, sub }: { label: string; value: string; ok?: boolean; sub?: string }) {
   return (
-    <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
+    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
       <span className="text-muted">{label}{sub && <span className="ml-1 text-[11px] text-faint">{sub}</span>}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-slate-800' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
+      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
     </div>
   )
 }
@@ -53,7 +53,7 @@ function StressProfile({ q, B, L, Df, zMax }: { q: number; B: number; L: number;
     pts.map((p, i) => `${i ? 'L' : 'M'}${X(p[key]).toFixed(1)},${Y(p.z).toFixed(1)}`).join(' ')
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-slate-200 bg-sheet" style={{ maxHeight: 280 }}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-hairline bg-sheet" style={{ maxHeight: 280 }}>
       <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="#475569" strokeWidth={1.2} />
       <line x1={padL} y1={padT} x2={W - padR} y2={padT} stroke="#475569" strokeWidth={1.2} />
       {[0, 0.5, 1].map((f) => (
@@ -169,7 +169,7 @@ export default function Settlement() {
       <CalcBody wide>
         <div className="space-y-5">
       <ReportControls title="Foundation Settlement" badges={['Boussinesq', 'Terzaghi', 'Schmertmann']} report={report} />
-      <p className="mt-2 text-sm text-slate-600">
+      <p className="mt-2 text-sm text-muted">
         Immediate (elastic and Schmertmann) plus primary consolidation settlement of a rectangular footing on a
         layered profile. Stress increase by Boussinesq; consolidation layer by layer with the overconsolidated
         branch handled separately, so a stiff crust is not charged virgin compression it will never see.
@@ -188,7 +188,7 @@ export default function Settlement() {
         </div>
       </Card>
 
-      <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm
+      <section data-pdf-drawing className="mt-5 rounded-xl border border-hairline bg-sheet p-5 shadow-sm
         [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
         <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Soil profile</h2>
         <SoilProfile
@@ -199,12 +199,12 @@ export default function Settlement() {
           Df={Df} B={B} waterTable={wt} q={q} governing={govLayer} />
       </section>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <section className="mt-5 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Soil profile</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[12px]">
             <thead className="text-muted">
-              <tr className="border-b border-slate-200">
+              <tr className="border-b border-hairline">
                 <th className="py-1 pr-2 text-left">Layer</th>
                 <th className="py-1 pr-2">H (m)</th><th className="py-1 pr-2">γ</th><th className="py-1 pr-2">γsat</th>
                 <th className="py-1 pr-2">e₀</th><th className="py-1 pr-2">Cc</th>
@@ -213,8 +213,8 @@ export default function Settlement() {
             </thead>
             <tbody>
               {layers.map((l, i) => (
-                <tr key={i} className="border-b border-slate-100">
-                  <td className="py-1 pr-2 text-left text-slate-700">{l.name ?? `Layer ${i + 1}`}</td>
+                <tr key={i} className="border-b border-hairline-2">
+                  <td className="py-1 pr-2 text-left text-ink-2">{l.name ?? `Layer ${i + 1}`}</td>
                   {([
                     ['H', l.H], ['gamma', l.gamma], ['gammaSat', l.gammaSat ?? l.gamma],
                     ['e0', l.e0 ?? 0], ['Cc', l.Cc ?? 0], ['sigmaP', l.sigmaP ?? 0], ['cv', l.cv ?? 0],
@@ -222,7 +222,7 @@ export default function Settlement() {
                     <td key={key} className="py-0.5 pr-2">
                       <input type="number" step="any" value={v}
                         onChange={(e) => setLayer(i, { [key]: num(e.target.value) } as Partial<SoilLayer>)}
-                        className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                        className="w-16 rounded border border-hairline px-1 py-0.5 text-right font-mono" />
                     </td>
                   ))}
                 </tr>
@@ -262,7 +262,7 @@ export default function Settlement() {
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[12px]">
             <thead className="text-muted">
-              <tr className="border-b border-slate-200">
+              <tr className="border-b border-hairline">
                 <th className="py-1 pr-3 text-left">Layer</th><th className="py-1 pr-3">z mid (m)</th>
                 <th className="py-1 pr-3">σ′₀ (kPa)</th><th className="py-1 pr-3">Δσ (kPa)</th>
                 <th className="py-1 pr-3">σ′p (kPa)</th><th className="py-1 pr-3 text-left">Branch</th>
@@ -271,13 +271,13 @@ export default function Settlement() {
             </thead>
             <tbody className="font-mono">
               {cons.layers.map((l) => (
-                <tr key={l.name} className="border-b border-slate-100">
+                <tr key={l.name} className="border-b border-hairline-2">
                   <td className="py-0.5 pr-3 text-left">{l.name}</td>
                   <td className="py-0.5 pr-3">{f2(l.zMid)}</td>
                   <td className="py-0.5 pr-3">{f1(l.sigma0)}</td>
                   <td className="py-0.5 pr-3">{f1(l.dSigma)}</td>
                   <td className="py-0.5 pr-3">{f1(l.sigmaP)}</td>
-                  <td className={`py-0.5 pr-3 text-left ${l.branch === 'none' ? 'text-faint' : 'text-slate-600'}`}>
+                  <td className={`py-0.5 pr-3 text-left ${l.branch === 'none' ? 'text-faint' : 'text-muted'}`}>
                     {l.branch}
                   </td>
                   <td className="py-0.5 pr-3 font-semibold">{f1(l.settlement)}</td>

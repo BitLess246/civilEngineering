@@ -15,12 +15,12 @@ function Row({ c }: { c: ValidationCase }) {
   const d = pctDiff(c)
   const ok = d <= c.tol * 100 + 1e-9 || d < 0.01
   return (
-    <tr className="border-t border-slate-100 align-top">
+    <tr className="border-t border-hairline-2 align-top">
       <td className="py-2 pr-3">
-        <p className="font-medium text-slate-800">{c.title}</p>
+        <p className="font-medium text-ink">{c.title}</p>
         <p className="text-[11px] text-muted">{c.reference}</p>
       </td>
-      <td className="py-2 pr-3 font-mono text-[11px] text-slate-600">{c.formula}</td>
+      <td className="py-2 pr-3 font-mono text-[11px] text-muted">{c.formula}</td>
       <td className="py-2 pr-3 text-right font-mono">{fmt(c.manual)}</td>
       <td className="py-2 pr-3 text-right font-mono">{fmt(c.software)}</td>
       <td className="py-2 pr-3 text-right text-muted">{c.unit}</td>
@@ -45,16 +45,16 @@ function SolverModuleRow({ m }: { m: SolverModuleCoverage }) {
     else suites.push({ suite: t.suite, names: [t.name] })
   }
   return (
-    <div className="border-t border-slate-100 first:border-t-0">
+    <div className="border-t border-hairline-2 first:border-t-0">
       <button type="button" onClick={() => setOpen(!open)}
-        className="flex w-full items-baseline gap-2 py-1.5 text-left hover:bg-blue-50/40">
+        className="flex w-full items-baseline gap-2 py-1.5 text-left hover:bg-brand-tint/40">
         <span className="w-3 text-faint">{open ? '▾' : '▸'}</span>
-        <span className="font-mono text-[11px] font-semibold text-slate-800">
+        <span className="font-mono text-[11px] font-semibold text-ink">
           engine/{m.module}.ts
           {m.integration && <span className="ml-1 font-sans font-normal text-[10px] text-faint">(integration)</span>}
         </span>
         <span className="text-[11px] text-muted">{m.title}</span>
-        <span className="ml-auto rounded bg-slate-100 px-1.5 py-px font-mono text-[10px] text-slate-600">
+        <span className="ml-auto rounded bg-paper px-1.5 py-px font-mono text-[10px] text-muted">
           {m.tests.length}
         </span>
       </button>
@@ -65,8 +65,8 @@ function SolverModuleRow({ m }: { m: SolverModuleCoverage }) {
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{s.suite}</p>
               <ul className="mt-0.5 space-y-px">
                 {s.names.map((n) => (
-                  <li key={n} className="flex gap-1.5 text-[11px] text-slate-700">
-                    <span className="text-slate-300">·</span><span>{n}</span>
+                  <li key={n} className="flex gap-1.5 text-[11px] text-ink-2">
+                    <span className="text-faint">·</span><span>{n}</span>
                   </li>
                 ))}
               </ul>
@@ -91,7 +91,7 @@ export default function Validation() {
     <div className="mx-auto max-w-[1400px] px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Reference</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">Validation</h1>
-      <p className="mt-2 max-w-3xl text-sm text-slate-600">
+      <p className="mt-2 max-w-3xl text-sm text-muted">
         Each calculation engine is checked against an independent closed-form hand calculation from a
         textbook or the governing code clause. The <b>Software</b> column is produced by the same engine
         the design pages use; the <b>Manual</b> column is the analytical result. Every case below is also
@@ -99,7 +99,7 @@ export default function Validation() {
       </p>
 
       {/* Per-module pass-count summary */}
-      <div className="mt-5 rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+      <div className="mt-5 rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-md px-3 py-1.5 text-sm font-bold ${allOK ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
             {allOK ? '✓' : '✗'} {passing}/{total} benchmarks passing
@@ -122,7 +122,7 @@ export default function Validation() {
         return (
           <section key={cat} className="mt-8">
             <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">{cat}</h2>
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+            <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-muted">
@@ -145,8 +145,8 @@ export default function Validation() {
       {/* ── Solver-engine test coverage ── */}
       <section className="mt-10">
         <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted">Solver engine coverage</h2>
-        <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
-          <p className="max-w-3xl text-xs text-slate-600">
+        <div className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
+          <p className="max-w-3xl text-xs text-muted">
             The benchmarks above pin a number against a hand calculation. The <b>solvers</b> — the modules that
             actually compute a structural response — are additionally covered by{' '}
             <b>{SOLVER_TEST_COUNT} automated cases</b> across {SOLVER_COVERAGE.length} modules, listed in full below.
@@ -165,7 +165,7 @@ export default function Validation() {
               const mods = SOLVER_COVERAGE.filter((m) => m.group === g)
               const n = mods.reduce((s2, m) => s2 + m.tests.length, 0)
               return (
-                <span key={g} className="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700">
+                <span key={g} className="rounded-md bg-paper px-2.5 py-1.5 text-xs font-medium text-ink-2">
                   {g} · {mods.length} modules · {n} tests
                 </span>
               )
@@ -177,7 +177,7 @@ export default function Validation() {
             return (
               <div key={g} className="mt-4">
                 <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-brand">{g}</p>
-                <div className="rounded-lg border border-slate-200">
+                <div className="rounded-lg border border-hairline">
                   {mods.map((m) => <SolverModuleRow key={m.module} m={m} />)}
                 </div>
               </div>

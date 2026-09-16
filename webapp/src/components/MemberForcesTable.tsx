@@ -91,11 +91,11 @@ export function MemberForcesTable({
 
   const tabCls = (on: boolean) =>
     `rounded px-2.5 py-1 text-xs font-semibold transition-colors ${
-      on ? 'bg-brand text-on-solid' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+      on ? 'bg-brand text-on-solid' : 'bg-paper text-muted hover:bg-hairline'
     }`
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+    <div className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
       <h2 className="mb-3 text-[1.02rem] font-bold text-brand">Member Forces (max absolute per member)</h2>
 
       <div className="mb-3 flex flex-wrap gap-1">
@@ -117,7 +117,7 @@ export function MemberForcesTable({
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-muted">
+            <tr className="border-b border-hairline text-muted">
               <th className="pb-1.5 pr-3 text-left font-semibold">Member</th>
               <th className="pb-1.5 pr-3 text-left font-semibold">Role</th>
               <th className="pb-1.5 pr-3 text-left font-semibold">Section</th>
@@ -131,20 +131,20 @@ export function MemberForcesTable({
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                <td className="py-1 pr-3 font-mono text-slate-700">{r.id}</td>
+              <tr key={r.id} className="border-b border-hairline-2 last:border-0 hover:bg-sheet-2">
+                <td className="py-1 pr-3 font-mono text-ink-2">{r.id}</td>
                 <td className="py-1 pr-3 capitalize text-muted">{r.role}</td>
                 <td className="py-1 pr-3 text-muted">{r.section}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.N)}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.Vy)}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.Vz)}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.T)}</td>
-                <td className="py-1 pr-3 text-right tabular-nums text-slate-800">{f1(r.My)}</td>
-                <td className="py-1 text-right tabular-nums text-slate-800">{f1(r.Mz)}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{f1(r.N)}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{f1(r.Vy)}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{f1(r.Vz)}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{f1(r.T)}</td>
+                <td className="py-1 pr-3 text-right tabular-nums text-ink">{f1(r.My)}</td>
+                <td className="py-1 text-right tabular-nums text-ink">{f1(r.Mz)}</td>
               </tr>
             ))}
-            <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
-              <td className="py-1.5 pr-3 text-slate-700" colSpan={3}>MAX</td>
+            <tr className="border-t-2 border-field-line bg-sheet-2 font-bold">
+              <td className="py-1.5 pr-3 text-ink-2" colSpan={3}>MAX</td>
               <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{f1(globalMax.N)}</td>
               <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{f1(globalMax.Vy)}</td>
               <td className="py-1.5 pr-3 text-right tabular-nums text-brand">{f1(globalMax.Vz)}</td>

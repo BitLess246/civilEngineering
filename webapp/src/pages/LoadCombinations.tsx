@@ -25,7 +25,7 @@ export default function LoadCombinations() {
         <div>
       <PageHeader title="Load Combinations" badges={['NSCP 2015', 'ACI 318-14']} />
       <div className="mx-auto max-w-[1200px] p-6">
-      <p className="no-print mt-1 text-slate-600">
+      <p className="no-print mt-1 text-muted">
         NSCP 2015 §203.3 Strength Design (LRFD) — 13 factored combinations.
         Enter unfactored characteristic loads; the table shows every factored result
         with the governing (max/min) envelope highlighted.
@@ -48,14 +48,14 @@ export default function LoadCombinations() {
 
         {/* ── RESULTS TABLE ── */}
         {r ? (
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-sheet shadow-sm">
-            <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-              <span className="text-sm font-semibold text-slate-700">Factored Load Combinations</span>
+          <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet shadow-sm">
+            <div className="border-b border-hairline-2 bg-sheet-2 px-4 py-2.5">
+              <span className="text-sm font-semibold text-ink-2">Factored Load Combinations</span>
               <span className="ml-3 text-xs text-muted">NSCP 2015 §203.3</span>
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-100 text-left text-xs text-muted">
+                <tr className="border-b border-hairline-2 text-left text-xs text-muted">
                   <th className="px-3 py-2 font-medium">No.</th>
                   <th className="px-3 py-2 font-medium">Combination</th>
                   <th className="px-3 py-2 text-right font-medium">Value</th>
@@ -66,14 +66,14 @@ export default function LoadCombinations() {
                   const isMax = c.id === r.maxCombo.id
                   const isMin = c.id === r.minCombo.id
                   const highlight = isMax
-                    ? 'bg-green-50'
+                    ? 'bg-ok-tint'
                     : isMin && r.minCombo.value < 0
-                    ? 'bg-red-50'
+                    ? 'bg-fail-tint'
                     : ''
                   return (
-                    <tr key={c.id} className={`border-b border-slate-50 ${highlight}`}>
+                    <tr key={c.id} className={`border-b border-hairline-2 ${highlight}`}>
                       <td className="px-3 py-2 font-mono text-muted">{c.id}</td>
-                      <td className="px-3 py-2 text-slate-700">{c.label}</td>
+                      <td className="px-3 py-2 text-ink-2">{c.label}</td>
                       <td className="px-3 py-2 text-right font-semibold tabular-nums">
                         {f2(c.value)}
                         {isMax && (
@@ -88,7 +88,7 @@ export default function LoadCombinations() {
                 })}
               </tbody>
             </table>
-            <div className="flex gap-6 border-t border-slate-100 bg-slate-50 px-4 py-3 text-sm">
+            <div className="flex gap-6 border-t border-hairline-2 bg-sheet-2 px-4 py-3 text-sm">
               <div>
                 <span className="text-muted">Max (governing):</span>
                 <span className="ml-1.5 font-bold text-ok">{f2(r.maxCombo.value)}</span>
@@ -96,13 +96,13 @@ export default function LoadCombinations() {
               </div>
               <div>
                 <span className="text-muted">Min:</span>
-                <span className="ml-1.5 font-bold text-slate-700">{f2(r.minCombo.value)}</span>
+                <span className="ml-1.5 font-bold text-ink-2">{f2(r.minCombo.value)}</span>
                 <span className="ml-1 text-muted text-xs">combo {r.minCombo.id}</span>
               </div>
             </div>
           </div>
         ) : (
-          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-muted">
+          <p className="self-start rounded-xl border border-hairline bg-sheet p-6 text-sm text-muted">
             Fill in load values to see factored combinations.
           </p>
         )}

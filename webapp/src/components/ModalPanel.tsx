@@ -5,7 +5,7 @@ const f2 = (v: number) => v.toFixed(2)
 const pct = (v: number) => `${(v * 100).toFixed(1)}%`
 
 /** Cumulative-mass cell colour: green once the ≥90% NSCP threshold is reached. */
-const cumCls = (v: number) => (v >= 0.9 ? 'text-emerald-600 font-semibold' : 'text-muted')
+const cumCls = (v: number) => (v >= 0.9 ? 'text-ok font-semibold' : 'text-muted')
 
 export function ModalPanel({ result, selectedMode, onSelectMode }: {
   result: ModalResult
@@ -17,7 +17,7 @@ export function ModalPanel({ result, selectedMode, onSelectMode }: {
   const cum: [number, number, number] = [0, 0, 0]
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+    <div className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
       <h2 className="mb-1 text-[1.02rem] font-bold text-brand">Modal Analysis — natural periods &amp; mass participation</h2>
       <p className="mb-3 text-[11px] text-muted">
         Lumped-mass free vibration. Effective modal mass per global direction; the cumulative column turns green at the
@@ -28,7 +28,7 @@ export function ModalPanel({ result, selectedMode, onSelectMode }: {
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-muted">
+            <tr className="border-b border-hairline text-muted">
               <th className="pb-1.5 pr-3 text-left font-semibold">Mode</th>
               <th className="pb-1.5 pr-3 text-right font-semibold">T (s)</th>
               <th className="pb-1.5 pr-3 text-right font-semibold">f (Hz)</th>
@@ -49,14 +49,14 @@ export function ModalPanel({ result, selectedMode, onSelectMode }: {
               const domLabel = m.effMassRatio[dom] > 0.5 ? ['X', 'Y', 'Z'][dom] : ''
               const active = selectedMode === i
               return (
-                <tr key={i} className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${active ? 'bg-violet-50' : ''}`}>
-                  <td className="py-1 pr-3 font-mono text-slate-700">{i + 1}{domLabel && <span className="ml-1 text-[10px] text-muted">{domLabel}</span>}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums font-semibold text-slate-800">{f3(m.period)}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums text-slate-600">{f2(m.freq)}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums text-slate-600">{f2(m.omega)}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums text-slate-700">{pct(m.effMassRatio[0])}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums text-slate-700">{pct(m.effMassRatio[1])}</td>
-                  <td className="py-1 pr-3 text-right tabular-nums text-slate-700">{pct(m.effMassRatio[2])}</td>
+                <tr key={i} className={`border-b border-hairline-2 last:border-0 hover:bg-sheet-2 ${active ? 'bg-violet-50' : ''}`}>
+                  <td className="py-1 pr-3 font-mono text-ink-2">{i + 1}{domLabel && <span className="ml-1 text-[10px] text-muted">{domLabel}</span>}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums font-semibold text-ink">{f3(m.period)}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums text-muted">{f2(m.freq)}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums text-muted">{f2(m.omega)}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums text-ink-2">{pct(m.effMassRatio[0])}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums text-ink-2">{pct(m.effMassRatio[1])}</td>
+                  <td className="py-1 pr-3 text-right tabular-nums text-ink-2">{pct(m.effMassRatio[2])}</td>
                   <td className={`py-1 pr-3 text-right tabular-nums ${cumCls(cum[0])}`}>{pct(cum[0])}</td>
                   <td className={`py-1 pr-3 text-right tabular-nums ${cumCls(cum[1])}`}>{pct(cum[1])}</td>
                   <td className={`py-1 text-right tabular-nums ${cumCls(cum[2])}`}>{pct(cum[2])}</td>

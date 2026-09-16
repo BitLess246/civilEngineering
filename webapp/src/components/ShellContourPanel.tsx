@@ -57,7 +57,7 @@ export function ShellContourPanel({ nodes, elems, stresses }: Props) {
       {/* Quantity selector */}
       <div className="col-span-full mb-2">
         <select value={key} onChange={(e) => setKey(e.target.value as StressKey)}
-          className="rounded border border-slate-300 bg-sheet px-2 py-1 text-sm text-slate-700">
+          className="rounded border border-field-line bg-sheet px-2 py-1 text-sm text-ink-2">
           {STRESS_KEYS.map(({ key: k, label, unit }) => (
             <option key={k} value={k}>{label} ({unit})</option>
           ))}
@@ -65,7 +65,7 @@ export function ShellContourPanel({ nodes, elems, stresses }: Props) {
       </div>
 
       {/* SVG contour */}
-      <div className="col-span-full mb-3 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+      <div className="col-span-full mb-3 overflow-hidden rounded-lg border border-hairline bg-sheet-2">
         <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg"
           preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: 'auto' }}>
           {elems.map((e) => {

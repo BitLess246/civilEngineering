@@ -27,6 +27,48 @@ const classStrings = (src: string): string[] =>
   [...src.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\}|\{([^}]*)\})/g)]
     .flatMap((m) => [m[1], m[2], m[3]].filter(Boolean) as string[])
 
+/**
+ * THE WHOLE FILE, because `className=` is not where the classes are.
+ *
+ * The status rule below asserted `[]` and was green while THIRTY-SEVEN stock
+ * status utilities shipped, because every one of them sits somewhere
+ * `classStrings` cannot see: a lookup table (`toggle: { cls: 'bg-amber-50…' }`),
+ * a module constant (`const delBtn = '… text-red-500 …'`), an argument to a
+ * cell helper (`cell(c.totalFloat, isCrit ? 'bg-red-500 …' : …)`), a ternary
+ * assigned to a variable three lines above the element. Tailwind does not care
+ * where the string is written — it scans the source — so a guard that reads
+ * one attribute is checking the notation, not the colour.
+ *
+ * That is the second time in this repo a guard passed its own sabotage by
+ * modelling too small a span. So the span is now the file, and the cost is
+ * accepted: a comment may not spell a banned utility either. Nothing in the
+ * app needs to, and `svgToPng.ts` — the one place that does — is `.ts`, which
+ * this glob does not read.
+ */
+const PROPS = 'text|bg|border|ring|divide|fill|stroke|decoration|from|via|to|placeholder|accent|outline|shadow|caret'
+
+/**
+ * The two files whose migration is still in flight. This is a RATCHET, not an
+ * exemption: `ModelSpace.tsx` (232 neutrals) and `SoilInvestigation.tsx` (190)
+ * are phases 2 and 3 of the same migration, and the phase that empties them
+ * deletes this constant. Every other file in the app is held to the rule now,
+ * which is the point of landing the guard with the first phase rather than
+ * after the last one.
+ */
+const DEBT = ['ModelSpace.tsx', 'SoilInvestigation.tsx']
+const inDebt = (file: string) => DEBT.some((d) => file.endsWith(d))
+
+/** Every `<prop>-<family>-<step>` in the app, outside the in-flight files. */
+const scan = (families: string) => {
+  const re = new RegExp(`(?<![\\w:-])(?:${PROPS})-(?:${families})-\\d{2,3}(?![\\w-])`, 'g')
+  const found: string[] = []
+  for (const [file, src] of Object.entries(SOURCES)) {
+    if (inDebt(file)) continue
+    for (const m of src.matchAll(re)) found.push(`${file}: ${m[0]}`)
+  }
+  return found
+}
+
 describe('the source actually loaded', () => {
   it('has the app in it', () => {
     expect(Object.keys(SOURCES).length).toBeGreaterThan(50)
@@ -120,19 +162,8 @@ describe('verdict colour comes from the status roles', () => {
   // the (complete, inverted) stock ramp. A rule that swept them up would be
   // demanding a token that does not exist.
   const STATUS = 'emerald|green|lime|red|rose|amber|yellow|orange'
-  const PROPS = 'text|bg|border|ring|divide|fill|stroke|decoration'
 
-  const stockStatus = () => {
-    const found: string[] = []
-    for (const [file, src] of Object.entries(SOURCES)) {
-      for (const c of classStrings(src)) {
-        for (const m of c.matchAll(new RegExp(`(?<![\\w:-])(?:${PROPS})-(?:${STATUS})-\\d{2,3}(?![\\w-])`, 'g'))) {
-          found.push(`${file}: ${m[0]}`)
-        }
-      }
-    }
-    return found
-  }
+  const stockStatus = () => scan(STATUS)
 
   it('is not painted with a stock colour anywhere', () => {
     expect(stockStatus()).toEqual([])
@@ -148,5 +179,65 @@ describe('verdict colour comes from the status roles', () => {
         expect(bp, `${role}${suffix}`).toContain(`--t-${role}${suffix}:`)
       }
     }
+  })
+})
+
+describe('neutral surfaces come from the neutral roles', () => {
+  // The last stock family in the app, and by far the biggest: 1 083 `slate-*`
+  // utilities across 72 files, doing the jobs fifteen roles already name.
+  //
+  // WHAT THIS IS NOT. It is not an accessibility fix, and the claim that it
+  // was is the thing this comment exists to correct. Blueprint INVERTS the
+  // stock slate ramp (step N takes step 1000−N), so `text-slate-600` on
+  // `bg-sheet` measures 6.01:1 there and 7.56:1 on Drafting — both pass AA,
+  // and the first two attempts at measuring it said otherwise: hex arithmetic
+  // against the stock ramp ignored the inversion (2.22:1), and reading
+  // `getComputedStyle` back as RGB when the browser returns `oklch(…)` was
+  // worse (1.86:1). The real numbers came from painting the computed value
+  // into a canvas `fillStyle` and reading the sRGB back.
+  //
+  // So the reason is consistency, not contrast: a component that names the
+  // stock ramp inherits whatever the inversion happens to give it, and a
+  // component that names a role inherits what the theme MEANT. Only the
+  // second survives a sixth theme.
+  const NEUTRAL = 'slate|gray|zinc|neutral|stone'
+
+  it('is never painted with a stock neutral anywhere', () => {
+    expect(scan(NEUTRAL)).toEqual([])
+  })
+
+  it('has a role for every job the stock ramp was doing', () => {
+    // A missing role is what forces a component back onto the stock ramp, so
+    // the fifteen the migration mapped onto are asserted present rather than
+    // assumed. Checked in Blueprint because that is where a hole shows.
+    const bp = themesCss.slice(themesCss.indexOf('[data-theme="blueprint"]'))
+    for (const role of [
+      'paper', 'sheet', 'sheet-2', 'field', 'rail', 'rail-ink', 'rail-muted',
+      'ink', 'ink-2', 'muted', 'faint', 'hairline', 'hairline-2', 'field-line',
+      'on-solid',
+    ]) expect(bp, role).toContain(`--t-${role}:`)
+  })
+})
+
+describe('every stock family the app still names is inverted for Blueprint', () => {
+  // The inversion block is the ONLY thing that makes a stock utility follow a
+  // dark theme, and the completeness test above it reads its families OUT of
+  // that block — so a family with no block at all is a family nothing checks.
+  // `teal` and `purple` shipped exactly that way: the documentation control
+  // key and the balanced-point row of the P-M table kept their stock LIGHT
+  // values on Blueprint's dark ground. This asks the question from the other
+  // side: what do the COMPONENTS name, and does each of those have a block?
+  it('leaves no family defined only by Tailwind', () => {
+    const bp = themesCss.slice(themesCss.indexOf('[data-theme="blueprint"]'))
+    const inverted = new Set(
+      [...bp.matchAll(/--color-([a-z]+)-\d{2,3}:/g)].map((m) => m[1]))
+    const named = new Set<string>()
+    for (const [file, src] of Object.entries(SOURCES)) {
+      if (inDebt(file)) continue
+      for (const m of src.matchAll(
+        new RegExp(`(?<![\\w:-])(?:${PROPS})-([a-z]+)-\\d{2,3}(?![\\w-])`, 'g'))) named.add(m[1])
+    }
+    const orphans = [...named].filter((f) => !inverted.has(f))
+    expect(orphans, 'named in a component, absent from the inversion block').toEqual([])
   })
 })

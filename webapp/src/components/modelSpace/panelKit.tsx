@@ -19,7 +19,7 @@ export function SolverProgress({ p }: { p: SolveProgress | null }) {
   if (!p) return null
   const pct = p.total && p.current ? Math.min(100, Math.round((p.current / p.total) * 100)) : null
   return (
-    <div className="col-span-full rounded-lg border border-brand/30 bg-blue-50/60 p-2.5">
+    <div className="col-span-full rounded-lg border border-brand/30 bg-brand-tint/60 p-2.5">
       <div className="flex items-center justify-between text-[11px] font-semibold text-brand">
         <span>⏳ {p.phase}</span>
         <span className="tabular-nums text-muted">
@@ -27,12 +27,12 @@ export function SolverProgress({ p }: { p: SolveProgress | null }) {
         </span>
       </div>
       {p.detail && (
-        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-600">
+        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted">
           <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-brand opacity-70" />
           <span className="truncate font-mono">{p.detail}</span>
         </div>
       )}
-      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-brand-line">
         {pct !== null
           ? <div className="h-full rounded-full bg-brand transition-all duration-150" style={{ width: `${pct}%` }} />
           : <div className="h-full w-1/3 animate-pulse rounded-full bg-brand" />}
@@ -45,10 +45,10 @@ export function DirPicker({ value, onChange }: { value: string[]; onChange: (v: 
   const toggle = (d: string) => onChange(value.includes(d) ? value.filter((x) => x !== d) : [...value, d])
   return (
     <div className="col-span-full flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">Directions to envelope</span>
+      <span className="mb-1 font-medium text-muted">Directions to envelope</span>
       <div className="flex gap-1.5">
         {LAT_DIRS.map((d) => (
-          <label key={d} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${value.includes(d) ? 'border-brand bg-blue-50 text-brand' : 'border-slate-200 text-muted'}`}>
+          <label key={d} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${value.includes(d) ? 'border-brand bg-brand-tint text-brand' : 'border-hairline text-muted'}`}>
             <input type="checkbox" className="sr-only" checked={value.includes(d)} onChange={() => toggle(d)} />{d}
           </label>
         ))}

@@ -37,9 +37,9 @@ export interface SoilParameterFill {
 }
 
 const PROVENANCE_STYLE: Record<string, string> = {
-  measured: 'bg-emerald-100 text-emerald-800',
+  measured: 'bg-ok-tint text-ok',
   derived: 'bg-sky-100 text-sky-800',
-  correlated: 'bg-amber-100 text-amber-900',
+  correlated: 'bg-warn-tint text-warn',
   assumed: 'bg-violet-100 text-violet-800',
 }
 
@@ -134,7 +134,7 @@ export function SoilLayerPicker({
     return (
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={() => setOpen(true)}
-          className="rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50">
+          className="rounded-md border border-field-line px-2.5 py-1 text-[12px] font-medium text-ink-2 hover:bg-sheet-2">
           {title}
         </button>
         {applied && (
@@ -145,15 +145,15 @@ export function SoilLayerPicker({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <div className="rounded-xl border border-hairline bg-sheet-2 p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-[13px] font-bold text-brand">{title}</h3>
         <button onClick={() => setOpen(false)}
-          className="rounded px-1.5 py-0.5 text-[11px] text-slate-600 hover:bg-slate-200">close</button>
+          className="rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-hairline">close</button>
       </div>
 
       {!investigations.length ? (
-        <p className="text-[12px] text-slate-600">
+        <p className="text-[12px] text-muted">
           No saved investigations in this browser.{' '}
           <Link to="/soils" className="font-medium text-brand underline">Create one</Link> to enter boreholes,
           laboratory tests and parameters once and reuse them here.
@@ -162,7 +162,7 @@ export function SoilLayerPicker({
         <>
           {investigations.length > 1 && (
             <select value={activeId ?? ''} onChange={(e) => setId(e.target.value)}
-              className="mb-2 rounded-md border border-slate-300 px-2 py-1 text-[12px]">
+              className="mb-2 rounded-md border border-field-line px-2 py-1 text-[12px]">
               {investigations.map((s) => (
                 <option key={s.id} value={s.id}>{s.investigationNo || s.title}</option>
               ))}
@@ -170,14 +170,14 @@ export function SoilLayerPicker({
           )}
 
           {!rows.length && (
-            <p className="text-[12px] text-slate-600">That investigation has no logged layers yet.</p>
+            <p className="text-[12px] text-muted">That investigation has no logged layers yet.</p>
           )}
 
           <div className="space-y-2">
             {rows.map(({ bh, layer, fill, resolved, missing }) => (
-              <div key={`${bh.id}-${layer.id}`} className="rounded-lg border border-slate-200 bg-sheet p-2.5">
+              <div key={`${bh.id}-${layer.id}`} className="rounded-lg border border-hairline bg-sheet p-2.5">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-[12px] font-semibold text-slate-800">
+                  <span className="text-[12px] font-semibold text-ink">
                     {bh.name} · {layer.name}
                     <span className="ml-1.5 font-mono text-[10px] font-normal text-muted">
                       {layer.depthTop.toFixed(2)}–{layer.depthBottom.toFixed(2)} m
@@ -191,7 +191,7 @@ export function SoilLayerPicker({
                     className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${
                       resolved.length
                         ? 'bg-brand text-on-solid hover:bg-brand-hover'
-                        : 'cursor-not-allowed bg-slate-200 text-muted'
+                        : 'cursor-not-allowed bg-hairline text-muted'
                     }`}>
                     {resolved.length ? 'Use this layer' : 'nothing to apply'}
                   </button>
@@ -201,8 +201,8 @@ export function SoilLayerPicker({
                   <ul className="mt-1.5 space-y-0.5">
                     {resolved.map((p) => (
                       <li key={p.key} className="flex flex-wrap items-baseline gap-1.5 text-[11px]">
-                        <span className="text-slate-600">{PARAMETER_LABEL[p.key]}</span>
-                        <span className="font-mono font-semibold text-slate-800">{fmt(p.value)}</span>
+                        <span className="text-muted">{PARAMETER_LABEL[p.key]}</span>
+                        <span className="font-mono font-semibold text-ink">{fmt(p.value)}</span>
                         <span className={`rounded px-1 text-[9px] font-semibold ${PROVENANCE_STYLE[p.value.provenance.kind]}`}>
                           {PROVENANCE_LABEL[p.value.provenance.kind]}
                         </span>

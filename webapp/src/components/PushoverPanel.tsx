@@ -64,7 +64,7 @@ export function PushoverPanel({ res, dirLabel }: { res: PushoverModelResult; dir
 
   return (
     <ResultCard title={`Pushover capacity — push ${dirLabel}`}>
-      <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
+      <div className="mb-3 rounded-lg border border-hairline bg-sheet-2 p-2">
         <CapacityCurve res={res} />
       </div>
       <Row label="Peak base shear" value={`${peakV.toFixed(1)} kN`}
@@ -81,7 +81,7 @@ export function PushoverPanel({ res, dirLabel }: { res: PushoverModelResult; dir
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="text-muted">
-              <tr className="border-b border-slate-200">
+              <tr className="border-b border-hairline">
                 <th className="py-1 pr-2">Event</th>
                 <th className="py-1 pr-2">V (kN)</th>
                 <th className="py-1 pr-2">Δ (mm)</th>
@@ -90,11 +90,11 @@ export function PushoverPanel({ res, dirLabel }: { res: PushoverModelResult; dir
                 {res.pmInteraction && <th className="py-1 pr-2">Mpc (kN·m)</th>}
               </tr>
             </thead>
-            <tbody className="text-slate-700">
+            <tbody className="text-ink-2">
               {curve.slice(1).map((p) => {
                 const h = hingeByEvent.get(p.event)
                 return (
-                <tr key={p.event} className="border-b border-slate-100 last:border-0">
+                <tr key={p.event} className="border-b border-hairline-2 last:border-0">
                   <td className="py-1 pr-2">{p.event}</td>
                   <td className="py-1 pr-2 font-semibold">{Math.abs(p.baseShear).toFixed(1)}</td>
                   <td className="py-1 pr-2">{(Math.abs(p.roofDisp) * 1000).toFixed(1)}</td>

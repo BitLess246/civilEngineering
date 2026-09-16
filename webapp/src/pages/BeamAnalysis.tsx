@@ -36,7 +36,7 @@ function ItemShell({ title, onRemove, children }: {
   title: string; onRemove: () => void; children: React.ReactNode
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="rounded-lg border border-hairline bg-sheet-2 p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-wide text-muted">{title}</span>
         <button type="button" onClick={onRemove} className="text-xs text-fail hover:underline">remove</button>
@@ -109,7 +109,7 @@ export default function BeamAnalysis() {
     <div>
       <PageHeader title="Beam Analysis" badges={['NSCP 2015', 'ACI 318-14']} />
       <div className="mx-auto max-w-[1500px] px-6 pb-6 pt-5">
-      <p className="no-print mt-1 text-slate-600">
+      <p className="no-print mt-1 text-muted">
         Euler–Bernoulli FEM (Hermite elements, Gauss-5) with modular supports — pin / roller / fixed / spring at any
         position — and categorised loads run through all 7 NSCP 2015 load combinations. Includes a three-moment
         (Clapeyron) cross-check for continuous beams.
@@ -207,7 +207,7 @@ export default function BeamAnalysis() {
                     {res.perCombo.map((pc, i) => (
                       <tr key={pc.combo.name}
                         onClick={() => pc.result && setSelIdx(i)}
-                        className={`border-t border-slate-100 ${pc.result ? 'cursor-pointer hover:bg-blue-50' : 'text-slate-300'} ${
+                        className={`border-t border-hairline-2 ${pc.result ? 'cursor-pointer hover:bg-brand-tint' : 'text-faint'} ${
                           i === res.govIdx ? 'bg-warn-tint font-semibold' : ''} ${i === shownIdx ? 'outline outline-1 outline-brand' : ''}`}>
                         <td className="py-1 pr-2">{pc.combo.name}{i === res.govIdx ? ' ★' : ''}</td>
                         <td className="py-1 pr-2 text-right">{pc.result ? f1(pc.result.Vmax) : pc.skipped ? '—' : 'sing.'}</td>
@@ -234,7 +234,7 @@ export default function BeamAnalysis() {
                 sub={`${f2(r.Dmax)} ≤ ${f2(allowDefl)} mm`} />
               <div className="no-print mt-3 flex flex-wrap gap-2">
                 <Link to={`/beam-design?mu=${r.Mmax.toFixed(1)}&vu=${r.Vmax.toFixed(1)}`}
-                  className="inline-block rounded-lg border border-slate-300 bg-sheet px-4 py-2 text-sm font-semibold text-brand transition hover:border-brand hover:bg-blue-50">
+                  className="inline-block rounded-lg border border-field-line bg-sheet px-4 py-2 text-sm font-semibold text-brand transition hover:border-brand hover:bg-brand-tint">
                   Use Mmax & Vmax →
                 </Link>
                 <button type="button"

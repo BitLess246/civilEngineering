@@ -376,10 +376,10 @@ export default function BeamDesign() {
               </div>
               <div className="space-y-3">
                 {sections.map((s) => (
-                  <div key={s.id} className={`rounded-lg border p-3 ${s.id === active?.id ? 'border-brand bg-blue-50/40' : 'border-slate-200 bg-slate-50'}`}>
+                  <div key={s.id} className={`rounded-lg border p-3 ${s.id === active?.id ? 'border-brand bg-brand-tint/40' : 'border-hairline bg-sheet-2'}`}>
                     <div className="mb-2 flex items-center justify-between">
                       <input value={s.label} onChange={(e) => setSec(s.id, { label: e.target.value })}
-                        className="w-1/2 rounded border border-transparent bg-transparent px-1 text-xs font-bold uppercase tracking-wide text-slate-600 focus:border-slate-300 focus:bg-sheet" />
+                        className="w-1/2 rounded border border-transparent bg-transparent px-1 text-xs font-bold uppercase tracking-wide text-muted focus:border-field-line focus:bg-sheet" />
                       <span className="flex gap-3">
                         <button type="button" onClick={() => setSelId(s.id)} className="text-xs text-brand hover:underline">view</button>
                         <button type="button" onClick={() => setSections((ss) => ss.filter((q) => q.id !== s.id))} className="text-xs text-fail hover:underline">remove</button>
@@ -437,7 +437,7 @@ export default function BeamDesign() {
                       const bad = d ? !sectionOK(d) : true
                       return (
                         <tr key={s.id} onClick={() => setSelId(s.id)}
-                          className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${
+                          className={`cursor-pointer border-t border-hairline-2 hover:bg-brand-tint ${
                             bad ? 'bg-fail-tint text-fail' : ''} ${s.id === active?.id ? 'outline outline-1 outline-brand' : ''}`}>
                           <td className="py-1 pr-2">{s.label}{s.Mu < 0 ? ' (hog)' : ''}</td>
                           <td className="py-1 pr-2">{d ? d.mode : '—'}</td>

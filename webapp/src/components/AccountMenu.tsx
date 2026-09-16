@@ -84,8 +84,8 @@ export function AccountMenu({ dark }: { dark?: boolean }) {
 
       {open && (
         <div role="menu"
-          className="absolute right-0 z-50 mt-1.5 w-60 overflow-hidden rounded-lg border border-slate-200 bg-sheet shadow-lg">
-          <div className="border-b border-slate-100 px-3.5 py-2.5">
+          className="absolute right-0 z-50 mt-1.5 w-60 overflow-hidden rounded-lg border border-hairline bg-sheet shadow-lg">
+          <div className="border-b border-hairline-2 px-3.5 py-2.5">
             <p className="truncate text-[12.5px] font-semibold text-ink">{label}</p>
             {user.email && user.email !== label && (
               <p className="truncate text-[11px] text-muted">{user.email}</p>
@@ -97,19 +97,19 @@ export function AccountMenu({ dark }: { dark?: boolean }) {
           </div>
           <nav className="py-1 text-[12.5px]">
             <Link to="/profile" onClick={() => setOpen(false)}
-              className="block px-3.5 py-1.5 text-slate-700 hover:bg-paper hover:text-brand">
+              className="block px-3.5 py-1.5 text-ink-2 hover:bg-paper hover:text-brand">
               Profile and letterhead
             </Link>
             <Link to="/pricing" onClick={() => setOpen(false)}
-              className="block px-3.5 py-1.5 text-slate-700 hover:bg-paper hover:text-brand">
+              className="block px-3.5 py-1.5 text-ink-2 hover:bg-paper hover:text-brand">
               {CHECKOUT_ENABLED && plan.id !== 'max' ? 'Upgrade plan' : 'Plans and pricing'}
             </Link>
             <Link to="/contact" onClick={() => setOpen(false)}
-              className="block px-3.5 py-1.5 text-slate-700 hover:bg-paper hover:text-brand">
+              className="block px-3.5 py-1.5 text-ink-2 hover:bg-paper hover:text-brand">
               Contact support
             </Link>
           </nav>
-          <div className="border-t border-slate-100 py-1">
+          <div className="border-t border-hairline-2 py-1">
             <button type="button"
               onClick={async () => { setOpen(false); await signOut(); nav('/') }}
               className="block w-full px-3.5 py-1.5 text-left text-[12.5px] font-semibold text-fail hover:bg-fail-tint">

@@ -446,7 +446,7 @@ export default function ColumnDesign() {
           )}
 
           {eccentric && inter && (
-            <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+            <div className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
               <InteractionDiagram r={inter} Pu={Pu} Mu={MuEff} />
             </div>
           )}
@@ -454,12 +454,12 @@ export default function ColumnDesign() {
       </div>
 
       {eccentric && inter && tableRows.length > 0 && (
-        <div className="mt-6 print-avoid-break rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+        <div className="mt-6 print-avoid-break rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
           <h2 className="mb-3 text-[1.02rem] font-bold text-brand">P–M Interaction Table — Design Envelope (φP<sub>n</sub>, φM<sub>n</sub>)</h2>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-200 text-left uppercase tracking-wide text-muted">
+                <tr className="border-b border-hairline text-left uppercase tracking-wide text-muted">
                   <th className="pb-1.5 pr-3 font-semibold">Point</th>
                   <th className="pb-1.5 pr-3 font-semibold">c (mm)</th>
                   <th className="pb-1.5 pr-3 font-semibold">εt</th>
@@ -472,31 +472,31 @@ export default function ColumnDesign() {
               </thead>
               <tbody>
                 {/* Compression cap */}
-                <tr className="border-b border-slate-100 bg-slate-50">
-                  <td className="py-1 pr-3 font-semibold text-slate-600">Max. axial cap</td>
+                <tr className="border-b border-hairline-2 bg-sheet-2">
+                  <td className="py-1 pr-3 font-semibold text-muted">Max. axial cap</td>
                   <td className="py-1 pr-3 text-muted">—</td>
                   <td className="py-1 pr-3 text-muted">—</td>
                   <td className="py-1 pr-3 text-muted">0.65</td>
                   <td className="py-1 pr-3 text-muted">{f1(inter.PnMax)}</td>
                   <td className="py-1 pr-3 text-muted">0</td>
-                  <td className="py-1 pr-3 font-semibold text-slate-800">{f1(0.65 * inter.PnMax)}</td>
-                  <td className="py-1 font-semibold text-slate-800">0</td>
+                  <td className="py-1 pr-3 font-semibold text-ink">{f1(0.65 * inter.PnMax)}</td>
+                  <td className="py-1 font-semibold text-ink">0</td>
                 </tr>
                 {tableRows.map((row, i) => (
                   <tr key={i}
-                    className={`border-b border-slate-100 last:border-0 ${row.isBalanced ? 'bg-purple-50' : ''}`}>
-                    <td className={`py-1 pr-3 ${row.isBalanced ? 'font-semibold text-purple-700' : 'text-slate-600'}`}>
+                    className={`border-b border-hairline-2 last:border-0 ${row.isBalanced ? 'bg-purple-50' : ''}`}>
+                    <td className={`py-1 pr-3 ${row.isBalanced ? 'font-semibold text-purple-700' : 'text-muted'}`}>
                       {row.label}
                     </td>
-                    <td className="py-1 pr-3 text-slate-600">{f0(row.c)}</td>
-                    <td className="py-1 pr-3 text-slate-600">{row.et.toFixed(4)}</td>
-                    <td className="py-1 pr-3 text-slate-600">{row.phi.toFixed(2)}</td>
-                    <td className="py-1 pr-3 text-slate-600">{f1(row.Pn)}</td>
-                    <td className="py-1 pr-3 text-slate-600">{f1(Math.abs(row.Mn))}</td>
-                    <td className={`py-1 pr-3 font-semibold ${row.isBalanced ? 'text-purple-700' : 'text-slate-800'}`}>
+                    <td className="py-1 pr-3 text-muted">{f0(row.c)}</td>
+                    <td className="py-1 pr-3 text-muted">{row.et.toFixed(4)}</td>
+                    <td className="py-1 pr-3 text-muted">{row.phi.toFixed(2)}</td>
+                    <td className="py-1 pr-3 text-muted">{f1(row.Pn)}</td>
+                    <td className="py-1 pr-3 text-muted">{f1(Math.abs(row.Mn))}</td>
+                    <td className={`py-1 pr-3 font-semibold ${row.isBalanced ? 'text-purple-700' : 'text-ink'}`}>
                       {f1(Math.max(0, row.phiPn))}
                     </td>
-                    <td className={`py-1 font-semibold ${row.isBalanced ? 'text-purple-700' : 'text-slate-800'}`}>
+                    <td className={`py-1 font-semibold ${row.isBalanced ? 'text-purple-700' : 'text-ink'}`}>
                       {f1(Math.max(0, row.phiMn))}
                     </td>
                   </tr>

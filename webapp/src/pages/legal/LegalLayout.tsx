@@ -18,7 +18,7 @@ export function LegalLayout({ title, subtitle, children }: {
     <div className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Legal</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">{title}</h1>
-      {subtitle && <p className="mt-2 text-sm leading-6 text-slate-600">{subtitle}</p>}
+      {subtitle && <p className="mt-2 text-sm leading-6 text-muted">{subtitle}</p>}
       <p className="mt-1 text-[12px] text-muted">Last updated {SITE.policiesUpdated}</p>
 
       {missing.length > 0 && (
@@ -35,9 +35,9 @@ export function LegalLayout({ title, subtitle, children }: {
         </div>
       )}
 
-      <div className="prose-sm mt-6 space-y-5 text-[14px] leading-7 text-slate-700">{children}</div>
+      <div className="prose-sm mt-6 space-y-5 text-[14px] leading-7 text-ink-2">{children}</div>
 
-      <div className="mt-10 border-t border-slate-200 pt-5 text-[13px] text-muted">
+      <div className="mt-10 border-t border-hairline pt-5 text-[13px] text-muted">
         {/* The draft notice is gone: these have been through legal review.
             What stays is the part that is still true of any policy — it
             governs the relationship and is not advice about the reader's own

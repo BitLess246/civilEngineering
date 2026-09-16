@@ -101,7 +101,7 @@ export function WelcomeDialog({ onClose }: { onClose: () => void }) {
             Save and continue
           </button>
           <button type="button" onClick={skip}
-            className="text-[13px] font-semibold text-slate-600 hover:text-brand hover:underline">
+            className="text-[13px] font-semibold text-muted hover:text-brand hover:underline">
             Skip — show me everything
           </button>
           {none && (

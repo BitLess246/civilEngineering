@@ -56,7 +56,7 @@ export default function BearingCapacity() {
         <div>
       <PageHeader title="Bearing Capacity" badges={['Meyerhof', 'Hansen', 'Vesić']} />
       <div className="mx-auto max-w-[1400px] px-5 py-6 sm:px-7">
-      <p className="no-print mt-1 max-w-3xl text-sm text-slate-600">
+      <p className="no-print mt-1 max-w-3xl text-sm text-muted">
         Shallow-foundation bearing capacity by the general equation, with shape, depth and
         inclination factors and Meyerhof&rsquo;s effective area for eccentric load. Nq and Nc are
         Prandtl/Reissner in all three methods; only Nγ and the shape/depth factors differ — so the

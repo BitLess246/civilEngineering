@@ -232,7 +232,17 @@
      inverted, and one component came out at 1.17:1, light on light. The
      comment above promised "50 is the darkest" for a ramp that did not
      define 50. A hole in a ramp is a defect waiting for the next utility
-     that lands in it, so the ramps are complete and a test says so. */
+     that lands in it, so the ramps are complete and a test says so.
+
+     EVERY FAMILY THE APP NAMES, not just the ones that were listed here.
+     `teal` and `purple` shipped with NO block at all, so the documentation
+     control key and the balanced-point row of the P-M table kept their
+     stock LIGHT values on this dark ground — the same light-on-light defect
+     the paragraph above describes, in a family nobody thought to generate.
+     The completeness test reads its families OUT of this block, so a family
+     that is absent is a family it cannot check. `themeUsage.test.ts` now
+     asks the question from the component side as well: every stock family
+     named in a `.tsx` must have a block here. */
   --color-amber-50: oklch(27.9% 0.077 45.635);   /* = stock amber-950 */
   --color-amber-100: oklch(41.4% 0.112 45.904);   /* = stock amber-900 */
   --color-amber-200: oklch(47.3% 0.137 46.201);   /* = stock amber-800 */
@@ -256,6 +266,18 @@
   --color-emerald-800: oklch(90.5% 0.093 164.15);   /* = stock emerald-200 */
   --color-emerald-900: oklch(95% 0.052 163.051);   /* = stock emerald-100 */
   --color-emerald-950: oklch(97.9% 0.021 166.113);   /* = stock emerald-50 */
+
+  --color-purple-50: oklch(29.1% 0.149 302.717);   /* = stock purple-950 */
+  --color-purple-100: oklch(38.1% 0.176 304.987);   /* = stock purple-900 */
+  --color-purple-200: oklch(43.8% 0.218 303.724);   /* = stock purple-800 */
+  --color-purple-300: oklch(49.6% 0.265 301.924);   /* = stock purple-700 */
+  --color-purple-400: oklch(55.8% 0.288 302.321);   /* = stock purple-600 */
+  --color-purple-500: oklch(62.7% 0.265 303.9);   /* = stock purple-500 */
+  --color-purple-600: oklch(71.4% 0.203 305.504);   /* = stock purple-400 */
+  --color-purple-700: oklch(82.7% 0.119 306.383);   /* = stock purple-300 */
+  --color-purple-800: oklch(90.2% 0.063 306.703);   /* = stock purple-200 */
+  --color-purple-900: oklch(94.6% 0.033 307.174);   /* = stock purple-100 */
+  --color-purple-950: oklch(97.7% 0.014 308.299);   /* = stock purple-50 */
 
   --color-red-50: oklch(25.8% 0.092 26.042);   /* = stock red-950 */
   --color-red-100: oklch(39.6% 0.141 25.723);   /* = stock red-900 */
@@ -292,6 +314,18 @@
   --color-slate-800: oklch(92.9% 0.013 255.508);   /* = stock slate-200 */
   --color-slate-900: oklch(96.8% 0.007 247.896);   /* = stock slate-100 */
   --color-slate-950: oklch(98.4% 0.003 247.858);   /* = stock slate-50 */
+
+  --color-teal-50: oklch(27.7% 0.046 192.524);   /* = stock teal-950 */
+  --color-teal-100: oklch(38.6% 0.063 188.416);   /* = stock teal-900 */
+  --color-teal-200: oklch(43.7% 0.078 188.216);   /* = stock teal-800 */
+  --color-teal-300: oklch(51.1% 0.096 186.391);   /* = stock teal-700 */
+  --color-teal-400: oklch(60% 0.118 184.704);   /* = stock teal-600 */
+  --color-teal-500: oklch(70.4% 0.14 182.503);   /* = stock teal-500 */
+  --color-teal-600: oklch(77.7% 0.152 181.912);   /* = stock teal-400 */
+  --color-teal-700: oklch(85.5% 0.138 181.071);   /* = stock teal-300 */
+  --color-teal-800: oklch(91% 0.096 180.426);   /* = stock teal-200 */
+  --color-teal-900: oklch(95.3% 0.051 180.801);   /* = stock teal-100 */
+  --color-teal-950: oklch(98.4% 0.014 180.72);   /* = stock teal-50 */
 
   --color-violet-50: oklch(28.3% 0.141 291.089);   /* = stock violet-950 */
   --color-violet-100: oklch(38% 0.189 293.745);   /* = stock violet-900 */

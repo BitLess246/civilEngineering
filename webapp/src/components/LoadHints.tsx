@@ -13,21 +13,21 @@ export function HintButton({ title, label = 'ⓘ Guide', children }: { title: st
   return (
     <>
       <button type="button" onClick={() => setOpen(true)}
-        className="no-print inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-0.5 text-xs font-semibold text-brand hover:border-brand hover:bg-blue-50"
+        className="no-print inline-flex items-center gap-1 rounded-md border border-field-line px-2 py-0.5 text-xs font-semibold text-brand hover:border-brand hover:bg-brand-tint"
         title={title} aria-label={title}>
         {label}
       </button>
       {open && (
-        <div className="no-print fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4"
+        <div className="no-print fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-rail/40 p-4"
           onClick={() => setOpen(false)}>
-          <div className="my-8 w-full max-w-2xl rounded-xl border border-slate-200 bg-sheet shadow-xl"
+          <div className="my-8 w-full max-w-2xl rounded-xl border border-hairline bg-sheet shadow-xl"
             onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+            <div className="flex items-center justify-between border-b border-hairline-2 px-4 py-3">
               <h3 className="text-[1.02rem] font-bold text-brand">{title}</h3>
               <button type="button" onClick={() => setOpen(false)}
-                className="rounded-md px-2 py-1 text-sm font-semibold text-muted hover:bg-slate-100">✕</button>
+                className="rounded-md px-2 py-1 text-sm font-semibold text-muted hover:bg-paper">✕</button>
             </div>
-            <div className="max-h-[75vh] space-y-4 overflow-y-auto px-4 py-4 text-xs text-slate-700">
+            <div className="max-h-[75vh] space-y-4 overflow-y-auto px-4 py-4 text-xs text-ink-2">
               {children}
             </div>
           </div>
@@ -38,14 +38,14 @@ export function HintButton({ title, label = 'ⓘ Guide', children }: { title: st
 }
 
 const Th = ({ children }: { children: ReactNode }) => (
-  <th className="border border-slate-200 bg-slate-50 px-2 py-1 text-left font-semibold">{children}</th>
+  <th className="border border-hairline bg-sheet-2 px-2 py-1 text-left font-semibold">{children}</th>
 )
 const Td = ({ children }: { children: ReactNode }) => (
-  <td className="border border-slate-200 px-2 py-1">{children}</td>
+  <td className="border border-hairline px-2 py-1">{children}</td>
 )
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
   <div>
-    <h4 className="mb-1 font-bold text-slate-800">{title}</h4>
+    <h4 className="mb-1 font-bold text-ink">{title}</h4>
     {children}
   </div>
 )

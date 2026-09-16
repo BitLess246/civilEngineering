@@ -43,7 +43,7 @@ const DEF_LOADS: LoadRow[] = [
 
 function Shell({ title, onRemove, children }: { title: string; onRemove: () => void; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="rounded-lg border border-hairline bg-sheet-2 p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-wide text-muted">{title}</span>
         <button type="button" onClick={onRemove} className="text-xs text-fail hover:underline">remove</button>
@@ -91,7 +91,7 @@ export default function FrameAnalysis() {
     <div>
       <PageHeader title="Frame Analysis (2D)" badges={['NSCP 2015', 'ACI 318-14']} />
       <div className="mx-auto max-w-[1500px] px-6 pb-6 pt-5">
-      <p className="no-print mt-1 text-slate-600">
+      <p className="no-print mt-1 text-muted">
         2D frame FEM — 6-DOF members (axial + Hermite bending) built on the shared core, with pinned / roller /
         fixed nodes, nodal & member gravity loads, and all 7 NSCP 2015 load combinations. Phase 2 of the 3D
         model-space roadmap.
@@ -116,9 +116,9 @@ export default function FrameAnalysis() {
               {nodes.map((n) => (
                 <Shell key={n.uid} title={n.id} onRemove={() => setNodes((ns) => ns.filter((q) => q.uid !== n.uid))}>
                   <label className="flex w-32 flex-col text-sm">
-                    <span className="mb-1 font-medium text-slate-600">id</span>
+                    <span className="mb-1 font-medium text-muted">id</span>
                     <input value={n.id} onChange={(e) => updNode(n.uid, { id: e.target.value })}
-                      className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+                      className="rounded-md border border-field-line px-2.5 py-1.5" />
                   </label>
                   <Num label="x" unit="m" value={n.x} onChange={(v) => updNode(n.uid, { x: v })} />
                   <Num label="y" unit="m" value={n.y} onChange={(v) => updNode(n.uid, { y: v })} />
@@ -134,9 +134,9 @@ export default function FrameAnalysis() {
               {members.map((m) => (
                 <Shell key={m.uid} title={m.id} onRemove={() => setMembers((ms) => ms.filter((q) => q.uid !== m.uid))}>
                   <label className="flex w-32 flex-col text-sm">
-                    <span className="mb-1 font-medium text-slate-600">id</span>
+                    <span className="mb-1 font-medium text-muted">id</span>
                     <input value={m.id} onChange={(e) => updMember(m.uid, { id: e.target.value })}
-                      className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+                      className="rounded-md border border-field-line px-2.5 py-1.5" />
                   </label>
                   <Pick label="node i" value={m.i} onChange={(v) => updMember(m.uid, { i: v })} options={nodeIds.map((q) => [q, q])} />
                   <Pick label="node j" value={m.j} onChange={(v) => updMember(m.uid, { j: v })} options={nodeIds.map((q) => [q, q])} />
@@ -215,7 +215,7 @@ export default function FrameAnalysis() {
                   <tbody>
                     {res.perCombo.map((pc, i) => (
                       <tr key={pc.combo.name} onClick={() => pc.result && setSelCombo(i)}
-                        className={`border-t border-slate-100 ${pc.result ? 'cursor-pointer hover:bg-blue-50' : 'text-slate-300'} ${
+                        className={`border-t border-hairline-2 ${pc.result ? 'cursor-pointer hover:bg-brand-tint' : 'text-faint'} ${
                           i === res.govIdx ? 'bg-warn-tint font-semibold' : ''} ${i === shownIdx ? 'outline outline-1 outline-brand' : ''}`}>
                         <td className="py-1 pr-2">{pc.combo.name}{i === res.govIdx ? ' ★' : ''}</td>
                         <td className="py-1 pr-2 text-right">{pc.result ? f1(pc.result.Nmax) : '—'}</td>
@@ -246,7 +246,7 @@ export default function FrameAnalysis() {
           <div className="mb-2 flex flex-wrap items-center gap-3">
             <h2 className="text-[13.5px] font-bold text-ink">Member diagrams</h2>
             <select value={selMember} onChange={(e) => setSelMember(e.target.value)}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm">
+              className="rounded-md border border-field-line px-2.5 py-1.5 text-sm">
               {r.members.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
             </select>
             <span className="text-xs text-muted">local x from node i · N &gt; 0 tension</span>

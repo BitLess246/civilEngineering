@@ -67,13 +67,13 @@ function NumField({ label, unit, value, onChange, step = 'any' }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">
+      <span className="mb-1 font-medium text-muted">
         {label}{unit ? <span className="text-muted"> ({unit})</span> : null}
       </span>
       <input
         type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+        className="rounded-md border border-field-line px-2.5 py-1.5 text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
       />
     </label>
   )
@@ -83,8 +83,8 @@ function Toggle({ label, value, onChange }: { label: ReactNode; value: boolean; 
   return (
     <label className="flex cursor-pointer items-center gap-2 text-sm">
       <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand" />
-      <span className="font-medium text-slate-600">{label}</span>
+        className="h-4 w-4 rounded border-field-line text-brand focus:ring-brand" />
+      <span className="font-medium text-muted">{label}</span>
     </label>
   )
 }
@@ -94,9 +94,9 @@ function Select<T extends string>({ label, value, onChange, options }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}</span>
+      <span className="mb-1 font-medium text-muted">{label}</span>
       <select value={value} onChange={(e) => onChange(e.target.value as T)}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-brand focus:outline-none">
+        className="rounded-md border border-field-line px-2.5 py-1.5 text-ink focus:border-brand focus:outline-none">
         {options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
       </select>
     </label>

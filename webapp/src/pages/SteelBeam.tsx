@@ -219,7 +219,7 @@ export default function SteelBeam() {
     <div>
       <PageHeader title="Steel Beam Design" badges={['AISC 360-16']} />
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <p className="no-print mt-1 text-slate-600">AISC 360-16 §F2/§F3 flexure — lateral-torsional buckling, plus §F3.2 flange local buckling when the flange is not compact — §G2.1 shear, and service deflections against L/360 and L/240. 3D scene and a step-by-step solution.</p>
+        <p className="no-print mt-1 text-muted">AISC 360-16 §F2/§F3 flexure — lateral-torsional buckling, plus §F3.2 flange local buckling when the flange is not compact — §G2.1 shear, and service deflections against L/360 and L/240. 3D scene and a step-by-step solution.</p>
         <ReportControls title="Steel Beam Design Report" />
         <div className="mt-5">
           <BeamTab />

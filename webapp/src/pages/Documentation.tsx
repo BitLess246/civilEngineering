@@ -6,10 +6,10 @@ import { DOC_GROUPS, countControls, matchesQuery, type DocTool, type DocControl 
 const KIND_TAG: Record<NonNullable<DocControl['kind']>, { label: string; cls: string }> = {
   field: { label: 'field', cls: 'bg-sky-50 text-sky-700' },
   choice: { label: 'choice', cls: 'bg-violet-50 text-violet-700' },
-  toggle: { label: 'toggle', cls: 'bg-amber-50 text-amber-700' },
-  button: { label: 'button', cls: 'bg-emerald-50 text-emerald-700' },
-  tab: { label: 'tab', cls: 'bg-teal-50 text-teal-700' },
-  output: { label: 'result', cls: 'bg-slate-100 text-slate-600' },
+  toggle: { label: 'toggle', cls: 'bg-teal-50 text-teal-700' },
+  button: { label: 'button', cls: 'bg-purple-50 text-purple-700' },
+  tab: { label: 'tab', cls: 'bg-brand-tint text-brand' },
+  output: { label: 'result', cls: 'bg-paper text-muted' },
 }
 
 function ControlTable({ controls }: { controls: DocControl[] }) {
@@ -28,13 +28,13 @@ function ControlTable({ controls }: { controls: DocControl[] }) {
           {controls.map((c) => {
             const tag = KIND_TAG[c.kind ?? 'field']
             return (
-              <tr key={c.name} className="border-t border-slate-100 align-top">
+              <tr key={c.name} className="border-t border-hairline-2 align-top">
                 <td className="py-1.5 pr-2">
                   <span className={`rounded px-1 py-px text-[9px] font-semibold uppercase ${tag.cls}`}>{tag.label}</span>
                 </td>
-                <td className="py-1.5 pr-3 font-medium text-slate-800">{c.name}</td>
+                <td className="py-1.5 pr-3 font-medium text-ink">{c.name}</td>
                 <td className="py-1.5 pr-3 whitespace-nowrap text-muted">{c.unit ?? '—'}</td>
-                <td className="py-1.5 leading-5 text-slate-700">
+                <td className="py-1.5 leading-5 text-ink-2">
                   {c.what}
                   {c.default && <span className="text-muted"> Default: {c.default}.</span>}
                 </td>
@@ -49,28 +49,28 @@ function ControlTable({ controls }: { controls: DocControl[] }) {
 
 function ToolDoc({ t }: { t: DocTool }) {
   return (
-    <section id={t.id} className="scroll-mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+    <section id={t.id} className="scroll-mt-6 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline gap-2">
         <h2 className="text-lg font-bold text-brand">{t.name}</h2>
         <a href={`#${t.id}`} className="text-[11px] text-faint hover:text-brand" aria-label={`Link to ${t.name}`}>#</a>
-        <Link to={t.route} className="ml-auto rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-brand hover:border-brand-hover hover:bg-blue-50">
+        <Link to={t.route} className="ml-auto rounded-md border border-field-line px-2 py-1 text-[11px] font-semibold text-brand hover:border-brand-hover hover:bg-brand-tint">
           Open tool →
         </Link>
       </div>
-      <p className="mt-1 text-sm leading-6 text-slate-700">{t.summary}</p>
+      <p className="mt-1 text-sm leading-6 text-ink-2">{t.summary}</p>
       {t.basis && (
         <p className="mt-1 text-[11px] text-muted"><span className="font-semibold">Basis:</span> {t.basis}</p>
       )}
       {t.sections.map((s) => (
-        <div key={s.id} id={`${t.id}-${s.id}`} className="mt-4 scroll-mt-6 border-t border-slate-100 pt-3">
-          <h3 className="text-[13px] font-bold text-slate-800">{s.title}</h3>
-          {s.body && <p className="mt-1 text-xs leading-6 text-slate-600">{s.body}</p>}
+        <div key={s.id} id={`${t.id}-${s.id}`} className="mt-4 scroll-mt-6 border-t border-hairline-2 pt-3">
+          <h3 className="text-[13px] font-bold text-ink">{s.title}</h3>
+          {s.body && <p className="mt-1 text-xs leading-6 text-muted">{s.body}</p>}
           {s.controls && s.controls.length > 0 && <ControlTable controls={s.controls} />}
           {s.notes && s.notes.length > 0 && (
             <ul className="mt-2 space-y-1">
               {s.notes.map((n) => (
-                <li key={n} className="flex gap-2 text-xs leading-5 text-slate-600">
-                  <span className="text-slate-300">•</span><span>{n}</span>
+                <li key={n} className="flex gap-2 text-xs leading-5 text-muted">
+                  <span className="text-faint">•</span><span>{n}</span>
                 </li>
               ))}
             </ul>
@@ -91,7 +91,7 @@ export default function Documentation() {
     <div className="mx-auto max-w-[1400px] px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Reference</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">Documentation</h1>
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
         Every control in the app — each field, dropdown, checkbox, button, tab and result — with what it does and
         what changes downstream when you touch it. Labels are reproduced exactly as they appear on screen, so
         searching here for something you can see in the UI finds its explanation.{' '}
@@ -106,7 +106,7 @@ export default function Documentation() {
         <input
           value={q} onChange={(e) => setQ(e.target.value)}
           placeholder="Search controls, tools, clauses…"
-          className="w-full max-w-md rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand focus:outline-none sm:w-96"
+          className="w-full max-w-md rounded-lg border border-field-line px-3 py-2 text-sm focus:border-brand focus:outline-none sm:w-96"
         />
         {q.trim() && (
           <span className="text-xs text-muted">
@@ -125,11 +125,11 @@ export default function Documentation() {
             if (!tools.length) return null
             return (
               <div key={g} className="mb-3">
-                <p className="text-[11px] font-bold text-slate-700">{g}</p>
-                <ul className="mt-1 space-y-px border-l border-slate-200 pl-2">
+                <p className="text-[11px] font-bold text-ink-2">{g}</p>
+                <ul className="mt-1 space-y-px border-l border-hairline pl-2">
                   {tools.map((t) => (
                     <li key={t.id}>
-                      <a href={`#${t.id}`} className="block py-0.5 text-[11px] text-slate-600 hover:text-brand">
+                      <a href={`#${t.id}`} className="block py-0.5 text-[11px] text-muted hover:text-brand">
                         {t.name}
                       </a>
                     </li>
@@ -143,7 +143,7 @@ export default function Documentation() {
         {/* ── body ── */}
         <div className="space-y-8">
           {shown.length === 0 && (
-            <p className="rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-muted">
+            <p className="rounded-xl border border-hairline bg-sheet p-6 text-sm text-muted">
               Nothing matches “{q}”. Every word has to match — try fewer of them.
             </p>
           )}

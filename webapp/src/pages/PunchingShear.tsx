@@ -91,7 +91,7 @@ export default function PunchingShear() {
         <div>
       <PageHeader title="Punching Shear" badges={['ACI 318-14 §22.6', 'NSCP 2015']} />
       <div className="mx-auto max-w-[1500px] p-6">
-      <p className="no-print mt-1 text-slate-600">
+      <p className="no-print mt-1 text-muted">
         Two-way slab–column punching shear — ACI 318-14 §22.6.
         Critical perimeter at d/2 from column face. φ = 0.75.
       </p>
@@ -124,7 +124,7 @@ export default function PunchingShear() {
         {/* ── RESULTS ── */}
         {r ? (
           <div className="flex flex-col gap-6">
-            <section data-pdf-drawing className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm
+            <section data-pdf-drawing className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm
               [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
               <h2 className="mb-2 text-[1.02rem] font-bold text-brand">Critical section</h2>
               <PunchingPlan c1={f.c1} c2={f.c2} d={d} position={f.position} b0={r.b0} alphaS={r.alphaS} />
@@ -168,7 +168,7 @@ export default function PunchingShear() {
             </ResultCard>
           </div>
         ) : (
-          <p className="self-start rounded-xl border border-slate-200 bg-sheet p-6 text-sm text-muted">
+          <p className="self-start rounded-xl border border-hairline bg-sheet p-6 text-sm text-muted">
             Fill in all inputs to see results.
           </p>
         )}

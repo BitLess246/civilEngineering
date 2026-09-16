@@ -53,7 +53,7 @@ export function CriticalPathDiagram({ activities, cpm, critical, onEditDuration 
     </div>
 
   return (
-    <div className="overflow-auto rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+    <div className="overflow-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
       <div className="relative" style={{ width: layout.width, height: layout.height }}>
         {/* arrows */}
         <svg className="pointer-events-none absolute inset-0" width={layout.width} height={layout.height}>
@@ -89,7 +89,7 @@ export function CriticalPathDiagram({ activities, cpm, critical, onEditDuration 
           const p = layout.pos.get(a.id)!
           const isCrit = critical.has(a.id)
           return (
-            <div key={a.id} className={`absolute rounded-md border-2 bg-sheet shadow-sm ${isCrit ? 'border-fail-line' : 'border-slate-300'}`}
+            <div key={a.id} className={`absolute rounded-md border-2 bg-sheet shadow-sm ${isCrit ? 'border-fail-line' : 'border-field-line'}`}
               style={{ left: p.x, top: p.y, width: BOX_W, height: BOX_H }} title={a.name}>
               <div className="grid h-[22px] grid-cols-3 divide-x divide-white overflow-hidden rounded-t">
                 {cell(c.es, 'bg-[#a5d76e] text-[#1e3a0f]')}
@@ -100,12 +100,12 @@ export function CriticalPathDiagram({ activities, cpm, critical, onEditDuration 
                 </div>
                 {cell(c.ef, 'bg-[#a5d76e] text-[#1e3a0f]')}
               </div>
-              <div className="flex h-[22px] items-center justify-center truncate px-1 text-[10px] font-bold text-slate-700">
+              <div className="flex h-[22px] items-center justify-center truncate px-1 text-[10px] font-bold text-ink-2">
                 {a.id} · {a.name.replace(/^(Floor|Columns|Footings|Level) /, '').split(' — ')[0].slice(0, 16)}
               </div>
               <div className="grid h-[22px] grid-cols-3 divide-x divide-white overflow-hidden rounded-b">
                 {cell(c.ls, 'bg-[#57cbbf] text-[#0f3b36]')}
-                {cell(c.totalFloat, `${isCrit ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'}`)}
+                {cell(c.totalFloat, `${isCrit ? 'bg-fail text-on-solid' : 'bg-muted text-on-solid'}`)}
                 {cell(c.lf, 'bg-[#57cbbf] text-[#0f3b36]')}
               </div>
             </div>

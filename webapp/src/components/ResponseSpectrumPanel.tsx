@@ -133,7 +133,7 @@ export function ResponseSpectrumPanel({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-sheet p-4 shadow-sm">
+    <div className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
       <h2 className="mb-1 text-[1.02rem] font-bold text-brand">
         Response Spectrum Analysis — NSCP §208.6
       </h2>
@@ -141,13 +141,13 @@ export function ResponseSpectrumPanel({
         Design spectrum: Sa/g = min(2.5·Ca·I/R, Cv·I/(R·T)) ≥ 0.11·Ca·I/R.
         {' '}Ts = {f3(Ts)} s. CQC combination (ζ = {pct(zeta)}).
         {T1 !== null && seismicT !== undefined && (
-          <> T₁ = <span className="font-semibold text-slate-600">{f3(T1)} s</span> (modal) vs{' '}
+          <> T₁ = <span className="font-semibold text-muted">{f3(T1)} s</span> (modal) vs{' '}
             T_approx = {f3(seismicT)} s (Ct·h<sub>n</sub><sup>¾</sup>).</>
         )}
       </p>
 
       {/* Spectrum chart */}
-      <div className="mb-3 rounded-lg border border-slate-100 bg-slate-50 p-2">
+      <div className="mb-3 rounded-lg border border-hairline-2 bg-sheet-2 p-2">
         <SpectrumChart result={result} />
       </div>
 
@@ -159,18 +159,18 @@ export function ResponseSpectrumPanel({
           ['CvI/R (at 1 s)', f3(Cv * I / R) + ' g'],
           ['min', f3(0.11 * Ca * I / R) + ' g'],
         ].map(([k, v]) => (
-          <span key={k}><span className="font-semibold text-slate-600">{k}</span> = {v}</span>
+          <span key={k}><span className="font-semibold text-muted">{k}</span> = {v}</span>
         ))}
       </div>
 
       {/* Modal base shear table */}
       {modalForces.length > 0 && (
         <>
-          <h3 className="mb-1 text-[0.82rem] font-semibold text-slate-600">Modal base shear</h3>
+          <h3 className="mb-1 text-[0.82rem] font-semibold text-muted">Modal base shear</h3>
           <div className="mb-3 overflow-x-auto">
             <table className="min-w-full text-xs">
               <thead>
-                <tr className="border-b border-slate-200 text-muted">
+                <tr className="border-b border-hairline text-muted">
                   <th className="pb-1 pr-3 text-left font-semibold">Mode</th>
                   <th className="pb-1 pr-3 text-right font-semibold">T (s)</th>
                   <th className="pb-1 pr-3 text-right font-semibold">Sa/g</th>
@@ -184,18 +184,18 @@ export function ResponseSpectrumPanel({
                   const d = domDir(mf)
                   const color = DIR_COLOR[d]
                   return (
-                    <tr key={mf.modeIdx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                      <td className="py-0.5 pr-3 font-mono text-slate-700">
+                    <tr key={mf.modeIdx} className="border-b border-hairline-2 last:border-0 hover:bg-sheet-2">
+                      <td className="py-0.5 pr-3 font-mono text-ink-2">
                         {mf.modeIdx}
                         {d !== -1 && (
                           <span className="ml-1 text-[9px]" style={{ color }}>{d === 0 ? 'X' : 'Z'}</span>
                         )}
                       </td>
-                      <td className="py-0.5 pr-3 text-right tabular-nums font-semibold text-slate-800">{f3(mf.period)}</td>
-                      <td className="py-0.5 pr-3 text-right tabular-nums text-slate-600">{f3(mf.SaG)}</td>
-                      <td className="py-0.5 pr-3 text-right tabular-nums text-slate-600">{f2(mf.Sa)}</td>
-                      <td className="py-0.5 pr-3 text-right tabular-nums text-slate-700">{f0(mf.baseShear[0])}</td>
-                      <td className="py-0.5 text-right tabular-nums text-slate-700">{f0(mf.baseShear[2])}</td>
+                      <td className="py-0.5 pr-3 text-right tabular-nums font-semibold text-ink">{f3(mf.period)}</td>
+                      <td className="py-0.5 pr-3 text-right tabular-nums text-muted">{f3(mf.SaG)}</td>
+                      <td className="py-0.5 pr-3 text-right tabular-nums text-muted">{f2(mf.Sa)}</td>
+                      <td className="py-0.5 pr-3 text-right tabular-nums text-ink-2">{f0(mf.baseShear[0])}</td>
+                      <td className="py-0.5 text-right tabular-nums text-ink-2">{f0(mf.baseShear[2])}</td>
                     </tr>
                   )
                 })}
@@ -206,11 +206,11 @@ export function ResponseSpectrumPanel({
       )}
 
       {/* Combined base shear summary */}
-      <h3 className="mb-1 text-[0.82rem] font-semibold text-slate-600">Combined base shear</h3>
+      <h3 className="mb-1 text-[0.82rem] font-semibold text-muted">Combined base shear</h3>
       <div className="overflow-x-auto">
         <table className="min-w-full text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-muted">
+            <tr className="border-b border-hairline text-muted">
               <th className="pb-1 pr-4 text-left font-semibold">Method</th>
               <th className="pb-1 pr-4 text-right font-semibold">V_x (kN)</th>
               <th className="pb-1 pr-4 text-right font-semibold">V_z (kN)</th>
@@ -219,17 +219,17 @@ export function ResponseSpectrumPanel({
             </tr>
           </thead>
           <tbody>
-            <tr className="border-b border-slate-100">
-              <td className="py-0.5 pr-4 text-slate-600">SRSS</td>
-              <td className="py-0.5 pr-4 text-right tabular-nums text-slate-700">{f0(srss[0])}</td>
-              <td className="py-0.5 pr-4 text-right tabular-nums text-slate-700">{f0(srss[2])}</td>
+            <tr className="border-b border-hairline-2">
+              <td className="py-0.5 pr-4 text-muted">SRSS</td>
+              <td className="py-0.5 pr-4 text-right tabular-nums text-ink-2">{f0(srss[0])}</td>
+              <td className="py-0.5 pr-4 text-right tabular-nums text-ink-2">{f0(srss[2])}</td>
               {staticV && <td className="py-0.5 pr-4" />}
               {staticV && <td className="py-0.5" />}
             </tr>
-            <tr className="border-b border-slate-100">
-              <td className="py-0.5 pr-4 font-semibold text-slate-800">CQC ←</td>
-              <td className="py-0.5 pr-4 text-right tabular-nums font-semibold text-slate-900">{f0(cqc[0])}</td>
-              <td className="py-0.5 pr-4 text-right tabular-nums font-semibold text-slate-900">{f0(cqc[2])}</td>
+            <tr className="border-b border-hairline-2">
+              <td className="py-0.5 pr-4 font-semibold text-ink">CQC ←</td>
+              <td className="py-0.5 pr-4 text-right tabular-nums font-semibold text-ink">{f0(cqc[0])}</td>
+              <td className="py-0.5 pr-4 text-right tabular-nums font-semibold text-ink">{f0(cqc[2])}</td>
               {staticV && (
                 <td className={`py-0.5 pr-4 text-right tabular-nums text-xs ${cqcRatio[0] !== null ? (cqcRatio[0]! < 0.9 ? 'text-fail font-semibold' : 'text-ok') : 'text-muted'}`}>
                   {cqcRatio[0] !== null ? pct(cqcRatio[0]!) : '—'}

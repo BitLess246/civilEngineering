@@ -3,9 +3,9 @@ import { SITE, businessName, addressLines, missingSiteFields } from '../../lib/s
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="border-t border-slate-100 py-3 sm:grid sm:grid-cols-[160px_1fr] sm:gap-4">
+    <div className="border-t border-hairline-2 py-3 sm:grid sm:grid-cols-[160px_1fr] sm:gap-4">
       <dt className="text-[12px] font-semibold uppercase tracking-wide text-muted">{label}</dt>
-      <dd className="mt-1 text-[14px] leading-6 text-slate-800 sm:mt-0">{children}</dd>
+      <dd className="mt-1 text-[14px] leading-6 text-ink sm:mt-0">{children}</dd>
     </div>
   )
 }
@@ -23,7 +23,7 @@ export default function Contact() {
     <div className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted">Support</p>
       <h1 className="mt-1 text-2xl font-bold text-brand">Contact us</h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
         A real person reads these. If something is wrong with a calculation, tell us what you entered
         and what you expected — that is usually enough to reproduce it.
       </p>
@@ -35,7 +35,7 @@ export default function Contact() {
         </div>
       )}
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-sheet p-5 shadow-sm">
+      <section className="mt-6 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
         <dl>
           <Row label="Business name">
             {SITE.legalName.trim()
@@ -55,7 +55,7 @@ export default function Contact() {
       </section>
 
       <h2 className="mt-8 text-[1.05rem] font-bold text-brand">What to include</h2>
-      <div className="mt-2 space-y-3 text-sm leading-6 text-slate-700">
+      <div className="mt-2 space-y-3 text-sm leading-6 text-ink-2">
         <p>
           <strong>A wrong or surprising result:</strong> the tool name, the inputs you used, and the
           number you expected. If you have a hand calculation, send it — that is the fastest possible
@@ -74,7 +74,7 @@ export default function Contact() {
       </div>
 
       <h2 className="mt-8 text-[1.05rem] font-bold text-brand">Before you write</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-700">
+      <p className="mt-2 text-sm leading-6 text-ink-2">
         The <Link to="/docs" className="text-brand underline">documentation</Link> explains every
         control on every page, and the{' '}
         <Link to="/validation" className="text-brand underline">validation page</Link> shows the
@@ -82,7 +82,7 @@ export default function Contact() {
         right?&rdquo;, that page may answer it faster than we can.
       </p>
 
-      <p className="mt-8 border-t border-slate-200 pt-4 text-[13px] text-muted">
+      <p className="mt-8 border-t border-hairline pt-4 text-[13px] text-muted">
         {businessName()} is a Philippine business. Our{' '}
         <Link to="/terms" className="text-brand underline">Terms</Link>,{' '}
         <Link to="/privacy" className="text-brand underline">Privacy Policy</Link> and{' '}

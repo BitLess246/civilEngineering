@@ -77,7 +77,7 @@ export default function WeldedConnection() {
       <PageHeader title="Eccentric weld group" badges={['AISC 360-16']} />
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
       <ReportControls title="Welded Connection Report" badges={['AISC 360-16']} />
-      <p className="mt-2 max-w-3xl text-sm text-slate-600">
+      <p className="mt-2 max-w-3xl text-sm text-muted">
         Elastic (weld-as-a-line) method for an eccentrically-loaded fillet weld group. Each unit length
         carries the direct share P/L_w plus a torsional share T·ρ/(J/t), T = Pᵧ·eₓ − Pₓ·e_y and
         J/t = Σ[L³/12 + L·ρ_c²]. The fillet throat is 0.707·w (NSCP 510.2.2 / AISC J2.2), so the
@@ -90,17 +90,17 @@ export default function WeldedConnection() {
         <section className="rail-card rounded-lg border border-hairline bg-sheet p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-[13.5px] font-bold text-ink">Weld segments (mm)</h2>
-            <button type="button" onClick={addSeg} className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-brand hover:bg-blue-50">+ Add segment</button>
+            <button type="button" onClick={addSeg} className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">+ Add segment</button>
           </div>
           <div className="max-h-56 overflow-auto">
             <table className="w-full text-xs">
               <thead className="text-muted"><tr className="text-left"><th className="pr-2 py-1">Weld</th><th className="pr-2">x₁</th><th className="pr-2">y₁</th><th className="pr-2">x₂</th><th className="pr-2">y₂</th><th className="pr-2 text-right">L</th><th /></tr></thead>
               <tbody>
                 {segs.map((s, i) => (
-                  <tr key={s.id} className="border-t border-slate-100">
+                  <tr key={s.id} className="border-t border-hairline-2">
                     <td className="pr-2 py-1 font-medium">{s.id}</td>
                     {(['x1', 'y1', 'x2', 'y2'] as const).map((k) => (
-                      <td key={k} className="pr-2"><input type="number" value={s[k]} onChange={(e) => setSeg(i, k, num(e.target.value))} className="w-14 rounded border border-slate-200 px-1 py-0.5" /></td>
+                      <td key={k} className="pr-2"><input type="number" value={s[k]} onChange={(e) => setSeg(i, k, num(e.target.value))} className="w-14 rounded border border-hairline px-1 py-0.5" /></td>
                     ))}
                     <td className="pr-2 text-right font-mono">{f2(Math.hypot(s.x2 - s.x1, s.y2 - s.y1))}</td>
                     <td className="text-right"><button type="button" onClick={() => delSeg(i)} className="text-muted hover:text-fail">✕</button></td>
@@ -113,22 +113,22 @@ export default function WeldedConnection() {
           <h2 className="mb-2 mt-4 text-[13.5px] font-bold text-ink">Load &amp; weld</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <label className="flex flex-col text-sm">
-              <span className="mb-1 text-slate-600">Design basis</span>
+              <span className="mb-1 text-muted">Design basis</span>
               <select value={basis} onChange={(e) => setBasis(e.target.value as DesignBasis)}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                className="rounded-md border border-field-line px-2.5 py-1.5">
                 <option value="LRFD">LRFD — φ = {SAFETY.connection.phi.toFixed(2)}</option>
                 <option value="ASD">ASD — Ω = {SAFETY.connection.omega.toFixed(2)}</option>
               </select>
             </label>
             <label className="flex flex-col text-sm">
-              <span className="mb-1 text-slate-600">Electrode</span>
+              <span className="mb-1 text-muted">Electrode</span>
               <select value={electrode}
                 onChange={(e) => {
                   const v = e.target.value as ElectrodeClass | 'custom'
                   setElectrode(v)
                   if (v !== 'custom') setFEXX(FEXX_BY_CLASS[v])
                 }}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                className="rounded-md border border-field-line px-2.5 py-1.5">
                 {(Object.keys(FEXX_BY_CLASS) as ElectrodeClass[]).map((k) => (
                   <option key={k} value={k}>{k}XX ({FEXX_BY_CLASS[k]} MPa)</option>
                 ))}
@@ -140,8 +140,8 @@ export default function WeldedConnection() {
               ...(electrode === 'custom' ? [['F_EXX (MPa)', FEXX, setFEXX] as const] : []),
              ] as const).map(([lbl, val, set]) => (
               <label key={lbl} className="flex flex-col text-sm">
-                <span className="mb-1 text-slate-600">{lbl}</span>
-                <input type="number" value={val} onChange={(e) => set(num(e.target.value))} className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+                <span className="mb-1 text-muted">{lbl}</span>
+                <input type="number" value={val} onChange={(e) => set(num(e.target.value))} className="rounded-md border border-field-line px-2.5 py-1.5" />
               </label>
             ))}
           </div>
@@ -164,17 +164,17 @@ export default function WeldedConnection() {
               // number is the ALLOWABLE strength. AISC calls both the available
               // strength, which is the one word that is true either way.
               [`Available strength / length (${basis})`, `${f2(r.capacityPerLen)} N/mm`]].map(([k, v]) => (
-              <div key={k} className="flex justify-between border-t border-slate-100 py-1"><span className="text-muted">{k}</span><span className="font-mono">{v}</span></div>
+              <div key={k} className="flex justify-between border-t border-hairline-2 py-1"><span className="text-muted">{k}</span><span className="font-mono">{v}</span></div>
             ))}
-            <div className="flex justify-between border-t border-slate-100 py-1">
+            <div className="flex justify-between border-t border-hairline-2 py-1">
               <span className="text-muted">Peak force / length f_max (≤ {f2(r.capacityPerLen)})</span>
               <span className={`font-mono font-semibold ${r.ok ? 'text-ok' : 'text-fail'}`}>{f2(r.fMax)} N/mm {r.ok ? '✓' : '✗'}</span>
             </div>
-            <div className="flex justify-between border-t border-slate-100 py-1">
+            <div className="flex justify-between border-t border-hairline-2 py-1">
               <span className="text-muted">Required fillet leg</span>
               <span className="font-mono">{f2(r.reqSize)} mm</span>
             </div>
-            <div className="mt-2 flex items-baseline justify-between rounded-lg bg-blue-50 p-2">
+            <div className="mt-2 flex items-baseline justify-between rounded-lg bg-brand-tint p-2">
               <span className="text-sm font-semibold text-brand">Maximum {demandLabel(basis, 'P')}</span>
               <span className="font-mono text-lg font-bold text-brand">{f2(r.maxP)} kN</span>
             </div>

@@ -34,11 +34,11 @@ export function DisciplinePicker({
         return (
           <label key={label}
             className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3.5 py-2.5 transition-colors ${
-              on ? 'border-brand bg-brand-tint' : 'border-slate-200 bg-sheet hover:border-slate-300'}`}>
+              on ? 'border-brand bg-brand-tint' : 'border-hairline bg-sheet hover:border-field-line'}`}>
             <input type="checkbox" checked={on} onChange={() => onToggle(label)}
               className="mt-0.5 h-4 w-4 flex-none accent-brand" />
             <span className="min-w-0">
-              <span className={`block text-[13px] font-bold ${on ? 'text-brand' : 'text-slate-700'}`}>{label}</span>
+              <span className={`block text-[13px] font-bold ${on ? 'text-brand' : 'text-ink-2'}`}>{label}</span>
               <span className="mt-0.5 block font-mono text-[10.5px] leading-relaxed text-muted">{summarise(label)}</span>
             </span>
           </label>
@@ -48,8 +48,8 @@ export function DisciplinePicker({
           the whole catalog and nobody hunts for a group that is simply not
           offered. Shown as fixed, not as an unchecked box they cannot tick. */}
       {PINNED_GROUPS.map((label) => (
-        <div key={label} className="flex items-start gap-2.5 rounded-lg border border-dashed border-slate-200 px-3.5 py-2.5">
-          <span className="mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-[3px] bg-slate-300 text-[10px] font-bold text-white" aria-hidden="true">✓</span>
+        <div key={label} className="flex items-start gap-2.5 rounded-lg border border-dashed border-hairline px-3.5 py-2.5">
+          <span className="mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-[3px] bg-muted text-[10px] font-bold text-on-solid" aria-hidden="true">✓</span>
           <span className="min-w-0">
             <span className="block text-[13px] font-bold text-muted">{label}</span>
             <span className="mt-0.5 block font-mono text-[10.5px] leading-relaxed text-faint">Always shown — {summarise(label)}</span>
