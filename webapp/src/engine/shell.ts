@@ -292,6 +292,11 @@ export interface ElementStress {
   sigma1: number; sigma2: number
   /** Von Mises membrane stress, kN/m² (plane-stress formula). */
   vonMises: number
+  /** Von Mises at the plate SURFACE — membrane ± the bending fibre stress
+   *  (6M/t²), evaluated at both faces and enveloped, kN/m². For a
+   *  bending-dominated slab this is the meaningful stress; the membrane-only
+   *  `vonMises` misses the bending action entirely. */
+  vmSurf: number
   /** Bending moments per unit width in element-local x–y, kN·m/m. */
   Mx: number; My: number; Mxy: number
 }
@@ -303,7 +308,7 @@ export interface ElementStress {
  * All stresses are in element-local coordinates.
  */
 export function recoverShellStress(
-  nodes: ShellNode[], elems: ShellElem[], result: ShellResult,
+  nodes: ShellNode[], elems: ShellElem[], result: Pick<ShellResult, 'd'>,
 ): ElementStress[] {
   const idx = new Map(nodes.map((n, i) => [n.id, i]))
   return elems.map((e) => {
@@ -356,7 +361,17 @@ export function recoverShellStress(
     const My = cb * (nu * kap[0] + kap[1])
     const Mxy = cb * (1 - nu) / 2 * kap[2]
 
-    return { id: e.id, sigmaX, sigmaY, tauXY, sigma1, sigma2, vonMises, Mx, My, Mxy }
+    // Surface von Mises: membrane ± the bending fibre stress (σ = 6M/t² at the
+    // extreme fibre), both faces enveloped — for a bending-dominated slab this
+    // is the meaningful stress, where the membrane-only `vonMises` reads ~0.
+    const kSurf = 6 / (tm * tm)
+    const vmFace = (sg: number) =>
+      Math.sqrt((sigmaX + sg * kSurf * Mx) ** 2 + (sigmaY + sg * kSurf * My) ** 2
+        - (sigmaX + sg * kSurf * Mx) * (sigmaY + sg * kSurf * My)
+        + 3 * (tauXY + sg * kSurf * Mxy) ** 2)
+    const vmSurf = Math.max(vmFace(1), vmFace(-1))
+
+    return { id: e.id, sigmaX, sigmaY, tauXY, sigma1, sigma2, vonMises, vmSurf, Mx, My, Mxy }
   })
 }
 

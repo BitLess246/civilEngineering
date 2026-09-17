@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { memberDiagramRibbon, diagramScale } from './memberDiagram3d'
+import { memberDiagramRibbon, diagramScale, memberRotDeg } from './memberDiagram3d'
 import type { V3 } from './frame3d'
 
 const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
@@ -68,6 +68,24 @@ describe('memberDiagramRibbon — 3D internal-force diagram geometry', () => {
     const dir = sub(d, c)
     const { base, curve } = memberDiagramRibbon(c, d, cs, cy, 'Mz', 0.05)
     curve.forEach((p, i) => expect(dot(sub(p, base[i]), dir)).toBeCloseTo(0, 9))
+  })
+
+  it('honours the member roll: a rot=90 column offsets along global X, not Z', () => {
+    // The solver rolls every vertical member 90° (defaultAxisRotation), so its
+    // local y′ = global X and z′ = global −Z. The ribbon must offset along the
+    // SAME axes or the diagram hangs off the wrong face of the column.
+    const c: V3 = [2, 0, 1], d: V3 = [2, 3, 1]
+    const cs = [0, 1.5, 3], cy = [10, 0, -10]
+    const rot = memberRotDeg(sub(d, c))   // vertical ⇒ 90
+    expect(rot).toBe(90)
+    const { base, curve } = memberDiagramRibbon(c, d, cs, cy, 'Mz', 0.05, rot)
+    // station 0 carries ordinate 10; Mz offsets along the ROLLED y′ = global X
+    expect(sub(curve[0], base[0])[0]).toBeCloseTo(10 * 0.05, 9)
+    expect(sub(curve[0], base[0])[2]).toBeCloseTo(0, 9)
+    // and My (offset axis z′) offsets along global −Z, not +X
+    const my = memberDiagramRibbon(c, d, cs, cy, 'My', 0.05, rot)
+    expect(sub(my.curve[0], my.base[0])[2]).toBeCloseTo(-10 * 0.05, 9)
+    expect(sub(my.curve[0], my.base[0])[0]).toBeCloseTo(0, 9)
   })
 })
 

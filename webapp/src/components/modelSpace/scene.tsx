@@ -23,7 +23,7 @@ import { memberDiagramRibbon, type DiagramComp } from '../../engine/memberDiagra
 import { footingPrism } from '../../engine/footingLayout'
 import { shapeByName, effectiveSection } from '../../engine/aiscSections'
 import { buildSectionShapes } from '../../lib/sectionShapes3d'
-import { SEL, LOAD_COLOR, levelDrop, memberColor, DIAG_COLOR, UP, TRIB_COLOR, slabTributaryPolys, type TribKind } from './sceneTokens'
+import { SEL, LOAD_COLOR, levelDrop, memberColor, DIAG_COLOR, UP, TRIB_COLOR, slabTributaryPolys, rampAt, type TribKind, type TintRamp } from './sceneTokens'
 
 /**
  * The EDGES of the mesh this sits inside, drawn only in wireframe.
@@ -68,10 +68,12 @@ const STICK_PICK = 0.14
  * description of the same member — the one the stiffness matrix is assembled
  * from — and it runs node to node by definition.
  */
-export function MemberStick3D({ a, b, role, selected, tint = 0, material, onPick }: {
+export function MemberStick3D({ a, b, role, selected, tint = 0, ramp, material, onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
   /** 0–1 utilisation tint, exactly as the solid takes it — see `memberColor`. */
   tint?: number
+  /** Station tint along the member — wins over the flat `tint` when present. */
+  ramp?: TintRamp
   material?: string
   onPick: () => void
 }) {
@@ -81,17 +83,28 @@ export function MemberStick3D({ a, b, role, selected, tint = 0, material, onPick
     const quat = len > 1e-9
       ? new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.clone().normalize())
       : new THREE.Quaternion()
-    return {
-      line: new THREE.BufferGeometry().setFromPoints([a, b]),
-      mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len,
+    // With a ramp the line runs through the tint stations (a 2-point line can
+    // only interpolate end to end and misses the diagram's shape); its vertex
+    // colours make the skeleton read the same stress story as the solid.
+    const ts = ramp && !selected ? ramp.ts : [0, 1]
+    const pts = ts.map((t) => a.clone().lerp(b, t))
+    const geo = new THREE.BufferGeometry().setFromPoints(pts)
+    const colors = new Float32Array(pts.length * 3)
+    const c = new THREE.Color()
+    for (let i = 0; i < pts.length; i++) {
+      c.set(memberColor(role, selected, ramp && !selected ? ramp.vs[i] : tint, material))
+      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b
     }
-  }, [a, b])
-  const color = memberColor(role, selected, tint, material)
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ vertexColors: true }))
+    return {
+      line, mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len,
+    }
+  }, [a, b, role, selected, tint, ramp, material])
+  useEffect(() => () => { line.geometry.dispose(); (line.material as THREE.Material).dispose() }, [line])
   return (
     <group>
-      <lineSegments geometry={line}>
-        <lineBasicMaterial color={color} />
-      </lineSegments>
+      <primitive object={line} />
       {/* The pick target. Invisible rather than absent: a line this thin is
           almost unclickable, and selection has to keep working in wireframe. */}
       <mesh position={mid} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>
@@ -150,10 +163,12 @@ export function Nodes3D({ nodePos, size = 0.07 }: {
   )
 }
 
-export function Member3D({ a, b, role, selected, tint = 0, sec, style = 'solid', onPick }: {
+export function Member3D({ a, b, role, selected, tint = 0, ramp, sec, style = 'solid', onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
   /** 0–1 utilisation tint (|M| relative to the model max) after analysis. */
   tint?: number
+  /** Station tint along the member — wins over the flat `tint` when present. */
+  ramp?: TintRamp
   /** the member's own section, drawn to scale (mm → m). */
   sec?: { b: number; h: number; material?: string }
   /** Solid concrete, ghosted (a cage is being read through it) or wireframe —
@@ -172,17 +187,39 @@ export function Member3D({ a, b, role, selected, tint = 0, sec, style = 'solid',
   // the node is the top of a beam, not its centroid — see levelDrop
   const drop = levelDrop(role, ty, a, b)
   const color = memberColor(role, selected, tint, sec?.material)
+  // Axially segmented box with per-vertex colours: the tint varies ALONG the
+  // member the way the force diagram does, instead of one flat peak colour
+  // per member that jumps at every joint.
+  const geom = useMemo(() => {
+    const useRamp = !!ramp && !selected
+    const segs = useRamp ? Math.max(1, ramp!.ts.length - 1) : 1
+    const g = new THREE.BoxGeometry(len, ty, tz, segs, 1, 1)
+    if (useRamp) {
+      const pos = g.getAttribute('position') as THREE.BufferAttribute
+      const colors = new Float32Array(pos.count * 3)
+      const c = new THREE.Color()
+      for (let i = 0; i < pos.count; i++) {
+        const t = (pos.getX(i) + len / 2) / (len || 1)
+        c.set(memberColor(role, false, rampAt(ramp!, t), sec?.material))
+        colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+    }
+    return g
+  }, [len, ty, tz, ramp, selected, role, sec?.material])
+  useEffect(() => () => geom.dispose(), [geom])
+  const useVC = !!ramp && !selected
   return (
-    <mesh position={[mid.x, mid.y - drop, mid.z]} quaternion={quat}
+    <mesh geometry={geom} position={[mid.x, mid.y - drop, mid.z]} quaternion={quat}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
-      <boxGeometry args={[len, ty, tz]} />
       {/* See-through while the cages are shown, and again in wireframe — solid
           concrete hides the steel inside it, which made "show reinforcement
           cages" look like it did nothing at all. The `key` is what makes the
           change work rather than merely look wired: three will not apply a
           transparent false → true change to a material that already exists, so
           the material has to be rebuilt. See modelSpace/viewMode.ts. */}
-      <meshStandardMaterial key={surfaceKey(style)} color={color} {...surfaceMaterial(style)} />
+      <meshStandardMaterial key={`${surfaceKey(style)}${useVC ? '-vc' : ''}`} color={useVC ? '#ffffff' : color}
+        vertexColors={useVC} {...surfaceMaterial(style)} />
     </mesh>
   )
 }
@@ -247,9 +284,11 @@ export function SlackMember3D({ a, b }: { a: THREE.Vector3; b: THREE.Vector3 }) 
  *  extrude (+Z) runs along the member and its strong axis (depth d) stays
  *  vertical for beams/girders. Falls back to the box Member3D if the shape is
  *  unknown. */
-export function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisRotation, style = 'solid', onPick }: {
+export function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, ramp, axisRotation, style = 'solid', onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; shapeName: string
   selected: boolean; tint?: number
+  /** Station tint along the member — wins over the flat `tint` when present. */
+  ramp?: TintRamp
   /** Explicit local-axis rotation (°). Absent ⇒ the role default (columns 90). */
   axisRotation?: number
   /** See `viewMode`. A steel section wireframes to its own profile outline,
@@ -289,16 +328,39 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisR
     return tint > 0 ? `#${base.lerp(new THREE.Color('#dc2626'), tint).getHexString()}` : `#${base.getHexString()}`
   }, [selected, tint])
 
+  // Extrude with as many axial steps as tint stations, coloured per vertex by
+  // axial position — the steel section reads the same continuous stress story
+  // the concrete box does.
+  const useVC = !!ramp && !selected
+  const geos = useMemo(() => {
+    const steps = useVC ? Math.max(1, ramp!.ts.length - 1) : 1
+    return shapes.map((sh) => {
+      const g = new THREE.ExtrudeGeometry(sh, { depth: len, bevelEnabled: false, steps })
+      if (useVC) {
+        const pos = g.getAttribute('position') as THREE.BufferAttribute
+        const colors = new Float32Array(pos.count * 3)
+        const c = new THREE.Color()
+        for (let i = 0; i < pos.count; i++) {
+          const t = pos.getZ(i) / (len || 1)
+          c.set(memberColor(role, false, rampAt(ramp!, t)))
+          colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b
+        }
+        g.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+      }
+      return g
+    })
+  }, [shapes, len, ramp, role, useVC])
+  useEffect(() => () => geos.forEach((g) => g.dispose()), [geos])
+
   if (shapes.length === 0) {
-    return <Member3D a={a} b={b} role={role} selected={selected} tint={tint} style={style} onPick={onPick} />
+    return <Member3D a={a} b={b} role={role} selected={selected} tint={tint} ramp={ramp} style={style} onPick={onPick} />
   }
   return (
     <group position={pos} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>
-      {shapes.map((sh, i) => (
-        <mesh key={i}>
-          <extrudeGeometry args={[sh, { depth: len, bevelEnabled: false, steps: 1 }]} />
-          <meshStandardMaterial key={surfaceKey(style)} color={color} metalness={0.35} roughness={0.5}
-            {...surfaceMaterial(style)} />
+      {geos.map((g, i) => (
+        <mesh key={i} geometry={g}>
+          <meshStandardMaterial key={`${surfaceKey(style)}${useVC ? '-vc' : ''}`} color={useVC ? '#ffffff' : color}
+            vertexColors={useVC} metalness={0.35} roughness={0.5} {...surfaceMaterial(style)} />
         </mesh>
       ))}
     </group>
@@ -774,24 +836,37 @@ export function ModeShapePlayer({ shape, nodePos, members, amp }: {
 
 // ── Member force diagrams (BMD / SFD / axial / torsion) ─────────────────────
 
-export function MemberForceDiagram3D({ a, b, xs, ys, comp, scale }: {
+export function MemberForceDiagram3D({ a, b, xs, ys, comp, scale, rotDeg = 0 }: {
   a: V3; b: V3; xs: number[]; ys: number[]; comp: DiagramComp; scale: number
+  /** The member's local-axis rotation — the SAME one the solver used, so a
+   *  column's diagram offsets along its real (rolled) transverse plane. */
+  rotDeg?: number
 }) {
-  const { fillGeo, curveGeo } = useMemo(() => {
-    const r = memberDiagramRibbon(a, b, xs, ys, comp, scale)
+  // The page passes fresh arrays every render; key the rebuild on VALUES, not
+  // identities, or the geometry (and its GPU buffers) churns every frame.
+  const sig = `${a[0]},${a[1]},${a[2]}|${b[0]},${b[1]},${b[2]}|${comp}|${scale}|${rotDeg}|${xs.length}|${ys.join(',')}`
+  const { fillGeo, line } = useMemo(() => {
+    const r = memberDiagramRibbon(a, b, xs, ys, comp, scale, rotDeg)
     const fillGeo = new THREE.BufferGeometry()
     fillGeo.setAttribute('position', new THREE.Float32BufferAttribute(r.fill, 3))
     const curveGeo = new THREE.BufferGeometry().setFromPoints(
       r.curve.map((p) => new THREE.Vector3(p[0], p[1], p[2])))
-    return { fillGeo, curveGeo }
-  }, [a, b, xs, ys, comp, scale])
-  const color = DIAG_COLOR[comp]
+    const line = new THREE.Line(curveGeo, new THREE.LineBasicMaterial({ color: DIAG_COLOR[comp] }))
+    return { fillGeo, line }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sig])
+  // Own the lifecycle: dispose the old buffers when the diagram changes.
+  useEffect(() => () => {
+    fillGeo.dispose()
+    line.geometry.dispose()
+    ;(line.material as THREE.Material).dispose()
+  }, [fillGeo, line])
   return (
     <group>
       <mesh geometry={fillGeo}>
-        <meshBasicMaterial color={color} transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
+        <meshBasicMaterial color={DIAG_COLOR[comp]} transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
-      <primitive object={new THREE.Line(curveGeo, new THREE.LineBasicMaterial({ color }))} />
+      <primitive object={line} />
     </group>
   )
 }
@@ -884,13 +959,16 @@ export function Loads3D({ model, nodePos, loads = model.loads, nodeScale }: {
       const a = m && nodePos.get(m.i), b = m && nodePos.get(m.j)
       if (!a || !b) continue
       const len = lenOf(Math.abs(l.w), max.udl)
+      // Direction follows the LOAD: positive w/P acts in global −Y (gravity),
+      // negative is uplift — an upward load drawn as a down-arrow lies.
+      const dir = l.w >= 0 ? DOWN : UP
       const n = Math.max(2, Math.min(7, Math.round(a.distanceTo(b) / 0.8)))
       for (let k = 0; k <= n; k++) {
         const tip = a.clone().lerp(b, k / n)
-        glyphs.push(<Arrow key={`u${i}-${k}`} tip={tip} dir={DOWN} len={len} color={color} />)
+        glyphs.push(<Arrow key={`u${i}-${k}`} tip={tip} dir={dir} len={len} color={color} />)
       }
       // bar joining the arrow tails
-      const barA = a.clone().addScaledVector(UP, len), barB = b.clone().addScaledVector(UP, len)
+      const barA = a.clone().addScaledVector(dir, -len), barB = b.clone().addScaledVector(dir, -len)
       const geo = new THREE.BufferGeometry().setFromPoints([barA, barB])
       glyphs.push(<primitive key={`ub${i}`} object={new THREE.Line(geo, new THREE.LineBasicMaterial({ color }))} />)
     } else if (l.kind === 'member-point') {
@@ -898,7 +976,8 @@ export function Loads3D({ model, nodePos, loads = model.loads, nodeScale }: {
       const a = m && nodePos.get(m.i), b = m && nodePos.get(m.j)
       if (!a || !b) continue
       const tip = a.clone().lerp(b, Math.max(0, Math.min(1, l.t)))
-      glyphs.push(<Arrow key={`p${i}`} tip={tip} dir={DOWN} len={lenOf(Math.abs(l.P), max.point)} color={color} />)
+      const dir = l.P >= 0 ? DOWN : UP
+      glyphs.push(<Arrow key={`p${i}`} tip={tip} dir={dir} len={lenOf(Math.abs(l.P), max.point)} color={color} />)
     } else if (l.kind === 'node') {
       const pos = nodePos.get(l.node)
       const dir = new THREE.Vector3(l.Fx ?? 0, l.Fy ?? 0, l.Fz ?? 0)

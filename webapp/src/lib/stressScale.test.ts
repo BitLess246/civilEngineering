@@ -14,11 +14,12 @@ import {
 } from './stressScale'
 
 describe('signedness', () => {
-  it('treats von Mises as the only unsigned quantity', () => {
-    // It is a norm of the deviatoric stress — it cannot be negative.
+  it('treats the von Mises pair as the unsigned quantities', () => {
+    // Both are norms of a stress state — neither can be negative.
     expect(isSigned('vonMises')).toBe(false)
+    expect(isSigned('vmSurf')).toBe(false)
     for (const { key } of STRESS_KEYS) {
-      if (key !== 'vonMises') expect(isSigned(key), key).toBe(true)
+      if (key !== 'vonMises' && key !== 'vmSurf') expect(isSigned(key), key).toBe(true)
     }
   })
 
@@ -35,11 +36,14 @@ describe('signedness', () => {
       expect(isMembrane(k), k).toBe(false)
       expect(unitFor(k), k).toBe('kN·m/m')
     }
+    // vmSurf is bending-INCLUSIVE — the opposite cut from membrane.
+    expect(isMembrane('vmSurf')).toBe(false)
+    expect(unitFor('vmSurf')).toBe('kN/m²')
     expect(isMembrane('sigmaX')).not.toBe(isSigned('sigmaX') === false)
   })
 
   it('covers every key the panel offers', () => {
-    expect(STRESS_KEYS).toHaveLength(9)
+    expect(STRESS_KEYS).toHaveLength(10)
     for (const { key, unit } of STRESS_KEYS) {
       expect(unitFor(key)).toBe(unit)
       expect(labelFor(key).length).toBeGreaterThan(0)
@@ -217,7 +221,7 @@ describe('keys are exhaustive against the engine', () => {
     // If `recoverShellStress` gains a quantity, it should become selectable
     // rather than silently unavailable.
     const fromEngine: StressKey[] = [
-      'sigmaX', 'sigmaY', 'tauXY', 'sigma1', 'sigma2', 'vonMises', 'Mx', 'My', 'Mxy',
+      'vmSurf', 'sigmaX', 'sigmaY', 'tauXY', 'sigma1', 'sigma2', 'vonMises', 'Mx', 'My', 'Mxy',
     ]
     expect(STRESS_KEYS.map((k) => k.key).sort()).toEqual([...fromEngine].sort())
   })

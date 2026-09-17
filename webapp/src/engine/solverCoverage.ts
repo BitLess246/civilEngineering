@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 552
+export const SOLVER_TEST_COUNT = 557
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -843,6 +843,26 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "designModelSlabsFE — Wood-Armer reinforcement from the FE field",
         "name": "skips wall panels"
+      },
+      {
+        "suite": "solveModelShells — load direction and accumulation",
+        "name": "sums D and L area loads on the same panel (no last-category-wins)"
+      },
+      {
+        "suite": "solveModelShells — load direction and accumulation",
+        "name": "gravity area loads act along global −Y regardless of plate winding"
+      },
+      {
+        "suite": "solveModelShells — load direction and accumulation",
+        "name": "maps pin supports to translations-only (rotations stay free)"
+      },
+      {
+        "suite": "rotateInPlaneTensor / toPanelFrames",
+        "name": "rotates a uniaxial tensor by 90° into the transverse component"
+      },
+      {
+        "suite": "rotateInPlaneTensor / toPanelFrames",
+        "name": "reports both triangle families of one panel in the SAME frame"
       }
     ]
   },

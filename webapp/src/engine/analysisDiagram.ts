@@ -26,7 +26,7 @@ import type { StructuralModel, Node, ModelLoad, SupportFixity } from './model'
 import type { LoadCategory } from './beamAnalysis'
 import type { Drawing, PlanPrimitive } from './planRenderer'
 import type { F3Result, F3MemberResult } from './frame3d'
-import { memberDiagramRibbon, type DiagramComp } from './memberDiagram3d'
+import { memberDiagramRibbon, memberRotDeg, type DiagramComp } from './memberDiagram3d'
 import { localAxes, type V3 } from './frame3d'
 import { SHEET_INK, SHEET_NOTE, SHEET_GRID, SHEET_WARN, STEEL } from './sheetInk'
 
@@ -434,11 +434,14 @@ export function displacedNodes(model: StructuralModel, r: F3Result, amp: number)
  * caption rather than left to be discovered.
  */
 export function memberDeflectedCurve(
-  a: Node, b: Node, di: number[], dj: number[], amp: number, n = 12,
+  a: Node, b: Node, di: number[], dj: number[], amp: number, n = 12, rotDeg = 0,
 ): V3[] {
   const dir: V3 = [b.x - a.x, b.y - a.y, b.z - a.z]
   const L = Math.hypot(...dir) || 1
-  const [ex, ey, ez] = localAxes(dir)
+  // Resolve onto the member's OWN local axes — the same rolled axes the solver
+  // used (columns roll 90°), or the transverse components swap under the roll
+  // and the drawn curve bends in the wrong plane.
+  const [ex, ey, ez] = localAxes(dir, rotDeg)
   const dot = (v: number[], e: V3) => v[0] * e[0] + v[1] * e[1] + v[2] * e[2]
   // Translations and rotations, resolved onto the member's own axes.
   const u1 = dot(di, ex), v1 = dot(di, ey), w1 = dot(di, ez)
@@ -514,7 +517,8 @@ export function deflectedDiagram(model: StructuralModel, r: F3Result, o: Deflect
     if (!a || !b) continue
     const di = r.d.slice(6 * a.i, 6 * a.i + 6)
     const dj = r.d.slice(6 * b.i, 6 * b.i + 6)
-    const pts = memberDeflectedCurve(a.n, b.n, di, dj, amp)
+    const pts = memberDeflectedCurve(a.n, b.n, di, dj, amp, 12,
+      memberRotDeg([b.n.x - a.n.x, b.n.y - a.n.y, b.n.z - a.n.z], m.axisRotation))
     P.push({
       kind: 'path', stroke: DEF_INK, width: 0.7, fill: 'none', join: 'round', cap: 'round',
       cmds: pts.map((p, k) => { const [x, y] = fit.at(asPoint(p)); return { c: k === 0 ? 'M' as const : 'L' as const, x, y } }),
@@ -612,7 +616,10 @@ export function forceDiagram(
     const a = byId.get(m.i), b = byId.get(m.j), res = resById.get(m.id)
     if (!a || !b || !res) continue
     const ys2 = ord(res)
-    const rib = memberDiagramRibbon(v3(a), v3(b), res.xs, ys2, comp, scale)
+    // The ribbon must offset along the SAME rolled local axes the solver used —
+    // see `memberRotDeg`. Unrolled, a column's diagram hangs off the wrong face.
+    const rot = memberRotDeg([b.x - a.x, b.y - a.y, b.z - a.z], m.axisRotation)
+    const rib = memberDiagramRibbon(v3(a), v3(b), res.xs, ys2, comp, scale, rot)
     ribbons.push({ id: m.id, curve: rib.curve, base: rib.base, ord: ys2, peak: Math.max(0, ...ys2.map(Math.abs)) })
   }
   const fit = fitView(

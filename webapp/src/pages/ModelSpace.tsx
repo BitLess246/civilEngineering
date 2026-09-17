@@ -26,9 +26,9 @@ import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck, StairLanding } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
-import { defaultAxisRotation, type F3Analysis, type F3MemberResult, type V3 } from '../engine/frame3d'
+import { defaultAxisRotation, type F3Analysis, type F3MemberResult, type F3ComboRun, type V3 } from '../engine/frame3d'
 import { type ActiveSetAnalysis, type AxialMode } from '../engine/axialOnly'
-import { diagramScale, type DiagramComp } from '../engine/memberDiagram3d'
+import { diagramScale, memberRotDeg, type DiagramComp } from '../engine/memberDiagram3d'
 import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
 import { type ModalResult, type MassModel } from '../engine/modal'
 import { computeResponseSpectrum, rsaEquivalentLoads, type ResponseSpectrumResult, type RsaLateralResult } from '../engine/responseSpectrum'
@@ -36,8 +36,10 @@ import { type StructureDesign, type FootingPlan, type OptimizeResult, type Later
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
 import { footingLayout } from '../engine/footingLayout'
-import { type ShellNode, type ShellElem, type ElementStress } from '../engine/shell'
-import { solveModelShells, designModelSlabsFE, type SlabFEScheduleRow } from '../engine/shellModel'
+import { type ShellNode, type ShellElem, type ElementStress, recoverShellStress } from '../engine/shell'
+import { solveModelShells, designModelSlabsFE, toPanelFrames, type SlabFEScheduleRow } from '../engine/shellModel'
+import { modelToFrame3D } from '../engine/modelBridge'
+import type { LoadCategory } from '../engine/beamAnalysis'
 import { useSolver } from '../lib/useSolver'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
 import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
@@ -110,7 +112,7 @@ import { usePlanGate } from '../lib/auth/usePlan'
 import { UpgradeNotice } from '../components/UpgradeNotice'
 import type { SolverKind } from '../lib/featureGate'
 import { Footing3D, GridBubbles3D, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
-import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/modelSpace/sceneTokens'
+import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop, type TintRamp } from '../components/modelSpace/sceneTokens'
 import { DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
 import {
@@ -363,6 +365,12 @@ export default function ModelSpace() {
   const [modeAmp, setModeAmp] = useState(1.5)
   const [forceDiag, setForceDiag] = useState<DiagramComp | null>(null)   // inline 3D BMD/SFD overlay
   const [forceDiagScale, setForceDiagScale] = useState(1)                // user offset multiplier
+  /** The load combination the viewport visualises; null = governing combo.
+   *  Drives the member stress tint, the inline force diagrams and the shell
+   *  contour together, so the three never tell different stories. */
+  const [dispCaseIdx, setDispCaseIdx] = useState<number | null>(null)
+  /** Shell stress contour visibility (the field itself re-derives per case). */
+  const [shellOn, setShellOn] = useState(false)
   // The selected member's six force diagrams, folded away by default: the
   // selection panel shows on every tab now, and six charts is not a summary.
   const [selDiagrams, setSelDiagrams] = useState(false)
@@ -440,7 +448,6 @@ export default function ModelSpace() {
   const [nl, setNl] = useState<{ inelastic: NonlinearModelResult | null; elastic: NonlinearModelResult | null } | null>(null)
   const [nlKindModel, setNlKindModel] = useState<'shear' | 'hinges'>('hinges')
   const [nlHinge, setNlHinge] = useState<{ inelastic: NonlinearFrameModelResult | null; elastic: NonlinearFrameModelResult | null } | null>(null)
-  const [shellStress, setShellStress] = useState<{ nodes: ShellNode[]; elems: ShellElem[]; stresses: ElementStress[] } | null>(null)
   const [slabFE, setSlabFE] = useState<SlabFEScheduleRow[] | null>(null)
   const [recSpec, setRecSpec] = useState<{ spec: AccelSpectrum; design: DesignSpectrumPoint[]; name: string } | null>(null)
   const [thCsv, setThCsv] = useState<{ text: string; name: string; npts: number } | null>(null)
@@ -816,16 +823,6 @@ export default function ModelSpace() {
     if (!spec) { setRecSpec(null); return }
     const design = nscp208DesignCurve(spec.points.map((p) => p.T), Ca, Cv, Ie, Rw)
     setRecSpec({ spec, design, name: thCsv.name })
-  }
-
-  const runShellStress = () => {
-    if (!model || !model.shellElements || model.plates.length === 0) return
-    // Mesh + solve the model's shell plates under the SERVICE area-load field for
-    // display (subdivision, conforming edges and corner-id reuse handled by the
-    // shared shellModel bridge). Pass nothing for D/L factors → unfactored stress.
-    const solved = solveModelShells(model, { subdiv: model.shellSubdiv ?? 4 })
-    if (!solved) { setShellStress(null); return }
-    setShellStress({ nodes: solved.nodes, elems: solved.elems, stresses: solved.stresses })
   }
 
   const runSlabFE = () => {
@@ -1445,11 +1442,105 @@ export default function ModelSpace() {
 
   const gov = analysis ? analysis.perCombo[analysis.govIdx] : null
   const govRes = gov?.result ?? null
-  const memForce = useMemo(() => {
-    const map = new Map<string, { Mmax: number; Vmax: number; Nmax: number }>()
-    govRes?.members.forEach((m) => map.set(m.id, { Mmax: m.Mmax, Vmax: m.Vmax, Nmax: m.Nmax }))
+  /** The combination the viewport visualises (governing unless overridden). */
+  const dispCombo: F3ComboRun | null = analysis
+    ? (dispCaseIdx !== null ? analysis.perCombo[dispCaseIdx] ?? null : gov)
+    : null
+  const dispRes = dispCombo?.result ?? null
+  const dispComboName = dispCombo?.combo.name ?? null
+
+  // Continuous stress tint, per displayed case. Each member contributes its
+  // station-sampled |M| = max(|My|, |Mz|); the END values are averaged across
+  // every member meeting at that joint, so the colour is continuous from one
+  // element to the next instead of one flat peak colour per member that jumps
+  // at every node; then everything is normalised by the model peak (×0.85, the
+  // same ceiling the flat tint had).
+  const tintRamps = useMemo(() => {
+    const map = new Map<string, TintRamp>()
+    if (!model || !dispRes) return map
+    const resById = new Map(dispRes.members.map((m) => [m.id, m]))
+    const raw = new Map<string, { ts: number[]; ms: number[] }>()
+    let peak = 0
+    for (const m of model.members) {
+      const r = resById.get(m.id)
+      if (!r || r.xs.length === 0) continue
+      const L = r.L || 1
+      const ts = r.xs.map((x) => Math.min(1, Math.max(0, x / L)))
+      const ms = r.xs.map((_, i) => Math.max(Math.abs(r.My[i] ?? 0), Math.abs(r.Mz[i] ?? 0)))
+      for (const v of ms) if (v > peak) peak = v
+      raw.set(m.id, { ts, ms })
+    }
+    if (peak < 1e-9) return map
+    const endAcc = new Map<string, { s: number; n: number }>()
+    for (const m of model.members) {
+      const r = raw.get(m.id)
+      if (!r) continue
+      for (const [nid, val] of [[m.i, r.ms[0]], [m.j, r.ms[r.ms.length - 1]]] as const) {
+        const a = endAcc.get(nid) ?? { s: 0, n: 0 }
+        a.s += val; a.n += 1
+        endAcc.set(nid, a)
+      }
+    }
+    for (const m of model.members) {
+      const r = raw.get(m.id)
+      if (!r) continue
+      const b0 = endAcc.get(m.i), b1 = endAcc.get(m.j)
+      const vs = r.ms.map((v, i) => {
+        let val = v
+        if (i === 0 && b0 && b0.n > 0) val = b0.s / b0.n
+        if (i === r.ms.length - 1 && b1 && b1.n > 0) val = b1.s / b1.n
+        return Math.min(1, (val / peak) * 0.85)
+      })
+      map.set(m.id, { ts: r.ts, vs })
+    }
     return map
-  }, [govRes])
+  }, [model, dispRes])
+
+  // Shell stress contour engine. When the analysis ran with design shells, the
+  // stresses are recovered straight from THAT displayed combo's solved DOF
+  // vector — the real load path (beams, walls, real fixities, the combo's own
+  // factors) with no re-solve, and it follows the case selector for free.
+  // Otherwise (no solve yet, or shells out of the analysis) the model's shells
+  // are meshed and solved isolated, under the displayed combo's area-load
+  // factors — service 1.0D+1.0L when nothing is analysed.
+  const shellBridge = useMemo(() => {
+    if (!model || !model.shellElements || !designShells || model.plates.length === 0) return null
+    try {
+      return modelToFrame3D(model, { useShells: true, shellSubdiv: model.shellSubdiv })
+    } catch {
+      return null
+    }
+  }, [model, designShells])
+
+  const shellFactors = useMemo<Partial<Record<LoadCategory, number>>>(() => {
+    const f = dispCombo?.combo.f
+    return f && Object.values(f).some((v) => (v ?? 0) !== 0) ? { ...f } : { D: 1, L: 1 }
+  }, [dispCombo])
+
+  const shellOut = useMemo<{ ok: true; nodes: ShellNode[]; elems: ShellElem[]; stresses: ElementStress[]; caseName: string; source: 'frame' | 'standalone' } | { ok: false; caseName: string } | null>(() => {
+    if (!shellOn || !model || !model.shellElements || model.plates.length === 0) return null
+    const caseName = dispComboName ?? 'service 1.0D + 1.0L'
+    if (shellBridge && dispRes) {
+      try {
+        const stresses = toPanelFrames(
+          shellBridge.nodes, shellBridge.shells,
+          recoverShellStress(shellBridge.nodes, shellBridge.shells, { d: dispRes.d }),
+        )
+        if (stresses.length > 0) {
+          return { ok: true, nodes: shellBridge.nodes, elems: shellBridge.shells, stresses, caseName, source: 'frame' }
+        }
+      } catch { /* fall through to the isolated solve */ }
+    }
+    const solved = solveModelShells(model, { subdiv: model.shellSubdiv ?? 4, factors: shellFactors })
+    if (!solved) return { ok: false, caseName }
+    return { ok: true, nodes: solved.nodes, elems: solved.elems, stresses: solved.stresses, caseName, source: 'standalone' }
+  }, [shellOn, model, shellBridge, dispRes, shellFactors, dispComboName])
+
+  // The recovered field as the 3D contour layer and the Display controls read
+  // it — same recovery, same displayed case, no second engine.
+  const shellStress = shellOut?.ok
+    ? { nodes: shellOut.nodes, elems: shellOut.elems, stresses: shellOut.stresses }
+    : null
 
   const generate = (matOverride?: 'concrete' | 'steel' | 'wood', woodOverride?: { sel?: WoodSpecies; wet?: boolean }) => {
     const mat = { fc, fy, barDia, tieDia, cover }
@@ -1583,14 +1674,14 @@ export default function ModelSpace() {
   // Auto-scale for the inline 3D force diagram: the model-wide peak |ordinate| of
   // the chosen component maps to ~10% of the model's largest dimension (× user mult).
   const forceDiagInfo = useMemo(() => {
-    if (!forceDiag || !govRes || !modelBox) return null
-    const byId = new Map<string, F3MemberResult>(govRes.members.map((m) => [m.id, m]))
+    if (!forceDiag || !dispRes || !modelBox) return null
+    const byId = new Map<string, F3MemberResult>(dispRes.members.map((m) => [m.id, m]))
     let maxAbs = 0
-    for (const m of govRes.members) for (const v of m[forceDiag]) maxAbs = Math.max(maxAbs, Math.abs(v))
+    for (const m of dispRes.members) for (const v of m[forceDiag]) maxAbs = Math.max(maxAbs, Math.abs(v))
     const span = Math.max(modelBox.max[0] - modelBox.min[0], modelBox.max[1] - modelBox.min[1], modelBox.max[2] - modelBox.min[2], 1)
     const scale = diagramScale(maxAbs, span * 0.1 * forceDiagScale)
     return { byId, scale, maxAbs }
-  }, [forceDiag, forceDiagScale, govRes, modelBox])
+  }, [forceDiag, forceDiagScale, dispRes, modelBox])
 
   /**
    * The members ready to contour, with ONE domain across all of them.
@@ -1889,8 +1980,9 @@ export default function ModelSpace() {
                 {model.members.map((m) => {
                   const a = nodePos.get(m.i), bb = nodePos.get(m.j)
                   if (!a || !bb) return null
-                  const tint = govRes && govRes.Mmax > 1e-9
-                    ? (memForce.get(m.id)?.Mmax ?? 0) / govRes.Mmax : 0
+                  // Continuous per-station tint from the displayed case; ends are
+                  // node-blended so the colour reads across joints (see tintRamps).
+                  const ramp = tintRamps.get(m.id)
                   const sec = sectionFor(m.id)
                   const manI = m.offsets?.iEnd, manJ = m.offsets?.jEnd
                   const v3 = (v: [number, number, number]) => new THREE.Vector3(v[0], v[1], v[2])
@@ -1953,12 +2045,12 @@ export default function ModelSpace() {
                   // other description of the same member, the one the
                   // stiffness matrix is assembled from.
                   const memberEl = skeleton
-                    ? <MemberStick3D a={a} b={bb} role={m.role} tint={tint * 0.85} material={sec?.material}
+                    ? <MemberStick3D a={a} b={bb} role={m.role} ramp={ramp} material={sec?.material}
                         selected={m.id === selected} onPick={() => setSelected(m.id)} />
                     : sec?.material === 'steel' && sec.shape
                       ? <MemberSteel3D a={aV} b={bV} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
-                          tint={tint * 0.85} style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
-                      : <Member3D a={aV} b={bV} role={m.role} tint={tint * 0.85}
+                          ramp={ramp} style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                      : <Member3D a={aV} b={bV} role={m.role} ramp={ramp}
                           sec={sec} style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                   return (
                     <group key={m.id}>
@@ -2057,7 +2149,8 @@ export default function ModelSpace() {
                   if (!mr || !a || !bb) return null
                   return <MemberForceDiagram3D key={`fd-${m.id}`}
                     a={[a.x, a.y, a.z]} b={[bb.x, bb.y, bb.z]}
-                    xs={mr.xs} ys={mr[forceDiag]} comp={forceDiag} scale={forceDiagInfo.scale} />
+                    xs={mr.xs} ys={mr[forceDiag]} comp={forceDiag} scale={forceDiagInfo.scale}
+                    rotDeg={memberRotDeg([bb.x - a.x, bb.y - a.y, bb.z - a.z], m.axisRotation)} />
                 })}
                 {modal && modeShapeIdx !== null && modal.modes[modeShapeIdx] && (
                   <ModeShapePlayer
@@ -3648,7 +3741,7 @@ export default function ModelSpace() {
                   <Row label="Extremes" value={`M ${f1(govRes.Mmax)} kN·m`}
                     sub={`V ${f1(govRes.Vmax)} · N ${f1(govRes.Nmax)} kN`} />
                   {orphans > 0 && <Row alert label="⚠ Orphan edges" value={`${orphans}`} sub="slab edges with no member" />}
-                  <p className="mt-1 text-[11px] text-muted">Members tinted red by |M| relative to the model max. Click one for its diagrams.</p>
+                  <p className="mt-1 text-[11px] text-muted">Members tinted toward red by |M| at every station of the displayed case, joint-blended so the colour reads continuously across members; blue = quiet, red = the model peak. Click one for its diagrams.</p>
                 </Sec>
               )}
 
@@ -3667,24 +3760,34 @@ export default function ModelSpace() {
               {model?.shellElements && model.plates.length > 0 && (
                 <Sec title="Shell plate stress (CST membrane + DKT bending)">
                   <p className="col-span-full text-[11px] text-muted">
-                    Recovers per-element membrane stresses (σx, σy, τxy, von Mises) and bending
-                    moments (Mx, My, Mxy) from the shell FEM. Uses E = 25 000 MPa, ν = 0.2 for
-                    all plates. Area loads are applied as uniform pressure.
+                    Recovers per-element membrane stresses (σx, σy, τxy), surface von Mises
+                    (membrane ± bending fibre) and bending moments (Mx, My, Mxy) from the shell
+                    FEM, in each panel's own reference frame. Uses E = 25 000 MPa, ν = 0.2 for
+                    all plates. Gravity area loads act along global −Y; W/E act along the
+                    panel normal.
                   </p>
                   <p className="col-span-full text-[11px] text-muted">
                     Mesh density is set with the model, beside the shell-elements switch above —
                     it is the same mesh the analysis solves.
                   </p>
                   <div className="col-span-full flex flex-wrap gap-2">
-                    <button type="button" onClick={runShellStress} disabled={!model || !!busy}
-                      className={btn}>
-                      ⬡ Recover shell stresses
+                    <button type="button" onClick={() => setShellOn((v) => !v)} disabled={!model || !!busy}
+                      aria-pressed={shellOn}
+                      className={shellOn ? `${btn} ring-2 ring-brand/40` : btn}>
+                      {shellOn ? '⬡ Hide shell stresses' : '⬡ Show shell stresses'}
                     </button>
                     <button type="button" onClick={runSlabFE} disabled={!model || !!busy}
                       className={btn}>
                       ▦ Design slab steel (Wood-Armer)
                     </button>
                   </div>
+                  {shellOn && (
+                    <p className="col-span-full text-[11px] text-muted">
+                      Follows the Display tab's load-case selector. With design shells in the
+                      analysis it reads the frame solve itself; otherwise the panels are solved
+                      isolated under the displayed combo's factors.
+                    </p>
+                  )}
                   <p className="col-span-full text-[11px] text-muted">
                     Wood-Armer (1968) converts the factored (1.2D + 1.6L) shell moment field (Mx, My, Mxy) into
                     orthogonal design moments for the bottom (sagging) and top (hogging) faces, then sizes the x/y
@@ -3692,8 +3795,19 @@ export default function ModelSpace() {
                   </p>
                 </Sec>
               )}
-              {shellStress && (
-                <ShellContourPanel nodes={shellStress.nodes} elems={shellStress.elems} stresses={shellStress.stresses} />
+              {shellOut && !shellOut.ok && (
+                <div className="col-span-full rounded-xl border border-warn-line bg-warn-tint p-3 text-[12px] leading-relaxed text-warn">
+                  <b>The shell mesh cannot be solved on its own for {shellOut.caseName}.</b> An isolated
+                  shell solve has no load path to the ground: every supported model node is restrained,
+                  but an elevated slab whose panels are not tied down by shell walls (or ground-bearing
+                  panels) leaves the stiffness matrix singular. Run the analysis with design shells on —
+                  the contour then reads the frame solve, where the beams and columns carry the load — or
+                  add shell walls down to the supports.
+                </div>
+              )}
+              {shellOut?.ok && (
+                <ShellContourPanel nodes={shellOut.nodes} elems={shellOut.elems} stresses={shellOut.stresses}
+                  caseName={shellOut.caseName} source={shellOut.source} />
               )}
               {slabFE && slabFE.length > 0 && (
                 <Sec grid={false} title="Slab reinforcement — Wood-Armer (shell FE, factored)">
@@ -4645,7 +4759,7 @@ export default function ModelSpace() {
                   </label>
                   {!shellStress ? (
                     <p className="mt-1 text-[11px] leading-snug text-muted">
-                      Nothing recovered yet — run <span className="font-medium">Recover shell
+                      Nothing recovered yet — open <span className="font-medium">Show shell
                       stresses</span> in the Analysis tab. Needs shell elements on.
                     </p>
                   ) : showStress && (() => {
@@ -4713,7 +4827,7 @@ export default function ModelSpace() {
                         </>)}
                         <p className="mt-1 text-[11px] leading-snug text-muted">
                           {shellStress.elems.length} elements · {shellStress.nodes.length} nodes,
-                          smoothed to the nodes. Service (unfactored) load field.
+                          smoothed to the nodes. {dispComboName ?? 'Service (unfactored)'} load field.
                         </p>
                       </div>
                     )
@@ -4820,13 +4934,28 @@ export default function ModelSpace() {
                     has just pressed Analyze that they have not — which is how
                     it read the first time it was measured. */}
                 <div className="border-t border-hairline-2 pt-2.5">
+                  <p className="mb-1 font-medium">Load case</p>
+                  <select value={dispCaseIdx ?? ''}
+                    onChange={(e) => setDispCaseIdx(e.target.value === '' ? null : Number(e.target.value))}
+                    disabled={!analysis}
+                    className="w-full rounded border border-field-line bg-sheet px-2 py-1 text-sm text-ink-2 disabled:cursor-not-allowed disabled:opacity-50">
+                    <option value="">Governing combo{gov?.combo.name ? ` — ${gov.combo.name}` : ''}</option>
+                    {analysis?.perCombo.map((c, i) => (
+                      <option key={i} value={i} disabled={!c.result}>{c.combo.name}{c.skipped ? ' (skipped)' : ''}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-faint">
+                    Drives the member stress tint, the force diagrams and the shell contour together.
+                  </p>
+                </div>
+                <div className="border-t border-hairline-2 pt-2.5">
                   <p className="mb-1 font-medium">Force diagram</p>
-                  <div className={`flex flex-wrap items-center gap-1 ${govRes ? '' : 'opacity-45'}`}>
-                    <button type="button" onClick={() => setForceDiag(null)} disabled={!govRes}
+                  <div className={`flex flex-wrap items-center gap-1 ${dispRes ? '' : 'opacity-45'}`}>
+                    <button type="button" onClick={() => setForceDiag(null)} disabled={!dispRes}
                       className={`rounded px-1.5 py-0.5 font-semibold ${forceDiag === null ? 'bg-hairline text-ink-2' : 'text-muted hover:text-muted'} disabled:cursor-not-allowed disabled:hover:text-muted`}>off</button>
                     {(['N', 'Vy', 'Vz', 'My', 'Mz', 'T'] as DiagramComp[]).map((c) => (
-                      <button key={c} type="button" onClick={() => setForceDiag(c)} disabled={!govRes}
-                        title={govRes ? `Draw ${c} on every member (governing combo)` : 'Needs analysis results'}
+                      <button key={c} type="button" onClick={() => setForceDiag(c)} disabled={!dispRes}
+                        title={dispRes ? `Draw ${c} on every member (${dispComboName ?? 'governing combo'})` : 'Needs analysis results'}
                         className="rounded px-1.5 py-0.5 font-semibold transition disabled:cursor-not-allowed"
                         style={forceDiag === c
                           ? { background: DIAG_COLOR[c], color: '#fff' }
@@ -4835,12 +4964,12 @@ export default function ModelSpace() {
                       </button>
                     ))}
                   </div>
-                  {!govRes && (
+                  {!dispRes && (
                     <p className="mt-1 text-[11px] text-faint">
                       analyse the model first — designing rebuilds the loads, so analyse again after it
                     </p>
                   )}
-                  {govRes && forceDiag && (
+                  {dispRes && forceDiag && (
                     <label className="mt-1.5 flex items-center gap-1.5">
                       <span className="text-muted">scale</span>
                       <input type="range" min={0.3} max={3} step={0.1} value={forceDiagScale}

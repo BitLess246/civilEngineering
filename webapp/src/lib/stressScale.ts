@@ -16,10 +16,11 @@
 
 /** The stress quantities `ElementStress` carries, as contour keys. */
 export type StressKey =
-  | 'vonMises' | 'sigmaX' | 'sigmaY' | 'tauXY' | 'sigma1' | 'sigma2'
+  | 'vmSurf' | 'vonMises' | 'sigmaX' | 'sigmaY' | 'tauXY' | 'sigma1' | 'sigma2'
   | 'Mx' | 'My' | 'Mxy'
 
 export const STRESS_KEYS: readonly { key: StressKey; label: string; unit: string }[] = [
+  { key: 'vmSurf', label: 'Von Mises surface', unit: 'kN/m²' },
   { key: 'vonMises', label: 'Von Mises σvm', unit: 'kN/m²' },
   { key: 'sigmaX', label: 'σx', unit: 'kN/m²' },
   { key: 'sigmaY', label: 'σy', unit: 'kN/m²' },
@@ -51,7 +52,8 @@ export const labelFor = (key: StressKey): string =>
  * colour bar and the hogging region reads as "medium" rather than "the other
  * sign". A diverging ramp pins zero to the middle.
  */
-export const isSigned = (key: StressKey): boolean => key !== 'vonMises'
+export const isSigned = (key: StressKey): boolean =>
+  key !== 'vonMises' && key !== 'vmSurf'
 
 /**
  * Is this an IN-PLANE (membrane) quantity rather than a bending one?
@@ -69,7 +71,7 @@ export const isSigned = (key: StressKey): boolean => key !== 'vonMises'
  * von Mises alone and leaves σx/σy/τxy/σ₁/σ₂ silently blank.
  */
 export const isMembrane = (key: StressKey): boolean =>
-  key !== 'Mx' && key !== 'My' && key !== 'Mxy'
+  key !== 'Mx' && key !== 'My' && key !== 'Mxy' && key !== 'vmSurf'
 
 export interface Domain {
   min: number; max: number; signed: boolean

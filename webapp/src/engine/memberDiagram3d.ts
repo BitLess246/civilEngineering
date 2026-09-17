@@ -12,7 +12,7 @@
 // For a horizontal member y′ is global-up, so the gravity BMD reads vertically;
 // for a column both transverse axes are horizontal (lateral diagrams).
 // ─────────────────────────────────────────────────────────────────────────
-import { localAxes, type V3 } from './frame3d'
+import { defaultAxisRotation, localAxes, type V3 } from './frame3d'
 
 export type DiagramComp = 'N' | 'Vy' | 'Vz' | 'T' | 'My' | 'Mz'
 
@@ -32,16 +32,30 @@ export interface DiagramRibbon {
 }
 
 /**
+ * The member-local rotation the SOLVER used for this member, from the model's
+ * `axisRotation` (vertical members default to 90°). The ribbon MUST offset
+ * along the same transverse axes the ordinates were computed with — a column's
+ * Vy/Mz act about the rotated y′/z′, and drawing them on the unrotated plane
+ * hangs the diagram off the wrong face, 90° around the member axis.
+ */
+export function memberRotDeg(dir: V3, axisRotation?: number): number {
+  return defaultAxisRotation(dir, axisRotation)
+}
+
+/**
  * Build the 3D ribbon for one force component along a member a→b. `xs` are the
  * stations in metres (0…L) and `ys` the ordinates (kN or kN·m). `scale` is the
- * transverse offset in metres per force unit.
+ * transverse offset in metres per force unit. `rotDeg` is the member's local-axis
+ * rotation — the SAME value the solver used (see `memberRotDeg`); default 0
+ * keeps the plain unrolled behaviour for callers that pre-rotate or test.
  */
 export function memberDiagramRibbon(
   a: V3, b: V3, xs: number[], ys: number[], comp: DiagramComp, scale: number,
+  rotDeg = 0,
 ): DiagramRibbon {
   const dir: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
   const L = Math.hypot(...dir) || 1
-  const off = localAxes(dir)[OFFSET_AXIS[comp]]   // unit transverse axis, global coords
+  const off = localAxes(dir, rotDeg)[OFFSET_AXIS[comp]]   // unit transverse axis, global coords
 
   const base: V3[] = []
   const curve: V3[] = []
