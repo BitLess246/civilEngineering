@@ -22,10 +22,28 @@ describe('splitLayers', () => {
 
   it('pairs a lone bar in the upper layer — the bug this exists to stop', () => {
     // 5 bars, 4 per layer, is [4, 1] naively. The 1 has no neighbour to sit
-    // beside the stirrup leg with, so it becomes [4, 2] and the count goes up.
-    expect(splitLayers(5, 4)).toEqual({ bars: 6, layers: [4, 2] })
+    // beside the stirrup leg with. The bottom layer can spare one, so the
+    // partner is borrowed and the count stays at the demand.
+    expect(splitLayers(5, 4)).toEqual({ bars: 5, layers: [3, 2] })
+    expect(splitLayers(9, 4)).toEqual({ bars: 9, layers: [4, 3, 2] })
+    expect(splitLayers(4, 3)).toEqual({ bars: 4, layers: [2, 2] })
+  })
+
+  it('adds a bar only when the layer below cannot spare one', () => {
+    // [2, 1]: borrowing would leave a single bar at the bottom, which is the
+    // same defect one layer down.
     expect(splitLayers(3, 2)).toEqual({ bars: 4, layers: [2, 2] })
-    expect(splitLayers(9, 4)).toEqual({ bars: 10, layers: [4, 4, 2] })
+    expect(splitLayers(5, 2)).toEqual({ bars: 6, layers: [2, 2, 2] })
+  })
+
+  it('keeps the stack fullest at the bottom', () => {
+    for (let per = 2; per <= 8; per++) {
+      for (let n = 2; n <= 60; n++) {
+        const l = splitLayers(n, per).layers
+        expect(l.every((k, j) => j === 0 || k <= l[j - 1])).toBe(true)
+        expect(l.every((k) => k <= per)).toBe(true)
+      }
+    }
   })
 
   it('never returns a layer of one, for any count or width', () => {
@@ -62,7 +80,7 @@ describe('splitLayers', () => {
   })
 
   it('rounds a fractional demand up', () => {
-    expect(splitLayers(4.2, 4).bars).toBe(6)   // 5 → paired to 6
+    expect(splitLayers(4.2, 4).bars).toBe(5)   // 5 → [3, 2], no bar added
   })
 })
 
@@ -192,7 +210,8 @@ describe('splitLayers terminates on any input', () => {
   })
 
   it('leaves every well-formed case exactly as it was', () => {
-    expect(splitLayers(7, 3)).toEqual({ bars: 8, layers: [3, 3, 2] })
+    // [3, 3, 1] borrows from the layer below rather than adding an eighth bar.
+    expect(splitLayers(7, 3)).toEqual({ bars: 7, layers: [3, 2, 2] })
     expect(splitLayers(6, 3)).toEqual({ bars: 6, layers: [3, 3] })
     expect(splitLayers(2, 5)).toEqual({ bars: 2, layers: [2] })
     expect(splitLayers(0, 3)).toEqual({ bars: 0, layers: [] })
