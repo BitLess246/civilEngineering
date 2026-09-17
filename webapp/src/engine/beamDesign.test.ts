@@ -36,6 +36,47 @@ describe('beam design — SRRB', () => {
     const r = designBeam({ ...base, Mu: 10 })
     expect(r.usedMin).toBe(true)
   })
+
+  // Textbook SRRB (Review Innovations, "Design of RCB (SRRB)", 2010/2015 NSCP):
+  // b = 300, d = 590, f'c = 28, fy = 415, Mu = 310 kN·m, φ = 0.90, ⌀20 bars.
+  // Published: Rn = 3.30, ρ = 0.00860, ρmin = 0.00337, N = 4.84 → 5 pcs.
+  // The problem does not state cover or stirrup; 40 and ⌀10 give the 200 mm
+  // clear web the answer's single layer needs.
+  const textbook: BeamDesignInput = {
+    b: 300, h: 650, cover: 40, barDia: 20, stirrupDia: 10, dGiven: 590,
+    fc: 28, fy: 415, Mu: 310, Vu: 0,
+  }
+
+  it('reproduces the textbook SRRB, step by step', () => {
+    const r = designBeam({ ...textbook, aggregate: 18 })
+    const Rn = (310e6) / (0.9 * 300 * 590 ** 2)
+    expect(Rn).toBeCloseTo(3.30, 2)
+    expect(r.mode).toBe('SRRB')
+    expect(r.rho).toBeCloseTo(0.00860, 4)
+    expect(r.rhoMin).toBeCloseTo(0.00337, 5)
+    // ρmax = 0.85·β1·f'c/fy·(3/8), dt = d — the section is tension-controlled
+    expect(r.rhoMax).toBeCloseTo(0.85 * 0.85 * (28 / 415) * 0.375, 9)
+    expect(r.As / (Math.PI * 100)).toBeCloseTo(4.84, 2)
+    // 5 × 20 + 4 × 25 = 200: one layer fits exactly once 4/3·d_agg ≤ 25
+    expect(r.bars).toBe(5)
+    expect(r.layers).toEqual([5])
+    expect(r.sClear).toBeCloseTo(25, 9)
+  })
+
+  it('keeps the textbook answer at five bars when a 20 mm mix forces two layers', () => {
+    // s_min = 26.7 on 20 mm aggregate, so four fit a layer. [4, 1] used to be
+    // paired to [4, 2] — six bars, 24 % over the demand. [3, 2] is compliant.
+    const r = designBeam(textbook)
+    expect(r.maxPerLayer).toBe(4)
+    expect(r.bars).toBe(5)
+    expect(r.layers).toEqual([3, 2])
+    expect(r.sClear).toBeGreaterThanOrEqual(r.sMinClear - 1e-9)
+    // and the five bars still carry the moment: φMn ≥ Mu, εt ≥ 0.005
+    const a = (r.AsProv * 415) / (0.85 * 28 * 300)
+    const c = a / beta1(28)
+    expect(0.003 * (590 - c) / c).toBeGreaterThanOrEqual(0.005)
+    expect((0.9 * r.AsProv * 415 * (590 - a / 2)) / 1e6).toBeGreaterThanOrEqual(310)
+  })
 })
 
 describe('beam design — bar layout & layers (§407.7, Varignon)', () => {

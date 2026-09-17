@@ -43,11 +43,13 @@ describe('designTBeam — rectangular behaviour (a ≤ hf)', () => {
     expect(r.ok).toBe(true)
   })
   it('hand calc: Rn with b = bf = 1800, at the CONVERGED d', () => {
-    // 5 bars are needed and only 4 fit per layer, so the cage is [4, 2] and the
-    // Varignon centroid sits (2·50)/6 = 16.667 mm above the extreme layer:
-    // d = 537.5 − 16.667 = 520.833, NOT dt. Solving at dt and then dropping d
+    // 5 bars are needed and only 4 fit per layer, so the cage is [3, 2] (the
+    // lone fifth bar borrows a partner rather than adding a sixth) and the
+    // Varignon centroid sits (2·50)/5 = 20 mm above the extreme layer:
+    // d = 537.5 − 20 = 517.5, NOT dt. Solving at dt and then dropping d
     // is the bug this case now pins — it left the section short of its own Mu.
-    const dConv = 537.5 - (2 * (25 + 25)) / 6
+    const dConv = 537.5 - (2 * (25 + 25)) / 5
+    expect(r.bars).toBe(5)
     expect(r.d).toBeCloseTo(dConv, 9)
     const Rn = 400e6 / (0.9 * 1800 * dConv ** 2)
     const rho = ((0.85 * 21) / 415) * (1 - Math.sqrt(1 - (2 * Rn) / (0.85 * 21)))

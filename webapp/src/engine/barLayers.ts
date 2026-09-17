@@ -8,9 +8,14 @@
 //
 // THE DETAILING RULE. No layer carries a single bar. A lone bar in the upper
 // (least-full) layer has nothing to tie to on either side, so it is paired
-// with a second and the two sit beside the stirrup legs. Pairing ADDS a bar,
-// which is conservative on As — the section ends up with slightly more steel
-// than the strength calculation demanded, never less.
+// with a second and the two sit beside the stirrup legs.
+//
+// The partner comes from the layer below when that layer can spare one and
+// still hold its own pair: 5 bars at 4 per layer is [3, 2], not [4, 2]. Only
+// when it cannot — [2, 1] — is a bar ADDED. Adding by default put a sixth ⌀20
+// in a beam that needs 4.84 of them, 24 % more steel than the moment asks
+// for, on a textbook SRRB whose published answer is five. Either way the
+// count never drops below the demand: pairing is conservative on As.
 // ─────────────────────────────────────────────────────────────────────────
 
 export interface BarLayers {
@@ -61,9 +66,17 @@ export function splitLayers(n: number, maxPerLayer: number): BarLayers {
     return out
   }
   let layers = build(total)
-  if (perLayer >= 2 && layers.length > 1 && layers[layers.length - 1] === 1) {
-    total += 1
-    layers = build(total)
+  const k = layers.length - 1
+  if (perLayer >= 2 && k > 0 && layers[k] === 1) {
+    if (layers[k - 1] >= 3) {
+      // Borrow: the layer below keeps at least two and stays the fuller one,
+      // so the stack is still fullest at the bottom.
+      layers[k - 1] -= 1
+      layers[k] = 2
+    } else {
+      total += 1
+      layers = build(total)
+    }
   }
   return { bars: total, layers }
 }

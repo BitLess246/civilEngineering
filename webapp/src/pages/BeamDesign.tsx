@@ -24,7 +24,7 @@ interface FormState extends BeamDesignInput { fyt: number; legs: number; comprBa
 
 const DEFAULTS: FormState = {
   b: 300, h: 500, cover: 40, barDia: 20, comprBarDia: 16, stirrupDia: 10,
-  fc: 28, fy: 415, fyt: 415, Mu: 180, Vu: 150, legs: 2,
+  fc: 28, fy: 415, fyt: 415, Mu: 180, Vu: 150, legs: 2, aggregate: 20,
 }
 
 const REGION: Record<string, string> = {
@@ -256,6 +256,7 @@ export default function BeamDesign() {
     data: [
       ['Section b × h', `${f.b} × ${f.h} mm`], ['Clear cover', `${f.cover} mm`],
       ["Concrete f'c", `${f.fc} MPa`], ['Steel fy / fyt', `${f.fy} / ${f.fyt} MPa`],
+      ['Max. aggregate size', `${f.aggregate ?? 20} mm`],
       ['Bar ⌀ / stirrup ⌀', `${fd.barDia} / ${fd.stirrupDia} mm (${fd.legs}-leg)`],
       ['Moment Mu', `${f1(demand.Mu)} kN·m${hogging ? ' (hogging)' : ''}`],
       ['Shear Vu', `${f1(demand.Vu)} kN`], ['ρ / ρmin / ρmax', `${r.rho.toFixed(4)} / ${r.rhoMin.toFixed(4)} / ${r.rhoMax.toFixed(4)}`],
@@ -343,6 +344,9 @@ export default function BeamDesign() {
             <Num label={<KTex tex="f'_c" />} unit="MPa" value={f.fc} onChange={set('fc')} />
             <Num label={<KTex tex="f_y" />} unit="MPa" value={f.fy} onChange={set('fy')} />
             <Num label={<KTex tex="f_{yt}" />} unit="MPa" value={f.fyt} onChange={set('fyt')} />
+            {/* §425.2.1's third spacing term, 4/3·d_agg. It was fixed at 20 mm,
+                so a textbook beam on a finer mix could not be reproduced. */}
+            <Num label="Max. aggregate size" unit="mm" value={f.aggregate ?? 20} onChange={set('aggregate')} min={1} />
           </Card>
 
           <Card title="Serviceability (optional)">
