@@ -8,7 +8,8 @@ what "done" was measured against.
 
 **Evidence vocabulary.** *Reproduced* = the failure was observed running.
 *Computed* = numbers evaluated against the shipped modules. *Traced* = the
-mechanism was established by reading, not observed.
+mechanism was established by reading, not observed. *Measured* = read off the
+rendered page in a real browser at stated viewports.
 
 ---
 
@@ -37,6 +38,11 @@ mechanism was established by reading, not observed.
 | S6 | `guest-quota` CORS lets any site burn a visitor's trial | low | read | ✅ #735 |
 | E5 | `Cv1` uses the superseded AISC 360-10 form (conservative) | low | read | ✅ #737 |
 | S7 | `?embed=1` bypassed `RequireAuth` on every gated route | high | verified | ✅ #753 |
+| D1 | Drawing annotation renders 2.5–9.8 px on every phone width | high | measured | ☐ open |
+| D2 | `DevLengthDetail` locks a 2×2 panel grid in one viewBox — cannot reflow | high | measured | ☐ open |
+| D3 | Drawings are SMALLER at 1280 than at 768 (non-monotonic) | medium | measured | ☐ open |
+| D4 | No shared max-width policy — 5 of ~20 drawings cap, rest run to 1418 px | low-med | measured | ☐ open |
+| D5 | `preserveAspectRatio` stated on 12 of 24 SVGs, always the default | low | read | ☐ open |
 
 **Found while reviewing merged work, not in the audit — S7, the embed skeleton
 key.** ✅ SHIPPED (#753). The landing page iframes Model Space as a demo poster
@@ -723,3 +729,118 @@ tenancy one.
 `cancelled` and both branches check it. Worker lifecycle in `useSolver` is
 clean; all eight call sites attach `.catch`. Both sibling stores validate shape
 on read. Every route is classified and there are no dead links.
+
+---
+
+# D — drawing scale against the viewport (September 2026)
+
+Cross-sections, elevations and plans, measured in Chromium at 320 / 375 / 414 /
+768 / 1280 / 1920 px. Fifteen routes, sixteen drawings. **Nothing is fixed yet**
+— this section is the record, not a remediation log.
+
+## The measurement trap, first
+
+The first sweep reported every drawing VANISHING at ≥768 px, which would have
+been the headline finding. It was false. Reusing one browser context burned the
+**trial quota** — `5 free runs` → `3` → `Create a free account` — and a gated
+page stops rendering its drawing. Reversing the width order moved the blank to
+the SMALL widths, which proves the cause was app state, not viewport. Every
+number below comes from a FRESH browser context per (route × width), so each
+measurement starts with an unspent quota.
+
+Anyone re-running this: one context per measurement, or you will measure the
+paywall.
+
+## What was measured
+
+Rendered width in CSS px · smallest annotation inside the drawing in CSS px.
+Annotation size is the number that matters: SVG `font-size` is in viewBox USER
+UNITS, so the rendered size is `font-size × (renderedWidth / viewBoxWidth)`.
+
+| route / drawing | 320 | 375 | 414 | 768 | 1280 | 1920 |
+|---|---|---|---|---|---|---|
+| dev-length **DevLengthDetail** | 238·**2.5** | 293·**3.0** | 332·**3.4** | 686·7.1 | 968·10.1 | 1418·14.7 |
+| slab-design **SlabBarSection** | 254·**2.8** | 309·**3.4** | 348·**3.9** | 686·7.7 | 378·4.2 | 566·6.3 |
+| retaining-wall **WallSection** | 246·**2.8** | 301·**3.4** | 340·**3.9** | 678·7.7 | 960·10.9 | 1410·16.0 |
+| beam-analysis **BeamElevation** | 238·**3.4** | 293·**4.2** | 332·**4.7** | 686·9.8 | 374·5.3 | 561·8.0 |
+| combined **CombinedFooting** | 246·**4.0** | 301·**4.9** | 340·**5.6** | 678·11.1 | 281·4.6 | 431·7.1 |
+| water-tank **TankSection** | 238·**4.2** | 293·**5.2** | 332·**5.9** | 686·12.2 | 686·12.2 | 686·12.2 |
+| settlement **SoilProfile** | 238·**4.6** | 293·**5.6** | 332·**6.4** | 670·12.9 | 952·18.3 | 1402·27.0 |
+| torsion **TorsionSection** | 238·**5.1** | 293·**6.2** | 332·**7.1** | 686·14.6 | 374·8.0 | 561·12.0 |
+| foundation **FootingSchematic** | 254·**5.3** | 309·**6.4** | 348·**7.3** | 686·14.3 | 388·8.1 | 580·12.1 |
+| tbeam-design **TSection** | 254·**5.9** | 309·**7.2** | 348·8.1 | 560·13.1 | 397·9.3 | 560·13.1 |
+| punching-shear **PunchingPlan** | 238·**6.2** | 293·**7.6** | 332·8.6 | 686·17.7 | 374·9.7 | 561·14.5 |
+| column-design **ColumnSchematic** | 254·**7.1** | 309·8.7 | 348·9.8 | 686·19.3 | 388·10.9 | 580·16.3 |
+
+**D1 · annotation is sub-legible on every phone width.** At 320 px every drawing
+lands under 7.2 px; the worst three are 2.5–2.8 px. The geometry survives; the
+bar callouts, dimensions and clause references do not, and on an engineering
+drawing those ARE the content. Note the contrast with the PDF path, which sets
+absolute 6.2–7.2 pt and never degrades — paper has no viewport.
+
+**D2 · `DevLengthDetail` cannot reflow.** Its four panels are
+`<g transform="translate(…)">` inside ONE 626-unit viewBox
+(`components/DevLengthDetail.tsx:59-66`), so the figure can only shrink. That is
+why it is the worst row in the table.
+
+**D3 · the drawing is smaller on desktop than on tablet.** `ColumnSchematic`:
+686 px at 768 → **388 px at 1280** → 580 px at 1920. The `lg` two-column layout
+moves the figure into a narrow panel. Same shape in 9 of 12 rows.
+
+**D4 · no shared max-width policy.** `TSection` caps at 560 px, `SectionShape`
+at 200 px; `RetainingWallSection`, `SoilProfile` and `DevLengthDetail` run to
+1410–1418 px at 1920. The inconsistency is the finding — whether the large end
+looks wrong was NOT established.
+
+**D5 · `preserveAspectRatio` on 12 of 24 SVGs**, always the default
+`xMidYMid meet`, so it changes nothing. Cosmetic.
+
+**Passing, and worth keeping:** zero horizontal overflow at all six widths on
+all fifteen routes. The `viewBox` + `w-full` baseline is sound. The failure is
+that shrinking is the ONLY adaptation the drawings have.
+
+## Cross-check against Impeccable
+
+Checked against `pbakaus/impeccable@0a4e72a`, which is no longer installed here.
+
+**Its floors agree, and are stricter than anything shipped:**
+
+| source | floor |
+|---|---|
+| `skill/reference/harden.md:81` | 16 px body on mobile; 14 px only for genuinely secondary text |
+| `skill/reference/typeset.md:46` | 1 rem / 16 px web body floor, "unless a dense role … justifies otherwise" |
+| `skill/reference/adapt.md:56` | larger text, 16 px minimum |
+| `skill/reference/ios.md:26` | 11 pt absolute floor |
+| `craft-floor.md` `rule:skill-typo-floor` | "run the real copy at every breakpoint and fix what overflows" |
+
+Drawing annotation is a genuinely dense role, so `typeset.md`'s exception
+applies in principle — but it is an exception from 16 px, not a licence for
+2.5 px, and the iOS 11 pt floor has no exception at all.
+
+**Where its detector would MISS this, which is the useful half.** Impeccable's
+Responsive dimension (`audit.md`) checks fixed widths, touch targets < 44 px,
+horizontal scroll, missing breakpoints, and layouts that break when text size
+increases. **This app passes all of them.** A viewBox-scaled SVG never
+overflows and never clips — it shrinks gracefully and illegibly, so
+`rule:skill-ban-text-overflow` and the clipping rules stay silent.
+
+And a static scan of the source reads `font-size="11.8"` and sees 11.8, which
+clears every floor in the table above. The number in the file passes; only the
+rendered product fails, because the source number is in user units and the
+rendered one is `user units × scale`. **The defect does not exist until render
+time, so no source-text rule can see it** — the same shape as the
+`themeUsage.test.ts` span bug: a guard is only as good as the thing it measures.
+
+Mapped to Impeccable's severities: D1 and D2 are **P1**, D3 and D4 **P2**
+(D4 under Implementation Integrity — design-system drift), D5 **P3**. Responsive
+dimension would score **2/4** — "works on mobile, rough edges": the layout is
+fine, the content is not.
+
+## The fix, when it is picked up
+
+One shared `<Drawing>` wrapper owning max-width AND a minimum rendered scale.
+Below that scale the figure stops shrinking and its container scrolls — a
+drawing you can pan beats one you cannot read. `DevLengthDetail` splits into
+four sibling SVGs in a `grid-cols-1 md:grid-cols-2`. The guard is a rendered
+measurement, not a source scan: assert that every drawing's smallest annotation
+clears a stated floor at 320 px, in a real browser.
