@@ -135,12 +135,42 @@ function RailGroup({ group, activeGroup, pathname, onNavigate }: {
   const onBlur = (e: React.FocusEvent) => {
     if (!wrap.current?.contains(e.relatedTarget as Node | null)) setOpen(false)
   }
+
+  // THE FLYOUT HAD TO BE CAUGHT BEFORE IT COULD BE REACHED.
+  //
+  // `place()` puts the panel at `btn.right + 6`, and the panel is `position:
+  // fixed` — detached from the 44 px icon it hangs off. `mouseleave` respects
+  // DOM containment, so moving from icon to panel would be safe if the pointer
+  // went straight there; it does not. It crosses those 6 px of RAIL, which is
+  // not a descendant of this wrapper, `mouseleave` fires, and the panel
+  // unmounts under a pointer that was on its way to it. A fast diagonal makes
+  // it worse: the browser samples the path, so a quick flick can leave the
+  // wrapper without ever reporting a point inside the panel.
+  //
+  // Closing on a short delay is the fix rather than closing the gap, because
+  // zero gap still leaves the two boxes merely ADJACENT — a sub-pixel seam or
+  // one skipped sample re-opens the same hole. The timer is cancelled by
+  // re-entering either box, so the panel survives the crossing and still shuts
+  // the moment the pointer genuinely leaves.
+  const closeAt = useRef<number | null>(null)
+  const cancelClose = () => {
+    if (closeAt.current !== null) { window.clearTimeout(closeAt.current); closeAt.current = null }
+  }
+  const armClose = () => {
+    cancelClose()
+    closeAt.current = window.setTimeout(() => { closeAt.current = null; setOpen(false) }, 180)
+  }
+  const enter = () => { cancelClose(); show() }
+  // A pending close must never outlive the component, or it fires `setOpen` on
+  // an unmounted node the first time the rail is collapsed with one open.
+  useEffect(() => cancelClose, [])
+
   return (
     <div ref={wrap} className="relative"
-      onMouseEnter={show} onMouseLeave={() => setOpen(false)}
+      onMouseEnter={enter} onMouseLeave={armClose}
       onFocus={show} onBlur={onBlur}
       onKeyDown={(e) => {
-        if (e.key === 'Escape' && open) { e.stopPropagation(); setOpen(false); btn.current?.focus() }
+        if (e.key === 'Escape' && open) { e.stopPropagation(); cancelClose(); setOpen(false); btn.current?.focus() }
       }}>
       <button ref={btn} type="button" aria-expanded={open} aria-controls={panelId}
         aria-label={`${group.label} — ${group.tools.length} tool${group.tools.length === 1 ? '' : 's'}`}
@@ -151,6 +181,7 @@ function RailGroup({ group, activeGroup, pathname, onNavigate }: {
       </button>
       {open && at && (
         <div ref={panel} id={panelId} role="group" aria-label={group.label} data-rail-flyout
+          onMouseEnter={cancelClose} onMouseLeave={armClose}
           style={{ left: at.left, top: at.top }}
           className="fixed z-30 w-[210px] rounded-md border border-white/10 bg-rail py-1.5 shadow-xl">
           <p className="px-2.5 pb-1 text-[9.5px] font-bold uppercase tracking-[.18em] text-rail-muted">

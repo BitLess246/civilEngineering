@@ -735,11 +735,21 @@ export default function ModelSpace() {
   // §208.4.1 vertical seismic component folded into the E-combo D factors.
   const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel, Ev: evOn ? 0.5 * Ca * Ie : undefined, colLayout: (allAround ? 'all-around' as const : 'two-face' as const), tBeamAction: tBeamOn, useShells: designShells }
 
-  const analyze = () => {
-    if (!model || busy || meshErrors) return   // §1 fail-fast: don't solve a singular mesh
+  /**
+   * Solve, and store what the report reads.
+   *
+   * `on` exists for the optimiser. React state is not yet updated when
+   * `optimize()`'s promise resolves — `save(r.model)` has been called but this
+   * closure still holds the PREVIOUS model — so re-analysing without it would
+   * solve the sections the optimiser just replaced and store the answer as if
+   * it were current. The caller passes the model it wants solved.
+   */
+  const analyzeModel = (on?: StructuralModel) => {
+    const target = on ?? model
+    if (!target || busy || meshErrors) return Promise.resolve()   // §1 fail-fast: don't solve a singular mesh
     // 3D FEM + storey drift run in the worker so the UI stays responsive.
-    run('analyze', {
-      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta, Z: Zf }, crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel,
+    return run('analyze', {
+      model: target, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta, Z: Zf }, crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel,
     }).then((r) => {
       const res = r as { analysis: F3Analysis | null; orphans: number; drift: DriftRow[] | null; irregularities: IrregularityFlag[] | null; stability: StabilityRow[] | null }
       setOrphans(res.orphans)
@@ -750,6 +760,7 @@ export default function ModelSpace() {
       setStability(res.stability)
     }).catch((e) => console.error('analyze failed', e))
   }
+  const analyze = () => { void analyzeModel() }
 
   const runModal = () => {
     if (!model || busy || meshErrors) return
@@ -1039,7 +1050,14 @@ export default function ModelSpace() {
       setOptBefore(before)
       setDesign(r.design)
       writeSessionDesign(r.design)   // the optimised design is what the calculators should show
-      requestAnimationFrame(captureModel)
+      // RE-SOLVE ON THE SECTIONS IT JUST CHOSE. The optimiser replaces every
+      // member's section, which changes the stiffness — so the stored analysis,
+      // drift, irregularity flags and stability rows all still describe the
+      // model as it was BEFORE it ran, and the PDF report reads exactly those.
+      // Leaving that to the user meant a report whose forces and whose sections
+      // came from two different structures, with nothing on screen saying so.
+      // Passed explicitly because `save()` has not reached this closure yet.
+      void analyzeModel(r.model).then(() => requestAnimationFrame(captureModel))
     }).catch((e) => console.error('optimize failed', e))
   }
 
