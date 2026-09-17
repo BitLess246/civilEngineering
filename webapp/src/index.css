@@ -20,8 +20,11 @@
      resolves in the browser and follows whatever `[data-theme]` is on <html>.
      Values live in styles/themes.css; this block only names the roles.
 
-     Tailwind's own palette (`text-slate-500`, ~2 400 uses) already compiles to
-     `var(--color-slate-*)`, so those follow a theme for free. */
+     Tailwind's own palette compiles to `var(--color-<family>-N)`, which
+     Blueprint redefines, so the few stock families still in use (the
+     informational tags: sky, violet, teal, purple) follow a theme too. The
+     neutral and status families no longer appear in any component — they name
+     these roles instead — and their inverted ramps have been removed. */
   --color-paper: var(--t-paper);
   --color-sheet: var(--t-sheet);
   --color-sheet-2: var(--t-sheet-2);
