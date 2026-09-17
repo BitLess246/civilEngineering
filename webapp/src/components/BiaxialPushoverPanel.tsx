@@ -1,5 +1,6 @@
 import { ResultCard, Row } from './qty'
 import { summarizeBiaxialPushover, type BiaxialPushoverResult } from '../engine/biaxialFrameModel'
+import { DrawingFrame } from './DrawingFrame'
 
 /** Base shear vs control-node displacement, with yield onset marked. */
 function CapacityCurve({ res }: { res: BiaxialPushoverResult }) {
@@ -14,32 +15,34 @@ function CapacityCurve({ res }: { res: BiaxialPushoverResult }) {
   const pts = res.curve.map((_, i) => `${sx(xs[i]).toFixed(1)},${sy(ys[i]).toFixed(1)}`).join(' ')
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
-      style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <line x1={x0} y1={y0} x2={x1} y2={y0} stroke="#475569" strokeWidth={1.2} />
-      <line x1={x0} y1={y0} x2={x0} y2={y1} stroke="#475569" strokeWidth={1.2} />
-      {[0, 0.5, 1].map((f) => (
-        <g key={`y${f}`}>
-          <line x1={x0} y1={sy(yMax * f)} x2={x1} y2={sy(yMax * f)} stroke="#e2e8f0" strokeWidth={0.8} />
-          <text x={x0 - 6} y={sy(yMax * f) + 3} fontSize={9} fill="#64748b" textAnchor="end">{(yMax * f).toFixed(0)}</text>
-        </g>
-      ))}
-      {[0, 0.5, 1].map((f) => (
-        <text key={`x${f}`} x={sx(xMax * f)} y={y0 + 14} fontSize={9} fill="#64748b" textAnchor="middle">{(xMax * f).toFixed(1)}</text>
-      ))}
-      <polyline points={pts} fill="none" stroke="#0056b3" strokeWidth={2} />
-      {res.curve.map((p, i) => (
-        <circle key={i} cx={sx(xs[i])} cy={sy(ys[i])} r={2.6}
-          fill={p.hinges > 0 ? '#dc2626' : '#0056b3'}>
-          <title>{`Δ ${xs[i].toFixed(1)} mm · V ${ys[i].toFixed(1)} kN · ${p.hinges} hinge(s) yielding`}</title>
-        </circle>
-      ))}
-      <text x={(x0 + x1) / 2} y={H - 4} fontSize={10} fill="#334155" textAnchor="middle" fontWeight={700}>
-        control-node displacement (mm)
-      </text>
-      <text x={12} y={(y0 + y1) / 2} fontSize={10} fill="#334155" textAnchor="middle" fontWeight={700}
-        transform={`rotate(-90 12 ${(y0 + y1) / 2})`}>base shear (kN)</text>
-    </svg>
+    <DrawingFrame label="biaxial pushover curves">
+      <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
+        <line x1={x0} y1={y0} x2={x1} y2={y0} stroke="#475569" strokeWidth={1.2} />
+        <line x1={x0} y1={y0} x2={x0} y2={y1} stroke="#475569" strokeWidth={1.2} />
+        {[0, 0.5, 1].map((f) => (
+          <g key={`y${f}`}>
+            <line x1={x0} y1={sy(yMax * f)} x2={x1} y2={sy(yMax * f)} stroke="#e2e8f0" strokeWidth={0.8} />
+            <text x={x0 - 6} y={sy(yMax * f) + 3} fontSize={9} fill="#64748b" textAnchor="end">{(yMax * f).toFixed(0)}</text>
+          </g>
+        ))}
+        {[0, 0.5, 1].map((f) => (
+          <text key={`x${f}`} x={sx(xMax * f)} y={y0 + 14} fontSize={9} fill="#64748b" textAnchor="middle">{(xMax * f).toFixed(1)}</text>
+        ))}
+        <polyline points={pts} fill="none" stroke="#0056b3" strokeWidth={2} />
+        {res.curve.map((p, i) => (
+          <circle key={i} cx={sx(xs[i])} cy={sy(ys[i])} r={2.6}
+            fill={p.hinges > 0 ? '#dc2626' : '#0056b3'}>
+            <title>{`Δ ${xs[i].toFixed(1)} mm · V ${ys[i].toFixed(1)} kN · ${p.hinges} hinge(s) yielding`}</title>
+          </circle>
+        ))}
+        <text x={(x0 + x1) / 2} y={H - 4} fontSize={10} fill="#334155" textAnchor="middle" fontWeight={700}>
+          control-node displacement (mm)
+        </text>
+        <text x={12} y={(y0 + y1) / 2} fontSize={10} fill="#334155" textAnchor="middle" fontWeight={700}
+          transform={`rotate(-90 12 ${(y0 + y1) / 2})`}>base shear (kN)</text>
+      </svg>
+    </DrawingFrame>
   )
 }
 

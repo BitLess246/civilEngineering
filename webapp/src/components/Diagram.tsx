@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { DrawingFrame } from './DrawingFrame'
 
 export interface DiagramProps {
   /** Station coordinates along the footing, m (monotonic increasing). */
@@ -75,42 +76,44 @@ export function Diagram({
   }
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
-      style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={padL} y={16} fontSize={11} fontWeight={700} fill="#0056b3">{title}</text>
-      <text x={W - padR} y={16} fontSize={9.5} fill="#94a3b8" textAnchor="end">{unit}</text>
+    <DrawingFrame label={`${title} diagram`}>
+      <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
+        <text x={padL} y={16} fontSize={11} fontWeight={700} fill="#0056b3">{title}</text>
+        <text x={W - padR} y={16} fontSize={9.5} fill="#94a3b8" textAnchor="end">{unit}</text>
 
-      {/* y gridlines + labels */}
-      {yticks.map((v) => (
-        <g key={`y${v}`}>
-          <line x1={padL} y1={sy(v)} x2={W - padR} y2={sy(v)} stroke={v === 0 ? ZERO : GRID} strokeWidth={v === 0 ? 1.1 : 1} />
-          <text x={padL - 6} y={sy(v) + 3} fontSize={9} fill="#64748b" textAnchor="end">{fmt(v)}</text>
-        </g>
-      ))}
+        {/* y gridlines + labels */}
+        {yticks.map((v) => (
+          <g key={`y${v}`}>
+            <line x1={padL} y1={sy(v)} x2={W - padR} y2={sy(v)} stroke={v === 0 ? ZERO : GRID} strokeWidth={v === 0 ? 1.1 : 1} />
+            <text x={padL - 6} y={sy(v) + 3} fontSize={9} fill="#64748b" textAnchor="end">{fmt(v)}</text>
+          </g>
+        ))}
 
-      {/* x axis baseline ticks */}
-      <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke={AXIS} strokeWidth={1} />
-      {[xMin, (xMin + xMax) / 2, xMax].map((x, k) => (
-        <g key={`x${k}`}>
-          <line x1={sx(x)} y1={H - padB} x2={sx(x)} y2={H - padB + 4} stroke={AXIS} strokeWidth={1} />
-          <text x={sx(x)} y={H - padB + 15} fontSize={9} fill="#64748b" textAnchor="middle">{x.toFixed(2)}</text>
-        </g>
-      ))}
+        {/* x axis baseline ticks */}
+        <line x1={padL} y1={H - padB} x2={W - padR} y2={H - padB} stroke={AXIS} strokeWidth={1} />
+        {[xMin, (xMin + xMax) / 2, xMax].map((x, k) => (
+          <g key={`x${k}`}>
+            <line x1={sx(x)} y1={H - padB} x2={sx(x)} y2={H - padB + 4} stroke={AXIS} strokeWidth={1} />
+            <text x={sx(x)} y={H - padB + 15} fontSize={9} fill="#64748b" textAnchor="middle">{x.toFixed(2)}</text>
+          </g>
+        ))}
 
-      {/* column / reference verticals */}
-      {vlines.map((v, k) => (
-        <g key={`v${k}`}>
-          <line x1={sx(v.x)} y1={padT} x2={sx(v.x)} y2={H - padB} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="4 3" />
-          {v.label && <text x={sx(v.x)} y={padT - 2} fontSize={8.5} fill="#94a3b8" textAnchor="middle">{v.label}</text>}
-        </g>
-      ))}
+        {/* column / reference verticals */}
+        {vlines.map((v, k) => (
+          <g key={`v${k}`}>
+            <line x1={sx(v.x)} y1={padT} x2={sx(v.x)} y2={H - padB} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="4 3" />
+            {v.label && <text x={sx(v.x)} y={padT - 2} fontSize={8.5} fill="#94a3b8" textAnchor="middle">{v.label}</text>}
+          </g>
+        ))}
 
-      {/* fill + curve */}
-      <polygon points={fillPts} fill={color} opacity={0.12} />
-      <polyline points={linePts} fill="none" stroke={color} strokeWidth={1.8} />
+        {/* fill + curve */}
+        <polygon points={fillPts} fill={color} opacity={0.12} />
+        <polyline points={linePts} fill="none" stroke={color} strokeWidth={1.8} />
 
-      {markExtrema && Math.abs(ys[iMax]) > 1e-6 && marker(iMax, 'above')}
-      {markExtrema && Math.abs(ys[iMin]) > 1e-6 && marker(iMin, 'below')}
-    </svg>
+        {markExtrema && Math.abs(ys[iMax]) > 1e-6 && marker(iMax, 'above')}
+        {markExtrema && Math.abs(ys[iMin]) > 1e-6 && marker(iMin, 'below')}
+      </svg>
+    </DrawingFrame>
   )
 }

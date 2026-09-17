@@ -1,5 +1,6 @@
 import { ResultCard, Row } from './qty'
 import type { AccelSpectrum, DesignSpectrumPoint } from '../engine/accelSpectrum'
+import { DrawingFrame } from './DrawingFrame'
 
 interface Props {
   /** Elastic response spectrum computed from the uploaded record. */
@@ -40,40 +41,42 @@ export function RecordedSpectrumPanel({ spec, design, recordName }: Props) {
   return (
     <ResultCard title="Response spectrum vs NSCP 208 design spectrum">
       <div className="col-span-full mb-2 overflow-hidden rounded-lg border border-hairline bg-sheet">
-        <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg"
-          preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: 'auto' }}>
-          {/* grid + ticks */}
-          {yTicks.map((sa, i) => (
-            <g key={`y${i}`}>
-              <line x1={x0} y1={sy(sa)} x2={x1} y2={sy(sa)} stroke="#eef2f7" strokeWidth={1} />
-              <text x={x0 - 5} y={sy(sa) + 3} fontSize={8} fill="#64748b" textAnchor="end">{sa.toFixed(1)}</text>
+        <DrawingFrame label="recorded spectrum">
+            <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg"
+            preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: 'auto' }}>
+            {/* grid + ticks */}
+            {yTicks.map((sa, i) => (
+              <g key={`y${i}`}>
+                <line x1={x0} y1={sy(sa)} x2={x1} y2={sy(sa)} stroke="#eef2f7" strokeWidth={1} />
+                <text x={x0 - 5} y={sy(sa) + 3} fontSize={8} fill="#64748b" textAnchor="end">{sa.toFixed(1)}</text>
+              </g>
+            ))}
+            {xTicks.map((T, i) => (
+              <text key={`x${i}`} x={sx(T)} y={y0 + 12} fontSize={8} fill="#64748b" textAnchor="middle">{T.toFixed(1)}</text>
+            ))}
+            {/* axes */}
+            <line x1={x0} y1={y0} x2={x1} y2={y0} stroke="#94a3b8" strokeWidth={1} />
+            <line x1={x0} y1={y0} x2={x0} y2={y1} stroke="#94a3b8" strokeWidth={1} />
+            <text x={(x0 + x1) / 2} y={H - 6} fontSize={9} fill="#475569" textAnchor="middle">Period T (s)</text>
+            <text x={12} y={(y0 + y1) / 2} fontSize={9} fill="#475569" textAnchor="middle"
+              transform={`rotate(-90 12 ${(y0 + y1) / 2})`}>PSA (m/s²)</text>
+
+            {/* design spectrum (red dashed) */}
+            <polyline points={dsgPts} fill="none" stroke="#dc2626" strokeWidth={1.6} strokeDasharray="5 3" />
+            {/* recorded spectrum (blue solid) */}
+            <polyline points={recPts} fill="none" stroke="#0056b3" strokeWidth={1.8} />
+            {/* peak marker */}
+            <circle cx={sx(spec.peakPSAT)} cy={sy(spec.peakPSA)} r={2.6} fill="#0056b3" />
+
+            {/* legend */}
+            <g transform={`translate(${x1 - 150}, ${y1 + 4})`}>
+              <line x1={0} y1={4} x2={18} y2={4} stroke="#0056b3" strokeWidth={1.8} />
+              <text x={22} y={7} fontSize={8} fill="#334155">Record ({(spec.zeta * 100).toFixed(0)}% damping)</text>
+              <line x1={0} y1={16} x2={18} y2={16} stroke="#dc2626" strokeWidth={1.6} strokeDasharray="5 3" />
+              <text x={22} y={19} fontSize={8} fill="#334155">NSCP 208 design</text>
             </g>
-          ))}
-          {xTicks.map((T, i) => (
-            <text key={`x${i}`} x={sx(T)} y={y0 + 12} fontSize={8} fill="#64748b" textAnchor="middle">{T.toFixed(1)}</text>
-          ))}
-          {/* axes */}
-          <line x1={x0} y1={y0} x2={x1} y2={y0} stroke="#94a3b8" strokeWidth={1} />
-          <line x1={x0} y1={y0} x2={x0} y2={y1} stroke="#94a3b8" strokeWidth={1} />
-          <text x={(x0 + x1) / 2} y={H - 6} fontSize={9} fill="#475569" textAnchor="middle">Period T (s)</text>
-          <text x={12} y={(y0 + y1) / 2} fontSize={9} fill="#475569" textAnchor="middle"
-            transform={`rotate(-90 12 ${(y0 + y1) / 2})`}>PSA (m/s²)</text>
-
-          {/* design spectrum (red dashed) */}
-          <polyline points={dsgPts} fill="none" stroke="#dc2626" strokeWidth={1.6} strokeDasharray="5 3" />
-          {/* recorded spectrum (blue solid) */}
-          <polyline points={recPts} fill="none" stroke="#0056b3" strokeWidth={1.8} />
-          {/* peak marker */}
-          <circle cx={sx(spec.peakPSAT)} cy={sy(spec.peakPSA)} r={2.6} fill="#0056b3" />
-
-          {/* legend */}
-          <g transform={`translate(${x1 - 150}, ${y1 + 4})`}>
-            <line x1={0} y1={4} x2={18} y2={4} stroke="#0056b3" strokeWidth={1.8} />
-            <text x={22} y={7} fontSize={8} fill="#334155">Record ({(spec.zeta * 100).toFixed(0)}% damping)</text>
-            <line x1={0} y1={16} x2={18} y2={16} stroke="#dc2626" strokeWidth={1.6} strokeDasharray="5 3" />
-            <text x={22} y={19} fontSize={8} fill="#334155">NSCP 208 design</text>
-          </g>
-        </svg>
+          </svg>
+        </DrawingFrame>
       </div>
 
       <Row label="Peak ground accel (PGA)" value={`${spec.pga.toFixed(3)} m/s²`} sub={`${(spec.pga / 9.81).toFixed(3)} g`} />

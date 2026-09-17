@@ -1,5 +1,6 @@
 import { ResultCard, Row } from './qty'
 import type { TimeHistoryModelResult } from '../engine/timeHistoryModel'
+import { DrawingFrame } from './DrawingFrame'
 
 /** A signed time series on a shared time axis (zero line centred). */
 function TimeChart({ t, y, color, yLabel, yScale = 1 }: {
@@ -14,23 +15,25 @@ function TimeChart({ t, y, color, yLabel, yScale = 1 }: {
   const pts = y.map((v, i) => `${sx(t[i]).toFixed(1)},${sy(v).toFixed(1)}`).join(' ')
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
-      style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      {/* zero line + frame */}
-      <line x1={x0} y1={yMid} x2={x1} y2={yMid} stroke="#cbd5e1" strokeWidth={1} />
-      <line x1={x0} y1={padT} x2={x0} y2={H - padB} stroke="#475569" strokeWidth={1} />
-      <line x1={x0} y1={H - padB} x2={x1} y2={H - padB} stroke="#475569" strokeWidth={1} />
-      {/* y extremes */}
-      <text x={x0 - 5} y={padT + 8} fontSize={9} fill="#64748b" textAnchor="end">{(yAbs).toFixed(yAbs < 10 ? 1 : 0)}</text>
-      <text x={x0 - 5} y={H - padB} fontSize={9} fill="#64748b" textAnchor="end">{(-yAbs).toFixed(yAbs < 10 ? 1 : 0)}</text>
-      {/* time ticks */}
-      {[0, 0.5, 1].map((f) => (
-        <text key={f} x={sx(tMax * f)} y={H - padB + 12} fontSize={9} fill="#64748b" textAnchor="middle">{(tMax * f).toFixed(1)}s</text>
-      ))}
-      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.4} />
-      <text x={12} y={yMid} fontSize={9} fill="#334155" textAnchor="middle" fontWeight={700}
-        transform={`rotate(-90 12 ${yMid})`}>{yLabel}</text>
-    </svg>
+    <DrawingFrame label="time history trace">
+      <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
+        {/* zero line + frame */}
+        <line x1={x0} y1={yMid} x2={x1} y2={yMid} stroke="#cbd5e1" strokeWidth={1} />
+        <line x1={x0} y1={padT} x2={x0} y2={H - padB} stroke="#475569" strokeWidth={1} />
+        <line x1={x0} y1={H - padB} x2={x1} y2={H - padB} stroke="#475569" strokeWidth={1} />
+        {/* y extremes */}
+        <text x={x0 - 5} y={padT + 8} fontSize={9} fill="#64748b" textAnchor="end">{(yAbs).toFixed(yAbs < 10 ? 1 : 0)}</text>
+        <text x={x0 - 5} y={H - padB} fontSize={9} fill="#64748b" textAnchor="end">{(-yAbs).toFixed(yAbs < 10 ? 1 : 0)}</text>
+        {/* time ticks */}
+        {[0, 0.5, 1].map((f) => (
+          <text key={f} x={sx(tMax * f)} y={H - padB + 12} fontSize={9} fill="#64748b" textAnchor="middle">{(tMax * f).toFixed(1)}s</text>
+        ))}
+        <polyline points={pts} fill="none" stroke={color} strokeWidth={1.4} />
+        <text x={12} y={yMid} fontSize={9} fill="#334155" textAnchor="middle" fontWeight={700}
+          transform={`rotate(-90 12 ${yMid})`}>{yLabel}</text>
+      </svg>
+    </DrawingFrame>
   )
 }
 

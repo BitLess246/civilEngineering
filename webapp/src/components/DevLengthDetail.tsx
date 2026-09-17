@@ -17,7 +17,19 @@
 //     is db/2, which is enough to move (cb+Ktr)/db a long way.
 //
 // Geometry only. `engine/devLength` decides every number; this labels them.
+//
+// FOUR SVGs, NOT ONE SHEET OF FOUR PANELS. The panels used to be `<g>` groups
+// placed by transform inside a single 626-unit viewBox, which meant the figure
+// could not reflow — only shrink. On a 320 px screen that put its annotation
+// at 2.5 px, the worst reading in the whole app (`docs/AuditRemediation.md`
+// § D2). Each panel is now its own drawing in a grid that collapses to one
+// column, so the text has a 300-unit box to live in instead of a 626-unit one
+// — 415 px to clear the legibility floor instead of 856. Same drawing, same
+// numbers, same panel geometry; only the container changed.
 // ─────────────────────────────────────────────────────────────────────────
+
+import { type ReactNode } from 'react'
+import { DrawingFrame } from './DrawingFrame'
 
 const INK = '#37526e'
 const CONC = '#eef3f8'
@@ -40,31 +52,38 @@ export interface DevLengthDetailProps {
   spliceClass?: 'A' | 'B'
 }
 
-/** Panel geometry — every panel is drawn in the same box and then placed. */
-const PW = 300, PH = 152, GAP = 26
+/** Panel geometry — every panel is drawn in the same box. */
+const PW = 300, PH = 152
+
+/** One panel, in its own viewBox and its own legibility frame. */
+function Panel({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <DrawingFrame label={label}>
+      <svg viewBox={`0 0 ${PW} ${PH}`} className="block h-auto w-full"
+        style={{ fontFamily: 'Arial, sans-serif' }}>
+        {children}
+      </svg>
+    </DrawingFrame>
+  )
+}
 
 export function DevLengthDetail(p: DevLengthDetailProps) {
   const { db, ld, ldh, ls_B, hookTail, hookBendDia } = p
-  const W = PW * 2 + GAP, H = PH * 2 + GAP + 16
-
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto block h-auto w-full"
-      style={{ fontFamily: 'Arial, sans-serif' }}>
-      <defs>
-        <marker id="dl-tick" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-          <path d="M1 5 L5 1" stroke={DIM} strokeWidth="1.2" fill="none" />
-        </marker>
-      </defs>
-
-      <g transform="translate(0,0)"><StraightPanel ld={ld} db={db} /></g>
-      <g transform={`translate(${PW + GAP},0)`}>
+    <div className="grid grid-cols-1 gap-x-[26px] gap-y-4 md:grid-cols-2">
+      <Panel label="A — development in tension, ℓd">
+        <StraightPanel ld={ld} db={db} />
+      </Panel>
+      <Panel label="B — standard hook, ℓdh">
         <HookPanel ldh={ldh} db={db} tail={hookTail} bend={hookBendDia} />
-      </g>
-      <g transform={`translate(0,${PH + GAP})`}>
+      </Panel>
+      <Panel label="C — tension lap splice, ℓst">
         <SplicePanel ls={ls_B} db={db} cls={p.spliceClass ?? 'B'} />
-      </g>
-      <g transform={`translate(${PW + GAP},${PH + GAP})`}><ConfinePanel db={db} /></g>
-    </svg>
+      </Panel>
+      <Panel label="D — section, cb and Ktr">
+        <ConfinePanel db={db} />
+      </Panel>
+    </div>
   )
 }
 

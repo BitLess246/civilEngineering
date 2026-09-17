@@ -19,6 +19,8 @@
 // Geometry only. `engine/settlement` decides everything.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { DrawingFrame } from './DrawingFrame'
+
 const INK = '#37526e'
 const WATER = '#0e7490'
 const STRESS = '#c2402a'
@@ -71,77 +73,79 @@ export function SoilProfile({ layers, Df, B, waterTable, q, governing }: SoilPro
   const fw = Math.min(COL_W * 0.8, B * s)   // footing, to the profile's scale
 
   return (
-    <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block h-auto w-full"
-      style={{ fontFamily: 'Arial, sans-serif' }}>
-      {/* strata */}
-      {layers.map((l, i) => {
-        const y = zy(l.zTop), hgt = l.H * s
-        const gov = i === governing
-        return (
-          <g key={i}>
-            <rect x={ML} y={y} width={COL_W} height={hgt}
-              fill={STRATA[i % STRATA.length]} stroke={INK} strokeWidth={0.9} />
-            {gov && <rect x={ML} y={y} width={COL_W} height={hgt} fill={GOV} opacity={0.22}
-              stroke={GOV} strokeWidth={2} />}
-            <text x={ML - 8} y={y + hgt / 2 - 3} fontSize={8} fill={INK} textAnchor="end">{l.name}</text>
-            <text x={ML - 8} y={y + hgt / 2 + 8} fontSize={7} fill={FAINT} textAnchor="end">
-              {l.H.toFixed(1)} m · {l.settlement.toFixed(1)} mm{gov ? ' ← governs' : ''}
-            </text>
-          </g>
-        )
-      })}
+    <DrawingFrame label="soil profile">
+      <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block h-auto w-full"
+        style={{ fontFamily: 'Arial, sans-serif' }}>
+        {/* strata */}
+        {layers.map((l, i) => {
+          const y = zy(l.zTop), hgt = l.H * s
+          const gov = i === governing
+          return (
+            <g key={i}>
+              <rect x={ML} y={y} width={COL_W} height={hgt}
+                fill={STRATA[i % STRATA.length]} stroke={INK} strokeWidth={0.9} />
+              {gov && <rect x={ML} y={y} width={COL_W} height={hgt} fill={GOV} opacity={0.22}
+                stroke={GOV} strokeWidth={2} />}
+              <text x={ML - 8} y={y + hgt / 2 - 3} fontSize={8} fill={INK} textAnchor="end">{l.name}</text>
+              <text x={ML - 8} y={y + hgt / 2 + 8} fontSize={7} fill={FAINT} textAnchor="end">
+                {l.H.toFixed(1)} m · {l.settlement.toFixed(1)} mm{gov ? ' ← governs' : ''}
+              </text>
+            </g>
+          )
+        })}
 
-      {/* ground line and the footing sitting at Df */}
-      <line x1={ML - 30} y1={MT} x2={ML + COL_W + 6} y2={MT} stroke={INK} strokeWidth={1.6} />
-      <rect x={ML + (COL_W - fw) / 2} y={zy(Df) - 10} width={fw} height={10}
-        fill={INK} opacity={0.8} />
-      <text x={ML + COL_W / 2} y={zy(Df) - 14} fontSize={7.5} fill={INK} textAnchor="middle">
-        q = {q.toFixed(0)} kPa
-      </text>
-      {/* Df sits INSIDE the profile column: outside it, on the left, it printed
-          straight through the layer names. */}
-      <g>
-        <line x1={ML + 8} y1={MT} x2={ML + 8} y2={zy(Df)} stroke={DIM} strokeWidth={0.8} />
-        {[MT, zy(Df)].map((y) => <line key={y} x1={ML + 5} y1={y} x2={ML + 11} y2={y} stroke={DIM} strokeWidth={0.9} />)}
-        <text x={ML + 13} y={(MT + zy(Df)) / 2 + 3} fontSize={7.5} fill={DIM}>Df = {Df.toFixed(1)} m</text>
-      </g>
-
-      {/* water table — the reason σ′ and σ diverge below it */}
-      {Number.isFinite(waterTable) && waterTable <= total && (
+        {/* ground line and the footing sitting at Df */}
+        <line x1={ML - 30} y1={MT} x2={ML + COL_W + 6} y2={MT} stroke={INK} strokeWidth={1.6} />
+        <rect x={ML + (COL_W - fw) / 2} y={zy(Df) - 10} width={fw} height={10}
+          fill={INK} opacity={0.8} />
+        <text x={ML + COL_W / 2} y={zy(Df) - 14} fontSize={7.5} fill={INK} textAnchor="middle">
+          q = {q.toFixed(0)} kPa
+        </text>
+        {/* Df sits INSIDE the profile column: outside it, on the left, it printed
+            straight through the layer names. */}
         <g>
-          <line x1={ML - 12} y1={zy(waterTable)} x2={ML + COL_W + 6} y2={zy(waterTable)}
-            stroke={WATER} strokeWidth={1.3} />
-          {[0, 1, 2].map((k) => (
-            <path key={k} d={`M${ML + 8 + k * 7} ${zy(waterTable) + 4} l3 -4 l3 4`}
-              fill="none" stroke={WATER} strokeWidth={1} />
-          ))}
-          <text x={ML + COL_W + 8} y={zy(waterTable) - 3} fontSize={7.5} fill={WATER}>
-            ▽ WT {waterTable.toFixed(1)} m
-          </text>
+          <line x1={ML + 8} y1={MT} x2={ML + 8} y2={zy(Df)} stroke={DIM} strokeWidth={0.8} />
+          {[MT, zy(Df)].map((y) => <line key={y} x1={ML + 5} y1={y} x2={ML + 11} y2={y} stroke={DIM} strokeWidth={0.9} />)}
+          <text x={ML + 13} y={(MT + zy(Df)) / 2 + 3} fontSize={7.5} fill={DIM}>Df = {Df.toFixed(1)} m</text>
         </g>
-      )}
 
-      {/* Δσ decay — the point of the whole drawing */}
-      <g>
-        <line x1={px(0)} y1={MT} x2={px(0)} y2={MT + DEPTH} stroke={FAINT} strokeWidth={0.8} />
-        <polyline
-          points={layers.map((l) => `${px(l.dSigma)},${zy(l.zTop + l.H / 2)}`).join(' ')}
-          fill="none" stroke={STRESS} strokeWidth={1.6} />
-        {layers.map((l, i) => (
-          <g key={i}>
-            <circle cx={px(l.dSigma)} cy={zy(l.zTop + l.H / 2)} r={2.2} fill={STRESS} />
-            <text x={px(l.dSigma) + 5} y={zy(l.zTop + l.H / 2) + 3} fontSize={7} fill={STRESS}>
-              {l.dSigma.toFixed(0)}
+        {/* water table — the reason σ′ and σ diverge below it */}
+        {Number.isFinite(waterTable) && waterTable <= total && (
+          <g>
+            <line x1={ML - 12} y1={zy(waterTable)} x2={ML + COL_W + 6} y2={zy(waterTable)}
+              stroke={WATER} strokeWidth={1.3} />
+            {[0, 1, 2].map((k) => (
+              <path key={k} d={`M${ML + 8 + k * 7} ${zy(waterTable) + 4} l3 -4 l3 4`}
+                fill="none" stroke={WATER} strokeWidth={1} />
+            ))}
+            <text x={ML + COL_W + 8} y={zy(waterTable) - 3} fontSize={7.5} fill={WATER}>
+              ▽ WT {waterTable.toFixed(1)} m
             </text>
           </g>
-        ))}
-        <text x={px(0)} y={MT - 8} fontSize={7.5} fill={STRESS}>Δσ at mid-height, kPa</text>
-      </g>
+        )}
 
-      <text x={ML} y={MT - 26} fontSize={9} fontWeight={700} fill={INK}>SOIL PROFILE &amp; STRESS DECAY</text>
-      <text x={W / 2} y={HT - 6} fontSize={7.5} fill={FAINT} textAnchor="middle">
-Δσ is zero above founding level, peaks just under the footing, then decays — a thick deep layer can settle less than a thin shallow one.
-      </text>
-    </svg>
+        {/* Δσ decay — the point of the whole drawing */}
+        <g>
+          <line x1={px(0)} y1={MT} x2={px(0)} y2={MT + DEPTH} stroke={FAINT} strokeWidth={0.8} />
+          <polyline
+            points={layers.map((l) => `${px(l.dSigma)},${zy(l.zTop + l.H / 2)}`).join(' ')}
+            fill="none" stroke={STRESS} strokeWidth={1.6} />
+          {layers.map((l, i) => (
+            <g key={i}>
+              <circle cx={px(l.dSigma)} cy={zy(l.zTop + l.H / 2)} r={2.2} fill={STRESS} />
+              <text x={px(l.dSigma) + 5} y={zy(l.zTop + l.H / 2) + 3} fontSize={7} fill={STRESS}>
+                {l.dSigma.toFixed(0)}
+              </text>
+            </g>
+          ))}
+          <text x={px(0)} y={MT - 8} fontSize={7.5} fill={STRESS}>Δσ at mid-height, kPa</text>
+        </g>
+
+        <text x={ML} y={MT - 26} fontSize={9} fontWeight={700} fill={INK}>SOIL PROFILE &amp; STRESS DECAY</text>
+        <text x={W / 2} y={HT - 6} fontSize={7.5} fill={FAINT} textAnchor="middle">
+  Δσ is zero above founding level, peaks just under the footing, then decays — a thick deep layer can settle less than a thin shallow one.
+        </text>
+      </svg>
+    </DrawingFrame>
   )
 }

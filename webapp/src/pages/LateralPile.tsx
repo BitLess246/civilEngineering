@@ -8,6 +8,7 @@ import { buildLateralPileSolution } from '../lib/lateralPileSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { PageHeader, CalcBody } from '../components/calc'
 import { Card, ResultCard } from '../components/qty'
+import { DrawingFrame } from '../components/DrawingFrame'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -47,28 +48,30 @@ function PyProfiles({ res, L }: { res: PyResult; L: number }) {
   const Y = (z: number) => padT + ((H - padT - padB) * z) / Math.max(L, 1e-9)
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-hairline bg-sheet" style={{ maxHeight: 320 }}>
-      {series.map((s, si) => {
-        const vals = res.stations.map((st) => st[s.key])
-        const m = Math.max(...vals.map(Math.abs), 1e-9)
-        const x0 = 12 + si * (panelW + 6)
-        const cx = x0 + panelW / 2
-        const X = (v: number) => cx + ((panelW / 2 - 6) * v) / m
-        const d = res.stations
-          .map((st, i) => `${i ? 'L' : 'M'}${X(st[s.key]).toFixed(1)},${Y(st.z).toFixed(1)}`).join(' ')
-        return (
-          <g key={s.key}>
-            <line x1={cx} y1={padT} x2={cx} y2={H - padB} stroke="#e2e8f0" strokeWidth={0.9} />
-            <line x1={x0} y1={padT} x2={x0 + panelW} y2={padT} stroke="#475569" strokeWidth={1} />
-            <path d={d} fill="none" stroke={s.color} strokeWidth={1.8} />
-            <text x={cx} y={11} fontSize={9} fill="#334155" textAnchor="middle" fontWeight={700}>{s.title}</text>
-            <text x={cx} y={H - 18} fontSize={8} fill="#94a3b8" textAnchor="middle">±{f1(m)}</text>
-          </g>
-        )
-      })}
-      <text x={12} y={H - 4} fontSize={8.5} fill="#64748b">z = 0</text>
-      <text x={W - 40} y={H - 4} fontSize={8.5} fill="#64748b">z = {f1(L)} m</text>
-    </svg>
+    <DrawingFrame label="pile deflection profile">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-hairline bg-sheet" style={{ maxHeight: 320 }}>
+        {series.map((s, si) => {
+          const vals = res.stations.map((st) => st[s.key])
+          const m = Math.max(...vals.map(Math.abs), 1e-9)
+          const x0 = 12 + si * (panelW + 6)
+          const cx = x0 + panelW / 2
+          const X = (v: number) => cx + ((panelW / 2 - 6) * v) / m
+          const d = res.stations
+            .map((st, i) => `${i ? 'L' : 'M'}${X(st[s.key]).toFixed(1)},${Y(st.z).toFixed(1)}`).join(' ')
+          return (
+            <g key={s.key}>
+              <line x1={cx} y1={padT} x2={cx} y2={H - padB} stroke="#e2e8f0" strokeWidth={0.9} />
+              <line x1={x0} y1={padT} x2={x0 + panelW} y2={padT} stroke="#475569" strokeWidth={1} />
+              <path d={d} fill="none" stroke={s.color} strokeWidth={1.8} />
+              <text x={cx} y={11} fontSize={9} fill="#334155" textAnchor="middle" fontWeight={700}>{s.title}</text>
+              <text x={cx} y={H - 18} fontSize={8} fill="#94a3b8" textAnchor="middle">±{f1(m)}</text>
+            </g>
+          )
+        })}
+        <text x={12} y={H - 4} fontSize={8.5} fill="#64748b">z = 0</text>
+        <text x={W - 40} y={H - 4} fontSize={8.5} fill="#64748b">z = {f1(L)} m</text>
+      </svg>
+    </DrawingFrame>
   )
 }
 

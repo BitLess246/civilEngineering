@@ -18,6 +18,8 @@
 // Geometry only. `engine/punchingShear` decides everything.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { DrawingFrame } from './DrawingFrame'
+
 const INK = '#37526e'
 const CONC = '#eef3f8'
 const COL = '#37526e'
@@ -63,71 +65,73 @@ export function PunchingPlan({ c1, c2, d, position, b0, alphaS }: PunchingPlanPr
   const edgeY = cy - ch / 2 - off - 4
 
   return (
-    <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block h-auto w-full"
-      style={{ fontFamily: 'Arial, sans-serif' }}>
-      <text x={ML} y={MT - 16} fontSize={9} fontWeight={700} fill={INK}>
-        PLAN — critical section at d/2
-      </text>
-
-      {/* the slab, clipped at any free edge */}
-      <rect x={openLeft ? edgeX : ML} y={openTop ? edgeY : MT}
-        width={(openLeft ? ML + PLAN - edgeX : PLAN)} height={(openTop ? MT + PLAN - edgeY : PLAN)}
-        fill={CONC} stroke={INK} strokeWidth={1.2} />
-      {openLeft && <line x1={edgeX} y1={openTop ? edgeY : MT} x2={edgeX} y2={MT + PLAN} stroke={INK} strokeWidth={2.2} />}
-      {openTop && <line x1={edgeX} y1={edgeY} x2={ML + PLAN} y2={edgeY} stroke={INK} strokeWidth={2.2} />}
-      {(openLeft || openTop) && (
-        <text x={openLeft ? edgeX + 4 : ML + 4} y={(openTop ? edgeY : MT) + 11} fontSize={7} fill={FAINT}>
-          slab edge
+    <DrawingFrame label="punching shear plan">
+      <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block h-auto w-full"
+        style={{ fontFamily: 'Arial, sans-serif' }}>
+        <text x={ML} y={MT - 16} fontSize={9} fontWeight={700} fill={INK}>
+          PLAN — critical section at d/2
         </text>
-      )}
 
-      {/* the column */}
-      <rect x={cx - cw / 2} y={cy - ch / 2} width={cw} height={ch} fill={COL} opacity={0.85} />
-      <text x={cx} y={cy + 3} fontSize={7.5} fill="#fff" textAnchor="middle">c₁×c₂</text>
+        {/* the slab, clipped at any free edge */}
+        <rect x={openLeft ? edgeX : ML} y={openTop ? edgeY : MT}
+          width={(openLeft ? ML + PLAN - edgeX : PLAN)} height={(openTop ? MT + PLAN - edgeY : PLAN)}
+          fill={CONC} stroke={INK} strokeWidth={1.2} />
+        {openLeft && <line x1={edgeX} y1={openTop ? edgeY : MT} x2={edgeX} y2={MT + PLAN} stroke={INK} strokeWidth={2.2} />}
+        {openTop && <line x1={edgeX} y1={edgeY} x2={ML + PLAN} y2={edgeY} stroke={INK} strokeWidth={2.2} />}
+        {(openLeft || openTop) && (
+          <text x={openLeft ? edgeX + 4 : ML + 4} y={(openTop ? edgeY : MT) + 11} fontSize={7} fill={FAINT}>
+            slab edge
+          </text>
+        )}
 
-      {/* the critical perimeter — open where the slab is */}
-      <path
-        d={[
-          `M${openLeft ? edgeX : l} ${t}`,
-          openTop ? '' : `L${l} ${t}`,
-          `L${r} ${t} L${r} ${bm} L${openLeft ? edgeX : l} ${bm}`,
-          openLeft ? '' : `L${l} ${t}`,
-        ].filter(Boolean).join(' ')}
-        fill="none" stroke={CRIT} strokeWidth={2} strokeDasharray="7 3" />
+        {/* the column */}
+        <rect x={cx - cw / 2} y={cy - ch / 2} width={cw} height={ch} fill={COL} opacity={0.85} />
+        <text x={cx} y={cy + 3} fontSize={7.5} fill="#fff" textAnchor="middle">c₁×c₂</text>
 
-      {/* the d/2 offset, dimensioned where it is easiest to read */}
-      <g>
-        <line x1={cx + cw / 2} y1={bm + 14} x2={r} y2={bm + 14} stroke={DIM} strokeWidth={0.9} />
-        {[cx + cw / 2, r].map((x) => <line key={x} x1={x - 3} y1={bm + 17} x2={x + 3} y2={bm + 11} stroke={DIM} strokeWidth={1.1} />)}
-        <text x={(cx + cw / 2 + r) / 2} y={bm + 28} fontSize={8} fill={DIM} textAnchor="middle"
-          paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>d/2 = {Math.round(d / 2)}</text>
-      </g>
+        {/* the critical perimeter — open where the slab is */}
+        <path
+          d={[
+            `M${openLeft ? edgeX : l} ${t}`,
+            openTop ? '' : `L${l} ${t}`,
+            `L${r} ${t} L${r} ${bm} L${openLeft ? edgeX : l} ${bm}`,
+            openLeft ? '' : `L${l} ${t}`,
+          ].filter(Boolean).join(' ')}
+          fill="none" stroke={CRIT} strokeWidth={2} strokeDasharray="7 3" />
 
-      {/* ── the failure cone, in section under the plan ─────────────────── */}
-      {(() => {
-        const sy = MT + PLAN + 56, sh = 30
-        const half = cw / 2, spread = off * 2
-        return (
-          <g>
-            <text x={ML} y={sy - 30} fontSize={9} fontWeight={700} fill={INK}>SECTION — failure cone</text>
-            <rect x={ML} y={sy} width={PLAN} height={sh} fill={CONC} stroke={INK} strokeWidth={1.2} />
-            <rect x={cx - half} y={sy - 16} width={cw} height={16} fill={COL} opacity={0.85} />
-            {/* ~45° through the slab, which is what "punching" means */}
-            <line x1={cx - half} y1={sy} x2={cx - half - spread} y2={sy + sh} stroke={CRIT} strokeWidth={1.8} strokeDasharray="6 3" />
-            <line x1={cx + half} y1={sy} x2={cx + half + spread} y2={sy + sh} stroke={CRIT} strokeWidth={1.8} strokeDasharray="6 3" />
-            <text x={cx + half + spread + 6} y={sy + sh - 2} fontSize={7.5} fill={CRIT}>≈45°</text>
-            <text x={ML + PLAN + 4} y={sy + sh / 2} fontSize={7.5} fill={DIM}>d = {Math.round(d)}</text>
-          </g>
-        )
-      })()}
+        {/* the d/2 offset, dimensioned where it is easiest to read */}
+        <g>
+          <line x1={cx + cw / 2} y1={bm + 14} x2={r} y2={bm + 14} stroke={DIM} strokeWidth={0.9} />
+          {[cx + cw / 2, r].map((x) => <line key={x} x1={x - 3} y1={bm + 17} x2={x + 3} y2={bm + 11} stroke={DIM} strokeWidth={1.1} />)}
+          <text x={(cx + cw / 2 + r) / 2} y={bm + 28} fontSize={8} fill={DIM} textAnchor="middle"
+            paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>d/2 = {Math.round(d / 2)}</text>
+        </g>
 
-      {/* what the position actually buys you */}
-      <text x={W / 2} y={HT - 20} fontSize={8} fill={CRIT} textAnchor="middle">
-        {position} column · b₀ = {Math.round(b0).toLocaleString()} mm · αs = {alphaS}
-      </text>
-      <text x={W / 2} y={HT - 8} fontSize={7.5} fill={FAINT} textAnchor="middle">
-Perimeter closes only for an interior column — hence αs = 40 / 30 / 20 (§22.6.5.2c).
-      </text>
-    </svg>
+        {/* ── the failure cone, in section under the plan ─────────────────── */}
+        {(() => {
+          const sy = MT + PLAN + 56, sh = 30
+          const half = cw / 2, spread = off * 2
+          return (
+            <g>
+              <text x={ML} y={sy - 30} fontSize={9} fontWeight={700} fill={INK}>SECTION — failure cone</text>
+              <rect x={ML} y={sy} width={PLAN} height={sh} fill={CONC} stroke={INK} strokeWidth={1.2} />
+              <rect x={cx - half} y={sy - 16} width={cw} height={16} fill={COL} opacity={0.85} />
+              {/* ~45° through the slab, which is what "punching" means */}
+              <line x1={cx - half} y1={sy} x2={cx - half - spread} y2={sy + sh} stroke={CRIT} strokeWidth={1.8} strokeDasharray="6 3" />
+              <line x1={cx + half} y1={sy} x2={cx + half + spread} y2={sy + sh} stroke={CRIT} strokeWidth={1.8} strokeDasharray="6 3" />
+              <text x={cx + half + spread + 6} y={sy + sh - 2} fontSize={7.5} fill={CRIT}>≈45°</text>
+              <text x={ML + PLAN + 4} y={sy + sh / 2} fontSize={7.5} fill={DIM}>d = {Math.round(d)}</text>
+            </g>
+          )
+        })()}
+
+        {/* what the position actually buys you */}
+        <text x={W / 2} y={HT - 20} fontSize={8} fill={CRIT} textAnchor="middle">
+          {position} column · b₀ = {Math.round(b0).toLocaleString()} mm · αs = {alphaS}
+        </text>
+        <text x={W / 2} y={HT - 8} fontSize={7.5} fill={FAINT} textAnchor="middle">
+  Perimeter closes only for an interior column — hence αs = 40 / 30 / 20 (§22.6.5.2c).
+        </text>
+      </svg>
+    </DrawingFrame>
   )
 }

@@ -15,6 +15,8 @@
 // the list. Reading out twelve <text> nodes in visual order would be worse than
 // silence.
 
+import { DrawingFrame } from './DrawingFrame'
+
 const STEPS = [
   { k: 'grid', top: 'Geometry', bot: 'grid → frame' },
   { k: 'load', top: 'Loading', bot: 'D · L · E · W' },
@@ -31,56 +33,58 @@ const GAP = (W - STEPS.length * BOX_W) / (STEPS.length - 1)
 
 export function PipelineDiagram({ className = '' }: { className?: string }) {
   return (
-    <svg
-      viewBox={`0 0 ${W} 96`}
-      className={`block w-full ${className}`}
-      role="presentation"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {STEPS.map((s, i) => {
-        const x = i * (BOX_W + GAP)
-        const last = i === STEPS.length - 1
-        return (
-          <g key={s.k}>
-            <rect
-              x={x} y={14} width={BOX_W} height={BOX_H} rx={8}
-              // The last box is the deliverable, so it is the filled one — the
-              // eye should land on what you walk away with.
-              // Tailwind fill-/stroke- utilities rather than hex attributes:
-              // an SVG presentation attribute cannot take `var()`, so a literal
-              // here is a colour no theme can reach — which is exactly how this
-              // diagram stayed white on the dark ground.
-              className={last ? 'fill-brand stroke-brand' : 'fill-sheet stroke-field-line'}
-              strokeWidth={1.5}
-            />
-            <text
-              x={x + BOX_W / 2} y={41}
-              textAnchor="middle"
-              fontSize={15} fontWeight={700}
-              className={last ? 'fill-on-solid' : 'fill-ink'}
-            >{s.top}</text>
-            <text
-              x={x + BOX_W / 2} y={60}
-              textAnchor="middle"
-              fontSize={12}
-              className={last ? 'fill-brand-line' : 'fill-faint'}
-            >{s.bot}</text>
+    <DrawingFrame label="pipeline diagram">
+      <svg
+        viewBox={`0 0 ${W} 96`}
+        className={`block w-full ${className}`}
+        role="presentation"
+        aria-hidden="true"
+        focusable="false"
+      >
+        {STEPS.map((s, i) => {
+          const x = i * (BOX_W + GAP)
+          const last = i === STEPS.length - 1
+          return (
+            <g key={s.k}>
+              <rect
+                x={x} y={14} width={BOX_W} height={BOX_H} rx={8}
+                // The last box is the deliverable, so it is the filled one — the
+                // eye should land on what you walk away with.
+                // Tailwind fill-/stroke- utilities rather than hex attributes:
+                // an SVG presentation attribute cannot take `var()`, so a literal
+                // here is a colour no theme can reach — which is exactly how this
+                // diagram stayed white on the dark ground.
+                className={last ? 'fill-brand stroke-brand' : 'fill-sheet stroke-field-line'}
+                strokeWidth={1.5}
+              />
+              <text
+                x={x + BOX_W / 2} y={41}
+                textAnchor="middle"
+                fontSize={15} fontWeight={700}
+                className={last ? 'fill-on-solid' : 'fill-ink'}
+              >{s.top}</text>
+              <text
+                x={x + BOX_W / 2} y={60}
+                textAnchor="middle"
+                fontSize={12}
+                className={last ? 'fill-brand-line' : 'fill-faint'}
+              >{s.bot}</text>
 
-            {/* Connector, drawn from THIS box to the next one. Sitting in the
-                gap rather than under the boxes means no overlap at any width. */}
-            {!last && (
-              <g className="stroke-field-line" strokeWidth={1.5} fill="none">
-                <line x1={x + BOX_W + 6} y1={47} x2={x + BOX_W + GAP - 12} y2={47} />
-                <path
-                  d={`M ${x + BOX_W + GAP - 14} 42.5 L ${x + BOX_W + GAP - 6} 47 L ${x + BOX_W + GAP - 14} 51.5 Z`}
-                  className="fill-field-line" stroke="none"
-                />
-              </g>
-            )}
-          </g>
-        )
-      })}
-    </svg>
+              {/* Connector, drawn from THIS box to the next one. Sitting in the
+                  gap rather than under the boxes means no overlap at any width. */}
+              {!last && (
+                <g className="stroke-field-line" strokeWidth={1.5} fill="none">
+                  <line x1={x + BOX_W + 6} y1={47} x2={x + BOX_W + GAP - 12} y2={47} />
+                  <path
+                    d={`M ${x + BOX_W + GAP - 14} 42.5 L ${x + BOX_W + GAP - 6} 47 L ${x + BOX_W + GAP - 14} 51.5 Z`}
+                    className="fill-field-line" stroke="none"
+                  />
+                </g>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+    </DrawingFrame>
   )
 }
