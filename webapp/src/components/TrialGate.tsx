@@ -10,9 +10,9 @@
 //
 // WHAT COUNTS AS ONE RUN: one visit to the calculator.
 //
-// Not one press of a button — these pages recompute live, on a 250 ms debounce,
-// every time a field changes (`useCalcResult`), so counting computations would
-// burn the whole allowance while somebody typed a beam width. Not one session
+// Not one press of a button — these pages recompute live, every time a field
+// changes (`useCalcResult`), so counting computations would burn the whole
+// allowance while somebody typed a beam width. Not one session
 // either, or the counter would never move for a visitor who leaves the tab
 // open. Arriving at the page is the event a person would describe as "using
 // the calculator", so that is the unit.

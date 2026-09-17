@@ -69,7 +69,12 @@ function BoltedConnectionCalc() {
      tPlate, FuPlate, FyPlate, ex_load, ey_load, e_out, b_gage, nShear, basis, custom]
   )
   const { data: res, loading, error, cause } = useCalcResult<ConnectionCalcResult>(
-    () => calcConnection(input), [input]
+    // No debounce: the connection solver is cheap and the 250 ms default just
+    // held the answer back a quarter of a second behind every keystroke, with
+    // a "computing…" badge sitting where the number should be — the same call
+    // the beam and column pages already make. 0 still defers to a task, so a
+    // burst of synchronous changes coalesces into one call.
+    () => calcConnection(input), [input], 0,
   )
 
   // The governing path on the CHOSEN basis. Picking it off the LRFD `phiRn`
