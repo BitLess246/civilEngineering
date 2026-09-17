@@ -122,7 +122,14 @@ describe("Blueprint's inverted stock ramps are complete", () => {
   const FAMILIES = Object.keys(inverted).filter((f) => f in stock && stock[f][500])
 
   it('parsed both palettes', () => {
-    expect(FAMILIES.length).toBeGreaterThanOrEqual(6)
+    // A SANITY CHECK ON THE PARSE, not a census of the block. This asserted
+    // `>= 6` — the count on the day it was written — and duly failed when the
+    // migration legitimately retired four dead ramps, reporting a shrinking
+    // block as a broken parser. A floor pinned to today's number is a test of
+    // the calendar. What actually has to hold is that the regex found the
+    // block at all, and that every family it found is a real stock family
+    // (which `FAMILIES` already filters for), so that is what is asserted.
+    expect(FAMILIES.length, 'no family parsed out of the blueprint block').toBeGreaterThan(0)
     expect(Object.keys(stock).length).toBeGreaterThan(15)
   })
 
@@ -238,6 +245,30 @@ describe('every stock family the app still names is inverted for Blueprint', () 
     }
     const orphans = [...named].filter((f) => !inverted.has(f))
     expect(orphans, 'named in a component, absent from the inversion block').toEqual([])
+  })
+
+  it('inverts no family the app has stopped naming', () => {
+    // THE SAME QUESTION FROM THE OTHER SIDE, and the reason it is asked: a ramp
+    // for a family nobody names cannot be wrong in any way a test or a
+    // screenshot would show. It is dead CSS that still looks load-bearing.
+    //
+    // Four were, by the time the migration finished. `slate` went when 1 083
+    // neutrals moved onto the ink/muted/hairline/sheet roles; `amber`,
+    // `emerald` and `red` went with the 67 status utilities. Nothing noticed,
+    // because nothing could — the rule above only ever asked whether a NAMED
+    // family had a block. Asking both directions is what keeps the block equal
+    // to what the app actually uses, which is the only thing that makes
+    // "every step, every family" a bounded promise.
+    const bp = themesCss.slice(themesCss.indexOf('[data-theme="blueprint"]'))
+    const inverted = new Set(
+      [...bp.matchAll(/--color-([a-z]+)-\d{2,3}:/g)].map((m) => m[1]))
+    const named = new Set<string>()
+    for (const src of Object.values(SOURCES)) {
+      for (const m of src.matchAll(
+        new RegExp(`(?<![\\w:-])(?:${PROPS})-([a-z]+)-\\d{2,3}(?![\\w-])`, 'g'))) named.add(m[1])
+    }
+    const dead = [...inverted].filter((f) => !named.has(f))
+    expect(dead, 'inverted here, named by no component — delete the ramp').toEqual([])
   })
 })
 

@@ -8,7 +8,7 @@
 //
 // WHAT WILL NOT SURVIVE THE TRIP: anything styled from an external stylesheet.
 // An `<img>` loading an SVG renders it in an isolated document with no access
-// to the page's CSS, so a Tailwind class like `stroke-slate-400` resolves to
+// to the page's CSS, so a themed class like `stroke-hairline` resolves to
 // nothing and the shape comes out black or invisible. The schematics in this
 // repo set stroke/fill as SVG PRESENTATION ATTRIBUTES (`stroke={STROKE}`), which
 // travel with the markup and do survive — that is why this works here, and the
