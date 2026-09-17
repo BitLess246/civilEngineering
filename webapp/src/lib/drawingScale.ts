@@ -70,3 +70,55 @@ export function clearsFloor(
 ): boolean {
   return renderedTextPx(fontUnits, renderedWidth, viewBoxWidth) >= floorPx
 }
+
+/**
+ * The tallest a figure may render, as a fraction of the viewport height.
+ *
+ * ESTABLISHED, NOT ASSUMED. The audit recorded D4 as "five of twenty drawings
+ * cap their width, the rest run to 1410–1418 px at 1920" and said explicitly
+ * that whether the large end LOOKED wrong had not been checked. It does: the
+ * cantilever retaining wall renders 1410 × 1594 on a 1920 × 1200 screen, so a
+ * single cross-section is taller than the window and cannot be seen at once,
+ * with the drawing's own whitespace stretched around it.
+ *
+ * Height is the binding constraint at the top end, not width — a section is
+ * usually taller than it is wide, so a width cap large enough to keep the
+ * annotation comfortable still lets the figure run off the screen vertically.
+ * `TSection` already had a `max-h-[440px]` for exactly this reason; this
+ * generalises that one component's fix into the policy.
+ */
+export const DRAWING_MAX_VH = 0.72
+
+/**
+ * The width at which this figure is `maxHeightPx` tall, in CSS px.
+ *
+ * Capping the FRAME's width rather than the SVG's height on purpose: an
+ * `max-height` on a `preserveAspectRatio` SVG letterboxes it — the box keeps
+ * its width, the drawing shrinks inside it, and the difference is whitespace.
+ * Deriving the width from the height keeps the figure flush with its frame.
+ */
+export function maxDrawingWidth(
+  viewBoxWidth: number, viewBoxHeight: number, maxHeightPx: number,
+): number {
+  if (!(viewBoxWidth > 0) || !(viewBoxHeight > 0) || !(maxHeightPx > 0)) return 0
+  return maxHeightPx * (viewBoxWidth / viewBoxHeight)
+}
+
+/**
+ * The width this figure should actually render at: no narrower than legible,
+ * no taller than the screen.
+ *
+ * THE FLOOR WINS WHEN THEY CONFLICT, and they do conflict — a tall, densely
+ * annotated section can need more width to stay readable than fits the height
+ * budget. Given the choice between a figure you must scroll and a figure you
+ * cannot read, this repo has already decided: scroll. So the ceiling is a
+ * preference and the floor is a rule.
+ */
+export function drawingWidthBounds(
+  viewBoxWidth: number, viewBoxHeight: number, smallestFontUnits: number,
+  maxHeightPx: number, floorPx = ANNOTATION_FLOOR_PX,
+): { min: number; max: number } {
+  const min = minDrawingWidth(viewBoxWidth, smallestFontUnits, floorPx)
+  const ceiling = maxDrawingWidth(viewBoxWidth, viewBoxHeight, maxHeightPx)
+  return { min, max: ceiling > 0 ? Math.max(ceiling, min) : 0 }
+}

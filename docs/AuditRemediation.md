@@ -38,10 +38,10 @@ rendered page in a real browser at stated viewports.
 | S6 | `guest-quota` CORS lets any site burn a visitor's trial | low | read | ✅ #735 |
 | E5 | `Cv1` uses the superseded AISC 360-10 form (conservative) | low | read | ✅ #737 |
 | S7 | `?embed=1` bypassed `RequireAuth` on every gated route | high | verified | ✅ #753 |
-| D1 | Drawing annotation renders 2.5–9.8 px on every phone width | high | measured | ☐ open |
-| D2 | `DevLengthDetail` locks a 2×2 panel grid in one viewBox — cannot reflow | high | measured | ☐ open |
-| D3 | Drawings are SMALLER at 1280 than at 768 (non-monotonic) | medium | measured | ☐ open |
-| D4 | No shared max-width policy — 5 of ~20 drawings cap, rest run to 1418 px | low-med | measured | ☐ open |
+| D1 | Drawing annotation renders 2.5–9.8 px on every phone width | high | measured | ✅ #780 |
+| D2 | `DevLengthDetail` locks a 2×2 panel grid in one viewBox — cannot reflow | high | measured | ✅ #780 |
+| D3 | Drawings are SMALLER at 1280 than at 768 (non-monotonic) | medium | measured | ✖ not a defect |
+| D4 | No shared max-width policy — 5 of ~20 drawings cap, rest run to 1418 px | low-med | measured | ✅ #781 |
 | D5 | `preserveAspectRatio` stated on 12 of 24 SVGs, always the default | low | read | ☐ open |
 
 **Found while reviewing merged work, not in the audit — S7, the embed skeleton
@@ -844,3 +844,46 @@ drawing you can pan beats one you cannot read. `DevLengthDetail` splits into
 four sibling SVGs in a `grid-cols-1 md:grid-cols-2`. The guard is a rendered
 measurement, not a source scan: assert that every drawing's smallest annotation
 clears a stated floor at 320 px, in a real browser.
+
+## D — what shipped, and what turned out not to be a defect
+
+**D1, D2 — ✅ #780.** `lib/drawingScale.ts` is the arithmetic; `components/DrawingFrame.tsx`
+measures each figure's own smallest `<text>` and refuses to render narrower than the
+width at which it lands on `ANNOTATION_FLOOR_PX` (9). Below that the frame scrolls.
+`DevLengthDetail` became four sibling SVGs in a collapsing grid. 29 figures across
+19 routes now clear 9.0 px at 320/375/414/768/1280/1920, from 2.5–7.1 px before.
+
+**D4 — ✅ #781.** The large end was the half this file said had NOT been established,
+so it was checked before being fixed: the cantilever retaining wall rendered
+1410 × **1594** on a 1920 × 1200 screen — one cross-section taller than the window,
+with the drawing's own whitespace stretched around it. **Height is the binding
+constraint at the top end**, not width; a section is usually taller than it is wide.
+`DRAWING_MAX_VH` (0.72) caps the height and the frame derives the width from the
+aspect ratio, so the figure stays flush instead of letterboxing. The floor wins when
+the two conflict, which they do — that wall needs 794 px to stay legible and its
+height budget allows 764. Results: 1410 → **794** (and identical at every width now),
+SoilProfile 1402 → 771, LateralPile 1410 → 1128.
+
+The five component caps (`SectionShape` 200, `TSection` 560, `PrestressedBeam` 380,
+both `ConnectionDetail2D` figures, `ConnectionDrawing`) are kept ON PURPOSE. They are
+now tighter-than-policy art direction rather than "the only drawings that happen to
+cap", and removing them would grow those figures for no benefit.
+
+**D3 — ✖ NOT A DEFECT.** The observation was true and the conclusion was wrong. Drawings
+ARE smaller at 1280 than at 768 — `ColumnSchematic` is 625 px at 768 and 388 px at 1280
+— but that is the two-column desktop layout doing its job: at 768 the page is stacked
+so the figure takes the full width, and at ≥`lg` it shares the row with the input panel.
+Both are legible now (17.6 px and 10.9 px of annotation), so the non-monotonicity costs
+the reader nothing and "fixing" it would narrow the inputs to widen a figure that is
+already readable. Recorded as closed rather than deleted, because "we looked and it was
+fine" is worth as much as a fix.
+
+**A regression I shipped in #780 and caught here.** `/truss` gained 47–55 px of
+horizontal overflow — 0 before #780. The containment took three measured attempts:
+`overflow-x: auto` alone leaks a grid ancestor's `min-width: auto` (/slab-design,
++236 px at 1280, traced to `DIV.space-y-5 lg:sticky` three levels above the frame);
+`width: 0; min-width: 100%` fixes that and breaks a FLEX row, where 100% means the
+whole container beside its siblings (/truss); `contain: inline-size` is the actual
+tool — the frame's inline size ignores its descendants, so it contributes nothing
+upward and still takes its width from grid track, flex row or block alike. Zero
+overflow on every route at every width.

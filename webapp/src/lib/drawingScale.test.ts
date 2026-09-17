@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   ANNOTATION_FLOOR_PX, renderedTextPx, minDrawingWidth, clearsFloor,
+  maxDrawingWidth, drawingWidthBounds,
 } from './drawingScale'
 
 describe('rendered text size', () => {
@@ -97,5 +98,68 @@ describe('clearsFloor', () => {
     // computes, forever.
     expect(clearsFloor(9, 100, 100)).toBe(true)
     expect(clearsFloor(8.999, 100, 100)).toBe(false)
+  })
+})
+
+describe('the height ceiling', () => {
+  it('derives the width at which a figure is exactly the allowed height', () => {
+    // RetainingWallSection, measured: 1410 × 1594 at 1920. That is an aspect
+    // ratio of 0.8845, so on a 1200-tall screen with a 0.72 budget (864 px) it
+    // should want 764 px of width.
+    expect(maxDrawingWidth(1410, 1594, 864)).toBeCloseTo(764, 0)
+    // A square figure wants its height.
+    expect(maxDrawingWidth(100, 100, 500)).toBe(500)
+    // A wide figure wants more width than height, which is the whole point of
+    // driving the cap off the aspect ratio rather than a constant.
+    expect(maxDrawingWidth(200, 100, 500)).toBe(1000)
+  })
+
+  it('returns 0 for degenerate input', () => {
+    expect(maxDrawingWidth(0, 100, 500)).toBe(0)
+    expect(maxDrawingWidth(100, 0, 500)).toBe(0)
+    expect(maxDrawingWidth(100, 100, 0)).toBe(0)
+  })
+})
+
+describe('width bounds — the floor beats the ceiling', () => {
+  it('lets the ceiling bind when the figure is comfortably legible', () => {
+    // A wide, coarsely annotated figure: the floor is cheap, so the height
+    // budget is what decides.
+    const b = drawingWidthBounds(400, 200, 20, 300)
+    expect(b.min).toBeCloseTo(180, 0)   // 400 × 9 / 20
+    expect(b.max).toBeCloseTo(600, 0)   // 300 × 400/200
+    expect(b.max).toBeGreaterThan(b.min)
+  })
+
+  it('never lets the ceiling push a figure below the legibility floor', () => {
+    // THE CASE THAT ACTUALLY OCCURS. RetainingWallSection needs 794 px to
+    // clear 9 px, but its height budget on a 1200-tall screen only allows
+    // 764 — the two constraints genuinely conflict. Given a figure you must
+    // scroll or a figure you cannot read, the floor wins.
+    const b = drawingWidthBounds(573, 648, 6.5, 864)
+    expect(b.min).toBeCloseTo(793.4, 1)
+    expect(b.max).toBe(b.min)           // ceiling clamped UP to the floor
+    expect(clearsFloor(6.5, b.max, 573)).toBe(true)
+  })
+
+  it('keeps max ≥ min for every shipped figure, so the style is never invalid', () => {
+    // `min-width` above `max-width` is a CSS contradiction the browser resolves
+    // by ignoring one of them — silently, and differently per engine. The
+    // clamp above exists to make that unreachable; this asserts it.
+    const shipped: [number, number, number][] = [
+      [573, 648, 6.5], [672, 300, 7.49], [420, 484, 11.8], [300, 152, 6.5],
+      [364, 260, 8.5], [290, 290, 7.0],
+    ]
+    for (const [w, h, units] of shipped) {
+      for (const budget of [300, 600, 864, 1400]) {
+        const b = drawingWidthBounds(w, h, units, budget)
+        expect(b.max, `${w}×${h} @${budget}`).toBeGreaterThanOrEqual(b.min)
+      }
+    }
+  })
+
+  it('reports no bounds at all when the height budget is unknown', () => {
+    const b = drawingWidthBounds(400, 200, 20, 0)
+    expect(b.max).toBe(0)               // no ceiling — the frame leaves it off
   })
 })
