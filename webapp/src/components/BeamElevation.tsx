@@ -2,6 +2,7 @@ import type { Key } from 'react'
 import type { JSX } from 'react'
 import { udlStations } from './udl'
 import type { Support, BeamLoad } from '../engine/beamAnalysis'
+import { DrawingFrame } from './DrawingFrame'
 
 const BEAM = '#37526e'
 const LOAD = '#dc2626'
@@ -103,13 +104,15 @@ export function BeamElevation({ L, supports, loads }: {
   }
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
-      style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <line x1={bx0} y1={by} x2={bx1} y2={by} stroke={BEAM} strokeWidth={4} strokeLinecap="round" />
-      {supports.map(supSym)}
-      {loads.map(loadGlyph)}
-      <text x={bx0} y={by + 56} fontSize={9} fill={BEAM}>0</text>
-      <text x={bx1} y={by + 56} fontSize={9} fill={BEAM} textAnchor="end">L = {L} m</text>
-    </svg>
+    <DrawingFrame label="beam elevation">
+      <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
+        <line x1={bx0} y1={by} x2={bx1} y2={by} stroke={BEAM} strokeWidth={4} strokeLinecap="round" />
+        {supports.map(supSym)}
+        {loads.map(loadGlyph)}
+        <text x={bx0} y={by + 56} fontSize={9} fill={BEAM}>0</text>
+        <text x={bx1} y={by + 56} fontSize={9} fill={BEAM} textAnchor="end">L = {L} m</text>
+      </svg>
+    </DrawingFrame>
   )
 }

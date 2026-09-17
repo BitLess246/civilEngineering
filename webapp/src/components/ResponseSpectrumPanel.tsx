@@ -1,4 +1,5 @@
 import type { ResponseSpectrumResult, ModalForce } from '../engine/responseSpectrum'
+import { DrawingFrame } from './DrawingFrame'
 
 const f0 = (v: number) => v.toFixed(0)
 const f2 = (v: number) => v.toFixed(2)
@@ -53,63 +54,65 @@ function SpectrumChart({ result }: { result: ResponseSpectrumResult }) {
   for (let T = 0; T <= Tmax + 0.01; T += 0.5) xTicks.push(parseFloat(T.toFixed(1)))
 
   return (
-    <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full" style={{ height: VH }} aria-label="Design response spectrum">
-      {/* Shaded area under curve */}
-      <polygon
-        points={[`${px(0)},${py(0)}`, ...curvePts, `${px(Tmax)},${py(0)}`].join(' ')}
-        fill="#dbeafe" opacity="0.55" />
-      {/* Spectrum curve */}
-      <polyline points={curvePts.join(' ')} fill="none" stroke="#0056b3" strokeWidth={1.8} strokeLinejoin="round" />
+    <DrawingFrame label="response spectrum">
+      <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full" style={{ height: VH }} aria-label="Design response spectrum">
+        {/* Shaded area under curve */}
+        <polygon
+          points={[`${px(0)},${py(0)}`, ...curvePts, `${px(Tmax)},${py(0)}`].join(' ')}
+          fill="#dbeafe" opacity="0.55" />
+        {/* Spectrum curve */}
+        <polyline points={curvePts.join(' ')} fill="none" stroke="#0056b3" strokeWidth={1.8} strokeLinejoin="round" />
 
-      {/* Ts dashed vertical */}
-      <line x1={px(Ts)} y1={TOP} x2={px(Ts)} y2={TOP + PH} stroke="#f59e0b" strokeWidth={1} strokeDasharray="3,2" />
-      <text x={px(Ts) + 2} y={TOP + 10} fontSize={8.5} fill="#b45309">Ts</text>
+        {/* Ts dashed vertical */}
+        <line x1={px(Ts)} y1={TOP} x2={px(Ts)} y2={TOP + PH} stroke="#f59e0b" strokeWidth={1} strokeDasharray="3,2" />
+        <text x={px(Ts) + 2} y={TOP + 10} fontSize={8.5} fill="#b45309">Ts</text>
 
-      {/* Mode markers (up to 10 to keep chart readable) */}
-      {modalForces.slice(0, 10).map((mf, i) => {
-        const d = domDir(mf)
-        const color = DIR_COLOR[d]
-        const x = px(mf.period)
-        const yDot = py(saG(mf.period))
-        return (
-          <g key={i}>
-            <line x1={x} y1={yDot} x2={x} y2={TOP + PH} stroke={color} strokeWidth={0.9}
-              strokeDasharray="2,2" opacity={0.75} />
-            <circle cx={x} cy={yDot} r={2.8} fill={color} />
-            <text x={x} y={yDot - 4} fontSize={8} fill={color} textAnchor="middle">{i + 1}</text>
+        {/* Mode markers (up to 10 to keep chart readable) */}
+        {modalForces.slice(0, 10).map((mf, i) => {
+          const d = domDir(mf)
+          const color = DIR_COLOR[d]
+          const x = px(mf.period)
+          const yDot = py(saG(mf.period))
+          return (
+            <g key={i}>
+              <line x1={x} y1={yDot} x2={x} y2={TOP + PH} stroke={color} strokeWidth={0.9}
+                strokeDasharray="2,2" opacity={0.75} />
+              <circle cx={x} cy={yDot} r={2.8} fill={color} />
+              <text x={x} y={yDot - 4} fontSize={8} fill={color} textAnchor="middle">{i + 1}</text>
+            </g>
+          )
+        })}
+
+        {/* Axes */}
+        <line x1={LEFT} y1={TOP} x2={LEFT} y2={TOP + PH} stroke="#64748b" strokeWidth={0.8} />
+        <line x1={LEFT} y1={TOP + PH} x2={LEFT + PW} y2={TOP + PH} stroke="#64748b" strokeWidth={0.8} />
+
+        {/* Y axis ticks + labels */}
+        {yTicks.map((v) => (
+          <g key={v}>
+            <line x1={LEFT - 3} y1={py(v)} x2={LEFT} y2={py(v)} stroke="#64748b" strokeWidth={0.7} />
+            <text x={LEFT - 5} y={py(v) + 3} fontSize={8.5} fill="#64748b" textAnchor="end">{v.toFixed(3)}</text>
           </g>
-        )
-      })}
+        ))}
+        <text x={11} y={TOP + PH / 2 + 3} fontSize={9} fill="#0056b3" textAnchor="middle"
+          transform={`rotate(-90,11,${TOP + PH / 2 + 3})`}>Sa/g</text>
 
-      {/* Axes */}
-      <line x1={LEFT} y1={TOP} x2={LEFT} y2={TOP + PH} stroke="#64748b" strokeWidth={0.8} />
-      <line x1={LEFT} y1={TOP + PH} x2={LEFT + PW} y2={TOP + PH} stroke="#64748b" strokeWidth={0.8} />
+        {/* X axis ticks + labels */}
+        {xTicks.filter((T) => T <= Tmax + 0.01).map((T) => (
+          <g key={T}>
+            <line x1={px(T)} y1={TOP + PH} x2={px(T)} y2={TOP + PH + 3} stroke="#64748b" strokeWidth={0.7} />
+            <text x={px(T)} y={TOP + PH + 12} fontSize={8.5} fill="#64748b" textAnchor="middle">{T}</text>
+          </g>
+        ))}
+        <text x={LEFT + PW / 2} y={VH - 2} fontSize={9} fill="#64748b" textAnchor="middle">T (s)</text>
 
-      {/* Y axis ticks + labels */}
-      {yTicks.map((v) => (
-        <g key={v}>
-          <line x1={LEFT - 3} y1={py(v)} x2={LEFT} y2={py(v)} stroke="#64748b" strokeWidth={0.7} />
-          <text x={LEFT - 5} y={py(v) + 3} fontSize={8.5} fill="#64748b" textAnchor="end">{v.toFixed(3)}</text>
-        </g>
-      ))}
-      <text x={11} y={TOP + PH / 2 + 3} fontSize={9} fill="#0056b3" textAnchor="middle"
-        transform={`rotate(-90,11,${TOP + PH / 2 + 3})`}>Sa/g</text>
-
-      {/* X axis ticks + labels */}
-      {xTicks.filter((T) => T <= Tmax + 0.01).map((T) => (
-        <g key={T}>
-          <line x1={px(T)} y1={TOP + PH} x2={px(T)} y2={TOP + PH + 3} stroke="#64748b" strokeWidth={0.7} />
-          <text x={px(T)} y={TOP + PH + 12} fontSize={8.5} fill="#64748b" textAnchor="middle">{T}</text>
-        </g>
-      ))}
-      <text x={LEFT + PW / 2} y={VH - 2} fontSize={9} fill="#64748b" textAnchor="middle">T (s)</text>
-
-      {/* Legend */}
-      <circle cx={LEFT + PW - 70} cy={TOP + 8} r={2.5} fill="#0056b3" />
-      <text x={LEFT + PW - 65} y={TOP + 11} fontSize={8} fill="#0056b3">X-dominant</text>
-      <circle cx={LEFT + PW - 70} cy={TOP + 20} r={2.5} fill="#15803d" />
-      <text x={LEFT + PW - 65} y={TOP + 23} fontSize={8} fill="#15803d">Z-dominant</text>
-    </svg>
+        {/* Legend */}
+        <circle cx={LEFT + PW - 70} cy={TOP + 8} r={2.5} fill="#0056b3" />
+        <text x={LEFT + PW - 65} y={TOP + 11} fontSize={8} fill="#0056b3">X-dominant</text>
+        <circle cx={LEFT + PW - 70} cy={TOP + 20} r={2.5} fill="#15803d" />
+        <text x={LEFT + PW - 65} y={TOP + 23} fontSize={8} fill="#15803d">Z-dominant</text>
+      </svg>
+    </DrawingFrame>
   )
 }
 

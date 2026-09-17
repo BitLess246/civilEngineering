@@ -29,6 +29,7 @@ import type { StructuralModel } from '../../engine/model'
 import type { RebarCage } from '../../engine/rebarModel'
 import { type MemberDeflectionResult } from '../../engine/memberDeflection'
 import { f0, f1, f2 } from '../../lib/format'
+import { DrawingFrame } from '../DrawingFrame'
 
 export type { BeamRowSection, SectionRect, SectionRowDesign } from '../../lib/scheduleFigures'
 
@@ -93,7 +94,13 @@ export function SheetFigure({ drawing, width = 300 }: { drawing: Drawing; width?
   const svg = useMemo(() => planToSvg(drawing, width), [drawing, width])
   // Engine-generated markup — every string in it comes from `planToSvg`, which
   // escapes the text it is given.
-  return <div className="[&>svg]:h-auto [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: svg }} />
+  return (
+    // The legibility frame reads the SVG out of the DOM, so engine-generated
+    // markup is covered by the same floor as the hand-written components.
+    <DrawingFrame label="section detail">
+      <div className="[&>svg]:h-auto [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: svg }} />
+    </DrawingFrame>
+  )
 }
 
 /**

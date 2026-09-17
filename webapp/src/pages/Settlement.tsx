@@ -9,6 +9,7 @@ import {
 import { buildSettlementSolution } from '../lib/settlementSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { SoilProfile } from '../components/SoilProfile'
+import { DrawingFrame } from '../components/DrawingFrame'
 import { PageHeader, CalcBody } from '../components/calc'
 import { Card, ResultCard } from '../components/qty'
 
@@ -53,38 +54,40 @@ function StressProfile({ q, B, L, Df, zMax }: { q: number; B: number; L: number;
     pts.map((p, i) => `${i ? 'L' : 'M'}${X(p[key]).toFixed(1)},${Y(p.z).toFixed(1)}`).join(' ')
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-hairline bg-sheet" style={{ maxHeight: 280 }}>
-      <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="#475569" strokeWidth={1.2} />
-      <line x1={padL} y1={padT} x2={W - padR} y2={padT} stroke="#475569" strokeWidth={1.2} />
-      {[0, 0.5, 1].map((f) => (
-        <g key={f}>
-          <text x={X(sMax * f)} y={padT - 3} fontSize={9} fill="#64748b" textAnchor="middle">{f0(sMax * f)}</text>
-          <line x1={X(sMax * f)} y1={padT} x2={X(sMax * f)} y2={H - padB} stroke="#e2e8f0" strokeWidth={0.7} />
+    <DrawingFrame label="stress profile">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-hairline bg-sheet" style={{ maxHeight: 280 }}>
+        <line x1={padL} y1={padT} x2={padL} y2={H - padB} stroke="#475569" strokeWidth={1.2} />
+        <line x1={padL} y1={padT} x2={W - padR} y2={padT} stroke="#475569" strokeWidth={1.2} />
+        {[0, 0.5, 1].map((f) => (
+          <g key={f}>
+            <text x={X(sMax * f)} y={padT - 3} fontSize={9} fill="#64748b" textAnchor="middle">{f0(sMax * f)}</text>
+            <line x1={X(sMax * f)} y1={padT} x2={X(sMax * f)} y2={H - padB} stroke="#e2e8f0" strokeWidth={0.7} />
+          </g>
+        ))}
+        {[0, 0.5, 1].map((f) => (
+          <text key={`z${f}`} x={padL - 5} y={Y(zMax * f) + 3} fontSize={9} fill="#64748b" textAnchor="end">{f1(zMax * f)}</text>
+        ))}
+        {Df > 0 && Df < zMax && (
+          <g>
+            <line x1={padL} y1={Y(Df)} x2={W - padR} y2={Y(Df)} stroke="#f59e0b" strokeWidth={1} strokeDasharray="4 3" />
+            <text x={W - padR + 4} y={Y(Df) + 3} fontSize={8.5} fill="#b45309">founding level</text>
+          </g>
+        )}
+        <path d={path('t')} fill="none" stroke="#94a3b8" strokeWidth={1.6} strokeDasharray="5 3" />
+        <path d={path('b')} fill="none" stroke="#0056b3" strokeWidth={2} />
+        <g fontSize={9}>
+          <rect x={W - padR + 4} y={padT + 10} width={10} height={2.5} fill="#0056b3" />
+          <text x={W - padR + 18} y={padT + 15} fill="#334155">Boussinesq</text>
+          <rect x={W - padR + 4} y={padT + 26} width={10} height={2.5} fill="#94a3b8" />
+          <text x={W - padR + 18} y={padT + 31} fill="#334155">2:1 spread</text>
         </g>
-      ))}
-      {[0, 0.5, 1].map((f) => (
-        <text key={`z${f}`} x={padL - 5} y={Y(zMax * f) + 3} fontSize={9} fill="#64748b" textAnchor="end">{f1(zMax * f)}</text>
-      ))}
-      {Df > 0 && Df < zMax && (
-        <g>
-          <line x1={padL} y1={Y(Df)} x2={W - padR} y2={Y(Df)} stroke="#f59e0b" strokeWidth={1} strokeDasharray="4 3" />
-          <text x={W - padR + 4} y={Y(Df) + 3} fontSize={8.5} fill="#b45309">founding level</text>
-        </g>
-      )}
-      <path d={path('t')} fill="none" stroke="#94a3b8" strokeWidth={1.6} strokeDasharray="5 3" />
-      <path d={path('b')} fill="none" stroke="#0056b3" strokeWidth={2} />
-      <g fontSize={9}>
-        <rect x={W - padR + 4} y={padT + 10} width={10} height={2.5} fill="#0056b3" />
-        <text x={W - padR + 18} y={padT + 15} fill="#334155">Boussinesq</text>
-        <rect x={W - padR + 4} y={padT + 26} width={10} height={2.5} fill="#94a3b8" />
-        <text x={W - padR + 18} y={padT + 31} fill="#334155">2:1 spread</text>
-      </g>
-      <text x={(padL + W - padR) / 2} y={H - 6} fontSize={9.5} fill="#334155" textAnchor="middle" fontWeight={700}>
-        Δσ (kPa)
-      </text>
-      <text x={11} y={H / 2} fontSize={9.5} fill="#334155" textAnchor="middle" fontWeight={700}
-        transform={`rotate(-90 11 ${H / 2})`}>depth below base (m)</text>
-    </svg>
+        <text x={(padL + W - padR) / 2} y={H - 6} fontSize={9.5} fill="#334155" textAnchor="middle" fontWeight={700}>
+          Δσ (kPa)
+        </text>
+        <text x={11} y={H / 2} fontSize={9.5} fill="#334155" textAnchor="middle" fontWeight={700}
+          transform={`rotate(-90 11 ${H / 2})`}>depth below base (m)</text>
+      </svg>
+    </DrawingFrame>
   )
 }
 

@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import { DimBelow, DimSide } from './dims'
+import { DrawingFrame } from './DrawingFrame'
 
 const STROKE = '#37526e'
 const FILL = '#eef3f8'
@@ -104,15 +105,17 @@ export function ColumnSchematic({ shape, b = 0, h = 0, D = 0, cover, barDia, tie
   }
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
-      style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      {body}
-      <text x={x0 + bw / 2} y={y0 + hgt + 12} fontSize={8.5} fill={BAR} textAnchor="middle">
-        {bars} ⌀{barDia} mm · {tied ? `ties ⌀${tieDia}` : `spiral ⌀${tieDia}`}{tieSpacing ? ` @ ${Math.round(tieSpacing)} mm` : ''}
-      </text>
-      <DimBelow xA={x0} xB={x0 + bw} featY={y0 + hgt + 14} dY={y0 + hgt + 30}
-        label={tied ? `b = ${Math.round(b)} mm` : `D = ${Math.round(D)} mm`} />
-      {tied && <DimSide yA={y0} yB={y0 + hgt} featX={x0} dX={x0 - 16} label={`h = ${Math.round(h)} mm`} side="left" />}
-    </svg>
+    <DrawingFrame label="column section">
+      <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
+        {body}
+        <text x={x0 + bw / 2} y={y0 + hgt + 12} fontSize={8.5} fill={BAR} textAnchor="middle">
+          {bars} ⌀{barDia} mm · {tied ? `ties ⌀${tieDia}` : `spiral ⌀${tieDia}`}{tieSpacing ? ` @ ${Math.round(tieSpacing)} mm` : ''}
+        </text>
+        <DimBelow xA={x0} xB={x0 + bw} featY={y0 + hgt + 14} dY={y0 + hgt + 30}
+          label={tied ? `b = ${Math.round(b)} mm` : `D = ${Math.round(D)} mm`} />
+        {tied && <DimSide yA={y0} yB={y0 + hgt} featX={x0} dX={x0 - 16} label={`h = ${Math.round(h)} mm`} side="left" />}
+      </svg>
+    </DrawingFrame>
   )
 }

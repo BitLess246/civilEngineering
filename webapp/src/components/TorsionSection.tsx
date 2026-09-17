@@ -19,6 +19,8 @@
 // Geometry only. `engine/torsionDesign` decides everything.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { DrawingFrame } from './DrawingFrame'
+
 const INK = '#37526e'
 const CONC = '#eef3f8'
 const STIRRUP = '#c2402a'
@@ -86,75 +88,77 @@ export function TorsionSection({
   const br = Math.max(2.4, (barDia / 2) * s)
 
   return (
-    <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block h-auto w-full"
-      style={{ fontFamily: 'Arial, sans-serif' }}>
-      <rect x={x0} y={y0} width={bw} height={hh} fill={CONC} stroke={INK} strokeWidth={1.6} />
+    <DrawingFrame label="torsion section">
+      <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block h-auto w-full"
+        style={{ fontFamily: 'Arial, sans-serif' }}>
+        <rect x={x0} y={y0} width={bw} height={hh} fill={CONC} stroke={INK} strokeWidth={1.6} />
 
-      {/* Aoh — the area enclosed by the stirrup CENTRELINE */}
-      <rect x={sx} y={sy} width={sw} height={sh} fill={STIRRUP} opacity={0.07} />
-      <rect x={sx} y={sy} width={sw} height={sh} rx={Math.max(2, 2 * stirrupDia * s)}
-        fill="none" stroke={STIRRUP} strokeWidth={Math.max(1.4, stirrupDia * s)} />
+        {/* Aoh — the area enclosed by the stirrup CENTRELINE */}
+        <rect x={sx} y={sy} width={sw} height={sh} fill={STIRRUP} opacity={0.07} />
+        <rect x={sx} y={sy} width={sw} height={sh} rx={Math.max(2, 2 * stirrupDia * s)}
+          fill="none" stroke={STIRRUP} strokeWidth={Math.max(1.4, stirrupDia * s)} />
 
-      {/* Ao = 0.85·Aoh — the shear-flow path inside it, with the circulation */}
-      <rect x={fx} y={fy} width={fw} height={fh} fill="none" stroke={FLOW}
-        strokeWidth={1.1} strokeDasharray="5 3" />
-      {([[fx + fw / 2, fy, 1, 0], [fx + fw, fy + fh / 2, 0, 1],
-         [fx + fw / 2, fy + fh, -1, 0], [fx, fy + fh / 2, 0, -1]] as const).map(([px, py, dx, dy], i) => (
-        <path key={i}
-          d={`M${px - dx * 8} ${py - dy * 8} L${px + dx * 8} ${py + dy * 8}`
-            + ` M${px + dx * 8} ${py + dy * 8} l${-dx * 4 - dy * 3} ${-dy * 4 + dx * 3}`
-            + ` M${px + dx * 8} ${py + dy * 8} l${-dx * 4 + dy * 3} ${-dy * 4 - dx * 3}`}
-          stroke={FLOW} strokeWidth={1.3} fill="none" strokeLinecap="round" />
-      ))}
-
-      {/* longitudinal torsional steel, distributed around the perimeter */}
-      {bars.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={br} fill={LONG} />)}
-
-      {/* x₁ and y₁ are stirrup-CENTRELINE dimensions — the distinction the
-          whole of §22.7 turns on */}
-      <g>
-        <line x1={sx} y1={y0 + hh + 18} x2={sx + sw} y2={y0 + hh + 18} stroke={DIM} strokeWidth={0.9} />
-        {[sx, sx + sw].map((x) => (
-          <line key={x} x1={x - 4} y1={y0 + hh + 22} x2={x + 4} y2={y0 + hh + 14} stroke={DIM} strokeWidth={1.2} />
+        {/* Ao = 0.85·Aoh — the shear-flow path inside it, with the circulation */}
+        <rect x={fx} y={fy} width={fw} height={fh} fill="none" stroke={FLOW}
+          strokeWidth={1.1} strokeDasharray="5 3" />
+        {([[fx + fw / 2, fy, 1, 0], [fx + fw, fy + fh / 2, 0, 1],
+           [fx + fw / 2, fy + fh, -1, 0], [fx, fy + fh / 2, 0, -1]] as const).map(([px, py, dx, dy], i) => (
+          <path key={i}
+            d={`M${px - dx * 8} ${py - dy * 8} L${px + dx * 8} ${py + dy * 8}`
+              + ` M${px + dx * 8} ${py + dy * 8} l${-dx * 4 - dy * 3} ${-dy * 4 + dx * 3}`
+              + ` M${px + dx * 8} ${py + dy * 8} l${-dx * 4 + dy * 3} ${-dy * 4 - dx * 3}`}
+            stroke={FLOW} strokeWidth={1.3} fill="none" strokeLinecap="round" />
         ))}
-        <text x={sx + sw / 2} y={y0 + hh + 14} fontSize={8.5} fill={DIM} textAnchor="middle"
-          paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>x₁ = {Math.round(x1)}</text>
 
-        <line x1={x0 - 18} y1={sy} x2={x0 - 18} y2={sy + sh} stroke={DIM} strokeWidth={0.9} />
-        {[sy, sy + sh].map((y) => (
-          <line key={y} x1={x0 - 22} y1={y + 4} x2={x0 - 14} y2={y - 4} stroke={DIM} strokeWidth={1.2} />
-        ))}
-        <text x={x0 - 28} y={sy + sh / 2} fontSize={8.5} fill={DIM} textAnchor="middle"
-          transform={`rotate(-90 ${x0 - 28} ${sy + sh / 2})`}
-          paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>y₁ = {Math.round(y1)}</text>
+        {/* longitudinal torsional steel, distributed around the perimeter */}
+        {bars.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={br} fill={LONG} />)}
 
-        <text x={x0 + bw / 2} y={y0 - 9} fontSize={8} fill={FAINT} textAnchor="middle">
-          {Math.round(b)} × {Math.round(h)} gross
+        {/* x₁ and y₁ are stirrup-CENTRELINE dimensions — the distinction the
+            whole of §22.7 turns on */}
+        <g>
+          <line x1={sx} y1={y0 + hh + 18} x2={sx + sw} y2={y0 + hh + 18} stroke={DIM} strokeWidth={0.9} />
+          {[sx, sx + sw].map((x) => (
+            <line key={x} x1={x - 4} y1={y0 + hh + 22} x2={x + 4} y2={y0 + hh + 14} stroke={DIM} strokeWidth={1.2} />
+          ))}
+          <text x={sx + sw / 2} y={y0 + hh + 14} fontSize={8.5} fill={DIM} textAnchor="middle"
+            paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>x₁ = {Math.round(x1)}</text>
+
+          <line x1={x0 - 18} y1={sy} x2={x0 - 18} y2={sy + sh} stroke={DIM} strokeWidth={0.9} />
+          {[sy, sy + sh].map((y) => (
+            <line key={y} x1={x0 - 22} y1={y + 4} x2={x0 - 14} y2={y - 4} stroke={DIM} strokeWidth={1.2} />
+          ))}
+          <text x={x0 - 28} y={sy + sh / 2} fontSize={8.5} fill={DIM} textAnchor="middle"
+            transform={`rotate(-90 ${x0 - 28} ${sy + sh / 2})`}
+            paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>y₁ = {Math.round(y1)}</text>
+
+          <text x={x0 + bw / 2} y={y0 - 9} fontSize={8} fill={FAINT} textAnchor="middle">
+            {Math.round(b)} × {Math.round(h)} gross
+          </text>
+        </g>
+
+        {/* the symbols, spelled out beside the section */}
+        <g fontSize={8.5}>
+          <rect x={W - MR + 4} y={MT + 2} width={11} height={8} fill={STIRRUP} opacity={0.25}
+            stroke={STIRRUP} strokeWidth={1.1} />
+          <text x={W - MR + 22} y={MT + 10} fill={STIRRUP}>Aoh = {Math.round(Aoh).toLocaleString()} mm²</text>
+          <text x={W - MR + 22} y={MT + 23} fill={STIRRUP}>ph = {Math.round(ph).toLocaleString()} mm</text>
+          <line x1={W - MR + 4} y1={MT + 36} x2={W - MR + 15} y2={MT + 36} stroke={FLOW}
+            strokeWidth={1.1} strokeDasharray="4 2" />
+          <text x={W - MR + 22} y={MT + 39} fill={FLOW}>Ao = 0.85·Aoh</text>
+          <text x={W - MR + 22} y={MT + 52} fill={FLOW}>= {Math.round(Ao).toLocaleString()} mm²</text>
+          <circle cx={W - MR + 9} cy={MT + 63} r={3} fill={LONG} />
+          <text x={W - MR + 22} y={MT + 66} fill={LONG}>Al = {Math.round(Al).toLocaleString()} mm²</text>
+          <text x={W - MR + 22} y={MT + 79} fill={LONG}>{bars.length} bars, s ≤ {LONG_BAR_MAX_SPACING} mm</text>
+          {stirrupNote && <text x={W - MR + 4} y={MT + 96} fill={STIRRUP}>{stirrupNote}</text>}
+        </g>
+
+        <text x={W / 2} y={HT - 18} fontSize={7.5} fill={FAINT} textAnchor="middle">
+          §22.7 treats the section as a thin-walled TUBE — only the shell inside the closed stirrup carries torque.
         </text>
-      </g>
-
-      {/* the symbols, spelled out beside the section */}
-      <g fontSize={8.5}>
-        <rect x={W - MR + 4} y={MT + 2} width={11} height={8} fill={STIRRUP} opacity={0.25}
-          stroke={STIRRUP} strokeWidth={1.1} />
-        <text x={W - MR + 22} y={MT + 10} fill={STIRRUP}>Aoh = {Math.round(Aoh).toLocaleString()} mm²</text>
-        <text x={W - MR + 22} y={MT + 23} fill={STIRRUP}>ph = {Math.round(ph).toLocaleString()} mm</text>
-        <line x1={W - MR + 4} y1={MT + 36} x2={W - MR + 15} y2={MT + 36} stroke={FLOW}
-          strokeWidth={1.1} strokeDasharray="4 2" />
-        <text x={W - MR + 22} y={MT + 39} fill={FLOW}>Ao = 0.85·Aoh</text>
-        <text x={W - MR + 22} y={MT + 52} fill={FLOW}>= {Math.round(Ao).toLocaleString()} mm²</text>
-        <circle cx={W - MR + 9} cy={MT + 63} r={3} fill={LONG} />
-        <text x={W - MR + 22} y={MT + 66} fill={LONG}>Al = {Math.round(Al).toLocaleString()} mm²</text>
-        <text x={W - MR + 22} y={MT + 79} fill={LONG}>{bars.length} bars, s ≤ {LONG_BAR_MAX_SPACING} mm</text>
-        {stirrupNote && <text x={W - MR + 4} y={MT + 96} fill={STIRRUP}>{stirrupNote}</text>}
-      </g>
-
-      <text x={W / 2} y={HT - 18} fontSize={7.5} fill={FAINT} textAnchor="middle">
-        §22.7 treats the section as a thin-walled TUBE — only the shell inside the closed stirrup carries torque.
-      </text>
-      <text x={W / 2} y={HT - 7} fontSize={7.5} fill={FAINT} textAnchor="middle">
-x₁, y₁ are stirrup CENTRELINE dimensions · Al is spread around ph, not bunched in the tension face.
-      </text>
-    </svg>
+        <text x={W / 2} y={HT - 7} fontSize={7.5} fill={FAINT} textAnchor="middle">
+  x₁, y₁ are stirrup CENTRELINE dimensions · Al is spread around ph, not bunched in the tension face.
+        </text>
+      </svg>
+    </DrawingFrame>
   )
 }

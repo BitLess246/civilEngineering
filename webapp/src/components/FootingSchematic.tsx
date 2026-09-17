@@ -1,6 +1,7 @@
 import type { JSX } from 'react'
 import { DimBelow, DimSide } from './dims'
 import type { ColumnPosition } from '../engine/shear'
+import { DrawingFrame } from './DrawingFrame'
 
 const STROKE = '#0f1b2a'
 const FILL = '#fff'
@@ -95,77 +96,79 @@ export function FootingSchematic({
   const totalH = baseY + (pressure ? 96 : 26)
 
   return (
-    <svg viewBox={`0 0 ${W} ${totalH}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
-      style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={14} y={20} fontSize={11} fontWeight={700} fill="#a39d8d" fontFamily="IBM Plex Mono, monospace" letterSpacing="2">PLAN</text>
-      {/* footing + column */}
-      <rect x={fx} y={fyTop} width={fW} height={fH} fill={FILL} stroke={STROKE} strokeWidth={1.4} />
-      {/* The critical section, and which of its sides actually resist. A free
-          edge carries no shear, so it is drawn open — that is the difference
-          the αs table exists to describe. */}
-      {crit && (
-        <g>
-          <rect x={crit.x} y={crit.y} width={crit.w} height={crit.h}
-            fill="none" stroke={CRIT} strokeWidth={1} strokeDasharray="4 3" opacity={0.85} />
-          <text x={crit.x - 3} y={crit.y - 3} fontSize={7.5} fill={CRIT} textAnchor="end">crit. @ d/2</text>
-        </g>
-      )}
-      {/* Free edges of the pad, where the column face is flush. */}
-      {freeX && <line x1={fx + fW} y1={fyTop} x2={fx + fW} y2={fyBot} stroke={FREE} strokeWidth={3} />}
-      {freeY && <line x1={fx} y1={fyBot} x2={fx + fW} y2={fyBot} stroke={FREE} strokeWidth={3} />}
-      <rect x={cxc - cpx / 2} y={cyc - cpx / 2} width={cpx} height={cpx} fill={COL} />
-      {position !== 'interior' && (
-        <text x={fx + 3} y={fyTop + 10} fontSize={7.5} fill={FREE} fontWeight={700}>
-          {position === 'corner' ? 'CORNER — 2 free edges' : 'EDGE — 1 free edge'}
-        </text>
-      )}
-      <DimBelow xA={fx} xB={fx + fW} featY={fyBot} dY={fyBot + 20} label={`Bx = ${Bx.toFixed(2)} m`} />
-      <DimSide yA={fyTop} yB={fyBot} featX={fx + fW} dX={fx + fW + 10} label={`By = ${By.toFixed(2)} m`} side="right" />
-
-      <text x={14} y={secTitleY} fontSize={11} fontWeight={700} fill="#a39d8d" fontFamily="IBM Plex Mono, monospace" letterSpacing="2">SECTION</text>
-      {/* ground + soil */}
-      <line x1={slabX} y1={gl} x2={slabX + sW} y2={gl} stroke="#8a6d3b" strokeWidth={1.2} />
-      {soilTicks}
-      {/* slab + column stub */}
-      <rect x={slabX} y={slabY} width={sW} height={slabH} fill="#fff" stroke={STROKE} strokeWidth={1.4} />
-      <rect x={stubX} y={gl} width={stubW} height={slabY - gl} fill={COL} />
-      {/* Bearing pressure. Off-centre the load, and the base no longer bears
-          uniformly; past the kern part of it lifts, which is drawn ABOVE the
-          line rather than clipped away, because the lift is the finding. */}
-      {pressure && (() => {
-        const { qMax, qMin } = pressure
-        const peak = Math.max(Math.abs(qMax), Math.abs(qMin), 1e-9)
-        // Its own zero datum, clear of the slab. With zero ON the base the
-        // uplift half climbed back up through the footing it was describing.
-        const sc = 34 / peak                       // px per kPa
-        const datum = baseY + 42
-        // The peak sits at the free edge (right) when the column is offset;
-        // centred, the trapezoid degenerates to the uniform rectangle.
-        const qR = qMax
-        const qL = freeX ? qMin : qMax
-        const yL = datum + qL * sc, yR = datum + qR * sc
-        const lift = qMin < 0
-        return (
+    <DrawingFrame label="footing section">
+      <svg viewBox={`0 0 ${W} ${totalH}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
+        <text x={14} y={20} fontSize={11} fontWeight={700} fill="#a39d8d" fontFamily="IBM Plex Mono, monospace" letterSpacing="2">PLAN</text>
+        {/* footing + column */}
+        <rect x={fx} y={fyTop} width={fW} height={fH} fill={FILL} stroke={STROKE} strokeWidth={1.4} />
+        {/* The critical section, and which of its sides actually resist. A free
+            edge carries no shear, so it is drawn open — that is the difference
+            the αs table exists to describe. */}
+        {crit && (
           <g>
-            <line x1={slabX} y1={datum} x2={slabX + sW} y2={datum} stroke="#a39d8d" strokeWidth={0.8} strokeDasharray="3 2" />
-            <path d={`M ${slabX} ${datum} L ${slabX + sW} ${datum} L ${slabX + sW} ${yR} L ${slabX} ${yL} Z`}
-              fill={lift ? 'rgba(194,64,42,.14)' : 'rgba(15,76,146,.14)'}
-              stroke={lift ? FREE : CRIT} strokeWidth={1} />
-            <text x={slabX + sW + 4} y={yR + 3} fontSize={7.5} fill={lift ? FREE : CRIT}>
-              {Math.round(qMax)} kPa
-            </text>
-            <text x={slabX - 4} y={yL + 3} fontSize={7.5} textAnchor="end" fill={lift ? FREE : CRIT}>
-              {Math.round(qMin)}
-            </text>
-            {lift && (
-              <text x={slabX + sW / 2} y={datum - 26} fontSize={8} textAnchor="middle"
-                fill={FREE} fontWeight={700}>UPLIFT — resultant outside the kern</text>
-            )}
+            <rect x={crit.x} y={crit.y} width={crit.w} height={crit.h}
+              fill="none" stroke={CRIT} strokeWidth={1} strokeDasharray="4 3" opacity={0.85} />
+            <text x={crit.x - 3} y={crit.y - 3} fontSize={7.5} fill={CRIT} textAnchor="end">crit. @ d/2</text>
           </g>
-        )
-      })()}
-      <DimSide yA={gl} yB={baseY} featX={slabX} dX={slabX - 12} label={`H = ${H.toFixed(2)} m`} side="left" />
-      <DimSide yA={slabY} yB={baseY} featX={slabX + sW} dX={slabX + sW + 8} label={`Dc = ${Math.round(Dc)} mm`} side="right" />
-    </svg>
+        )}
+        {/* Free edges of the pad, where the column face is flush. */}
+        {freeX && <line x1={fx + fW} y1={fyTop} x2={fx + fW} y2={fyBot} stroke={FREE} strokeWidth={3} />}
+        {freeY && <line x1={fx} y1={fyBot} x2={fx + fW} y2={fyBot} stroke={FREE} strokeWidth={3} />}
+        <rect x={cxc - cpx / 2} y={cyc - cpx / 2} width={cpx} height={cpx} fill={COL} />
+        {position !== 'interior' && (
+          <text x={fx + 3} y={fyTop + 10} fontSize={7.5} fill={FREE} fontWeight={700}>
+            {position === 'corner' ? 'CORNER — 2 free edges' : 'EDGE — 1 free edge'}
+          </text>
+        )}
+        <DimBelow xA={fx} xB={fx + fW} featY={fyBot} dY={fyBot + 20} label={`Bx = ${Bx.toFixed(2)} m`} />
+        <DimSide yA={fyTop} yB={fyBot} featX={fx + fW} dX={fx + fW + 10} label={`By = ${By.toFixed(2)} m`} side="right" />
+
+        <text x={14} y={secTitleY} fontSize={11} fontWeight={700} fill="#a39d8d" fontFamily="IBM Plex Mono, monospace" letterSpacing="2">SECTION</text>
+        {/* ground + soil */}
+        <line x1={slabX} y1={gl} x2={slabX + sW} y2={gl} stroke="#8a6d3b" strokeWidth={1.2} />
+        {soilTicks}
+        {/* slab + column stub */}
+        <rect x={slabX} y={slabY} width={sW} height={slabH} fill="#fff" stroke={STROKE} strokeWidth={1.4} />
+        <rect x={stubX} y={gl} width={stubW} height={slabY - gl} fill={COL} />
+        {/* Bearing pressure. Off-centre the load, and the base no longer bears
+            uniformly; past the kern part of it lifts, which is drawn ABOVE the
+            line rather than clipped away, because the lift is the finding. */}
+        {pressure && (() => {
+          const { qMax, qMin } = pressure
+          const peak = Math.max(Math.abs(qMax), Math.abs(qMin), 1e-9)
+          // Its own zero datum, clear of the slab. With zero ON the base the
+          // uplift half climbed back up through the footing it was describing.
+          const sc = 34 / peak                       // px per kPa
+          const datum = baseY + 42
+          // The peak sits at the free edge (right) when the column is offset;
+          // centred, the trapezoid degenerates to the uniform rectangle.
+          const qR = qMax
+          const qL = freeX ? qMin : qMax
+          const yL = datum + qL * sc, yR = datum + qR * sc
+          const lift = qMin < 0
+          return (
+            <g>
+              <line x1={slabX} y1={datum} x2={slabX + sW} y2={datum} stroke="#a39d8d" strokeWidth={0.8} strokeDasharray="3 2" />
+              <path d={`M ${slabX} ${datum} L ${slabX + sW} ${datum} L ${slabX + sW} ${yR} L ${slabX} ${yL} Z`}
+                fill={lift ? 'rgba(194,64,42,.14)' : 'rgba(15,76,146,.14)'}
+                stroke={lift ? FREE : CRIT} strokeWidth={1} />
+              <text x={slabX + sW + 4} y={yR + 3} fontSize={7.5} fill={lift ? FREE : CRIT}>
+                {Math.round(qMax)} kPa
+              </text>
+              <text x={slabX - 4} y={yL + 3} fontSize={7.5} textAnchor="end" fill={lift ? FREE : CRIT}>
+                {Math.round(qMin)}
+              </text>
+              {lift && (
+                <text x={slabX + sW / 2} y={datum - 26} fontSize={8} textAnchor="middle"
+                  fill={FREE} fontWeight={700}>UPLIFT — resultant outside the kern</text>
+              )}
+            </g>
+          )
+        })()}
+        <DimSide yA={gl} yB={baseY} featX={slabX} dX={slabX - 12} label={`H = ${H.toFixed(2)} m`} side="left" />
+        <DimSide yA={slabY} yB={baseY} featX={slabX + sW} dX={slabX + sW + 8} label={`Dc = ${Math.round(Dc)} mm`} side="right" />
+      </svg>
+    </DrawingFrame>
   )
 }

@@ -10,6 +10,7 @@
 
 import type { BoltGroupGeom, BoltForce } from '../engine/steelDesign'
 import { DimBelow, DimSide } from './dims'
+import { DrawingFrame } from './DrawingFrame'
 
 const EDGE = 40   // display edge margin around the outermost bolts, mm
 
@@ -63,82 +64,84 @@ export function ConnectionDrawing({ geom, db, boltForces, critical, Vu, Hu, ex_l
       <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
         Connection face — {connType === 'bolt' ? 'bolt layout' : 'weld layout'}
       </h3>
-      <svg width="100%" style={{ maxWidth: svgW * 1.15 }} viewBox={`0 0 ${svgW} ${svgH}`} className="h-auto">
-        {/* plate */}
-        <rect x={X0} y={Y0} width={X1 - X0} height={Y1 - Y0} fill="#f1f5f9" stroke="#334155" strokeWidth={1.5} rx={1} />
+      <DrawingFrame label="connection face">
+          <svg width="100%" style={{ maxWidth: svgW * 1.15 }} viewBox={`0 0 ${svgW} ${svgH}`} className="h-auto">
+          {/* plate */}
+          <rect x={X0} y={Y0} width={X1 - X0} height={Y1 - Y0} fill="#f1f5f9" stroke="#334155" strokeWidth={1.5} rx={1} />
 
-        {/* plate dimensions — shared architectural-tick primitives */}
-        <DimBelow xA={X0} xB={X1} featY={Y1} dY={Y1 + 22} label={`${Math.round(pw_mm)} mm`} />
-        <DimSide yA={Y0} yB={Y1} featX={X0} dX={X0 - 26} label={`${Math.round(ph_mm)} mm`} side="left" />
+          {/* plate dimensions — shared architectural-tick primitives */}
+          <DimBelow xA={X0} xB={X1} featY={Y1} dY={Y1 + 22} label={`${Math.round(pw_mm)} mm`} />
+          <DimSide yA={Y0} yB={Y1} featX={X0} dX={X0 - 26} label={`${Math.round(ph_mm)} mm`} side="left" />
 
-        {connType === 'bolt' ? (
-          <>
-            {abs.map((b) => {
-              const bfEntry = boltForces?.find((bf) => bf.id === b.id)
-              const isCrit = b.id === critical
-              const cx = tx(b.x), cy = ty(b.y)
-              const util = bfEntry?.utilShear ?? 0
-              const holeColor = isCrit ? '#dc2626' : util > 0.8 ? '#f59e0b' : '#334155'
-              return (
-                <g key={b.id}>
-                  <circle cx={cx} cy={cy} r={r} fill="white" stroke={holeColor} strokeWidth={isCrit ? 2 : 1} />
-                  <line x1={cx - r - 2} y1={cy} x2={cx + r + 2} y2={cy} stroke={holeColor} strokeWidth={0.6} />
-                  <line x1={cx} y1={cy - r - 2} x2={cx} y2={cy + r + 2} stroke={holeColor} strokeWidth={0.6} />
-                  {bfEntry && bfEntry.R > 0.01 && (() => {
-                    const sc = 22 / Math.max(...(boltForces?.map((f) => f.R) ?? [1]))
-                    const dx = bfEntry.Vx * sc, dy = -bfEntry.Vy * sc
-                    return <line x1={cx} y1={cy} x2={cx + dx} y2={cy + dy}
-                      stroke={isCrit ? '#dc2626' : '#3b82f6'} strokeWidth={1.4} markerEnd="url(#arrow)" />
-                  })()}
-                  {/* id top-left of the hole, force bottom-right — no stacking collisions */}
-                  {label(cx - r - 3, cy - r - 1, b.id, isCrit ? '#dc2626' : '#475569', 9, 'end')}
-                  {bfEntry && label(cx + r + 3, cy + r + 8, `${bfEntry.R.toFixed(1)}kN`, isCrit ? '#dc2626' : '#64748b', 8, 'start')}
-                </g>
-              )
-            })}
-          </>
-        ) : (
-          <>
-            {/* weld lines (two vertical welds on plate edges) */}
-            <line x1={X0 + 3} y1={Y0 + 4} x2={X0 + 3} y2={Y1 - 4} stroke="#f59e0b" strokeWidth={4} />
-            <line x1={X1 - 3} y1={Y0 + 4} x2={X1 - 3} y2={Y1 - 4} stroke="#f59e0b" strokeWidth={4} />
-            {label((X0 + X1) / 2, (Y0 + Y1) / 2, 'Weld', '#d97706', 11)}
-            {label((X0 + X1) / 2, (Y0 + Y1) / 2 + 14, `L = ${Math.round(ph_mm)} mm ea.`, '#d97706', 9)}
-          </>
-        )}
+          {connType === 'bolt' ? (
+            <>
+              {abs.map((b) => {
+                const bfEntry = boltForces?.find((bf) => bf.id === b.id)
+                const isCrit = b.id === critical
+                const cx = tx(b.x), cy = ty(b.y)
+                const util = bfEntry?.utilShear ?? 0
+                const holeColor = isCrit ? '#dc2626' : util > 0.8 ? '#f59e0b' : '#334155'
+                return (
+                  <g key={b.id}>
+                    <circle cx={cx} cy={cy} r={r} fill="white" stroke={holeColor} strokeWidth={isCrit ? 2 : 1} />
+                    <line x1={cx - r - 2} y1={cy} x2={cx + r + 2} y2={cy} stroke={holeColor} strokeWidth={0.6} />
+                    <line x1={cx} y1={cy - r - 2} x2={cx} y2={cy + r + 2} stroke={holeColor} strokeWidth={0.6} />
+                    {bfEntry && bfEntry.R > 0.01 && (() => {
+                      const sc = 22 / Math.max(...(boltForces?.map((f) => f.R) ?? [1]))
+                      const dx = bfEntry.Vx * sc, dy = -bfEntry.Vy * sc
+                      return <line x1={cx} y1={cy} x2={cx + dx} y2={cy + dy}
+                        stroke={isCrit ? '#dc2626' : '#3b82f6'} strokeWidth={1.4} markerEnd="url(#arrow)" />
+                    })()}
+                    {/* id top-left of the hole, force bottom-right — no stacking collisions */}
+                    {label(cx - r - 3, cy - r - 1, b.id, isCrit ? '#dc2626' : '#475569', 9, 'end')}
+                    {bfEntry && label(cx + r + 3, cy + r + 8, `${bfEntry.R.toFixed(1)}kN`, isCrit ? '#dc2626' : '#64748b', 8, 'start')}
+                  </g>
+                )
+              })}
+            </>
+          ) : (
+            <>
+              {/* weld lines (two vertical welds on plate edges) */}
+              <line x1={X0 + 3} y1={Y0 + 4} x2={X0 + 3} y2={Y1 - 4} stroke="#f59e0b" strokeWidth={4} />
+              <line x1={X1 - 3} y1={Y0 + 4} x2={X1 - 3} y2={Y1 - 4} stroke="#f59e0b" strokeWidth={4} />
+              {label((X0 + X1) / 2, (Y0 + Y1) / 2, 'Weld', '#d97706', 11)}
+              {label((X0 + X1) / 2, (Y0 + Y1) / 2 + 14, `L = ${Math.round(ph_mm)} mm ea.`, '#d97706', 9)}
+            </>
+          )}
 
-        {/* centroid mark */}
-        <g stroke="#059669" strokeWidth={1}>
-          <circle cx={tx(geom.Cx)} cy={ty(geom.Cy)} r={3.5} fill="none" />
-          <line x1={tx(geom.Cx) - 7} y1={ty(geom.Cy)} x2={tx(geom.Cx) + 7} y2={ty(geom.Cy)} />
-          <line x1={tx(geom.Cx)} y1={ty(geom.Cy) - 7} x2={tx(geom.Cx)} y2={ty(geom.Cy) + 7} />
-        </g>
+          {/* centroid mark */}
+          <g stroke="#059669" strokeWidth={1}>
+            <circle cx={tx(geom.Cx)} cy={ty(geom.Cy)} r={3.5} fill="none" />
+            <line x1={tx(geom.Cx) - 7} y1={ty(geom.Cy)} x2={tx(geom.Cx) + 7} y2={ty(geom.Cy)} />
+            <line x1={tx(geom.Cx)} y1={ty(geom.Cy) - 7} x2={tx(geom.Cx)} y2={ty(geom.Cy) + 7} />
+          </g>
 
-        {/* load application point, eccentricity trace & force arrows */}
-        {(() => {
-          const lx = tx(loadX), ly = ty(loadY)
-          // keep the label inside the canvas: grow leftwards when the load
-          // point sits on the right half of the drawing
-          const onRight = loadX > (vx0 + vx1) / 2
-          return (
-            <g>
-              <line x1={tx(geom.Cx)} y1={ty(geom.Cy)} x2={lx} y2={ly} stroke="#16a34a" strokeWidth={0.8} strokeDasharray="4,3" />
-              <circle cx={lx} cy={ly} r={4} fill="none" stroke="#16a34a" strokeWidth={1.5} strokeDasharray="3,2" />
-              {Vu !== 0 && <line x1={lx} y1={ly - 22} x2={lx} y2={ly - 6}
-                stroke="#16a34a" strokeWidth={1.5} markerEnd="url(#arrow)" />}
-              {Hu !== 0 && <line x1={lx + (Hu > 0 ? -22 : 22)} y1={ly} x2={lx + (Hu > 0 ? -6 : 6)} y2={ly}
-                stroke="#16a34a" strokeWidth={1.5} markerEnd="url(#arrow)" />}
-              {label(onRight ? lx - 7 : lx + 7, ly - 24, `P @ (${Math.round(loadX)}, ${Math.round(loadY)})`, '#15803d', 8.5, onRight ? 'end' : 'start')}
-            </g>
-          )
-        })()}
+          {/* load application point, eccentricity trace & force arrows */}
+          {(() => {
+            const lx = tx(loadX), ly = ty(loadY)
+            // keep the label inside the canvas: grow leftwards when the load
+            // point sits on the right half of the drawing
+            const onRight = loadX > (vx0 + vx1) / 2
+            return (
+              <g>
+                <line x1={tx(geom.Cx)} y1={ty(geom.Cy)} x2={lx} y2={ly} stroke="#16a34a" strokeWidth={0.8} strokeDasharray="4,3" />
+                <circle cx={lx} cy={ly} r={4} fill="none" stroke="#16a34a" strokeWidth={1.5} strokeDasharray="3,2" />
+                {Vu !== 0 && <line x1={lx} y1={ly - 22} x2={lx} y2={ly - 6}
+                  stroke="#16a34a" strokeWidth={1.5} markerEnd="url(#arrow)" />}
+                {Hu !== 0 && <line x1={lx + (Hu > 0 ? -22 : 22)} y1={ly} x2={lx + (Hu > 0 ? -6 : 6)} y2={ly}
+                  stroke="#16a34a" strokeWidth={1.5} markerEnd="url(#arrow)" />}
+                {label(onRight ? lx - 7 : lx + 7, ly - 24, `P @ (${Math.round(loadX)}, ${Math.round(loadY)})`, '#15803d', 8.5, onRight ? 'end' : 'start')}
+              </g>
+            )
+          })()}
 
-        <defs>
-          <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-            <path d="M0,0 L6,3 L0,6 Z" fill="#1d4ed8" />
-          </marker>
-        </defs>
-      </svg>
+          <defs>
+            <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+              <path d="M0,0 L6,3 L0,6 Z" fill="#1d4ed8" />
+            </marker>
+          </defs>
+        </svg>
+      </DrawingFrame>
     </div>
   )
 }

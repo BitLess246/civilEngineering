@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import { DimBelow, DimSide } from './dims'
+import { DrawingFrame } from './DrawingFrame'
 
 const STROKE = '#37526e'
 const FILL = '#eef3f8'
@@ -133,67 +134,69 @@ export function BeamSchematic({
     : `${n} ⌀${barDia} mm${lay.length > 1 ? ` (${lay.join('+')})` : ''}`
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
-      style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      {/* concrete */}
-      <rect x={x0} y={y0} width={bw} height={hh} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.6} />
+    <DrawingFrame label="beam schematic">
+      <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
+        style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
+        {/* concrete */}
+        <rect x={x0} y={y0} width={bw} height={hh} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.6} />
 
-      {/* stirrup body + the two 135° corner hooks (smooth D_bend arcs) */}
-      <rect x={sx0} y={sy0} width={sw} height={sh} rx={r}
-        fill="none" stroke={BAR} strokeWidth={stW} opacity={0.8} />
-      <path d={hook1} fill="none" stroke={BAR} strokeWidth={stW} strokeLinecap="round" opacity={0.8} />
-      <path d={hook2} fill="none" stroke={BAR} strokeWidth={stW} strokeLinecap="round" opacity={0.8} />
+        {/* stirrup body + the two 135° corner hooks (smooth D_bend arcs) */}
+        <rect x={sx0} y={sy0} width={sw} height={sh} rx={r}
+          fill="none" stroke={BAR} strokeWidth={stW} opacity={0.8} />
+        <path d={hook1} fill="none" stroke={BAR} strokeWidth={stW} strokeLinecap="round" opacity={0.8} />
+        <path d={hook2} fill="none" stroke={BAR} strokeWidth={stW} strokeLinecap="round" opacity={0.8} />
 
-      {/* compression bars (hollow), stacking away from their face */}
-      {cLayDrawn.map((q, li) =>
-        rowX(q).map((bx, i) => (
-          <circle key={`c${li}-${i}`} cx={bx} cy={comY(li)} r={brC} fill="#fff" stroke={BAR} strokeWidth={1.6} />
-        )),
-      )}
+        {/* compression bars (hollow), stacking away from their face */}
+        {cLayDrawn.map((q, li) =>
+          rowX(q).map((bx, i) => (
+            <circle key={`c${li}-${i}`} cx={bx} cy={comY(li)} r={brC} fill="#fff" stroke={BAR} strokeWidth={1.6} />
+          )),
+        )}
 
-      {/* tension bars (solid), stacking toward mid-depth */}
-      {layDrawn.map((q, li) =>
-        rowX(q).map((bx, i) => (
-          <circle key={`t${li}-${i}`} cx={bx} cy={tenY(li)} r={br} fill={BAR} />
-        )),
-      )}
+        {/* tension bars (solid), stacking toward mid-depth */}
+        {layDrawn.map((q, li) =>
+          rowX(q).map((bx, i) => (
+            <circle key={`t${li}-${i}`} cx={bx} cy={tenY(li)} r={br} fill={BAR} />
+          )),
+        )}
 
-      {/* over-full section: NA line + explicit warning */}
-      {!flexOK && (
-        <g>
-          <line x1={x0 - 4} y1={yNA} x2={x0 + bw + 4} y2={yNA} stroke={CENTROID} strokeWidth={0.8} strokeDasharray="6 4" />
-          <text x={x0 + bw - 4} y={yNA - 4} fontSize={8} fill={CENTROID} textAnchor="end">N.A.</text>
-          <text x={x0 + bw / 2} y={y0 + hh / 2} fontSize={9.5} fontWeight={700} fill={CENTROID} textAnchor="middle"
-            paintOrder="stroke" stroke="#fff" strokeWidth={3}>
-            ⚠ {flexReason ?? `n = ${bars} bars cannot fit in the section`}
+        {/* over-full section: NA line + explicit warning */}
+        {!flexOK && (
+          <g>
+            <line x1={x0 - 4} y1={yNA} x2={x0 + bw + 4} y2={yNA} stroke={CENTROID} strokeWidth={0.8} strokeDasharray="6 4" />
+            <text x={x0 + bw - 4} y={yNA - 4} fontSize={8} fill={CENTROID} textAnchor="end">N.A.</text>
+            <text x={x0 + bw / 2} y={y0 + hh / 2} fontSize={9.5} fontWeight={700} fill={CENTROID} textAnchor="middle"
+              paintOrder="stroke" stroke="#fff" strokeWidth={3}>
+              ⚠ {flexReason ?? `n = ${bars} bars cannot fit in the section`}
+            </text>
+          </g>
+        )}
+
+        {/* centroid marks with dashed ties to their dimension lines */}
+        {hasDP && <CentroidMark cx={cxMid} cy={cyDP} toX={dxInner} />}
+        <CentroidMark cx={cxMid} cy={cyD} toX={dxOuter} />
+
+        {/* labels: each group labelled at its own face */}
+        {nC > 0 && (
+          <text x={x0 + bw / 2} y={hogging ? y0 + hh + 12 : y0 - 6} fontSize={8.5} fill={BAR} textAnchor="middle">
+            {nC} ⌀{dbC} mm{cLay.length > 1 ? (cLay.length > 3 ? ` — ${cLay.length} layers` : ` (${cLay.join('+')})`) : ''}{hogging ? ' bottom' : ' top'}
           </text>
-        </g>
-      )}
-
-      {/* centroid marks with dashed ties to their dimension lines */}
-      {hasDP && <CentroidMark cx={cxMid} cy={cyDP} toX={dxInner} />}
-      <CentroidMark cx={cxMid} cy={cyD} toX={dxOuter} />
-
-      {/* labels: each group labelled at its own face */}
-      {nC > 0 && (
-        <text x={x0 + bw / 2} y={hogging ? y0 + hh + 12 : y0 - 6} fontSize={8.5} fill={BAR} textAnchor="middle">
-          {nC} ⌀{dbC} mm{cLay.length > 1 ? (cLay.length > 3 ? ` — ${cLay.length} layers` : ` (${cLay.join('+')})`) : ''}{hogging ? ' bottom' : ' top'}
+        )}
+        <text x={x0 + bw / 2} y={hogging ? y0 - 6 : y0 + hh + 12} fontSize={8.5} fill={BAR} textAnchor="middle">
+          {tenLabel}{hogging ? ' top' : ''}
         </text>
-      )}
-      <text x={x0 + bw / 2} y={hogging ? y0 - 6 : y0 + hh + 12} fontSize={8.5} fill={BAR} textAnchor="middle">
-        {tenLabel}{hogging ? ' top' : ''}
-      </text>
 
-      {/* dimensions: b below, h left, d (and d′ for DRRB) right — measured
-          from the compression face (top for sagging, bottom for hogging) */}
-      <DimBelow xA={x0} xB={x0 + bw} featY={y0 + hh + 14} dY={y0 + hh + 30} label={`b = ${Math.round(b)} mm`} />
-      <DimSide yA={y0} yB={y0 + hh} featX={x0} dX={x0 - 16} label={`h = ${Math.round(h)} mm`} side="left" />
-      {hasDP && (
-        <DimSide yA={hogging ? cyDP : y0} yB={hogging ? y0 + hh : cyDP} featX={x0 + bw} dX={dxInner}
-          label={`d' = ${Math.round(dPrime as number)} mm`} side="right" />
-      )}
-      <DimSide yA={hogging ? cyD : y0} yB={hogging ? y0 + hh : cyD} featX={x0 + bw} dX={dxOuter}
-        label={`d = ${Math.round(d)} mm`} side="right" />
-    </svg>
+        {/* dimensions: b below, h left, d (and d′ for DRRB) right — measured
+            from the compression face (top for sagging, bottom for hogging) */}
+        <DimBelow xA={x0} xB={x0 + bw} featY={y0 + hh + 14} dY={y0 + hh + 30} label={`b = ${Math.round(b)} mm`} />
+        <DimSide yA={y0} yB={y0 + hh} featX={x0} dX={x0 - 16} label={`h = ${Math.round(h)} mm`} side="left" />
+        {hasDP && (
+          <DimSide yA={hogging ? cyDP : y0} yB={hogging ? y0 + hh : cyDP} featX={x0 + bw} dX={dxInner}
+            label={`d' = ${Math.round(dPrime as number)} mm`} side="right" />
+        )}
+        <DimSide yA={hogging ? cyD : y0} yB={hogging ? y0 + hh : cyD} featX={x0 + bw} dX={dxOuter}
+          label={`d = ${Math.round(d)} mm`} side="right" />
+      </svg>
+    </DrawingFrame>
   )
 }

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ResultCard, Row } from './qty'
 import type { ShellNode, ShellElem, ElementStress } from '../engine/shell'
 import { contourData } from '../lib/shellContour'
+import { DrawingFrame } from './DrawingFrame'
 import {
   STRESS_KEYS, stressColor, normalise, unitFor, labelFor, type StressKey,
 } from '../lib/stressScale'
@@ -66,32 +67,34 @@ export function ShellContourPanel({ nodes, elems, stresses }: Props) {
 
       {/* SVG contour */}
       <div className="col-span-full mb-3 overflow-hidden rounded-lg border border-hairline bg-sheet-2">
-        <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg"
-          preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: 'auto' }}>
-          {elems.map((e) => {
-            const pts = e.nodes.map((id) => {
-              const [x, y] = nodeXY.get(id)!
-              return `${x.toFixed(1)},${y.toFixed(1)}`
-            }).join(' ')
-            // Colour by element centroid value (average of its 3 node values)
-            const cv = e.nodes.reduce((s, id) => s + (nodal.get(id) ?? 0), 0) / 3
-            return (
-              <polygon key={e.id} points={pts}
-                fill={stressColor(norm(cv), domain.signed)} stroke="#94a3b8" strokeWidth={0.4} opacity={0.92} />
-            )
-          })}
-          {/* Colour bar */}
-          {Array.from({ length: 20 }, (_, i) => {
-            const t = i / 19
-            const bx = W - 28, bw = 14, bh = (H - padT - padB) / 20
-            return (
-              <rect key={i} x={bx} y={H - padB - (i + 1) * bh} width={bw} height={bh + 0.5}
-                fill={stressColor(t, domain.signed)} />
-            )
-          })}
-          <text x={W - 14} y={padT + 4} fontSize={8} fill="#334155" textAnchor="middle">{vMax.toFixed(0)}</text>
-          <text x={W - 14} y={H - padB - 2} fontSize={8} fill="#334155" textAnchor="middle">{vMin.toFixed(0)}</text>
-        </svg>
+        <DrawingFrame label="shell contour">
+            <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg"
+            preserveAspectRatio="xMidYMid meet" style={{ width: '100%', height: 'auto' }}>
+            {elems.map((e) => {
+              const pts = e.nodes.map((id) => {
+                const [x, y] = nodeXY.get(id)!
+                return `${x.toFixed(1)},${y.toFixed(1)}`
+              }).join(' ')
+              // Colour by element centroid value (average of its 3 node values)
+              const cv = e.nodes.reduce((s, id) => s + (nodal.get(id) ?? 0), 0) / 3
+              return (
+                <polygon key={e.id} points={pts}
+                  fill={stressColor(norm(cv), domain.signed)} stroke="#94a3b8" strokeWidth={0.4} opacity={0.92} />
+              )
+            })}
+            {/* Colour bar */}
+            {Array.from({ length: 20 }, (_, i) => {
+              const t = i / 19
+              const bx = W - 28, bw = 14, bh = (H - padT - padB) / 20
+              return (
+                <rect key={i} x={bx} y={H - padB - (i + 1) * bh} width={bw} height={bh + 0.5}
+                  fill={stressColor(t, domain.signed)} />
+              )
+            })}
+            <text x={W - 14} y={padT + 4} fontSize={8} fill="#334155" textAnchor="middle">{vMax.toFixed(0)}</text>
+            <text x={W - 14} y={H - padB - 2} fontSize={8} fill="#334155" textAnchor="middle">{vMin.toFixed(0)}</text>
+          </svg>
+        </DrawingFrame>
       </div>
 
       {/* Summary rows */}
