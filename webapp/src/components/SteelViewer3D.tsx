@@ -63,6 +63,48 @@ function Arrow({ from, to, color = '#16a34a', r = 0.04, headR = 0.10, headH = 0.
   )
 }
 
+function MomentArc({ center, R, head, tail, color = '#f59e0b', r = 0.03, headR = 0.09, headH = 0.22 }: {
+  /** Centre of the arc, m — for an end moment, the loaded end of the member. */
+  center: [number,number,number]
+  /** Arc radius, m. */ R: number
+  /** Angle, rad CCW from +X, where the ARROWHEAD lands.
+   *  Angles live in the X–Y plane at z = center[2]. */
+  head: number
+  /** Angle, rad CCW from +X, where the bare tail sits. Must exceed `head`;
+   *  the arc then runs CCW from the head, which makes the head's tangent —
+   *  read in travel direction — CLOCKWISE seen from +Z (the camera side).
+   *  That is the sense the old two-arrow couple pushed: over the top
+   *  towards +X. A counter-clockwise moment needs the pair mirrored. */
+  tail: number
+  color?: string; r?: number; headR?: number; headH?: number
+}) {
+  // The tangent of a CCW parametrisation is (−sinθ, cosθ); travelling the arc
+  // the OTHER way (into the head) flips it to (sinθ, −cosθ). The cone is
+  // nudged back along that tangent so its base embeds in the tube end instead
+  // of floating a tube-radius past it.
+  const tx = Math.sin(head), ty = -Math.cos(head)
+  const hx = center[0] + R * Math.cos(head)
+  const hy = center[1] + R * Math.sin(head)
+  const quat = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0), new THREE.Vector3(tx, ty, 0))
+  return (
+    <group>
+      {/* TorusGeometry's arc always starts at local +X and sweeps CCW, so the
+          mesh carries the head angle as its Z rotation and the arc spans
+          head → tail. Rotation about Z keeps it in the X–Y plane. */}
+      <mesh position={[center[0], center[1], center[2]]} rotation={[0, 0, head]}>
+        <torusGeometry args={[R, r, 10, 48, tail - head]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+      <mesh position={[hx + tx * (headH / 2 - 0.01), hy + ty * (headH / 2 - 0.01), center[2]]}
+        quaternion={quat}>
+        <coneGeometry args={[headR, headH, 12]} />
+        <meshStandardMaterial color={color} />
+      </mesh>
+    </group>
+  )
+}
+
 function CanvasWrap({ children, box, dir = [1.2, 0.9, 1.5] }: {
   children: React.ReactNode; box: { min:[number,number,number]; max:[number,number,number] }
   /** Where the camera sits relative to the model. A member reads best at three
@@ -235,9 +277,10 @@ export function ColumnViewer3D({ shape, L, Pu, Mux }: {
   const shapes = useMemo(() => wShape(shape), [shape])
   const bf = (shape.bf ?? 150) / 1000 / 2
 
-  // Wide enough for the annotations, not just the steel: the moment couple
-  // reaches ±0.75 m and the section label runs off to the right, and anything
-  // outside the box is what the fit crops.
+  // Wide enough for the annotations, not just the steel: the moment arc
+  // reaches ±0.45 m about the top, the Pu arrow stops a hand's width above
+  // it, and the section label runs off to the right — anything outside the
+  // box is what the fit crops.
   const box = useMemo<{ min:[number,number,number]; max:[number,number,number] }>(() => ({
     min: [-1.1, -0.4, -Math.max(bf * 2, 0.4)],
     max: [ bf + 2.1, L + 1.35, Math.max(bf * 2, 0.4)],
@@ -263,24 +306,30 @@ export function ColumnViewer3D({ shape, L, Pu, Mux }: {
       </group>
 
       {/* Axial load, with its magnitude — an arrow alone says "compression",
-          not "how much". */}
+          not "how much". With a moment below it, the arrow stops a hand's
+          width ABOVE the arc instead of running straight through it: the arc
+          owns the end of the member, and a shaft crossing it read as a third
+          force in the couple. */}
       {Pu > 0 && (
         <>
-          <Arrow from={[0, L + 0.9, 0]} to={[0, L + 0.05, 0]} color="#dc2626" headR={0.13} headH={0.3} />
-          <SceneText position={[0.28, L + 0.75, 0]} fontSize={0.2} color="#b91c1c" anchorX="left">
+          <Arrow from={[0, L + (Mux > 0 ? 1.05 : 0.90), 0]}
+            to={[0, L + (Mux > 0 ? 0.60 : 0.05), 0]} color="#dc2626" headR={0.13} headH={0.3} />
+          <SceneText position={[0.28, L + (Mux > 0 ? 0.85 : 0.75), 0]} fontSize={0.2} color="#b91c1c" anchorX="left">
             {`Pu = ${Pu.toFixed(0)} kN`}
           </SceneText>
         </>
       )}
 
-      {/* End moment. Drawn as a COUPLE — two opposed arrows a lever apart —
-          because a single straight arrow reads as a transverse point load,
-          which is a different thing entirely. */}
+      {/* End moment, as the standard symbol: a curved arrow curling about the
+          loaded end in the plane of bending (X–Y, the plane the section depth
+          spans). The old two opposed straight arrows read as a pair of
+          transverse point loads squeezing the end — a couple has to be
+          reconstructed mentally, where the rotation glyph is read directly. */}
       {Mux > 0 && (
         <>
-          <Arrow from={[-0.75, L + 0.20, 0]} to={[-0.05, L + 0.20, 0]} color="#f59e0b" r={0.03} headR={0.10} headH={0.22} />
-          <Arrow from={[ 0.75, L - 0.05, 0]} to={[ 0.05, L - 0.05, 0]} color="#f59e0b" r={0.03} headR={0.10} headH={0.22} />
-          {/* Below the couple, not above it: above, the text ran straight
+          <MomentArc center={[0, L, 0]} R={0.45}
+            head={-Math.PI / 12} tail={13 * Math.PI / 12} />
+          {/* Below the arc, not above it: above, the text ran straight
               through the Pu arrow and its label. Anchored RIGHT and stopped
               short of the axis, because a left-anchored label at z = 0 runs
               its second half inside the column and is occluded by it. */}
