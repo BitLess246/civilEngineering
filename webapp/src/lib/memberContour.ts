@@ -87,10 +87,22 @@ export interface ContourMember {
  *     KINK where σ changes sign, which no straight edge between two corners
  *     can reproduce.
  *
- * Six per side = 24 points around the ring, against 25-odd stations the solver
+ * Six per side = 24 points around the ring, against the 25 stations the solver
  * already gives along the length (`NS = 24` in `frame3d`), so the mesh is about
- * as fine across as it is along. 600 vertices a member: a 26-member frame is
- * 15 600, which is nothing, and the count is linear in members.
+ * as fine across as it is along.
+ *
+ * THE COST, MEASURED rather than estimated, on a 3×3-bay 3-storey frame — 120
+ * members, 300×500 — built in a vitest probe:
+ *
+ *   600 vertices a member · 72 000 vertices · 138 240 triangles
+ *   2.68 MB of buffers · 79 ms to build the whole mesh
+ *
+ * Linear in members, built once per (key, domain) change, and an order of
+ * magnitude under anything the pool workers carry. What it buys, on a beam of
+ * that frame at its support: τ down the side face reads
+ * 0 · 0.32 · 0.51 · 0.58 · 0.51 · 0.32 · 0 MPa — the parabola, free at both
+ * extreme fibres, and 0.5789 at the neutral axis against the rectangle's exact
+ * 1.5·V/A = 0.5789. Four corners drew all seven of those as one number.
  */
 export const RING_PER_SIDE = 6
 
