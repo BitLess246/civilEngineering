@@ -328,6 +328,16 @@ export default function ModelSpace() {
   // at all, but this one would appear the moment anyone analyses, on top of a
   // model they were looking at for another reason.
   const [showMemStress, setShowMemStress] = useState(false)
+  /**
+   * Tint the SOLID members by |M|. Default OFF, which is the fix: this is a
+   * stress visualisation and it was painting the ordinary geometry view.
+   *
+   * The model view has two jobs — "is my structure built right" and "what did
+   * the analysis find" — and until now the second one ran over the first
+   * whenever a solve existed, with no way to turn it off. Concrete reads as
+   * concrete again unless you ask for the stress reading.
+   */
+  const [tintByMoment, setTintByMoment] = useState(false)
   // ONE band count for BOTH contours. Two settings would let the plate and the
   // member plot be drawn at different resolutions in the same picture, and a
   // reader comparing a slab band against a beam band would be comparing two
@@ -1449,15 +1459,21 @@ export default function ModelSpace() {
   const dispRes = dispCombo?.result ?? null
   const dispComboName = dispCombo?.combo.name ?? null
 
-  // Continuous stress tint, per displayed case. Each member contributes its
-  // station-sampled |M| = max(|My|, |Mz|); the END values are averaged across
-  // every member meeting at that joint, so the colour is continuous from one
-  // element to the next instead of one flat peak colour per member that jumps
-  // at every node; then everything is normalised by the model peak (×0.85, the
-  // same ceiling the flat tint had).
+  // Continuous stress tint, per displayed case: each member's station-sampled
+  // |M| = max(|My|, |Mz|), normalised by the model peak (×0.85, the ceiling the
+  // flat tint had).
+  //
+  // NO JOINT BLENDING, and that is a correction. The first version averaged the
+  // end |M| across every member meeting at a joint so the colour ran
+  // continuously across it. But a moment diagram IS discontinuous at a rigid
+  // joint — the beam and column end moments differ and SUM to zero, that being
+  // what joint equilibrium means — so averaging paints the beam end a number
+  // that is not the beam's moment, and the legend says the colour is |M|.
+  // Sampling along the member already fixes what the flat per-member peak got
+  // wrong; the blend was a separate step that bought smoothness with accuracy.
   const tintRamps = useMemo(() => {
     const map = new Map<string, TintRamp>()
-    if (!model || !dispRes) return map
+    if (!model || !dispRes || !tintByMoment) return map
     const resById = new Map(dispRes.members.map((m) => [m.id, m]))
     const raw = new Map<string, { ts: number[]; ms: number[] }>()
     let peak = 0
@@ -1471,30 +1487,13 @@ export default function ModelSpace() {
       raw.set(m.id, { ts, ms })
     }
     if (peak < 1e-9) return map
-    const endAcc = new Map<string, { s: number; n: number }>()
     for (const m of model.members) {
       const r = raw.get(m.id)
       if (!r) continue
-      for (const [nid, val] of [[m.i, r.ms[0]], [m.j, r.ms[r.ms.length - 1]]] as const) {
-        const a = endAcc.get(nid) ?? { s: 0, n: 0 }
-        a.s += val; a.n += 1
-        endAcc.set(nid, a)
-      }
-    }
-    for (const m of model.members) {
-      const r = raw.get(m.id)
-      if (!r) continue
-      const b0 = endAcc.get(m.i), b1 = endAcc.get(m.j)
-      const vs = r.ms.map((v, i) => {
-        let val = v
-        if (i === 0 && b0 && b0.n > 0) val = b0.s / b0.n
-        if (i === r.ms.length - 1 && b1 && b1.n > 0) val = b1.s / b1.n
-        return Math.min(1, (val / peak) * 0.85)
-      })
-      map.set(m.id, { ts: r.ts, vs })
+      map.set(m.id, { ts: r.ts, vs: r.ms.map((v) => Math.min(1, (v / peak) * 0.85)) })
     }
     return map
-  }, [model, dispRes])
+  }, [model, dispRes, tintByMoment])
 
   // Shell stress contour engine. When the analysis ran with design shells, the
   // stresses are recovered straight from THAT displayed combo's solved DOF
@@ -1980,9 +1979,10 @@ export default function ModelSpace() {
                 {model.members.map((m) => {
                   const a = nodePos.get(m.i), bb = nodePos.get(m.j)
                   if (!a || !bb) return null
-                  // Continuous per-station tint from the displayed case; ends are
-                  // node-blended so the colour reads across joints (see tintRamps).
-                  const ramp = tintRamps.get(m.id)
+                  // Continuous per-station tint from the displayed case — ONLY when
+                  // asked for. Undefined here leaves `memberColor` on the role
+                  // colour, which is what the geometry view is supposed to show.
+                  const ramp = tintByMoment ? tintRamps.get(m.id) : undefined
                   const sec = sectionFor(m.id)
                   const manI = m.offsets?.iEnd, manJ = m.offsets?.jEnd
                   const v3 = (v: [number, number, number]) => new THREE.Vector3(v[0], v[1], v[2])
@@ -3741,7 +3741,7 @@ export default function ModelSpace() {
                   <Row label="Extremes" value={`M ${f1(govRes.Mmax)} kN·m`}
                     sub={`V ${f1(govRes.Vmax)} · N ${f1(govRes.Nmax)} kN`} />
                   {orphans > 0 && <Row alert label="⚠ Orphan edges" value={`${orphans}`} sub="slab edges with no member" />}
-                  <p className="mt-1 text-[11px] text-muted">Members tinted toward red by |M| at every station of the displayed case, joint-blended so the colour reads continuously across members; blue = quiet, red = the model peak. Click one for its diagrams.</p>
+                  <p className="mt-1 text-[11px] text-muted">Tint members by bending moment (Display tab) colours them toward red by |M| at every station of the displayed case; each member shows its OWN moment, so the colour steps at a joint the way the diagram does. Click one for its diagrams.</p>
                 </Sec>
               )}
 
@@ -4833,6 +4833,24 @@ export default function ModelSpace() {
                     )
                   })()}
                 </div>
+                {/* MEMBER TINT BY |M|.
+                    Its own switch, and OFF by default. A model view has two
+                    jobs — "is my structure built right" and "what did the
+                    analysis find" — and this one used to run over the other
+                    the moment a solve existed, with nothing to turn it off. */}
+                <div>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={tintByMoment} disabled={!dispRes}
+                      onChange={(e) => setTintByMoment(e.target.checked)} />
+                    Tint members by bending moment
+                  </label>
+                  <p className="mt-1 text-[11px] leading-snug text-muted">
+                    {!dispRes
+                      ? 'Analyse the model first — there is no moment diagram to colour from yet.'
+                      : 'Colours the solid members toward red by |M| at every station of the displayed case. Off leaves the geometry in its role colours.'}
+                  </p>
+                </div>
+
                 {/* BEAM / COLUMN STRESS.
                     The frame counterpart of the plate contour above. It is the
                     same internal forces the force diagrams draw — this module

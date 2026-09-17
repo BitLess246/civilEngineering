@@ -6,51 +6,24 @@
 //   1. PLATE GROUPING — one flat 2D projection of every panel in the model
 //      overlaps walls onto slabs and storey upon storey. Each panel gets its
 //      own best-fit plane and its own tile instead.
-//   2. A COLOUR RAMP that actually starts at blue (the old `heatColor` jumped
-//      straight to cyan, contradicting its own comment).
-//   3. BARYCENTRIC SAMPLING — the maths the canvas rasteriser uses to blend
+//   2. BARYCENTRIC SAMPLING — the maths the canvas rasteriser uses to blend
 //      the three corner values across a triangle, which is what makes the
 //      contour continuous from one element to the next (a shared edge
 //      interpolates the same two node colours on both sides).
+//
+// NO COLOUR RAMP LIVES HERE. It did — a blue→cyan→green→yellow→red ramp with
+// its own `heatRGB`/`heatColorCss`/`heatGradientCss` — and NOTHING imported
+// any of it: the panel's legend takes `rampSwatches` from `lib/stressScale`
+// and its canvas takes `stressColorRGB` from the same place, which is what
+// keeps the swatch and the pixel the same number. A second ramp definition
+// beside the real one is the drift that #771 existed to remove, so it is gone
+// rather than left as a tempting import.
 // ─────────────────────────────────────────────────────────────────────────
 import { triFrame, type ShellNode, type ShellElem, type V3 } from '../../engine/shell'
 
 export type StressKey =
   | 'vmSurf' | 'vonMises' | 'sigmaX' | 'sigmaY' | 'tauXY'
   | 'sigma1' | 'sigma2' | 'Mx' | 'My' | 'Mxy'
-
-// ── Colour ramp: blue → cyan → green → yellow → red ────────────────────────
-const RAMP: [number, number, number][] = [
-  [0, 0, 255],      // 0.00 blue
-  [0, 255, 255],    // 0.25 cyan
-  [0, 255, 0],      // 0.50 green
-  [255, 255, 0],    // 0.75 yellow
-  [255, 0, 0],      // 1.00 red
-]
-
-/** Piecewise-linear sample of the ramp at t ∈ [0,1] (clamped). */
-export function heatRGB(t: number): [number, number, number] {
-  const c = Math.max(0, Math.min(1, t))
-  const seg = Math.min(RAMP.length - 2, Math.floor(c * (RAMP.length - 1)))
-  const f = c * (RAMP.length - 1) - seg
-  const a = RAMP[seg], b = RAMP[seg + 1]
-  return [
-    Math.round(a[0] + (b[0] - a[0]) * f),
-    Math.round(a[1] + (b[1] - a[1]) * f),
-    Math.round(a[2] + (b[2] - a[2]) * f),
-  ]
-}
-
-export const heatColorCss = (t: number): string => {
-  const [r, g, b] = heatRGB(t)
-  return `rgb(${r},${g},${b})`
-}
-
-/** The same ramp as a CSS linear-gradient (bottom = 0), for the legend bar. */
-export function heatGradientCss(): string {
-  const stops = RAMP.map((_, i) => `${heatColorCss(i / (RAMP.length - 1))} ${(i / (RAMP.length - 1)) * 100}%`)
-  return `linear-gradient(to top, ${stops.join(', ')})`
-}
 
 // ── Plate grouping + per-panel best-fit projection ─────────────────────────
 
