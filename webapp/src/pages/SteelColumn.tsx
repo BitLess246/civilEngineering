@@ -145,7 +145,7 @@ function ColumnTab() {
 
       <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
         <Suspense fallback={<Spinner />}>
-          <ColumnViewer3D shape={shape} L={L} Pu={Pu} Mux={Mux} />
+          <ColumnViewer3D shape={shape} L={L} Pu={Pu} Mux={Mux} Muy={Muy} />
         </Suspense>
         {res && (<>
           <ResultCard title="Axial §E3">

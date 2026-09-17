@@ -224,19 +224,23 @@ export function BeamViewer3D({ shape, span, wDead, wLive }: {
   const shapes = useMemo(() => wShape(shape), [shape])
   const d = (shape.d ?? 250) / 1000 / 2
   const bf = (shape.bf ?? 150) / 1000 / 2
+  // A load that is not applied must not be drawn — and must not reserve the
+  // space it would have occupied either, or the fit frames a band of empty
+  // air above the member and shrinks the beam to fill it.
+  const loaded = wDead + wLive !== 0
   // The box is what the fit crops to, so slack in it is dead space on screen —
   // and on a phone, where the canvas is nearly square while the beam is long
   // and thin, the fit is already leaving bands top and bottom. These bounds are
   // now what is actually DRAWN: the supports below, the load curtain and its
   // label above, and half a flange either side.
   const box = useMemo<{ min:[number,number,number]; max:[number,number,number] }>(() => {
-    const loadTop = d + udlHeight(2 * d, span) + 0.34   // curtain + label
+    const loadTop = loaded ? d + udlHeight(2 * d, span) + 0.34 : d + 0.15
     const below = d + 0.42                              // support cone + span label
     return {
       min: [-bf * 1.2, -below, -0.15],
       max: [ bf * 1.2, loadTop, span + 0.15],
     }
-  }, [bf, d, span])
+  }, [bf, d, span, loaded])
 
   return (
     // Flatter than the default three-quarter view. A 6 m beam drawn on a strong
@@ -253,7 +257,7 @@ export function BeamViewer3D({ shape, span, wDead, wLive }: {
           while everything else pointed elsewhere. (The COLUMN view rotates by
           +90° on purpose: a column should stand up.) */}
       <ExtrudedSection shapes={shapes} length={span} color="#8b9fc1" />
-      <DistLoad span={span} w={wDead + wLive} top={d} bf={bf} />
+      {loaded && <DistLoad span={span} w={wDead + wLive} top={d} bf={bf} />}
       <PinSupport3D pos={[0, -d, 0]} />
       <RollerSupport3D pos={[0, -d, span]} />
       {/* +π/2 about Y turns the label's +Z face towards +X, which is where the
@@ -271,15 +275,19 @@ export function BeamViewer3D({ shape, span, wDead, wLive }: {
 
 // ─── Column 3D ─────────────────────────────────────────────────────────────
 
-export function ColumnViewer3D({ shape, L, Pu, Mux }: {
-  shape: AiscShape; L: number; Pu: number; Mux: number
+export function ColumnViewer3D({ shape, L, Pu, Mux, Muy }: {
+  shape: AiscShape; L: number; Pu: number; Mux: number; Muy: number
 }) {
   const shapes = useMemo(() => wShape(shape), [shape])
   const bf = (shape.bf ?? 150) / 1000 / 2
+  // A symbol is drawn only for a force that IS there: zero axial, zero moment
+  // about either axis — nothing of that kind is applied, and drawing it anyway
+  // invented loads the run was never checked against.
+  const hasMoment = Mux !== 0 || Muy !== 0
 
-  // Wide enough for the annotations, not just the steel: the moment arc
-  // reaches ±0.45 m about the top, the Pu arrow stops a hand's width above
-  // it, and the section label runs off to the right — anything outside the
+  // Wide enough for the annotations, not just the steel: the moment arcs
+  // reach ±0.45 m about the top, the Pu arrow stops a hand's width above
+  // them, and the section label runs off to the right — anything outside the
   // box is what the fit crops.
   const box = useMemo<{ min:[number,number,number]; max:[number,number,number] }>(() => ({
     min: [-1.1, -0.4, -Math.max(bf * 2, 0.4)],
@@ -307,25 +315,30 @@ export function ColumnViewer3D({ shape, L, Pu, Mux }: {
 
       {/* Axial load, with its magnitude — an arrow alone says "compression",
           not "how much". With a moment below it, the arrow stops a hand's
-          width ABOVE the arc instead of running straight through it: the arc
-          owns the end of the member, and a shaft crossing it read as a third
-          force in the couple. */}
-      {Pu > 0 && (
+          width ABOVE the arcs instead of running straight through them: an
+          arc owns the end of the member, and a shaft crossing it read as a
+          third force in the system. Negative Pu is uplift, so the arrow turns
+          round and points AWAY from the member — a downward shaft labelled
+          with a negative number would flatly contradict itself. */}
+      {Pu !== 0 && (
         <>
-          <Arrow from={[0, L + (Mux > 0 ? 1.05 : 0.90), 0]}
-            to={[0, L + (Mux > 0 ? 0.60 : 0.05), 0]} color="#dc2626" headR={0.13} headH={0.3} />
-          <SceneText position={[0.28, L + (Mux > 0 ? 0.85 : 0.75), 0]} fontSize={0.2} color="#b91c1c" anchorX="left">
+          <Arrow
+            from={Pu > 0 ? [0, L + (hasMoment ? 1.05 : 0.90), 0] : [0, L + (hasMoment ? 0.60 : 0.05), 0]}
+            to={Pu > 0 ? [0, L + (hasMoment ? 0.60 : 0.05), 0] : [0, L + (hasMoment ? 1.05 : 0.90), 0]}
+            color="#dc2626" headR={0.13} headH={0.3} />
+          <SceneText position={[0.28, L + (hasMoment ? 0.85 : 0.75), 0]} fontSize={0.2} color="#b91c1c" anchorX="left">
             {`Pu = ${Pu.toFixed(0)} kN`}
           </SceneText>
         </>
       )}
 
-      {/* End moment, as the standard symbol: a curved arrow curling about the
-          loaded end in the plane of bending (X–Y, the plane the section depth
-          spans). The old two opposed straight arrows read as a pair of
-          transverse point loads squeezing the end — a couple has to be
-          reconstructed mentally, where the rotation glyph is read directly. */}
-      {Mux > 0 && (
+      {/* End moments, as the standard symbol: a curved arrow curling about the
+          loaded end in the plane of bending. Mux is strong-axis — the arc
+          stands in X–Y, the plane the section depth spans. The old two
+          opposed straight arrows read as a pair of transverse point loads
+          squeezing the end — a couple has to be reconstructed mentally, where
+          the rotation glyph is read directly. */}
+      {Mux !== 0 && (
         <>
           <MomentArc center={[0, L, 0]} R={0.45}
             head={-Math.PI / 12} tail={13 * Math.PI / 12} />
@@ -335,6 +348,23 @@ export function ColumnViewer3D({ shape, L, Pu, Mux }: {
               its second half inside the column and is occluded by it. */}
           <SceneText position={[-0.22, L - 0.32, 0]} fontSize={0.2} color="#b45309" anchorX="right">
             {`Mux = ${Mux.toFixed(0)} kN-m`}
+          </SceneText>
+        </>
+      )}
+
+      {/* Weak-axis moment — the same glyph about the OTHER bending plane. The
+          group's −90° about Y maps the X–Y arc into Y–Z (normal along X, the
+          section's strong axis) with the head landing on the camera side.
+          Smaller radius, so where the two planes meet near the crown the arcs
+          pass at different heights (L+0.45 vs L+0.36) and never touch. */}
+      {Muy !== 0 && (
+        <>
+          <group rotation={[0, -Math.PI / 2, 0]}>
+            <MomentArc center={[0, L, 0]} R={0.36}
+              head={-Math.PI / 12} tail={13 * Math.PI / 12} />
+          </group>
+          <SceneText position={[-0.22, L - 0.60, 0]} fontSize={0.2} color="#b45309" anchorX="right">
+            {`Muy = ${Muy.toFixed(0)} kN-m`}
           </SceneText>
         </>
       )}
