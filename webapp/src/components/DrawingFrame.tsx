@@ -28,12 +28,16 @@
 // drawing per resize.
 // ─────────────────────────────────────────────────────────────────────────
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { ANNOTATION_FLOOR_PX, minDrawingWidth } from '../lib/drawingScale'
+import {
+  ANNOTATION_FLOOR_PX, DRAWING_MAX_VH, drawingWidthBounds,
+} from '../lib/drawingScale'
 
 export interface DrawingFrameProps {
   children: ReactNode
   /** Override the floor for one figure. Almost nothing should. */
   floorPx?: number
+  /** Override the height ceiling, as a fraction of the viewport. */
+  maxVh?: number
   /** Extra classes for the scroll frame. */
   className?: string
   /**
@@ -53,14 +57,16 @@ export interface DrawingFrameProps {
  * renders unchanged, because a frame that cannot find a drawing should be
  * invisible rather than clever.
  */
-export function DrawingFrame({ children, floorPx = ANNOTATION_FLOOR_PX, className = '', label }: DrawingFrameProps) {
+export function DrawingFrame({
+  children, floorPx = ANNOTATION_FLOOR_PX, maxVh = DRAWING_MAX_VH, className = '', label,
+}: DrawingFrameProps) {
   const frame = useRef<HTMLDivElement>(null)
-  const [minW, setMinW] = useState(0)
+  const [box, setBox] = useState({ min: 0, max: 0 })
 
   const measure = useCallback(() => {
     const svg = frame.current?.querySelector('svg')
-    const vb = svg?.viewBox?.baseVal?.width
-    if (!svg || !vb) return
+    const vb = svg?.viewBox?.baseVal
+    if (!svg || !vb?.width) return
     let units = Infinity
     for (const t of svg.querySelectorAll('text')) {
       if (!t.textContent?.trim()) continue
@@ -70,8 +76,11 @@ export function DrawingFrame({ children, floorPx = ANNOTATION_FLOOR_PX, classNam
       if (Number.isFinite(fs) && fs > 0 && fs < units) units = fs
     }
     // A figure with no annotation has nothing to keep legible; leave it fluid.
-    setMinW(units === Infinity ? 0 : Math.ceil(minDrawingWidth(vb, units, floorPx)))
-  }, [floorPx])
+    if (units === Infinity) { setBox({ min: 0, max: 0 }); return }
+    const b = drawingWidthBounds(
+      vb.width, vb.height, units, window.innerHeight * maxVh, floorPx)
+    setBox({ min: Math.ceil(b.min), max: Math.ceil(b.max) })
+  }, [floorPx, maxVh])
 
   useEffect(() => {
     measure()
@@ -81,28 +90,46 @@ export function DrawingFrame({ children, floorPx = ANNOTATION_FLOOR_PX, classNam
     // labels (a schedule row added, a units switch) and change its own floor.
     const ro = new ResizeObserver(measure)
     ro.observe(el)
-    return () => { ro.disconnect() }
+    // The ceiling is a fraction of the VIEWPORT, which a ResizeObserver on the
+    // frame does not see when only the window height changes.
+    window.addEventListener('resize', measure)
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure) }
   }, [measure, children])
 
   // `tabIndex={0}` only while it can actually scroll: a focus stop on a box
   // with nothing to scroll is a keyboard trap for no reason.
-  const scrolls = minW > 0
+  const scrolls = box.min > 0
   return (
     <div
       ref={frame}
-      // `width: 0; min-width: 100%` is load-bearing, not a flourish.
-      // `overflow-x: auto` does NOT stop a box contributing its content's
-      // intrinsic width to a grid or flex ancestor, and a grid track's
-      // `min-width: auto` happily grows to fit. The first version used
-      // `max-w-full` alone and pushed the /slab-design page 236 px wider than
-      // the viewport at 1280 — a horizontal-scroll regression introduced by
-      // the fix for an unrelated problem. Declaring width 0 makes the frame
-      // contribute nothing, and min-width 100% fills the track it was given.
-      style={{ width: 0, minWidth: '100%' }}
-      className={`overflow-x-auto ${className}`}
+      // `contain: inline-size` is load-bearing, not a flourish, and it took
+      // three tries to get right — each one measured, because each failed
+      // somewhere the previous one passed.
+      //
+      // `overflow-x: auto` alone does NOT stop a box contributing its
+      // content's intrinsic width to a grid ancestor. On /slab-design the
+      // leak was `DIV.space-y-5 lg:sticky` — the GRID ITEM three levels above
+      // this frame, carrying `min-width: auto` — whose track computed to
+      // 833 px instead of its share and pushed the page 236 px past the
+      // viewport at 1280. Nothing this component can set on ITSELF fixes an
+      // ancestor's automatic minimum size.
+      //
+      // `width: 0; min-width: 100%` did fix that (a zero width contributes
+      // nothing upward) and broke /truss by 47–55 px, because in a FLEX row
+      // `min-width: 100%` means 100% of the flex container and the frame then
+      // demands the whole row alongside its siblings.
+      //
+      // Inline-size containment is the actual tool: the frame's inline size is
+      // computed without regard to its descendants, so it contributes nothing
+      // upward AND still takes its width from whatever box it is placed in —
+      // grid track, flex row or plain block alike.
+      style={{ contain: 'inline-size' }}
+      className={`w-full overflow-x-auto ${className}`}
       {...(scrolls ? { tabIndex: 0, role: 'region', 'aria-label': label } : {})}
     >
-      <div style={minW ? { minWidth: minW } : undefined}>{children}</div>
+      <div style={box.min ? { minWidth: box.min, maxWidth: box.max || undefined } : undefined}>
+        {children}
+      </div>
     </div>
   )
 }
