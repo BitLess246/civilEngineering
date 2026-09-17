@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  sectionCorners, memberValues, memberContourDomain, memberPeak,
+  sectionRing, RING_PER_SIDE, memberValues, memberContourDomain, memberPeak,
   memberContourGeometry, isSignedMember, MEMBER_STRESS_KEYS,
   type ContourMember, type MemberStressKey,
 } from './memberContour'
@@ -57,6 +57,14 @@ const asMember = (
 const BEAM = asMember(beam(), [0, 0, 0], [6, 0, 0])
 const COLUMN = asMember(column(), [0, 0, 0], [0, 3, 0], 90)
 
+// Ring indices, named once. The walk runs top face (+z→−z), then the −z side
+// downward, then the bottom face, then the +z side back up, each side
+// contributing `RING_PER_SIDE` points and leaving its end corner to the next.
+const N = RING_PER_SIDE
+const R = 4 * N
+const TOP = 0, BOT = 2 * N            // the two extreme-fibre corners
+const MID_SIDE = 2 * N - N / 2        // halfway down the −z side ⇒ y ≈ 0
+
 describe('the key set', () => {
   it('marks only σ as signed', () => {
     expect(isSignedMember('sigma')).toBe(true)
@@ -67,39 +75,113 @@ describe('the key set', () => {
   })
 })
 
+describe('the section ring', () => {
+  it('is a strict generalisation of the four corners it replaces', () => {
+    // One point per side IS the old outline, in the old order. The refinement
+    // adds samples between the corners; it does not move the shape.
+    expect(sectionRing(S, 1).map((f) => [f.y, f.z])).toEqual([
+      [S.cy, S.cz], [S.cy, -S.cz], [-S.cy, -S.cz], [-S.cy, S.cz],
+    ])
+  })
+
+  it('closes without repeating a point', () => {
+    const ring = sectionRing(S)
+    expect(ring).toHaveLength(R)
+    const seen = new Set(ring.map((f) => `${f.y.toFixed(9)},${f.z.toFixed(9)}`))
+    expect(seen.size, 'a duplicated ring point makes a degenerate quad').toBe(R)
+  })
+
+  it('stays on the outline — never inside it, never outside', () => {
+    for (const f of sectionRing(S)) {
+      expect(Math.abs(f.y)).toBeLessThanOrEqual(S.cy + 1e-9)
+      expect(Math.abs(f.z)).toBeLessThanOrEqual(S.cz + 1e-9)
+      const onFace = Math.abs(Math.abs(f.y) - S.cy) < 1e-9 || Math.abs(Math.abs(f.z) - S.cz) < 1e-9
+      expect(onFace, `(${f.y}, ${f.z}) is not on a face`).toBe(true)
+    }
+  })
+
+  it('leaves the four corners shear-free and gives every other point real flow', () => {
+    // Q vanishes at the extreme fibre, which is the physics that makes a
+    // corner free. It is a CONSEQUENCE of Q(y), not a special case in the
+    // code, so asserting it here is asserting the formula.
+    const ring = sectionRing(S)
+    const corners = [0, N, 2 * N, 3 * N]
+    for (const c of corners) {
+      expect(ring[c].Qz, `corner ${c} Qz`).toBeUndefined()
+      expect(ring[c].Qy, `corner ${c} Qy`).toBeUndefined()
+    }
+    // Halfway down a side face: Qz = b·h²/8, its maximum.
+    const mid = ring[MID_SIDE]
+    expect(mid.y).toBeCloseTo(0, 9)
+    expect(mid.Qz).toBeCloseTo((b * h * h) / 8, 6)
+    expect(mid.tz).toBe(b)
+  })
+
+  it('refuses a degenerate subdivision rather than emitting nothing', () => {
+    expect(sectionRing(S, 0)).toHaveLength(4)
+    expect(sectionRing(S, -3)).toHaveLength(4)
+    expect(sectionRing(S, 2.9)).toHaveLength(8)   // floored, not rounded
+  })
+})
+
 describe('values around the section', () => {
   it('gives the two faces opposite signs — the whole content of the plot', () => {
     // A member coloured by one scalar per station draws a beam in hogging
     // identically to one in sagging. These must differ in SIGN, not magnitude.
     const vals = memberValues(BEAM, 'sigma')
     expect(vals).toHaveLength(BEAM.forces.xs.length)
-    const [topA, , botA] = [vals[0][0], vals[0][1], vals[0][2]]
+    expect(vals[0]).toHaveLength(R)
+    const topA = vals[0][TOP], botA = vals[0][BOT]
     expect(Math.sign(topA)).toBe(-Math.sign(botA))
     expect(topA).not.toBeCloseTo(botA, 6)
   })
 
   it('swaps which face is in tension between the hogging and sagging ends', () => {
     const vals = memberValues(BEAM, 'sigma')
-    const top = vals.map((v) => v[0])       // corner 0 is +y, the top
+    const top = vals.map((v) => v[TOP])     // ring point 0 is +y, the top
     expect(Math.min(...top)).toBeLessThan(0)
     expect(Math.max(...top)).toBeGreaterThan(0)
     // Hogging at the built-in end puts the top in tension.
     expect(top[0]).toBeGreaterThan(0)
   })
 
-  it('holds τ constant around the section, because its maximum is not at a corner', () => {
+  it('draws τ as the parabola it is, not the section maximum flat all round', () => {
+    // THE DEFECT THIS RING FIXES. With four corner samples every one of them
+    // is shear-free, so τ had to be painted as the section ENVELOPE — one
+    // number repeated four times, which draws each member in a single flat
+    // colour. Here it is evaluated where it is drawn.
     const vals = memberValues(BEAM, 'tau')
     for (const row of vals) {
-      expect(new Set(row.map((v) => v.toFixed(12))).size).toBe(1)
-      expect(row[0]).toBeGreaterThanOrEqual(0)
+      expect(row).toHaveLength(R)
+      for (const v of row) expect(v).toBeGreaterThanOrEqual(0)
+      // Free at both extreme fibres: Qz(±h/2) = 0 and there is no torsion.
+      expect(row[TOP]).toBeCloseTo(0, 9)
+      expect(row[BOT]).toBeCloseTo(0, 9)
     }
-    expect(Math.max(...vals.map((r) => r[0]))).toBeGreaterThan(0)
+    // At the built-in end (the largest shear) the neutral axis carries it.
+    const atA = vals[0]
+    expect(atA[MID_SIDE]).toBeGreaterThan(0)
+    expect(atA[MID_SIDE]).toBeGreaterThan(atA[TOP])
+    // And it is a PARABOLA, so the mid-height value is 3V/2A — exactly 1.5×
+    // the average — which is the closed form for a rectangle.
+    const V = Math.abs(BEAM.forces.Vy[0])
+    const Aarea = (b * h)
+    expect(atA[MID_SIDE]).toBeCloseTo(1.5 * (V * 1000) / Aarea, 6)
   })
 
-  it('keeps von Mises non-negative and at least |σ| at every corner', () => {
+  it('varies τ monotonically from the corner to the neutral axis', () => {
+    // One flat number would satisfy 'non-negative' and 'zero at the corners'
+    // is not enough on its own either — this asserts the SHAPE down the face.
+    const row = memberValues(BEAM, 'tau')[0]
+    const face = Array.from({ length: N + 1 }, (_, k) => row[(N + k) % R])
+    for (let k = 1; k <= N / 2; k++) expect(face[k]).toBeGreaterThan(face[k - 1])
+    expect(new Set(face.map((v) => v.toFixed(9))).size).toBeGreaterThan(3)
+  })
+
+  it('keeps von Mises non-negative and at least |σ| at every ring point', () => {
     const sig = memberValues(BEAM, 'sigma'), vm = memberValues(BEAM, 'vonMises')
     for (let i = 0; i < sig.length; i++) {
-      for (let c = 0; c < 4; c++) {
+      for (let c = 0; c < R; c++) {
         expect(vm[i][c]).toBeGreaterThanOrEqual(Math.abs(sig[i][c]) - 1e-9)
       }
     }
@@ -141,11 +223,11 @@ describe('geometry', () => {
   const dom = memberContourDomain([BEAM], 'sigma')
   const g = memberContourGeometry([BEAM], 'sigma', dom)!
 
-  it('emits four vertices per station and four faces per bay', () => {
+  it('emits one vertex per ring point per station, and a quad per ring bay', () => {
     const n = BEAM.forces.xs.length
-    expect(g.position).toHaveLength(n * 4 * 3)
-    expect(g.value, 'one SCALAR per vertex, not three colour channels').toHaveLength(n * 4)
-    expect(g.index).toHaveLength((n - 1) * 4 * 2 * 3)
+    expect(g.position).toHaveLength(n * R * 3)
+    expect(g.value, 'one SCALAR per vertex, not three colour channels').toHaveLength(n * R)
+    expect(g.index).toHaveLength((n - 1) * R * 2 * 3)
   })
 
   it('indexes only vertices that exist', () => {
@@ -182,11 +264,12 @@ describe('geometry', () => {
   })
 
   it('puts the prism on the member, at the section half-width', () => {
-    // Station 0 of the beam sits at x = 0; its four corners are ±h/2 up and
-    // ±b/2 across, in metres, grown by the proud factor.
+    // Station 0 of the beam sits at x = 0; its ring spans ±h/2 up and ±b/2
+    // across, in metres, grown by the proud factor.
     const p = (v: number, c: number) => g.position[v * 3 + c]
-    for (let c = 0; c < 4; c++) expect(p(c, 0)).toBeCloseTo(0, 6)
-    const ys = [0, 1, 2, 3].map((c) => p(c, 1)), zs = [0, 1, 2, 3].map((c) => p(c, 2))
+    const all = Array.from({ length: R }, (_, c) => c)
+    for (const c of all) expect(p(c, 0)).toBeCloseTo(0, 6)
+    const ys = all.map((c) => p(c, 1)), zs = all.map((c) => p(c, 2))
     expect(Math.max(...ys)).toBeCloseTo((h / 2 / 1000) * 1.015, 6)
     expect(Math.min(...ys)).toBeCloseTo(-(h / 2 / 1000) * 1.015, 6)
     expect(Math.max(...zs)).toBeCloseTo((b / 2 / 1000) * 1.015, 6)
@@ -195,7 +278,7 @@ describe('geometry', () => {
   it('drops a beam prism to the centroid, because the node is the TOP', () => {
     const dropped = memberContourGeometry(
       [{ ...BEAM, drop: 0.25 }], 'sigma', dom)!
-    for (let v = 0; v < 4; v++) {
+    for (let v = 0; v < R; v++) {
       expect(dropped.position[v * 3 + 1]).toBeCloseTo(g.position[v * 3 + 1] - 0.25, 6)
     }
   })
@@ -227,11 +310,11 @@ describe("the column uses the SOLVER's local axes, not the renderer's", () => {
     // rot = 90° turns y′ toward z′, which is what the bridge gives a vertical.
     const [, yp, zp] = localAxes([0, 1, 0], 90)
     const g2 = memberContourGeometry([COLUMN], 'sigma', memberContourDomain([COLUMN], 'sigma'))!
-    const corners = sectionCorners(S)
-    for (let c = 0; c < 4; c++) {
-      const oy = (corners[c].y / 1000) * 1.015, oz = (corners[c].z / 1000) * 1.015
+    const ring = sectionRing(S)
+    for (let c = 0; c < R; c++) {
+      const oy = (ring[c].y / 1000) * 1.015, oz = (ring[c].z / 1000) * 1.015
       for (let k = 0; k < 3; k++) {
-        expect(g2.position[c * 3 + k], `corner ${c} axis ${k}`)
+        expect(g2.position[c * 3 + k], `ring ${c} axis ${k}`)
           .toBeCloseTo(yp[k] * oy + zp[k] * oz, 6)
       }
     }

@@ -23,7 +23,7 @@ import { memberDiagramRibbon, type DiagramComp } from '../../engine/memberDiagra
 import { footingPrism } from '../../engine/footingLayout'
 import { shapeByName, effectiveSection } from '../../engine/aiscSections'
 import { buildSectionShapes } from '../../lib/sectionShapes3d'
-import { SEL, LOAD_COLOR, levelDrop, memberColor, DIAG_COLOR, UP, TRIB_COLOR, slabTributaryPolys, rampAt, type TribKind, type TintRamp } from './sceneTokens'
+import { SEL, LOAD_COLOR, levelDrop, memberColor, DIAG_COLOR, UP, TRIB_COLOR, slabTributaryPolys, type TribKind } from './sceneTokens'
 
 /**
  * The EDGES of the mesh this sits inside, drawn only in wireframe.
@@ -68,12 +68,8 @@ const STICK_PICK = 0.14
  * description of the same member — the one the stiffness matrix is assembled
  * from — and it runs node to node by definition.
  */
-export function MemberStick3D({ a, b, role, selected, tint = 0, ramp, material, onPick }: {
+export function MemberStick3D({ a, b, role, selected, material, onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
-  /** 0–1 utilisation tint, exactly as the solid takes it — see `memberColor`. */
-  tint?: number
-  /** Station tint along the member — wins over the flat `tint` when present. */
-  ramp?: TintRamp
   material?: string
   onPick: () => void
 }) {
@@ -83,28 +79,17 @@ export function MemberStick3D({ a, b, role, selected, tint = 0, ramp, material, 
     const quat = len > 1e-9
       ? new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.clone().normalize())
       : new THREE.Quaternion()
-    // With a ramp the line runs through the tint stations (a 2-point line can
-    // only interpolate end to end and misses the diagram's shape); its vertex
-    // colours make the skeleton read the same stress story as the solid.
-    const ts = ramp && !selected ? ramp.ts : [0, 1]
-    const pts = ts.map((t) => a.clone().lerp(b, t))
-    const geo = new THREE.BufferGeometry().setFromPoints(pts)
-    const colors = new Float32Array(pts.length * 3)
-    const c = new THREE.Color()
-    for (let i = 0; i < pts.length; i++) {
-      c.set(memberColor(role, selected, ramp && !selected ? ramp.vs[i] : tint, material))
-      colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ vertexColors: true }))
     return {
-      line, mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len,
+      line: new THREE.BufferGeometry().setFromPoints([a, b]),
+      mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len,
     }
-  }, [a, b, role, selected, tint, ramp, material])
-  useEffect(() => () => { line.geometry.dispose(); (line.material as THREE.Material).dispose() }, [line])
+  }, [a, b])
+  const color = memberColor(role, selected, 0, material)
   return (
     <group>
-      <primitive object={line} />
+      <lineSegments geometry={line}>
+        <lineBasicMaterial color={color} />
+      </lineSegments>
       {/* The pick target. Invisible rather than absent: a line this thin is
           almost unclickable, and selection has to keep working in wireframe. */}
       <mesh position={mid} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>
@@ -163,12 +148,8 @@ export function Nodes3D({ nodePos, size = 0.07 }: {
   )
 }
 
-export function Member3D({ a, b, role, selected, tint = 0, ramp, sec, style = 'solid', onPick }: {
+export function Member3D({ a, b, role, selected, sec, style = 'solid', onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
-  /** 0–1 utilisation tint (|M| relative to the model max) after analysis. */
-  tint?: number
-  /** Station tint along the member — wins over the flat `tint` when present. */
-  ramp?: TintRamp
   /** the member's own section, drawn to scale (mm → m). */
   sec?: { b: number; h: number; material?: string }
   /** Solid concrete, ghosted (a cage is being read through it) or wireframe —
@@ -186,40 +167,18 @@ export function Member3D({ a, b, role, selected, tint = 0, ramp, sec, style = 's
   const tz = sec ? sec.b / 1000 : role === 'column' ? 0.3 : 0.22
   // the node is the top of a beam, not its centroid — see levelDrop
   const drop = levelDrop(role, ty, a, b)
-  const color = memberColor(role, selected, tint, sec?.material)
-  // Axially segmented box with per-vertex colours: the tint varies ALONG the
-  // member the way the force diagram does, instead of one flat peak colour
-  // per member that jumps at every joint.
-  const geom = useMemo(() => {
-    const useRamp = !!ramp && !selected
-    const segs = useRamp ? Math.max(1, ramp!.ts.length - 1) : 1
-    const g = new THREE.BoxGeometry(len, ty, tz, segs, 1, 1)
-    if (useRamp) {
-      const pos = g.getAttribute('position') as THREE.BufferAttribute
-      const colors = new Float32Array(pos.count * 3)
-      const c = new THREE.Color()
-      for (let i = 0; i < pos.count; i++) {
-        const t = (pos.getX(i) + len / 2) / (len || 1)
-        c.set(memberColor(role, false, rampAt(ramp!, t), sec?.material))
-        colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b
-      }
-      g.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-    }
-    return g
-  }, [len, ty, tz, ramp, selected, role, sec?.material])
-  useEffect(() => () => geom.dispose(), [geom])
-  const useVC = !!ramp && !selected
+  const color = memberColor(role, selected, 0, sec?.material)
   return (
-    <mesh geometry={geom} position={[mid.x, mid.y - drop, mid.z]} quaternion={quat}
+    <mesh position={[mid.x, mid.y - drop, mid.z]} quaternion={quat}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
+      <boxGeometry args={[len, ty, tz]} />
       {/* See-through while the cages are shown, and again in wireframe — solid
           concrete hides the steel inside it, which made "show reinforcement
           cages" look like it did nothing at all. The `key` is what makes the
           change work rather than merely look wired: three will not apply a
           transparent false → true change to a material that already exists, so
           the material has to be rebuilt. See modelSpace/viewMode.ts. */}
-      <meshStandardMaterial key={`${surfaceKey(style)}${useVC ? '-vc' : ''}`} color={useVC ? '#ffffff' : color}
-        vertexColors={useVC} {...surfaceMaterial(style)} />
+      <meshStandardMaterial key={surfaceKey(style)} color={color} {...surfaceMaterial(style)} />
     </mesh>
   )
 }
@@ -278,17 +237,9 @@ export function SlackMember3D({ a, b }: { a: THREE.Vector3; b: THREE.Vector3 }) 
  *  extrude (+Z) runs along the member and its strong axis (depth d) stays
  *  vertical for beams/girders. Falls back to the box Member3D if the shape is
  *  unknown. */
-
-/** Steel member drawn as its true AISC cross-section, extruded along the member
- *  axis (i→j). The profile is built in the local XY plane then oriented so its
- *  extrude (+Z) runs along the member and its strong axis (depth d) stays
- *  vertical for beams/girders. Falls back to the box Member3D if the shape is
- *  unknown. */
-export function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, ramp, axisRotation, style = 'solid', onPick }: {
+export function MemberSteel3D({ a, b, role, shapeName, selected, axisRotation, style = 'solid', onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; shapeName: string
-  selected: boolean; tint?: number
-  /** Station tint along the member — wins over the flat `tint` when present. */
-  ramp?: TintRamp
+  selected: boolean
   /** Explicit local-axis rotation (°). Absent ⇒ the role default (columns 90). */
   axisRotation?: number
   /** See `viewMode`. A steel section wireframes to its own profile outline,
@@ -324,43 +275,19 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, ramp,
 
   const color = useMemo(() => {
     if (selected) return SEL
-    const base = new THREE.Color('#64748b')   // steel grey
-    return tint > 0 ? `#${base.lerp(new THREE.Color('#dc2626'), tint).getHexString()}` : `#${base.getHexString()}`
-  }, [selected, tint])
-
-  // Extrude with as many axial steps as tint stations, coloured per vertex by
-  // axial position — the steel section reads the same continuous stress story
-  // the concrete box does.
-  const useVC = !!ramp && !selected
-  const geos = useMemo(() => {
-    const steps = useVC ? Math.max(1, ramp!.ts.length - 1) : 1
-    return shapes.map((sh) => {
-      const g = new THREE.ExtrudeGeometry(sh, { depth: len, bevelEnabled: false, steps })
-      if (useVC) {
-        const pos = g.getAttribute('position') as THREE.BufferAttribute
-        const colors = new Float32Array(pos.count * 3)
-        const c = new THREE.Color()
-        for (let i = 0; i < pos.count; i++) {
-          const t = pos.getZ(i) / (len || 1)
-          c.set(memberColor(role, false, rampAt(ramp!, t)))
-          colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b
-        }
-        g.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-      }
-      return g
-    })
-  }, [shapes, len, ramp, role, useVC])
-  useEffect(() => () => geos.forEach((g) => g.dispose()), [geos])
+    return '#64748b'                          // steel grey
+  }, [selected])
 
   if (shapes.length === 0) {
-    return <Member3D a={a} b={b} role={role} selected={selected} tint={tint} ramp={ramp} style={style} onPick={onPick} />
+    return <Member3D a={a} b={b} role={role} selected={selected} style={style} onPick={onPick} />
   }
   return (
     <group position={pos} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>
-      {geos.map((g, i) => (
-        <mesh key={i} geometry={g}>
-          <meshStandardMaterial key={`${surfaceKey(style)}${useVC ? '-vc' : ''}`} color={useVC ? '#ffffff' : color}
-            vertexColors={useVC} metalness={0.35} roughness={0.5} {...surfaceMaterial(style)} />
+      {shapes.map((sh, i) => (
+        <mesh key={i}>
+          <extrudeGeometry args={[sh, { depth: len, bevelEnabled: false, steps: 1 }]} />
+          <meshStandardMaterial key={surfaceKey(style)} color={color} metalness={0.35} roughness={0.5}
+            {...surfaceMaterial(style)} />
         </mesh>
       ))}
     </group>
@@ -622,11 +549,6 @@ export function GridBubbles3D({ model }: { model: StructuralModel }) {
     </group>
   )
 }
-
-/** A designed footing drawn to ACTUAL plan size below grade, so overlapping
- *  footprints are visible. bx/bz = plan dimensions (m), dc = depth (m), angle =
- *  plan rotation about Y (combined footings follow the column axis). Overlapping
- *  footings are tinted red. */
 
 /** A designed footing drawn to ACTUAL plan size below grade, so overlapping
  *  footprints are visible. bx/bz = plan dimensions (m), dc = depth (m), angle =
