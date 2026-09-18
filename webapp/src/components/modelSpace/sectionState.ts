@@ -64,14 +64,15 @@ export function parseSectionState(raw: string | null | undefined): SectionState 
 
 // ── the store ─────────────────────────────────────────────────────────────
 
-const storage = (): Storage | undefined => {
-  try {
-    return typeof globalThis !== 'undefined'
-      ? (globalThis as { localStorage?: Storage }).localStorage : undefined
-  } catch { return undefined }               // a browser set to block site data
-}
+let storedState: string | null = null
+try {
+  if (typeof globalThis !== 'undefined') {
+    const ls = (globalThis as { localStorage?: Storage }).localStorage
+    if (ls) storedState = ls.getItem(SECTIONS_KEY)
+  }
+} catch { /* quota, or blocked */ }
 
-let state: SectionState = parseSectionState(storage()?.getItem(SECTIONS_KEY) ?? null)
+let state: SectionState = parseSectionState(storedState ?? null)
 const listeners = new Set<() => void>()
 
 export function subscribeSections(fn: () => void): () => void {
