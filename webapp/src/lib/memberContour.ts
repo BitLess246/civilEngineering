@@ -26,8 +26,8 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { localAxes, type V3 } from '../engine/frame3d'
 import {
-  normalStress, fibreStress, shearStress, stationStress,
-  type StressSection, type MemberForceArrays, type MemberForces,
+  normalStress, fibreStress, shearStress,
+  type StressSection, type MemberForceArrays, type MemberForces, type Fibre,
 } from '../engine/memberStress'
 import { stressDomain, normalise, type Domain } from './stressScale'
 
@@ -71,13 +71,87 @@ export interface ContourMember {
   drop: number
 }
 
-/** The four section corners, in a consistent go-around order so consecutive
- *  pairs are the four faces. */
-export function sectionCorners(s: StressSection): { y: number; z: number }[] {
-  return [
-    { y: s.cy, z: s.cz }, { y: s.cy, z: -s.cz },
-    { y: -s.cy, z: -s.cz }, { y: -s.cy, z: s.cz },
-  ]
+/**
+ * How many points each SIDE of the section outline is divided into.
+ *
+ * FOUR CORNERS IS NOT A MESH. The outline used to be the four corners and
+ * nothing else, which is exact for σ — normal stress is linear in (y, z), so
+ * the GPU's interpolation along a straight edge between two corners is the
+ * right answer — and useless for everything shear carries:
+ *
+ *   · τ = VQ/(I·t) is PARABOLIC over the depth: zero at the extreme fibres,
+ *     largest at the neutral axis. Sampled only at corners it is zero
+ *     everywhere, so the contour used to paint the section MAXIMUM flat around
+ *     the whole outline. That is a number, not a picture.
+ *   · σvm = √(σ² + 3τ²) inherits that parabola on the side faces, and has a
+ *     KINK where σ changes sign, which no straight edge between two corners
+ *     can reproduce.
+ *
+ * Six per side = 24 points around the ring, against the 25 stations the solver
+ * already gives along the length (`NS = 24` in `frame3d`), so the mesh is about
+ * as fine across as it is along.
+ *
+ * THE COST, MEASURED rather than estimated, on a 3×3-bay 3-storey frame — 120
+ * members, 300×500 — built in a vitest probe:
+ *
+ *   600 vertices a member · 72 000 vertices · 138 240 triangles
+ *   2.68 MB of buffers · 79 ms to build the whole mesh
+ *
+ * Linear in members, built once per (key, domain) change, and an order of
+ * magnitude under anything the pool workers carry. What it buys, on a beam of
+ * that frame at its support: τ down the side face reads
+ * 0 · 0.32 · 0.51 · 0.58 · 0.51 · 0.32 · 0 MPa — the parabola, free at both
+ * extreme fibres, and 0.5789 at the neutral axis against the rectangle's exact
+ * 1.5·V/A = 0.5789. Four corners drew all seven of those as one number.
+ */
+export const RING_PER_SIDE = 6
+
+/**
+ * The section outline as a closed ring of fibres, each carrying its own
+ * shear-flow data so the stress can actually be evaluated there.
+ *
+ * Q AND t ARE THE POINT. `Qz(y) = b(h²/4 − y²)/2` with `t = b` is the first
+ * moment of the area above a cut at height y — it falls to zero at y = ±h/2,
+ * which is what makes the extreme fibres shear-free, and peaks at the centroid.
+ * `Qy(z)` is the same statement across the width. Both are evaluated at every
+ * ring point, so a corner (where both vanish) comes out shear-free without any
+ * special case, and a mid-face point gets the real parabola.
+ *
+ * The outline is the bounding rectangle for every section, steel shapes
+ * included — which is what the four-corner outline already drew, so this
+ * refines the sampling of the shape that ships rather than changing the shape.
+ * `sectionRing(s, 1)` IS those four corners, so the ring is a strict
+ * generalisation of what it replaces.
+ */
+export function sectionRing(s: StressSection, perSide = RING_PER_SIDE): Fibre[] {
+  const n = Math.max(1, Math.floor(perSide))
+  const h = 2 * s.cy, b = 2 * s.cz
+  const Qz = (y: number) => (b * (h * h / 4 - y * y)) / 2
+  const Qy = (z: number) => (h * (b * b / 4 - z * z)) / 2
+  const at = (y: number, z: number): Fibre => {
+    const qz = Math.max(0, Qz(y)), qy = Math.max(0, Qy(z))
+    return {
+      y, z, label: '',
+      // Omitted rather than zero where there is no flow: `shearStress` treats a
+      // missing pair as a free surface, which is the same answer and says so.
+      ...(qz > 0 && b > 0 ? { Qz: qz, tz: b } : {}),
+      ...(qy > 0 && h > 0 ? { Qy: qy, ty: h } : {}),
+    }
+  }
+  const ring: Fibre[] = []
+  // Counter-clockwise from (+cy, +cz), each side split n ways and its END
+  // corner left to the next side, so the ring closes without a duplicate.
+  const walk = (y0: number, z0: number, y1: number, z1: number) => {
+    for (let k = 0; k < n; k++) {
+      const t = k / n
+      ring.push(at(y0 + (y1 - y0) * t, z0 + (z1 - z0) * t))
+    }
+  }
+  walk(s.cy, s.cz, s.cy, -s.cz)      // top face, +z → −z
+  walk(s.cy, -s.cz, -s.cy, -s.cz)    // −z side, top → bottom
+  walk(-s.cy, -s.cz, -s.cy, s.cz)    // bottom face, −z → +z
+  walk(-s.cy, s.cz, s.cy, s.cz)      // +z side, bottom → top
+  return ring
 }
 
 const forcesAt = (f: MemberForceArrays, i: number): MemberForces => ({
@@ -86,28 +160,32 @@ const forcesAt = (f: MemberForceArrays, i: number): MemberForces => ({
 })
 
 /**
- * Contour values for one member: `[station][corner]`, MPa.
+ * Contour values for one member: `[station][ringPoint]`, MPa.
  *
- * `sigma` and `vonMises` are evaluated AT each corner fibre, so they vary
- * around the section. `tau` is the section ENVELOPE — the largest shear
- * anywhere on the section, which is at the neutral axis and not at a corner —
- * so it is the same at all four and the legend says so. Painting the corner's
- * own τ instead would draw zero on every member with no torsion, which is true
- * of the corner and useless as a picture of shear.
+ * EVERY KEY IS NOW EVALUATED AT THE POINT IT IS DRAWN AT, which τ was not. It
+ * used to be painted as the section ENVELOPE — one number, the largest shear
+ * anywhere on the section — repeated at all four corners, because the corners
+ * are shear-free and their own τ is zero. That was the honest thing to do with
+ * four samples, and it drew a member in uniform colour: a reading of the peak
+ * rather than a picture of the distribution.
+ *
+ * With the ring there are real fibres between the corners, so τ is the actual
+ * VQ/(I·t) at each: zero at the extreme fibres, parabolic down the side faces,
+ * peaking at the neutral axis. σvm follows it, and picks up the kink where σ
+ * changes sign. σ is unchanged in value — it is linear in (y, z), so the extra
+ * points sit exactly on the line the corners already defined — but the extra
+ * points are what let the BANDS land where the iso-lines are.
  */
 export function memberValues(m: ContourMember, key: MemberStressKey): number[][] {
-  const corners = sectionCorners(m.section)
+  const ring = sectionRing(m.section)
   const out: number[][] = []
   for (let i = 0; i < m.forces.xs.length; i++) {
     const f = forcesAt(m.forces, i)
-    if (key === 'tau') {
-      const t = stationStress(m.section, f).tauMax
-      out.push([t, t, t, t])
-      continue
-    }
-    out.push(corners.map((c) => key === 'sigma'
-      ? normalStress(m.section, f, c.y, c.z)
-      : fibreStress(m.section, f, { y: c.y, z: c.z, label: '' }).vonMises))
+    out.push(ring.map((fib) => {
+      if (key === 'sigma') return normalStress(m.section, f, fib.y, fib.z)
+      if (key === 'tau') return shearStress(m.section, f, fib)
+      return fibreStress(m.section, f, fib).vonMises
+    }))
   }
   return out
 }
@@ -150,8 +228,15 @@ export interface MemberContourGeometry {
 const PROUD = 1.015
 
 /**
- * Build the contour skin: one four-sided prism per member, subdivided at the
- * force stations, vertex-coloured at the section corners.
+ * Build the contour skin: a prism per member, ringed at `RING_PER_SIDE` points
+ * a side and subdivided at the solver's force stations, carrying one NORMALISED
+ * VALUE per vertex.
+ *
+ * The value, not a colour — see `lib/contourMaterial`. Interpolating colour
+ * walks a straight line through RGB that misses the ramp's centre; interpolating
+ * the scalar and evaluating the ramp per fragment is what puts the band
+ * boundaries on the iso-lines, and it is the whole reason a finer ring is worth
+ * anything.
  *
  * Returns null rather than an empty mesh, so a caller can tell "nothing to
  * draw" from "a mesh of nothing".
@@ -169,7 +254,8 @@ export function memberContourGeometry(
     // THE SOLVER'S BASIS. See the file header — the renderer's is different for
     // every column.
     const [, yp, zp] = localAxes(dir, m.rotDeg)
-    const corners = sectionCorners(m.section)
+    const ring = sectionRing(m.section)
+    const R = ring.length
     const vals = memberValues(m, key)
     const base = pos.length / 3
 
@@ -178,9 +264,9 @@ export function memberContourGeometry(
       const px = m.a[0] + dir[0] * t
       const py = m.a[1] + dir[1] * t - m.drop
       const pz = m.a[2] + dir[2] * t
-      for (let c = 0; c < 4; c++) {
+      for (let c = 0; c < R; c++) {
         // mm → m, and out to the drawn face.
-        const oy = (corners[c].y / 1000) * PROUD, oz = (corners[c].z / 1000) * PROUD
+        const oy = (ring[c].y / 1000) * PROUD, oz = (ring[c].z / 1000) * PROUD
         pos.push(
           px + yp[0] * oy + zp[0] * oz,
           py + yp[1] * oy + zp[1] * oz,
@@ -189,14 +275,15 @@ export function memberContourGeometry(
         val.push(normalise(vals[i]?.[c] ?? 0, domain))
       }
     }
-    // Four faces per bay, two triangles each. The corner vertices are SHARED
-    // between adjacent faces, so the colour interpolates around the section as
-    // well as along the member.
+    // R quads per bay, two triangles each, the ring closing on itself via the
+    // modulo. Ring vertices are SHARED between adjacent quads, so the value
+    // interpolates continuously around the section as well as along the member
+    // — no seam at a corner, which a per-face mesh would have.
     for (let i = 0; i < n - 1; i++) {
-      for (let c = 0; c < 4; c++) {
-        const d = (c + 1) % 4
-        const p0 = base + i * 4 + c, p1 = base + i * 4 + d
-        const q0 = base + (i + 1) * 4 + c, q1 = base + (i + 1) * 4 + d
+      for (let c = 0; c < R; c++) {
+        const d = (c + 1) % R
+        const p0 = base + i * R + c, p1 = base + i * R + d
+        const q0 = base + (i + 1) * R + c, q1 = base + (i + 1) * R + d
         idx.push(p0, p1, q1, p0, q1, q0)
       }
     }

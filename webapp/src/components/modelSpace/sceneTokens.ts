@@ -77,27 +77,6 @@ export function levelDrop(role: string, depth: number, a: THREE.Vector3, b: THRE
   return depth / 2
 }
 
-// ── Continuous stress tint along a member ────────────────────────────────────
-/** Station-sampled tint along one member: `ts` are station fractions 0…1 along
- *  i→j, `vs` the tint at each station 0…1 (already scaled). A member coloured
- *  from ONE peak number reads as a flat block that jumps at every joint; from
- *  the sampled diagram it varies the way the force actually does, and blended
- *  end values keep it continuous across the joints. */
-export interface TintRamp { ts: number[]; vs: number[] }
-
-/** Tint at axial fraction t ∈ [0,1] — linear between stations. */
-export function rampAt(ramp: TintRamp, t: number): number {
-  const { ts, vs } = ramp
-  const n = ts.length
-  if (n === 0) return 0
-  if (t <= ts[0]) return vs[0]
-  if (t >= ts[n - 1]) return vs[n - 1]
-  let i = 1
-  while (i < n - 1 && ts[i] < t) i++
-  const f = ts[i] !== ts[i - 1] ? (t - ts[i - 1]) / (ts[i] - ts[i - 1]) : 0
-  return vs[i - 1] + (vs[i] - vs[i - 1]) * f
-}
-
 // ── Member force diagrams (BMD / SFD / axial / torsion) ─────────────────────
 export const DIAG_COLOR: Record<DiagramComp, string> = {
   Mz: '#d62728', My: '#ea580c', Vy: '#1f77b4', Vz: '#0e7490', N: '#7c3aed', T: '#b45309',
@@ -107,16 +86,8 @@ export const DIAG_LABEL: Record<DiagramComp, string> = {
   Mz: 'Mz', My: 'My', Vy: 'Vy', Vz: 'Vz', N: 'N', T: 'T',
 }
 
-/** Inline 3D internal-force diagram drawn directly on one member. */
-
-/** Inline 3D internal-force diagram drawn directly on one member. */
-
 // ── Load glyphs ─────────────────────────────────────────────────────────────
 export const UP = new THREE.Vector3(0, 1, 0)
-/** A single force arrow with its head at `tip`, drawn back along −`dir`. */
-
-/** A single force arrow with its head at `tip`, drawn back along −`dir`. */
-
 // Colours for the tributary footprint by shape (= which beam carries it).
 export const TRIB_COLOR = { triangle: '#0e7490', trapezoid: '#0f4c92', rect: '#15803d' } as const
 
