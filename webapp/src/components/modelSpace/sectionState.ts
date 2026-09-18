@@ -84,7 +84,12 @@ export const sectionsSnapshot = (): SectionState => state
 
 export function toggleSectionInStore(id: string): void {
   state = toggleSection(state, id)
-  try { storage()?.setItem(SECTIONS_KEY, JSON.stringify(state)) } catch { /* quota, or blocked */ }
+  try {
+    if (typeof globalThis !== 'undefined') {
+      const ls = (globalThis as { localStorage?: Storage }).localStorage
+      ls?.setItem(SECTIONS_KEY, JSON.stringify(state))
+    }
+  } catch { /* quota, or blocked */ }
   for (const fn of listeners) fn()
 }
 
