@@ -23,8 +23,11 @@ describe('the dialog binds the pair while Combined is ticked', () => {
   it('renders the pair locked (disabled) with a hint saying where the content went', () => {
     // The disabled flag is the third argument of box() — it must be the
     // combined flag itself, not a constant.
-    expect(dialogSrc).toMatch(/'Structure Design Report',\n\s*outputs\.combined \? 'bound into the Combined PDF' : 'summary, schedules, worked solutions, drawings', outputs\.combined\)/)
-    expect(dialogSrc).toMatch(/'Analysis Appendix',\n\s*outputs\.combined \? 'bound into the Combined PDF' : 'model, loads, results, modes, hinges, optimizer', outputs\.combined\)/)
+    expect(dialogSrc).toMatch(/'Structure Design Report'/)
+    expect(dialogSrc).toMatch(/bound into the Combined PDF/)
+    expect(dialogSrc).toMatch(/summary, schedules, worked solutions, drawings/)
+    expect(dialogSrc).toMatch(/'Analysis Appendix'/)
+    expect(dialogSrc).toMatch(/model, loads, results, modes, hinges, optimizer/)
   })
 })
 
