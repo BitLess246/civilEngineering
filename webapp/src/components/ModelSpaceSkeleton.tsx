@@ -17,6 +17,8 @@
 // tried to reproduce eleven tabs and thirty controls would be a second
 // description of the layout, drifting from the first the day either changes.
 // ─────────────────────────────────────────────────────────────────────────
+import type { CSSProperties } from 'react'
+import { RIBBON_ESTIMATE_PX, WORKSPACE_FALLBACK_CSS } from '../lib/workspaceFit'
 
 /** One shimmering block. `animate-pulse` is Tailwind's, and it already stops
  *  under `prefers-reduced-motion`. */
@@ -45,22 +47,29 @@ function RailSection({ rows = 2 }: { rows?: number }) {
  */
 export function ModelSpaceSkeleton() {
   return (
-    <div className="mx-auto max-w-[1700px]" aria-busy="true">
+    <div className="w-full" aria-busy="true">
       <span className="sr-only" role="status">Loading the 3D model space…</span>
 
       {/* Ribbon — same border, background and padding as the real one, and the
           same HEIGHT, which is the only number here that has to be right.
 
-          The real ribbon wraps its eleven tabs onto two lines under their group
-          labels; measured in the browser it is 76 px against the 41 px a single
-          row of placeholders gave, and that 35 px was the entire footer shift
-          left after the workspace grid below already matched to the pixel. It
-          is stated as a height rather than reproduced by copying the ribbon's
-          markup, because a second copy of eleven tabs and five group labels
-          would drift from the first the day either changes — and drift there
-          is silent, where a wrong number here is one measurement away from
-          being caught again. */}
-      <div aria-hidden className="flex min-h-[76px] items-center gap-2 border-b border-hairline bg-sheet px-3 py-2">
+          The height is `RIBBON_ESTIMATE_PX`, and it is the SAME constant the
+          page falls back to before its own measurement lands — which is what
+          makes the two agree by construction rather than by two files
+          remembering the same number. It is stated rather than reproduced by
+          copying the ribbon's markup, because a second copy of twelve commands
+          under five group labels would drift from the first the day either
+          changes, and drift there is silent. A wrong number here is one
+          measurement away from being caught; a wrong copy is not.
+
+          The old value was 76 px, measured in the browser against the 41 px a
+          single row of placeholders gave — that 35 px was the entire footer
+          shift left after the workspace grid below already matched to the
+          pixel. The Office-style ribbon works out to the same 76 px from its
+          box model, which is arithmetic and not a reading: worth re-measuring,
+          and `workspaceFit` says so where the constant lives. */}
+      <div aria-hidden className="flex items-center gap-2 border-b border-hairline bg-sheet px-3 py-2"
+        style={{ minHeight: RIBBON_ESTIMATE_PX }}>
         <div className="flex flex-wrap items-center gap-2">
           <Bar className="h-6 w-16" />
           <Bar className="h-6 w-20" />
@@ -78,7 +87,8 @@ export function ModelSpaceSkeleton() {
 
       {/* Workspace — the same grid, heights and gaps the page uses, which is
           the whole point: the footer lands where it will finally sit. */}
-      <div aria-hidden className="grid grid-cols-1 gap-4 p-4 lg:h-[calc(100vh-6.5rem)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div aria-hidden className="grid grid-cols-1 gap-4 p-4 lg:h-[var(--ws-h)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_380px]"
+        style={{ '--ws-h': WORKSPACE_FALLBACK_CSS } as CSSProperties}>
         <div className="lg:flex lg:min-h-0 lg:flex-col">
           <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-hairline bg-rail lg:h-full lg:min-h-0">
             {/* The viewport is dark, so its own shimmer has to be light — the

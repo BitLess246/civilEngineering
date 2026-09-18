@@ -3,7 +3,8 @@ import { Link, useLocation } from 'react-router-dom'
 import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
 import { loadCollapsed, saveCollapsed, toggleCollapsed } from '../lib/navCollapse'
 import { loadRailCollapsed, saveRailCollapsed, RAIL_W } from '../lib/navRail'
-import { iconFor, ICON_VIEWBOX, ICON_STROKE } from '../lib/toolGroupIcons'
+import { iconFor, ICON_STROKE } from '../lib/toolGroupIcons'
+import { DrawnIcon } from './DrawnIcon'
 import { useToolPrefs } from '../lib/useToolPrefs'
 import { visibleGroups } from '../lib/toolPrefs'
 import { CommandPalette } from './CommandPalette'
@@ -57,18 +58,7 @@ function Caret({ open }: { open: boolean }) {
  * the set stops looking like a set.
  */
 function GroupIcon({ label, size = 16 }: { label: string; size?: number }) {
-  const icon = iconFor(label)
-  if (!icon) return <span style={{ width: size, height: size }} aria-hidden="true" />
-  return (
-    <svg viewBox={ICON_VIEWBOX} width={size} height={size} aria-hidden="true"
-      fill="none" stroke="currentColor" strokeWidth={ICON_STROKE}
-      strokeLinecap="round" strokeLinejoin="round" className="flex-none">
-      {icon.paths.map((d, i) => <path key={i} d={d} vectorEffect="non-scaling-stroke" />)}
-      {(icon.dots ?? []).map((c, i) => (
-        <circle key={`d${i}`} cx={c.cx} cy={c.cy} r={c.r} fill="currentColor" stroke="none" />
-      ))}
-    </svg>
-  )
+  return <DrawnIcon icon={iconFor(label)} size={size} />
 }
 
 /**

@@ -1,9 +1,9 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { workspaceHeightCss, WORKSPACE_FALLBACK_CSS } from '../lib/workspaceFit'
 import { scrollTop } from '../lib/useScrollTop'
 import { endDrops } from '../lib/baseDrop'
 import { Link, useSearchParams } from 'react-router-dom'
 import { GuidedTour } from '../components/GuidedTour'
-import { TourButton } from '../components/TourButton'
 import { MODEL_STEPS } from '../lib/modelTour'
 import { useTour } from '../lib/useTour'
 import { Canvas } from '@react-three/fiber'
@@ -113,7 +113,7 @@ import { UpgradeNotice } from '../components/UpgradeNotice'
 import type { SolverKind } from '../lib/featureGate'
 import { Footing3D, GridBubbles3D, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
 import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/modelSpace/sceneTokens'
-import { DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
+import { ActionBtn, DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
 import {
   BeamCageSection, BeamElevationFigure, BeamServiceability, ColumnCageSection, ColumnElevationFigure, WShapeSection,
@@ -1817,13 +1817,45 @@ export default function ModelSpace() {
     ? `${globalThis.Math.max(1, [...new Set(model.nodes.map((n) => n.x))].length - 1)}×${globalThis.Math.max(1, [...new Set(model.nodes.map((n) => n.z))].length - 1)} Bay · ${[...new Set(model.storeys.map((q) => q.elevation))].length} Storey${[...new Set(model.storeys.map((q) => q.elevation))].length === 1 ? '' : 's'}`
     : '3D Model Space'
 
+  /**
+   * The workspace row's height, measured rather than assumed.
+   *
+   * `chrome` is the app header plus the ribbon — everything `sticky` above the
+   * viewport/rail row. Read off the ribbon's own bounding box, whose top edge
+   * IS the bottom of the header (that is what it is stuck under), so a ribbon
+   * that wraps at a narrow width or grows a group moves this with it. The
+   * constant it replaces could not: see `lib/workspaceFit`.
+   */
+  const ribbonRef = useRef<HTMLDivElement>(null)
+  const [fitH, setFitH] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    const el = ribbonRef.current
+    if (!el) return
+    const measure = () => {
+      const r = el.getBoundingClientRect()
+      setFitH(workspaceHeightCss(window.innerHeight, r.top + r.height))
+    }
+    measure()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null
+    ro?.observe(el)
+    window.addEventListener('resize', measure)
+    return () => { ro?.disconnect(); window.removeEventListener('resize', measure) }
+  }, [])
+
   return (
     // ?embed=1 — the page-wide pointer lock that makes the preview a poster
     // with two live parts: the 3D viewport and the walkthrough re-enable
     // pointer events on themselves below; everything else — ribbon, control
     // rail, the report stack — draws but does not respond. The shell around
     // the page applies the same rule one level up (AppShell).
-    <div className="mx-auto max-w-[1700px]" style={EMBED ? { pointerEvents: 'none' } : undefined}>
+    // FULL WIDTH, no centred cap. `mx-auto max-w-[1700px]` is right for a
+    // document and wrong for a workspace: past 1700 px it stopped giving the
+    // 3D view the screen it was asked for and spent the rest on two equal
+    // margins, so an ultrawide showed the same viewport as a 1700 px laptop
+    // with grey down both sides. The control rail is a fixed 380 px and the
+    // viewport is `minmax(0,1fr)`, so every pixel this returns goes to the
+    // model — which is the thing the page is named after.
+    <div className="w-full" style={EMBED ? { pointerEvents: 'none' } : undefined}>
       {/* Backstop message from the gated `run`. The buttons for off-plan
           features are already disabled, so reaching this means a path was
           missed — it is shown rather than swallowed so that shows up. */}
@@ -1864,52 +1896,100 @@ export default function ModelSpace() {
           has moved into the viewport it names, so the ribbon is the workspace's
           own chrome and reads as a toolbar rather than a card floating under
           one. The two actions that were in that strip and are still global —
-          undo/redo and the PDF — come with it. */}
-      <div className="no-print flex items-center gap-2 border-b border-hairline bg-sheet px-3 py-2"
+          undo/redo and the PDF — come with it.
+
+          STICKY, under the app header. Scrolling the report stack below used
+          to carry the ribbon off the top of the screen, which put every tab —
+          including the one that would scroll you back to the viewport — out of
+          reach at exactly the moment you wanted them. `z-30` sits under the
+          header's `z-40` and over the viewport.
+
+          `top-[45px]`, NOT `top-11`. The header is `h-11` — 44 px — plus a
+          1 px bottom hairline, and measured in Chromium its box is 45. Parking
+          at 44 tucked the ribbon's first pixel row behind the header at every
+          width. One pixel, and the sort that is invisible until someone reads
+          the two numbers side by side, which is why `HEADER_PX` now carries
+          the measured 45 and this is derived from it rather than from `h-11`.
+
+          A GROUP IS A BLOCK, in the shape of an Office ribbon: icon-over-label
+          commands, the group's name under them, a full-height hairline between
+          blocks. See `TAB_GROUPS`. */}
+      <div ref={ribbonRef}
+        className="no-print sticky top-[45px] z-30 flex items-stretch gap-1 border-b border-hairline bg-sheet/95 px-3 py-1.5 backdrop-blur"
         data-tour="tab-bar">
-        {/* The tabs wrap inside their OWN box. Wrapping them in the ribbon
-            itself sent `ml-auto` Guide to a second row on its own as soon as
-            the tabs nearly filled the first — a lone button on an empty line,
-            which reads as a mistake rather than as a layout. */}
-        {/* Gap separates the LABELLED groups — their own labels already mark
-            where each begins, and a rule between them dangles at the start of
-            the line whenever the ribbon wraps there, which is what 1150 px
-            showed. The one rule that stays is before the utilities, which have
-            no label to do the separating. */}
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3.5 gap-y-1">
-          {TAB_GROUPS.map((g) => (
-            <div key={g.label} role="group" aria-label={g.label}
-              className="flex flex-wrap items-center gap-0.5">
-              <span className="mr-0.5 text-[9.5px] font-bold uppercase tracking-[.14em] text-faint">{g.label}</span>
-              {g.tabs.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
-            </div>
+        {/* SCROLLS SIDEWAYS, does not wrap. Measured in Chromium: wrapping,
+            the ribbon was 76 px at 1280 and up, 138 px at 1024 and 768, and
+            264 px at 390 — where a FROZEN 264 px band is most of a phone
+            screen, so the fix for the one ask defeats the other. One band at
+            every width, and you pan it, which is what a real ribbon does.
+
+            EVERY GROUP IS IN IT, File included. Held outside as `flex-none`
+            it took its 254 px off the top whatever the width, which at 390
+            left the tab row 95 px — one and a half commands — while the four
+            actions sat in full view. One row that pans as a whole is both the
+            Office behaviour and the one that degrades evenly.
+
+            `tabIndex`/`role="group"` with a name because a scrollable box that
+            keyboard focus can land on has to announce what it is — the same
+            pairing the audit's scroll-region pass established for the data
+            tables and `DrawingFrame`. */}
+        <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto"
+          tabIndex={0} role="group" aria-label="Model Space ribbon">
+          {TAB_GROUPS.map((g, i) => (
+            <Fragment key={g.label}>
+              {i > 0 && <Rule />}
+              <div role="group" aria-label={g.label} className="flex flex-col items-center">
+                <div className="flex items-start gap-0.5">
+                  {g.tabs.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
+                </div>
+                {/* The group's NAME, under its commands. Aria-hidden because
+                    the `role="group"`'s own `aria-label` already carries it —
+                    a screen reader announcing "Model" twice per group is the
+                    cost of leaving a visible label unmarked. */}
+                <span aria-hidden className="text-[9px] font-bold uppercase tracking-[.14em] text-faint">{g.label}</span>
+              </div>
+            </Fragment>
           ))}
-          <div className="flex flex-wrap items-center gap-0.5">
-            <Rule />
-            {UTILITY_TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
+          <Rule />
+          <div role="group" aria-label="Utilities" className="flex flex-col items-center">
+            <div className="flex items-start gap-0.5">
+              {UTILITY_TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
+            </div>
+            <span aria-hidden className="text-[9px] font-bold uppercase tracking-[.14em] text-faint">Utilities</span>
+          </div>
+          {/* The global actions, in their own block with the same label
+              treatment — so the right-hand end of the ribbon is a section like
+              the rest of it rather than three loose controls.
+
+              DRAWN MARKS, not `↶ ↷ ⎙`. Those were text glyphs in the one ribbon
+              that had just been made to draw everything else: a different
+              typeface on every platform, no stroke weight of their own, and no
+              way to line up with a set built on a 24×24 grid. They also sized
+              themselves, so at 1024 and below this block wrapped into a COLUMN
+              and took the ribbon from 63 px to 125, and to 251 at 390 — measured.
+              Same `ActionBtn` box as a tab, so it behaves like one. */}
+          <Rule />
+          <div role="group" aria-label="File" className="flex flex-col items-center">
+            <div className="flex items-start gap-0.5">
+              <ActionBtn label="Undo" icon="undo" disabled={hist.past.length === 0} onClick={undo}
+                title={`Undo (⌘Z) — ${hist.past.length} step${hist.past.length === 1 ? '' : 's'}`} />
+              <ActionBtn label="Redo" icon="redo" disabled={hist.future.length === 0} onClick={redo}
+                title={`Redo (⌘⇧Z) — ${hist.future.length} step${hist.future.length === 1 ? '' : 's'}`} />
+              <ActionBtn label={exporting ? 'PDF…' : 'PDF'} icon="pdf" onClick={openExport}
+                disabled={!design || exporting || !reportsGate.allowed}
+                title={!reportsGate.allowed ? reportsGate.message
+                  : design ? 'Download the calculation report as a PDF' : 'Run “Design structure” in the Design tab first'} />
+              {/* In embed the Guide is one of the two live controls, so it
+                  re-enables pointer events inside the page-wide lock (see the
+                  root div). */}
+              <span className="inline-flex" style={EMBED ? { pointerEvents: 'auto' } : undefined}>
+                <ActionBtn label="Guide" icon="guide" onClick={tour.start}
+                  title="Walk through the page, left to right" />
+              </span>
+            </div>
+            <span aria-hidden className="text-[9px] font-bold uppercase tracking-[.14em] text-faint">File</span>
           </div>
         </div>
-        <div className="flex items-center">
-          {([['↶', 'Undo', undo, hist.past.length], ['↷', 'Redo', redo, hist.future.length]] as const).map(([glyph, label, run, depth], i) => (
-            <button key={label} type="button" onClick={run} disabled={depth === 0}
-              title={`${label} (${label === 'Undo' ? '⌘Z' : '⌘⇧Z'}) — ${depth} step${depth === 1 ? '' : 's'}`}
-              aria-label={label}
-              className={`border border-field-line bg-sheet px-2 py-1 text-[13px] font-semibold text-ink-2 hover:border-brand-hover hover:text-brand disabled:opacity-35 ${i === 0 ? 'rounded-l-md' : '-ml-px rounded-r-md'}`}>
-              {glyph}
-            </button>
-          ))}
-        </div>
-        <button type="button" onClick={openExport} disabled={!design || exporting || !reportsGate.allowed}
-          title={!reportsGate.allowed ? reportsGate.message
-            : design ? 'Download the calculation report as a PDF' : 'Run “Design structure” in the Design tab first'}
-          className="rounded-md border border-brand bg-sheet px-2.5 py-1 text-[11.5px] font-bold text-brand hover:bg-brand-tint disabled:opacity-40">
-          {exporting ? '⏳ PDF…' : '⎙ PDF'}
-        </button>
-        {/* In embed the Guide is one of the two live controls, so it re-enables
-            pointer events inside the page-wide lock (see the root div). */}
-        <span className="inline-flex" style={EMBED ? { pointerEvents: 'auto' } : undefined}>
-          <TourButton onClick={tour.start} label="Guide" />
-        </span>
       </div>
 
       {/* ── Main split: the viewport takes the width, the controls a fixed rail
@@ -1923,7 +2003,13 @@ export default function ModelSpace() {
           same intent written in a way that only worked while nothing above it
           moved. The report below still scrolls the page normally; it is a
           document, and it should. */}
-      <div className="grid grid-cols-1 gap-4 p-4 lg:h-[calc(100vh-6.5rem)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_380px]">
+      {/* `--ws-h` is the MEASURED height of everything sticky above this row
+          (see the hook above); `lg:h-[var(--ws-h)]` consumes it only from the
+          breakpoint where the two columns actually sit side by side. Below
+          that the columns stack and each takes its natural height, which is
+          why the variable is not applied at every width. */}
+      <div className="grid grid-cols-1 gap-4 p-4 lg:h-[var(--ws-h)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_380px]"
+        style={{ '--ws-h': fitH ?? WORKSPACE_FALLBACK_CSS } as CSSProperties}>
         {/* LEFT — sticky 3D viewport */}
         <div className="no-print lg:flex lg:min-h-0 lg:flex-col">
           {/* The live half of the embed: this container re-enables pointer
