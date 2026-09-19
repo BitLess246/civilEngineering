@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ALL_TOOLS, isGatedRoute } from '../lib/tools'
+import { ALL_TOOLS, PALETTE_EXAMPLES, isGatedRoute } from '../lib/tools'
 import { useFocusTrap } from '../lib/useFocusTrap'
 import { useToolPrefs } from '../lib/useToolPrefs'
 import { isHidden } from '../lib/toolPrefs'
@@ -105,7 +105,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         <div className="flex items-center gap-3 border-b border-hairline-2 px-4 py-3">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true" className="text-faint"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
           <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={onKey}
-            placeholder={`Search ${ALL_TOOLS.length} tools — try "footing", "W-shape", "seismic"…`}
+            placeholder={`Search ${ALL_TOOLS.length} tools — ${PALETTE_EXAMPLES}`}
             className="flex-1 !border-0 !bg-transparent !p-0 text-sm !shadow-none placeholder:text-faint focus:!shadow-none" />
           <kbd className="rounded border border-field-line px-1.5 py-0.5 font-mono text-[10px] text-faint">esc</kbd>
         </div>

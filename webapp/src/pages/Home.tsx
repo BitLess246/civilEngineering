@@ -2,8 +2,11 @@ import { useMemo, useState } from 'react'
 import { AccountMenu } from '../components/AccountMenu'
 import { Link } from 'react-router-dom'
 import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
-import { SIDEBAR_GROUPS, ALL_TOOLS, isGatedRoute } from '../lib/tools'
+import { SIDEBAR_GROUPS, ALL_TOOLS, PALETTE_EXAMPLES, isGatedRoute } from '../lib/tools'
 import { CommandPalette } from '../components/CommandPalette'
+import { SkipLink } from '../components/AppShell'
+import { SiteFooter } from '../components/SiteFooter'
+import { ThemeSwitch } from '../components/AppShell'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { PipelineDiagram } from '../components/PipelineDiagram'
 import { WorkedSolutionPreview } from '../components/WorkedSolutionPreview'
@@ -68,7 +71,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         {big ? (
           <>
             <span className="sm:hidden">Search {toolCount} tools…</span>
-            <span className="hidden sm:inline">Search {toolCount} tools — try “footing”, “W-shape”, “seismic”…</span>
+            <span className="hidden sm:inline">Search {toolCount} tools — {PALETTE_EXAMPLES}</span>
           </>
         ) : 'Find a tool…'}
       </span>
@@ -78,10 +81,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
 
   return (
     <div className="min-h-screen bg-paper">
-      <a href="#content"
-        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-3 focus-visible:top-3 focus-visible:z-[100] focus-visible:rounded-md focus-visible:bg-brand focus-visible:px-3.5 focus-visible:py-2 focus-visible:text-[13px] focus-visible:font-semibold focus-visible:text-on-solid">
-        Skip to content
-      </a>
+      <SkipLink />
       {/* Top bar */}
       <nav className="no-print sticky top-0 z-50 border-b border-white/10 bg-rail">
         <div className="mx-auto flex h-[52px] max-w-[1200px] items-center gap-5 px-6">
@@ -104,6 +104,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
             <div className="hidden min-w-0 flex-1 sm:block">{searchBox(false)}</div>
             <a href="#tools" className="hidden whitespace-nowrap rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-rail-muted hover:bg-sheet/5 hover:text-rail-ink md:inline-block">Tools</a>
             <Link to="/pricing" className="hidden whitespace-nowrap rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-rail-muted hover:bg-sheet/5 hover:text-rail-ink md:inline-block">Plans</Link>
+            <span className="hidden md:inline-block"><ThemeSwitch /></span>
             <AccountMenu dark />
           </div>
         </div>
@@ -121,13 +122,29 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           <p className="mt-4 max-w-[600px] text-base leading-relaxed text-rail-muted">{toolCount} code-checked calculators, 3D analysis and quantity take-off on a typed engine — every result traced to its clause, every report ready to sign.</p>
           <div className="mt-7 flex max-w-[640px] flex-col items-stretch gap-2.5 sm:flex-row sm:items-center">
             {searchBox(true)}
-            <Link to="/model" className="whitespace-nowrap rounded-lg bg-brand px-5 py-3.5 text-center text-sm font-bold text-on-solid hover:bg-brand-hover">Open workbench</Link>
+            {/* The ask depends on who is reading: a member goes to the model,
+                an anonymous visitor is told it is an account, not bounced
+                post-click through a gated route. */}
+            {!loading && (user ? (
+              <Link to="/model" className="whitespace-nowrap rounded-lg bg-brand px-5 py-3.5 text-center text-sm font-bold text-on-solid hover:bg-brand-hover">Open workbench</Link>
+            ) : (
+              <button onClick={() => onAuth('signup')}
+                className="whitespace-nowrap rounded-lg bg-brand px-5 py-3.5 text-center text-sm font-bold text-on-solid hover:bg-brand-hover">Create free account</button>
+            ))}
           </div>
           <div className="mt-6 flex flex-wrap gap-2">
-            {CHIPS.map((c) => (
-              <Link key={c} to={chipTo[c] ?? '#'}
-                className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-rail-muted hover:border-rail-accent hover:bg-brand-hover/35 hover:text-on-solid">{c}</Link>
-            ))}
+            {CHIPS.map((c) => {
+              const gated = isGatedRoute(chipTo[c] ?? '#')
+              return (
+                <Link key={c} to={chipTo[c] ?? '#'}
+                  className="flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-rail-muted hover:border-rail-accent hover:bg-brand-hover/35 hover:text-on-solid">{c}
+                  {gated && (
+                    <span className="font-mono text-[9px] uppercase tracking-wider opacity-75"
+                      title="Needs an account — sign in to open">Sign in</span>
+                  )}
+                </Link>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -325,30 +342,10 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         </div>
       </section>
 
-      {/* CTA band */}
-      <section className="bg-rail">
-        <div className="mx-auto flex max-w-[1200px] flex-col items-start justify-between gap-5 px-6 py-10 sm:flex-row sm:items-center">
-          <div>
-            <h2 className="text-xl font-extrabold text-rail-ink">Every calculation, code-referenced.</h2>
-            <p className="mt-1 text-[13px] text-rail-muted">Clause citations on every worked step. Validated against hand calcs — <Link to="/validation" className="text-rail-accent underline underline-offset-2 decoration-rail-accent/40 hover:decoration-rail-accent">see the validation suite</Link>.</p>
-          </div>
-          {/* The ask depends on who is reading. A member has no account left
-              to create, so the button becomes the workbench link — the same
-              destination the hero offers. While the session lookup runs there
-              is no button at all: offering account creation to someone who
-              turns out to be signed in is the exact flash AccountMenu exists
-              to prevent, and a wrong button on the marketing page is worse
-              than a one-frame gap before the right one. */}
-          {!loading && (user ? (
-            <Link to="/model" className="whitespace-nowrap rounded-md bg-brand px-5 py-3 text-[13px] font-bold text-on-solid hover:bg-brand-hover">Open the workbench</Link>
-          ) : (
-            <button onClick={() => onAuth('signup')}
-              className="whitespace-nowrap rounded-md bg-brand px-5 py-3 text-[13px] font-bold text-on-solid hover:bg-brand-hover">Create free account</button>
-          ))}
-        </div>
-      </section>
-
+      {/* No CTA band: the hero already asks, and the page ends on the
+          directory — the thing a returning visitor actually came back for. */}
       </main>
+      <SiteFooter />
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
     </div>
   )
