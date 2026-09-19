@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { AccountMenu } from '../components/AccountMenu'
 import { Link } from 'react-router-dom'
 import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
-import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
+import { SIDEBAR_GROUPS, ALL_TOOLS, isGatedRoute } from '../lib/tools'
 import { CommandPalette } from '../components/CommandPalette'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { PipelineDiagram } from '../components/PipelineDiagram'
@@ -45,8 +45,10 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
   // product, not about this reader's sidebar. Numbering and anchors are derived
   // AFTER the filter, so a trimmed directory reads 01, 02, 03 rather than
   // skipping the numbers of hidden groups.
+  // Single label source: SIDEBAR_GROUPS owns the names — no presentational
+  // renames here, so sidebar, palette, breadcrumb and directory agree.
   const groups = useMemo(() => visibleGroups(SIDEBAR_GROUPS, prefs).map((g, i) => ({
-    heading: g.label === 'Analysis' ? 'Analysis & Modelling' : g.label === 'Steel' ? 'Steel & Connections' : g.label === 'Estimates' ? 'Quantity Take-Off' : g.label,
+    heading: g.label,
     anchor: `dir-${i}`,
     tools: g.tools,
   })), [prefs])
@@ -57,7 +59,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
   const searchBox = (big: boolean) => (
     <button type="button" onClick={() => setPalette(true)}
       className={`flex items-center gap-2.5 rounded-lg border border-white/20 bg-sheet/[.07] text-left transition-colors hover:border-rail-accent ${big ? 'w-full px-4 py-3 sm:flex-1' : 'w-full min-w-0 max-w-[340px] rounded-md px-2.5 py-1.5'}`}>
-      <svg className="flex-none" viewBox="0 0 24 24" width={big ? 16 : 13} height={big ? 16 : 13} fill="none" stroke="#7d8ea3" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
+      <svg className="flex-none text-rail-muted" viewBox="0 0 24 24" width={big ? 16 : 13} height={big ? 16 : 13} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
       {/* The examples are the point of the long label — they teach what the
           palette accepts — but at 390px they wrapped it to four lines and
           pushed the row 60px tall. Below `sm` the prompt alone; the examples
@@ -203,6 +205,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
             <div className="flex flex-wrap items-center gap-2.5">
               <h2 className="text-[19px] font-extrabold tracking-tight">3D Model Space</h2>
               <span className="rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[10px] font-semibold tracking-wide text-brand">BIM-lite viewer</span>
+              <span className="rounded bg-rail px-1.5 py-px font-mono text-[10px] font-bold uppercase tracking-[.14em] text-rail-ink" title="Scaled-down live preview — only the viewport and Guide respond">Preview</span>
             </div>
             {/* The model page's own copy, duplicated alongside its viewport:
                 the name it draws in the corner, the directory's one-line sub,
@@ -279,10 +282,12 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           )}
         </div>
         <div className="grid items-start gap-6 lg:grid-cols-[200px_1fr]">
-          <div className="sticky top-[72px] hidden flex-col gap-0.5 lg:flex">
+          {/* Mobile gets a horizontal discipline strip instead of nothing:
+              search answers names, browsing answers "what exists". */}
+          <div className="sticky top-[72px] flex flex-row gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
             {groups.map((g) => (
               <a key={g.anchor} href={`#${g.anchor}`}
-                className="flex items-center justify-between rounded-md px-2.5 py-[7px] text-[12.5px] font-semibold text-muted hover:bg-hairline-2 hover:text-ink">
+                className="flex flex-none items-center justify-between gap-3 rounded-md px-2.5 py-[7px] text-[12.5px] font-semibold text-muted hover:bg-hairline-2 hover:text-ink lg:flex-auto">
                 {g.heading}
                 <span className="font-mono text-[10px] text-faint">{String(g.tools.length).padStart(2, '0')}</span>
               </a>
@@ -304,7 +309,12 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
                   {g.tools.map((t) => (
                     <Link key={t.to + t.name} to={t.to}
                       className="flex flex-col rounded-lg border border-hairline bg-sheet px-4 py-3.5 transition-colors hover:border-brand-hover">
-                      <span className="text-[13.5px] font-bold text-ink">{t.name}</span>
+                      <span className="flex items-center gap-2 text-[13.5px] font-bold text-ink">{t.name}
+                        {isGatedRoute(t.to) && (
+                          <span className="rounded border border-hairline px-1 py-px font-mono text-[9px] font-semibold uppercase tracking-wider text-muted"
+                            title="Needs an account — sign in to open">Sign in</span>
+                        )}
+                      </span>
                       <span className="mt-0.5 font-mono text-[10.5px] text-faint">{t.sub}</span>
                     </Link>
                   ))}

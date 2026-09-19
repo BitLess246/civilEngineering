@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation, useNavigationType } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { useScrollTopOnChange } from './lib/useScrollTop'
 import { isEmbedLocation } from './lib/embed'
@@ -106,7 +106,13 @@ const ScheduleDaily = lazy(() => import('./pages/ScheduleDaily'))
  */
 function PageLoading({ what }: { what: string }) {
   return (
-    <div className="flex min-h-[70vh] items-center justify-center p-8" role="status" aria-live="polite">
+    <div className="flex min-h-[70vh] flex-col items-center justify-center gap-4 p-8" role="status" aria-live="polite">
+      <div className="w-full max-w-md animate-pulse" aria-hidden="true">
+        <div className="h-5 w-2/3 rounded bg-hairline-2" />
+        <div className="mt-2.5 h-3 w-full rounded bg-hairline-2" />
+        <div className="mt-2 h-3 w-5/6 rounded bg-hairline-2" />
+        <div className="mt-2 h-3 w-4/6 rounded bg-hairline-2" />
+      </div>
       <p className="text-sm text-muted">Loading {what}…</p>
     </div>
   )
@@ -149,7 +155,10 @@ export default function App() {
   // the middle of the next one. Keyed on pathname, so a query-string or hash
   // change (an in-page anchor) does not yank the viewport.
   const { pathname, search } = useLocation()
-  useScrollTopOnChange(pathname)
+  const navType = useNavigationType()
+  // Back/forward (POP) preserves scroll — yanking to top on every pathname
+  // change stranded back-button users at the top of long calculators.
+  useScrollTopOnChange(navType === 'POP' ? 'back-stay' : pathname)
   // GA4 counts SPA navigations — the initial load is counted by the gtag
   // snippet in index.html, so this skips its first render (see analytics.ts).
   usePageViews()
@@ -170,7 +179,9 @@ export default function App() {
   // marketing page it sits on. The answer is still collected on the next
   // ordinary page — nothing is lost by waiting.
   const embed = useMemo(() => isEmbedLocation({ pathname, search }), [pathname, search])
-  const askPrefs = !hasAnswered(prefs) && !dismissed && !NO_ASK_ROUTES.includes(pathname) && !embed
+  // First-run question fires on the landing page only — never over a deep
+  // tool link, where it interrupts Operate intent before first value.
+  const askPrefs = pathname === '/' && !hasAnswered(prefs) && !dismissed && !NO_ASK_ROUTES.includes(pathname) && !embed
 
   // Home carries its own hero navigation; every tool route lives inside the
   // workbench shell (sidebar + breadcrumb header + command palette).

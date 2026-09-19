@@ -55,7 +55,8 @@ function SpectrumChart({ result }: { result: ResponseSpectrumResult }) {
 
   return (
     <DrawingFrame label="response spectrum">
-      <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full" style={{ height: VH }} aria-label="Design response spectrum">
+      <svg viewBox={`0 0 ${VW} ${VH}`} className="w-full" style={{ height: VH }} aria-label="Design response spectrum" role="img">
+        <title>Design response spectrum</title>
         {/* Shaded area under curve */}
         <polygon
           points={[`${px(0)},${py(0)}`, ...curvePts, `${px(Tmax)},${py(0)}`].join(' ')}
