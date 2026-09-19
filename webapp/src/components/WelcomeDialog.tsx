@@ -29,8 +29,9 @@
 // route, bookmark, deep link and ⌘K result keeps working, and the whole answer
 // is editable afterwards at /profile.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useFocusTrap } from '../lib/useFocusTrap'
 import { DisciplinePicker } from './DisciplinePicker'
 import { prefsFromChosen, ALL_PREFS, CHOOSABLE_GROUPS } from '../lib/toolPrefs'
 import { setToolPrefs } from '../lib/useToolPrefs'
@@ -46,11 +47,10 @@ export function WelcomeDialog({ onClose }: { onClose: () => void }) {
   // listener is not torn down and rebuilt on every keystroke.
   const skip = useCallback(() => { setToolPrefs(ALL_PREFS); onClose() }, [onClose])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') skip() }
-    window.addEventListener('keydown', onKey)
-    return () => { window.removeEventListener('keydown', onKey) }
-  }, [skip])
+  // Trapped + return-focus + Escape→skip via the shared hook (replaces the
+  // bespoke Escape listener so Tab can't walk out behind the modal).
+  const panelRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(panelRef, true, skip)
 
   const toggle = (label: string) => setChosen((s) => {
     const next = new Set(s)
@@ -66,7 +66,7 @@ export function WelcomeDialog({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-rail/55 p-4 py-[6vh]"
       onMouseDown={skip} role="dialog" aria-modal="true" aria-labelledby="welcome-title">
-      <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-hairline bg-sheet shadow-2xl"
+      <div ref={panelRef} tabIndex={-1} className="w-full max-w-2xl overflow-hidden rounded-xl border border-hairline bg-sheet shadow-2xl outline-none"
         onMouseDown={(e) => e.stopPropagation()}>
         <div className="border-b border-hairline bg-sheet-2 px-6 py-4">
           <p className="font-mono text-[10.5px] font-semibold uppercase tracking-[0.18em] text-faint">Getting to know you</p>
