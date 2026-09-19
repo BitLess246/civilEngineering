@@ -25,6 +25,16 @@ import { setTheme, useTheme } from '../lib/useTheme'
 // every tool route; the home page keeps its own hero navigation. Groups not
 // holding the active tool collapse to their first two entries. Hidden in print.
 
+/** Shared skip link — one markup for both shells, so keyboard entry never drifts. */
+export function SkipLink() {
+  return (
+    <a href="#content"
+      className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-3 focus-visible:top-3 focus-visible:z-[100] focus-visible:rounded-md focus-visible:bg-brand focus-visible:px-3.5 focus-visible:py-2 focus-visible:text-[13px] focus-visible:font-semibold focus-visible:text-on-solid">
+      Skip to content
+    </a>
+  )
+}
+
 function SearchBox({ onOpen, compact }: { onOpen: () => void; compact?: boolean }) {
   return (
     <button type="button" onClick={onOpen}
@@ -474,8 +484,9 @@ function NavDrawer({ open, onClose, onOpenPalette }: {
   )
 }
 
-/** Theme picker in the workbench header — five shipped themes, keyboard-native. */
-function ThemeSwitch() {
+/** Theme picker — five shipped themes, keyboard-native. Shared by the workbench
+ *  header and the landing nav so theming is a user feature in both shells. */
+export function ThemeSwitch() {
   const theme = useTheme()
   return (
     <label className="hidden items-center gap-1.5 text-[11px] text-faint md:flex">
@@ -535,10 +546,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           navigation. Visually hidden until focused, then a real, visible
           control: a skip link nobody can see they have landed on is no better
           than none. */}
-      <a href="#content"
-        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-3 focus-visible:top-3 focus-visible:z-[100] focus-visible:rounded-md focus-visible:bg-brand focus-visible:px-3.5 focus-visible:py-2 focus-visible:text-[13px] focus-visible:font-semibold focus-visible:text-on-solid">
-        Skip to content
-      </a>
+      <SkipLink />
       <Sidebar onOpenPalette={() => setPalette(true)} railable />
       {/* A COLUMN, so the footer can be pushed to the bottom.
           This div is stretched to the full height of a `min-h-screen` row, but
@@ -566,7 +574,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 painted over it — a measured 40px overlap at 390px. The action
                 group is `flex-none` for the same reason, from the other side. */}
             <div className="flex min-w-0 flex-1 items-center gap-2 text-[11px] text-faint">
-              <Link to="/" className="inline-flex min-h-[24px] flex-none items-center hover:text-brand">Workbench</Link>
+              <Link to="/" className="inline-flex min-h-[24px] flex-none items-center hover:text-brand">Toolkit</Link>
               {tool && (<>
                 <span className="hidden sm:inline">/</span>
                 <span className="hidden sm:inline">{tool.groupLabel}</span>

@@ -129,3 +129,7 @@ export const GATED_ROUTES: ReadonlySet<string> = new Set([
 ])
 
 export const isGatedRoute = (to: string): boolean => GATED_ROUTES.has(to)
+
+/** Shared palette teaching copy — one string for the hero, the pill and the
+ *  palette placeholder, so the query vocabulary never drifts between them. */
+export const PALETTE_EXAMPLES = 'try "footing", "W-shape", "seismic"…'
