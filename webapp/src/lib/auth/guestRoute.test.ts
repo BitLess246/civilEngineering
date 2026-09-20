@@ -47,9 +47,10 @@ describe('route wiring', () => {
     expect(appSrc).toContain('<Route path="/reset-password" element={<ResetPassword />} />')
   })
 
-  it('home no longer offers account creation unconditionally — the CTA band asks by session state', () => {
+  it('home no longer offers account creation unconditionally — the hero asks by session state', () => {
     expect(homeSrc).toMatch(/const \{ user, loading \} = useAuth\(\)/)
-    expect(homeSrc).toContain('Open the workbench')
+    // Members go to the model; anonymous visitors are told it is an account.
+    expect(homeSrc).toContain('Open workbench')
     // Still offered to the people it is for.
     expect(homeSrc).toContain('Create free account')
   })

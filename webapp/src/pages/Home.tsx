@@ -2,8 +2,11 @@ import { useMemo, useState } from 'react'
 import { AccountMenu } from '../components/AccountMenu'
 import { Link } from 'react-router-dom'
 import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
-import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
+import { SIDEBAR_GROUPS, ALL_TOOLS, PALETTE_EXAMPLES, isGatedRoute } from '../lib/tools'
 import { CommandPalette } from '../components/CommandPalette'
+import { SkipLink } from '../components/AppShell'
+import { SiteFooter } from '../components/SiteFooter'
+import { ThemeSwitch } from '../components/AppShell'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { PipelineDiagram } from '../components/PipelineDiagram'
 import { WorkedSolutionPreview } from '../components/WorkedSolutionPreview'
@@ -45,8 +48,10 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
   // product, not about this reader's sidebar. Numbering and anchors are derived
   // AFTER the filter, so a trimmed directory reads 01, 02, 03 rather than
   // skipping the numbers of hidden groups.
+  // Single label source: SIDEBAR_GROUPS owns the names — no presentational
+  // renames here, so sidebar, palette, breadcrumb and directory agree.
   const groups = useMemo(() => visibleGroups(SIDEBAR_GROUPS, prefs).map((g, i) => ({
-    heading: g.label === 'Analysis' ? 'Analysis & Modelling' : g.label === 'Steel' ? 'Steel & Connections' : g.label === 'Estimates' ? 'Quantity Take-Off' : g.label,
+    heading: g.label,
     anchor: `dir-${i}`,
     tools: g.tools,
   })), [prefs])
@@ -57,7 +62,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
   const searchBox = (big: boolean) => (
     <button type="button" onClick={() => setPalette(true)}
       className={`flex items-center gap-2.5 rounded-lg border border-white/20 bg-sheet/[.07] text-left transition-colors hover:border-rail-accent ${big ? 'w-full px-4 py-3 sm:flex-1' : 'w-full min-w-0 max-w-[340px] rounded-md px-2.5 py-1.5'}`}>
-      <svg className="flex-none" viewBox="0 0 24 24" width={big ? 16 : 13} height={big ? 16 : 13} fill="none" stroke="#7d8ea3" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
+      <svg className="flex-none text-rail-muted" viewBox="0 0 24 24" width={big ? 16 : 13} height={big ? 16 : 13} fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
       {/* The examples are the point of the long label — they teach what the
           palette accepts — but at 390px they wrapped it to four lines and
           pushed the row 60px tall. Below `sm` the prompt alone; the examples
@@ -66,7 +71,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         {big ? (
           <>
             <span className="sm:hidden">Search {toolCount} tools…</span>
-            <span className="hidden sm:inline">Search {toolCount} tools — try “footing”, “W-shape”, “seismic”…</span>
+            <span className="hidden sm:inline">Search {toolCount} tools — {PALETTE_EXAMPLES}</span>
           </>
         ) : 'Find a tool…'}
       </span>
@@ -76,10 +81,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
 
   return (
     <div className="min-h-screen bg-paper">
-      <a href="#content"
-        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-3 focus-visible:top-3 focus-visible:z-[100] focus-visible:rounded-md focus-visible:bg-brand focus-visible:px-3.5 focus-visible:py-2 focus-visible:text-[13px] focus-visible:font-semibold focus-visible:text-on-solid">
-        Skip to content
-      </a>
+      <SkipLink />
       {/* Top bar */}
       <nav className="no-print sticky top-0 z-50 border-b border-white/10 bg-rail">
         <div className="mx-auto flex h-[52px] max-w-[1200px] items-center gap-5 px-6">
@@ -102,6 +104,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
             <div className="hidden min-w-0 flex-1 sm:block">{searchBox(false)}</div>
             <a href="#tools" className="hidden whitespace-nowrap rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-rail-muted hover:bg-sheet/5 hover:text-rail-ink md:inline-block">Tools</a>
             <Link to="/pricing" className="hidden whitespace-nowrap rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-rail-muted hover:bg-sheet/5 hover:text-rail-ink md:inline-block">Plans</Link>
+            <span className="hidden md:inline-block"><ThemeSwitch /></span>
             <AccountMenu dark />
           </div>
         </div>
@@ -119,13 +122,29 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           <p className="mt-4 max-w-[600px] text-base leading-relaxed text-rail-muted">{toolCount} code-checked calculators, 3D analysis and quantity take-off on a typed engine — every result traced to its clause, every report ready to sign.</p>
           <div className="mt-7 flex max-w-[640px] flex-col items-stretch gap-2.5 sm:flex-row sm:items-center">
             {searchBox(true)}
-            <Link to="/model" className="whitespace-nowrap rounded-lg bg-brand px-5 py-3.5 text-center text-sm font-bold text-on-solid hover:bg-brand-hover">Open workbench</Link>
+            {/* The ask depends on who is reading: a member goes to the model,
+                an anonymous visitor is told it is an account, not bounced
+                post-click through a gated route. */}
+            {!loading && (user ? (
+              <Link to="/model" className="whitespace-nowrap rounded-lg bg-brand px-5 py-3.5 text-center text-sm font-bold text-on-solid hover:bg-brand-hover">Open workbench</Link>
+            ) : (
+              <button onClick={() => onAuth('signup')}
+                className="whitespace-nowrap rounded-lg bg-brand px-5 py-3.5 text-center text-sm font-bold text-on-solid hover:bg-brand-hover">Create free account</button>
+            ))}
           </div>
           <div className="mt-6 flex flex-wrap gap-2">
-            {CHIPS.map((c) => (
-              <Link key={c} to={chipTo[c] ?? '#'}
-                className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-rail-muted hover:border-rail-accent hover:bg-brand-hover/35 hover:text-on-solid">{c}</Link>
-            ))}
+            {CHIPS.map((c) => {
+              const gated = isGatedRoute(chipTo[c] ?? '#')
+              return (
+                <Link key={c} to={chipTo[c] ?? '#'}
+                  className="flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-rail-muted hover:border-rail-accent hover:bg-brand-hover/35 hover:text-on-solid">{c}
+                  {gated && (
+                    <span className="font-mono text-[9px] uppercase tracking-wider opacity-75"
+                      title="Needs an account — sign in to open">Sign in</span>
+                  )}
+                </Link>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -203,6 +222,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
             <div className="flex flex-wrap items-center gap-2.5">
               <h2 className="text-[19px] font-extrabold tracking-tight">3D Model Space</h2>
               <span className="rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[10px] font-semibold tracking-wide text-brand">BIM-lite viewer</span>
+              <span className="rounded bg-rail px-1.5 py-px font-mono text-[10px] font-bold uppercase tracking-[.14em] text-rail-ink" title="Scaled-down live preview — only the viewport and Guide respond">Preview</span>
             </div>
             {/* The model page's own copy, duplicated alongside its viewport:
                 the name it draws in the corner, the directory's one-line sub,
@@ -279,10 +299,12 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           )}
         </div>
         <div className="grid items-start gap-6 lg:grid-cols-[200px_1fr]">
-          <div className="sticky top-[72px] hidden flex-col gap-0.5 lg:flex">
+          {/* Mobile gets a horizontal discipline strip instead of nothing:
+              search answers names, browsing answers "what exists". */}
+          <div className="sticky top-[72px] flex flex-row gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
             {groups.map((g) => (
               <a key={g.anchor} href={`#${g.anchor}`}
-                className="flex items-center justify-between rounded-md px-2.5 py-[7px] text-[12.5px] font-semibold text-muted hover:bg-hairline-2 hover:text-ink">
+                className="flex flex-none items-center justify-between gap-3 rounded-md px-2.5 py-[7px] text-[12.5px] font-semibold text-muted hover:bg-hairline-2 hover:text-ink lg:flex-auto">
                 {g.heading}
                 <span className="font-mono text-[10px] text-faint">{String(g.tools.length).padStart(2, '0')}</span>
               </a>
@@ -304,7 +326,12 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
                   {g.tools.map((t) => (
                     <Link key={t.to + t.name} to={t.to}
                       className="flex flex-col rounded-lg border border-hairline bg-sheet px-4 py-3.5 transition-colors hover:border-brand-hover">
-                      <span className="text-[13.5px] font-bold text-ink">{t.name}</span>
+                      <span className="flex items-center gap-2 text-[13.5px] font-bold text-ink">{t.name}
+                        {isGatedRoute(t.to) && (
+                          <span className="rounded border border-hairline px-1 py-px font-mono text-[9px] font-semibold uppercase tracking-wider text-muted"
+                            title="Needs an account — sign in to open">Sign in</span>
+                        )}
+                      </span>
                       <span className="mt-0.5 font-mono text-[10.5px] text-faint">{t.sub}</span>
                     </Link>
                   ))}
@@ -315,30 +342,10 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         </div>
       </section>
 
-      {/* CTA band */}
-      <section className="bg-rail">
-        <div className="mx-auto flex max-w-[1200px] flex-col items-start justify-between gap-5 px-6 py-10 sm:flex-row sm:items-center">
-          <div>
-            <h2 className="text-xl font-extrabold text-rail-ink">Every calculation, code-referenced.</h2>
-            <p className="mt-1 text-[13px] text-rail-muted">Clause citations on every worked step. Validated against hand calcs — <Link to="/validation" className="text-rail-accent underline underline-offset-2 decoration-rail-accent/40 hover:decoration-rail-accent">see the validation suite</Link>.</p>
-          </div>
-          {/* The ask depends on who is reading. A member has no account left
-              to create, so the button becomes the workbench link — the same
-              destination the hero offers. While the session lookup runs there
-              is no button at all: offering account creation to someone who
-              turns out to be signed in is the exact flash AccountMenu exists
-              to prevent, and a wrong button on the marketing page is worse
-              than a one-frame gap before the right one. */}
-          {!loading && (user ? (
-            <Link to="/model" className="whitespace-nowrap rounded-md bg-brand px-5 py-3 text-[13px] font-bold text-on-solid hover:bg-brand-hover">Open the workbench</Link>
-          ) : (
-            <button onClick={() => onAuth('signup')}
-              className="whitespace-nowrap rounded-md bg-brand px-5 py-3 text-[13px] font-bold text-on-solid hover:bg-brand-hover">Create free account</button>
-          ))}
-        </div>
-      </section>
-
+      {/* No CTA band: the hero already asks, and the page ends on the
+          directory — the thing a returning visitor actually came back for. */}
       </main>
+      <SiteFooter />
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
     </div>
   )

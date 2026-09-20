@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
+import { SIDEBAR_GROUPS, ALL_TOOLS, isGatedRoute } from '../lib/tools'
 import { loadCollapsed, saveCollapsed, toggleCollapsed } from '../lib/navCollapse'
 import { loadRailCollapsed, saveRailCollapsed, RAIL_W } from '../lib/navRail'
 import { iconFor, ICON_VIEWBOX, ICON_STROKE } from '../lib/toolGroupIcons'
@@ -17,17 +17,29 @@ import { ErrorBoundary } from './ErrorBoundary'
 import { watchScrollableRegions } from '../lib/scrollableRegions'
 import { titleFor } from '../lib/documentTitle'
 import { useFocusTrap } from '../lib/useFocusTrap'
+import { THEMES } from '../lib/theme'
+import { setTheme, useTheme } from '../lib/useTheme'
 
 // Workbench shell (docs/design/uiux-2026-07): persistent ink-navy sidebar with
 // the grouped tool catalog + ⌘K search, and a slim breadcrumb header. Wraps
 // every tool route; the home page keeps its own hero navigation. Groups not
 // holding the active tool collapse to their first two entries. Hidden in print.
 
+/** Shared skip link — one markup for both shells, so keyboard entry never drifts. */
+export function SkipLink() {
+  return (
+    <a href="#content"
+      className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-3 focus-visible:top-3 focus-visible:z-[100] focus-visible:rounded-md focus-visible:bg-brand focus-visible:px-3.5 focus-visible:py-2 focus-visible:text-[13px] focus-visible:font-semibold focus-visible:text-on-solid">
+      Skip to content
+    </a>
+  )
+}
+
 function SearchBox({ onOpen, compact }: { onOpen: () => void; compact?: boolean }) {
   return (
     <button type="button" onClick={onOpen}
       className={`flex w-full items-center gap-2 rounded-md border border-white/15 bg-sheet/5 px-2.5 text-left hover:border-white/30 ${compact ? 'py-1.5' : 'py-[7px]'}`}>
-      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#7d8ea3" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
       <span className="flex-1 text-xs text-rail-muted">Find a tool…</span>
       <span className="rounded border border-white/15 px-1 py-px font-mono text-[10px] text-rail-muted">⌘K</span>
     </button>
@@ -158,7 +170,8 @@ function RailGroup({ group, activeGroup, pathname, onNavigate }: {
   }
   const armClose = () => {
     cancelClose()
-    closeAt.current = window.setTimeout(() => { closeAt.current = null; setOpen(false) }, 180)
+    // 300ms grace: 180ms punished fast diagonal travel and touch re-taps.
+    closeAt.current = window.setTimeout(() => { closeAt.current = null; setOpen(false) }, 300)
   }
   const enter = () => { cancelClose(); show() }
   // A pending close must never outlive the component, or it fires `setOpen` on
@@ -174,10 +187,12 @@ function RailGroup({ group, activeGroup, pathname, onNavigate }: {
       }}>
       <button ref={btn} type="button" aria-expanded={open} aria-controls={panelId}
         aria-label={`${group.label} — ${group.tools.length} tool${group.tools.length === 1 ? '' : 's'}`}
+        title={group.label}
         onClick={() => { if (!open) place(); setOpen((v) => !v) }}
-        className={`relative flex h-11 w-11 items-center justify-center rounded-md transition-colors ${
+        className={`relative flex h-11 w-11 flex-col items-center justify-center gap-0.5 rounded-md transition-colors ${
           holdsActive ? 'bg-brand text-on-solid' : 'text-rail-muted hover:bg-sheet/10 hover:text-rail-ink'}`}>
-        <GroupIcon label={group.label} size={22} />
+        <GroupIcon label={group.label} size={20} />
+        <span className="w-full truncate px-0.5 text-center text-[7.5px] font-semibold uppercase leading-none tracking-wide" aria-hidden="true">{group.label}</span>
       </button>
       {open && at && (
         <div ref={panel} id={panelId} role="group" aria-label={group.label} data-rail-flyout
@@ -267,11 +282,20 @@ function Sidebar({ onOpenPalette, onNavigate, className, trailing, railable = fa
   // silently does not contain the page you are looking at.
   const activeIsHidden = !!activeGroup && !groups.some((g) => g.label === activeGroup)
 
-  // A collapsed group is NOT force-opened when you navigate into it. Doing that
-  // means the user's explicit collapse is silently undone by an ordinary
-  // navigation, and it has to be re-done every time. Instead the header marks
-  // itself (dot + lit label) when it holds the active route, so a shut group
-  // never hides where you are — which was the only reason to force it open.
+  // A collapsed group opens when you navigate into it. An explicit collapse is
+  // a standing instruction for browsing, not a blindfold for wayfinding — the
+  // active tool must be visible, not a dot inside a shut group. Adjusted
+  // during render (the same pattern as the drawer route-change below), not in
+  // an effect, so no cascading render; persistence stays in the toggle handler
+  // and the effect below, which only touch the external store.
+  const [prevActiveGroup, setPrevActiveGroup] = useState(activeGroup)
+  if (prevActiveGroup !== activeGroup) {
+    setPrevActiveGroup(activeGroup)
+    if (activeGroup && collapsed.has(activeGroup)) {
+      setCollapsed(toggleCollapsed(collapsed, activeGroup))
+    }
+  }
+  useEffect(() => { saveCollapsed(collapsed) }, [collapsed])
   const toggle = (label: string) => setCollapsed((c) => {
     const next = toggleCollapsed(c, label)
     saveCollapsed(next)
@@ -369,6 +393,7 @@ function Sidebar({ onOpenPalette, onNavigate, className, trailing, railable = fa
                 <div id={panelId}>
                   {g.tools.map((t) => {
                     const active = t.to === pathname
+                    const gated = isGatedRoute(t.to)
                     return (
                       <Link key={t.to + t.name} to={t.to} onClick={onNavigate}
                         aria-current={active ? 'page' : undefined}
@@ -380,7 +405,11 @@ function Sidebar({ onOpenPalette, onNavigate, className, trailing, railable = fa
                            line this PR was touching anyway. */
                         className={`flex min-h-[44px] items-center gap-2 rounded-md px-2 py-1.5 text-[13.5px] font-medium lg:min-h-0 lg:text-[12.5px] ${
                           active ? 'bg-brand text-on-solid' : 'text-rail-muted hover:bg-sheet/5 hover:text-on-solid'}`}>
-                        {t.name}
+                        <span className="min-w-0 flex-1 truncate">{t.name}</span>
+                        {gated && !active && (
+                          <span className="flex-none font-mono text-[9px] uppercase tracking-wider opacity-70"
+                            title="Needs an account — sign in to open">Sign in</span>
+                        )}
                       </Link>
                     )
                   })}
@@ -433,6 +462,17 @@ function NavDrawer({ open, onClose, onOpenPalette }: {
       <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Tool navigation"
         id="nav-drawer"
         className="absolute inset-y-0 left-0 flex w-[280px] max-w-[85vw] flex-col bg-rail text-rail-ink shadow-2xl outline-none">
+        {/* Discipline jump-links: the drawer is the only mobile catalog, so a
+            first-timer gets browsing, not just search. */}
+        <nav aria-label="Disciplines" className="flex flex-none gap-1 overflow-x-auto border-b border-white/10 px-2.5 py-2">
+          {SIDEBAR_GROUPS.map((g) => (
+            <button key={g.label} type="button"
+              onClick={() => document.getElementById(`navgroup-${g.label.replace(/\W+/g, '-').toLowerCase()}`)?.scrollIntoView({ block: 'start' })}
+              className="flex-none rounded-md px-2 py-2 text-[11px] font-semibold text-rail-muted hover:bg-sheet/10 hover:text-rail-ink">
+              {g.label}
+            </button>
+          ))}
+        </nav>
         <Sidebar onOpenPalette={() => { onClose(); onOpenPalette() }} onNavigate={onClose}
           className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-rail text-rail-ink"
           trailing={(
@@ -443,6 +483,24 @@ function NavDrawer({ open, onClose, onOpenPalette }: {
           )} />
       </div>
     </div>
+  )
+}
+
+/** Theme picker — five shipped themes, keyboard-native. Shared by the workbench
+ *  header and the landing nav so theming is a user feature in both shells. */
+export function ThemeSwitch() {
+  const theme = useTheme()
+  return (
+    <label className="hidden items-center gap-1.5 text-[11px] text-faint md:flex">
+      <span className="sr-only">Theme</span>
+      <select value={theme} onChange={(e) => setTheme(e.target.value as typeof theme)}
+        aria-label="Theme"
+        className="h-7 rounded-md border border-field-line bg-field px-1.5 text-[11px] text-muted hover:border-brand-hover hover:text-brand">
+        {THEMES.map((t) => (
+          <option key={t.id} value={t.id}>{t.name}</option>
+        ))}
+      </select>
+    </label>
   )
 }
 
@@ -490,10 +548,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           navigation. Visually hidden until focused, then a real, visible
           control: a skip link nobody can see they have landed on is no better
           than none. */}
-      <a href="#content"
-        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-3 focus-visible:top-3 focus-visible:z-[100] focus-visible:rounded-md focus-visible:bg-brand focus-visible:px-3.5 focus-visible:py-2 focus-visible:text-[13px] focus-visible:font-semibold focus-visible:text-on-solid">
-        Skip to content
-      </a>
+      <SkipLink />
       <Sidebar onOpenPalette={() => setPalette(true)} railable />
       {/* A COLUMN, so the footer can be pushed to the bottom.
           This div is stretched to the full height of a `min-h-screen` row, but
@@ -521,7 +576,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 painted over it — a measured 40px overlap at 390px. The action
                 group is `flex-none` for the same reason, from the other side. */}
             <div className="flex min-w-0 flex-1 items-center gap-2 text-[11px] text-faint">
-              <Link to="/" className="inline-flex min-h-[24px] flex-none items-center hover:text-brand">Workbench</Link>
+              <Link to="/" className="inline-flex min-h-[24px] flex-none items-center hover:text-brand">Toolkit</Link>
               {tool && (<>
                 <span className="hidden sm:inline">/</span>
                 <span className="hidden sm:inline">{tool.groupLabel}</span>
@@ -530,6 +585,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </>)}
             </div>
             <div className="ml-auto flex flex-none items-center gap-2.5">
+            <ThemeSwitch />
             <button type="button" onClick={() => setPalette(true)}
               className="flex items-center gap-2 rounded-md border border-field-line bg-field px-2.5 py-1 text-xs text-faint hover:border-brand-hover hover:text-brand">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>

@@ -4,7 +4,7 @@ import { DrawingFrame } from './DrawingFrame'
 // Accurate-to-geometry cross-section drawing for an AISC shape (W/C/L/2L/HSS/
 // Pipe/WT). Drawn to scale inside a fixed viewBox; steel is filled, the section
 // name + the governing dimensions are labelled. Pure SVG.
-const FILL = '#94a3b8', EDGE = '#37526e', BLUE = '#0056b3'
+const FILL = '#94a3b8', EDGE = '#37526e'
 
 export function SectionShape({ sec }: { sec: EffectiveSection }) {
   const VB = 150, pad = 22
@@ -77,12 +77,14 @@ export function SectionShape({ sec }: { sec: EffectiveSection }) {
 
   return (
     <DrawingFrame label="section shape">
-      <svg viewBox={`0 0 ${VB} ${VB}`} xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', maxWidth: 200, height: 'auto', fontFamily: 'Arial' }}>
+      <svg viewBox={`0 0 ${VB} ${VB}`} xmlns="http://www.w3.org/2000/svg" role="img" aria-label={`Section ${sec.label}`}
+        style={{ width: '100%', maxWidth: 200, height: 'auto', fontFamily: 'Arial' }}>
+        <title>{`Section ${sec.label}`}</title>
         <rect x={0.5} y={0.5} width={VB - 1} height={VB - 1} fill="#f8fafc" stroke="#e2e8f0" />
         {shapeEl}
-        <text x={VB / 2} y={VB - 5} fontSize={9} fontWeight={700} fill={BLUE} textAnchor="middle">{sec.label}</text>
-        <text x={4} y={11} fontSize={8} fill="#64748b">A = {Math.round(sec.A)} mm²</text>
-        <text x={VB - 4} y={11} fontSize={8} fill="#64748b" textAnchor="end">r_min {sec.rmin.toFixed(1)} mm</text>
+        <text x={VB / 2} y={VB - 5} fontSize={9} fontWeight={700} fill="currentColor" textAnchor="middle">{sec.label}</text>
+        <text x={4} y={11} fontSize={8} fill="currentColor" opacity={0.65}>A = {Math.round(sec.A)} mm²</text>
+        <text x={VB - 4} y={11} fontSize={8} fill="currentColor" opacity={0.65} textAnchor="end">r_min {sec.rmin.toFixed(1)} mm</text>
       </svg>
     </DrawingFrame>
   )

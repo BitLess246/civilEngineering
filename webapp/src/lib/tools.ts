@@ -114,3 +114,22 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = (() => {
  *  shell breadcrumb. */
 export const ALL_TOOLS: (ToolDef & { groupLabel: string })[] =
   SIDEBAR_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, groupLabel: g.label })))
+
+/**
+ * Routes that need an account/plan — advertised with a lock badge + "Sign in"
+ * suffix pre-click, never with equal weight then a post-click wall.
+ * Mirrors the RequireAuth gates in App.tsx (members-only + trial/plan gates).
+ */
+export const GATED_ROUTES: ReadonlySet<string> = new Set([
+  '/model', '/frame', '/truss', '/soils', '/seismic-wizard',
+  '/estimate/slab', '/estimate/beam', '/estimate/column', '/estimate/chb',
+  '/estimate/box-culvert',
+  '/schedule', '/schedule/gantt', '/schedule/network', '/schedule/dashboard',
+  '/schedule/resources', '/schedule/reports', '/schedule/daily',
+])
+
+export const isGatedRoute = (to: string): boolean => GATED_ROUTES.has(to)
+
+/** Shared palette teaching copy — one string for the hero, the pill and the
+ *  palette placeholder, so the query vocabulary never drifts between them. */
+export const PALETTE_EXAMPLES = 'try "footing", "W-shape", "seismic"…'

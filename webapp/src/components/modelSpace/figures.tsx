@@ -200,8 +200,10 @@ export function WShapeSection({ shape, d, bf, tf, tw }: { shape: string; d: numb
   const webX = (VW - stw) / 2
   const textStyle = { fontSize: 9, fontFamily: 'Arial, sans-serif', fill: '#334155' }
   return (
-    <svg viewBox={`0 0 ${VW} ${VH}`} xmlns="http://www.w3.org/2000/svg"
+    <svg viewBox={`0 0 ${VW} ${VH}`} xmlns="http://www.w3.org/2000/svg" role="img"
+      aria-label={`Steel section ${shape}`}
       style={{ width: 200, height: 200 }}>
+      <title>{`Steel section ${shape}`}</title>
       {/* label */}
       <text x={VW / 2} y={10} textAnchor="middle" fontSize={10} fontWeight={700} fill="#0f4c92" fontFamily="Arial, sans-serif">{shape}</text>
       {/* top flange */}

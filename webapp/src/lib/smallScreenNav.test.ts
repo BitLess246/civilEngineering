@@ -139,6 +139,6 @@ describe('tap targets (WCAG 2.5.8, 24x24 minimum)', () => {
   })
 
   it('gives the root breadcrumb a 24px row', () => {
-    expect(shell).toMatch(/<Link to="\/" className="inline-flex min-h-\[24px\][^"]*">Workbench<\/Link>/)
+    expect(shell).toMatch(/<Link to="\/" className="inline-flex min-h-\[24px\][^"]*">Toolkit<\/Link>/)
   })
 })
