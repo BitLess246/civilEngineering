@@ -284,16 +284,18 @@ function Sidebar({ onOpenPalette, onNavigate, className, trailing, railable = fa
 
   // A collapsed group opens when you navigate into it. An explicit collapse is
   // a standing instruction for browsing, not a blindfold for wayfinding — the
-  // active tool must be visible, not a dot inside a shut group.
-  useEffect(() => {
-    if (!activeGroup) return
-    setCollapsed((c) => {
-      if (!c.has(activeGroup)) return c
-      const next = toggleCollapsed(c, activeGroup)
-      saveCollapsed(next)
-      return next
-    })
-  }, [activeGroup])
+  // active tool must be visible, not a dot inside a shut group. Adjusted
+  // during render (the same pattern as the drawer route-change below), not in
+  // an effect, so no cascading render; persistence stays in the toggle handler
+  // and the effect below, which only touch the external store.
+  const [prevActiveGroup, setPrevActiveGroup] = useState(activeGroup)
+  if (prevActiveGroup !== activeGroup) {
+    setPrevActiveGroup(activeGroup)
+    if (activeGroup && collapsed.has(activeGroup)) {
+      setCollapsed(toggleCollapsed(collapsed, activeGroup))
+    }
+  }
+  useEffect(() => { saveCollapsed(collapsed) }, [collapsed])
   const toggle = (label: string) => setCollapsed((c) => {
     const next = toggleCollapsed(c, label)
     saveCollapsed(next)
