@@ -211,6 +211,23 @@ export const SHELL_TOOLS: DocTool[] = [
       },
     ],
   },
+  // SPIKE ONLY — Fluid UI evaluation route. Not for merge.
+  {
+    id: 'fluid-spike',
+    name: 'Fluid UI spike (evaluation only)',
+    route: '/fluid-spike',
+    group: 'Getting around',
+    summary: 'Throwaway evaluation of the Fluid UI component library: one Button, one Card and one Modal inside a scoped provider.',
+    sections: [
+      {
+        id: 'fluid-spike-controls',
+        title: 'Spike controls',
+        controls: [
+          { kind: 'button', name: 'Open modal', what: 'Opens the Fluid ModalRoot sandbox dialog, which is dismissed by its Close button.' },
+        ],
+      },
+    ],
+  },
   {
     id: 'legal',
     name: 'Terms, Privacy, Refunds and Contact',
