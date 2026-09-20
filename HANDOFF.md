@@ -3292,3 +3292,59 @@ because nothing wrapped yet. Each was found by measuring the running app and
 fixed at the model, not the symptom. When you add a guard here, **sabotage it
 first** and confirm it fails — several in this codebase now carry the
 sabotage they were checked against in their comments.
+
+---
+
+# Navigation honesty + SVG pass (PRs #786, #787) and the live overlay pass (Sep 2026)
+
+#786 fixed two UI test failures; #787 (Loop 1 + Loop 2, merged as `8351db0`)
+is the perfect-score navigation + SVG pass from the session handoff in
+`%TEMP%\opencode\session-handoff-2026-09-20.md`:
+
+- single label source (directory uses `SIDEBAR_GROUPS` names verbatim);
+  breadcrumb root `Workbench` → `Toolkit`;
+- WelcomeDialog fires on `/` only; tool-prefs picker asks once on a fresh
+  profile; skipping writes `{hidden: []}` rather than re-asking;
+- `GATED_ROUTES` + `isGatedRoute()` in `lib/tools.ts` mirror `RequireAuth` —
+  Sign-in badges pre-click in directory, sidebar, palette and drawer;
+- `useFocusTrap` on palette + welcome dialog; rail micro-labels, 300 ms
+  flyout grace, auto-open active group via render-phase adjustment (lint-safe,
+  no setState-in-effect); palette subsequence-fuzzy + 5 recents;
+- shared `SkipLink`/`ThemeSwitch`/`PALETTE_EXAMPLES`; Home ends on the
+  directory (CTA band removed) with `SiteFooter`; favicon redrawn with a
+  viewBox. `impeccable detect`: 1 finding, triaged false positive
+  (active-tab underline, same class as the two left standing in the audit).
+
+## The live overlay pass (this session, merged main @ `8351db0`)
+
+Section 6 of that handoff asked for a live-browser overlay pass, explicitly
+noting API sessions have no browser tool. Done from the terminal session
+instead: installed Playwright + Chromium headless shell into
+`%TEMP%\opencode\overlay-pass` (outside the repo, nothing to clean up) and
+ran `overlay-pass.cjs` against `vite dev` — **21/21 checks green**:
+
+- `/` fresh profile: first-visit dialog present, Escape dismisses, 0 px
+  horizontal overflow at 1440;
+- palette: opens as dialog, focus starts inside, Tab wraps inside the trap,
+  `seismic` filters 53 → 3–4 with the gated hit badged pre-click, Escape
+  closes;
+- deep link `/steel/beam`: no welcome dialog; computes with the API absent
+  (the `404 /api/steel/beam` in dev is the deliberate 404-fallback path, and
+  the `403 guest-quota` is pre-existing dev-environment noise — neither is a
+  #787 regression; the quota path is untouched by its 12 files);
+- mobile 390 on a tool route (the drawer lives in AppShell, so `/` is the
+  wrong route to probe it — first attempt failed on that, not on the app):
+  trigger, drawer with 54 tool links, Escape, 0 px overflow throughout;
+- collapsed 60 px rail + hover: the fixed flyout opens at x = 58, fully
+  inside the viewport — the `position: fixed` clip fix verified live, not
+  just by `getBoundingClientRect` in a unit test.
+
+Screenshots (`shot-*.png`) and `overlay-results.json` stay in the temp dir,
+not the repo. **No new defects → no new PR from the pass itself.**
+
+## Still open (unchanged)
+
+- Full route-level shell merge (Home mounts outside AppShell).
+- Next candidates if looping continues: `sub` code glosses for first-timers,
+  palette frequency weighting, print-report safety signal.
+- Drawing-audit D5 (`preserveAspectRatio` default on 12 SVGs, cosmetic P3).
