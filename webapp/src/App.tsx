@@ -67,6 +67,8 @@ const Settlement = lazy(() => import('./pages/Settlement'))
 const LateralPile = lazy(() => import('./pages/LateralPile'))
 const SoilInvestigation = lazy(() => import('./pages/SoilInvestigation'))
 const Pricing = lazy(() => import('./pages/Pricing'))
+// SPIKE ONLY — Fluid UI evaluation. Not for merge.
+const FluidSpike = lazy(() => import('./pages/FluidSpike'))
 const SignIn = lazy(() => import('./pages/auth/SignIn'))
 const SignUp = lazy(() => import('./pages/auth/SignUp'))
 const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'))
@@ -253,6 +255,8 @@ export default function App() {
         <Route path="/lateral-pile" element={<LateralPile />} />
         <Route path="/soils" element={<RequireAuth><SoilInvestigation /></RequireAuth>} />
         <Route path="/pricing" element={<Pricing />} />
+        {/* SPIKE ONLY — Fluid UI evaluation. Not for merge. */}
+        <Route path="/fluid-spike" element={<FluidSpike />} />
         {/* Guest-only routes. A signed-in visitor reaching one — a stale
             bookmark, the back button after signing in, an old email link —
             gets sent home rather than a sign-in form that reads as "your

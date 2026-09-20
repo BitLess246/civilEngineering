@@ -12,6 +12,7 @@
     "gen:coverage": "node --experimental-strip-types scripts/genSolverCoverage.mjs"
   },
   "dependencies": {
+    "@infinityfx/fluid": "^2.1.6",
     "@paddle/paddle-js": "^1.6.4",
     "@paddle/paddle-node-sdk": "^3.10.0",
     "@react-three/drei": "^10.7.7",

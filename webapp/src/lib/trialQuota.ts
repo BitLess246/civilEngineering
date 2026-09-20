@@ -45,6 +45,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/soil-nail', '/micropile', '/rock-anchor', '/shotcrete-facing',
   // standalone analysis helpers
   '/load-combinations', '/load-path', '/plumbing',
+  // SPIKE ONLY — Fluid UI evaluation route. Not for merge.
+  '/fluid-spike',
 ]
 
 /**

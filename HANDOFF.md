@@ -3348,3 +3348,39 @@ not the repo. **No new defects → no new PR from the pass itself.**
 - Next candidates if looping continues: `sub` code glosses for first-timers,
   palette frequency weighting, print-report safety signal.
 - Drawing-audit D5 (`preserveAspectRatio` default on 12 SVGs, cosmetic P3).
+
+---
+
+# Fluid UI spike — evaluated, do NOT adopt (Sep 2026, PR #789, unmerged)
+
+Asked to "upgrade the UI" with `@infinityfx/fluid` v2.1.6 (React 19 kit,
+~60 components, zero-runtime compiled CSS). Spiked on a scratch branch with a
+`/fluid-spike` sandbox (Button + Card + Modal in a scoped provider-as-div):
+tsc/eslint clean, guards green, prod build fine, renders with no console
+errors. Verdict recorded here so nobody re-runs it:
+
+- **GPL-3.0** (`license` field confirmed) against a proprietary billed
+  product — the blocker; adoption needs a relicense, not an engineer.
+- **Theme disconnect, seen on screen**: the button renders Fluid-default
+  mint (`rgb(34,227,159)`) on Drafting — a parallel `--f-*` token universe.
+  Their model wants a whole-app `FluidProvider`, which fights the
+  pre-hydration theme script; full mapping = Fluid palettes (exact array
+  lengths) × 5 themes + contrast-guard coverage for CSS the scanners
+  cannot see.
+- **Build coupling**: `fluid compile` must precede every dev/build/CI/Vercel
+  run; default output lands in `node_modules` (wiped on install), `manual`
+  mode commits a regenerated `fluid.css`. The config **must be ESM** here —
+  the documented CJS form fails to load under `"type": "module"`.
+- **Bundle**: 48.6 kB raw / 16.1 kB gzip lazy chunk for 3 components
+  (vs 23–38 kB for ours) + 11.5 kB tree-shaken CSS (77 kB full dev CSS).
+- **Overlap**: Modal/Drawer/Popover/focus-trap already built in #754–#787;
+  Fluid buys mostly inputs + animations. Icons are Lucide-internals vs the
+  hand-drawn set (their consistency rule wants all 27 overridden).
+- Corrections from the pass: the 11 `npm audit` findings are pre-existing
+  advisory drift (none from Fluid — but `npm audit` is no longer 0 on main,
+  needs its own pass), and the `@import` CSS-order build warning is
+  pre-existing Tailwind behaviour, verified by rebuilding without the import.
+
+The PR stays **unmerged by instruction** — it is the spike record, not a
+proposal. To reproduce: checkout the branch, `npm install`,
+`npx fluid compile`, `npm run dev`, visit `/fluid-spike`.
