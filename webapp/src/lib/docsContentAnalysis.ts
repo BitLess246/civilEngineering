@@ -149,6 +149,43 @@ export const ANALYSIS_TOOLS: DocTool[] = [
     ],
   },
   {
+    id: 'influence-lines',
+    name: 'Influence Lines',
+    route: '/influence-lines',
+    group: 'Analysis & modelling',
+    summary: 'Draws the influence line of every member of a simply-supported bridge truss under a unit load walking the deck, and integrates a uniform-load patch over it.',
+    basis: 'Unit-load method on a statically determinate truss — joint equilibrium at every load position; lines are exact polygons between panel points.',
+    sections: [
+      {
+        id: 'il-truss',
+        title: 'Truss',
+        controls: [
+          { kind: 'choice', name: 'Truss type', what: 'Pratt (diagonals toward midspan), Howe (diagonals toward the ends), or Warren with verticals.' },
+          { kind: 'choice', name: 'Deck level', what: 'Through trusses take the moving load at the bottom panel points; deck trusses at the top nodes, with the two abutment positions added — a load there goes straight into the bearing.' },
+          { kind: 'choice', name: 'Panels', what: 'Even panel count from 4 to 12. Panel points are where the floor beams land, and the only places the line needs an ordinate.' },
+          { kind: 'field', name: 'Span L / Depth h', unit: 'm', what: 'Overall span and truss depth. Chord forces scale with the panel moment over the depth.' },
+        ],
+      },
+      {
+        id: 'il-load',
+        title: 'Moving unit load',
+        controls: [
+          { kind: 'field', name: 'Position x', unit: 'm', what: 'Where the 1 kN unit load stands. Between panel points the deck beams share it with adjacent floor beams, so the ordinate interpolates linearly.' },
+          { kind: 'choice', name: 'Member', what: 'Whose influence line to plot — both reactions included, and every member is clickable in the elevation.' },
+        ],
+      },
+      {
+        id: 'il-uniform',
+        title: 'Uniform load patch and results',
+        controls: [
+          { kind: 'field', name: 'w, from a, to b', unit: 'kN/m, m', what: 'A uniform patch over [a, b] loads the member with w times the exact trapezoid area under its influence line.' },
+          { kind: 'output', name: 'Ordinates table', what: 'The influence-line value at every panel point, marked tension or compression.' },
+          { kind: 'output', name: 'Extremes', what: 'Largest and smallest ordinate with the load position that produces them — the panel points are the only candidates on a polygonal line.' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'seismic-wizard',
     name: 'Seismic Wizard',
     route: '/seismic-wizard',

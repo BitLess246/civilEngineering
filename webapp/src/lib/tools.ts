@@ -32,6 +32,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/beam-analysis', name: 'Beam Analysis',      sub: 'FEM multi-span',            group: 'Analysis & Modelling' },
       { to: '/truss',         name: 'Truss Space',        sub: 'Plane truss solver',        group: 'Analysis & Modelling' },
       { to: '/load-path',     name: 'Slab Load Path',     sub: 'Two-way tributary',         group: 'Analysis & Modelling' },
+      { to: '/influence-lines', name: 'Influence Lines',  sub: 'Bridge truss · moving load', group: 'Analysis & Modelling' },
       { to: '/steel/beam',    name: 'Steel Beam',         sub: 'AISC §F2–F3 / §G2.1',          group: 'Steel & Connections' },
       { to: '/steel/column',  name: 'Steel Column',       sub: 'AISC §E3 / §H1-1',          group: 'Steel & Connections' },
       { to: '/bolted-connection', name: 'Bolted Connection', sub: 'Eccentric bolt group',   group: 'Steel & Connections' },

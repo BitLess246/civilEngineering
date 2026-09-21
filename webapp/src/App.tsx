@@ -41,6 +41,7 @@ const BeamAnalysis = lazy(() => import('./pages/BeamAnalysis'))
 const ColumnDesign = lazy(() => import('./pages/ColumnDesign'))
 const FrameAnalysis = lazy(() => import('./pages/FrameAnalysis'))
 const LoadPath = lazy(() => import('./pages/LoadPath'))
+const InfluenceLines = lazy(() => import('./pages/InfluenceLines'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const Validation = lazy(() => import('./pages/Validation'))
 const Terms = lazy(() => import('./pages/legal/Terms'))
@@ -213,6 +214,7 @@ export default function App() {
         <Route path="/column-design" element={<ColumnDesign />} />
         <Route path="/frame" element={<RequireAuth><FrameAnalysis /></RequireAuth>} />
         <Route path="/load-path" element={<LoadPath />} />
+        <Route path="/influence-lines" element={<InfluenceLines />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected
             without the lazy chunk being fetched at all. Inside, the import
             starts before the gate has an answer. */}

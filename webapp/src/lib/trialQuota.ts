@@ -44,7 +44,7 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/earth-pressure', '/bearing-capacity', '/slope', '/settlement', '/lateral-pile',
   '/soil-nail', '/micropile', '/rock-anchor', '/shotcrete-facing',
   // standalone analysis helpers
-  '/load-combinations', '/load-path', '/plumbing',
+  '/load-combinations', '/load-path', '/influence-lines', '/plumbing',
 ]
 
 /**
