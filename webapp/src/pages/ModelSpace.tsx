@@ -6,6 +6,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { GuidedTour } from '../components/GuidedTour'
 import { MODEL_STEPS } from '../lib/modelTour'
 import { useTour } from '../lib/useTour'
+import {
+  shouldAutoStartGuide, hasSeenGuide, markGuideSeen, MODEL_GUIDE,
+} from '../lib/guideFirstRun'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { RebarWireframe } from '../components/RebarWireframe'
@@ -1595,6 +1598,59 @@ export default function ModelSpace() {
     setParams(next, { replace: true })
     tourStart()
   }, [tourParam, params, setParams, tourStart])
+
+  // ── The guide opens itself, once ────────────────────────────────────────
+  //
+  // This is the one page in the app nobody can use by looking at it: twelve
+  // tabs in a SEQUENCE, a viewport that starts empty, and a pipeline that has
+  // to run in order. It has a walkthrough for exactly that reason, and the
+  // walkthrough was behind a button marked "Guide" that a first-time visitor
+  // has no reason to press.
+  //
+  // The rule for when it may fire is in `lib/guideFirstRun`, as a function of
+  // facts rather than as conditions scattered through this effect — there are
+  // four ways it must NOT fire and each is a real path through this page (seen
+  // before, the embed poster, `?tour=1` already starting it, and the page not
+  // ready). Marked seen on START, so dismissing it at step one still counts:
+  // a guide that reappears is one people learn to dismiss without reading.
+  //
+  // ONE FRAME LATE, deliberately. `tour.start` runs `onStart`, which generates
+  // a demo model when there is none — a dozen setStates. Doing that inside the
+  // mount effect cascades renders, and it also means the first thing a visitor
+  // sees is an overlay rather than the workspace the overlay is about. The
+  // timeout lets the empty viewport paint first.
+  //
+  // THE FLAG IS WRITTEN INSIDE THE TIMEOUT, and the ref is RELEASED on
+  // cleanup. Both of those are the fix for a bug measured in Chromium rather
+  // than a style preference, and it is the classic StrictMode double-mount
+  // trap. Written as `ref = true; markSeen(); setTimeout(...)` with a
+  // `clearTimeout` cleanup, the sequence is: mount arms the timeout and writes
+  // the flag → StrictMode's cleanup clears the timeout → the remount hits the
+  // ref guard and returns. The guide NEVER OPENS, and the visitor's one shot
+  // at it has already been spent. The probe caught exactly that: no overlay,
+  // and `civeng-guide-seen` set.
+  //
+  // Releasing the ref lets the second mount re-arm; writing the flag only when
+  // the tour actually starts means a visitor who navigates away inside 350 ms
+  // still gets the guide next time, which is the behaviour you would want
+  // anyway.
+  const autoStarted = useRef(false)
+  useEffect(() => {
+    if (autoStarted.current) return
+    const go = shouldAutoStartGuide({
+      seen: hasSeenGuide(MODEL_GUIDE),
+      embed: EMBED,
+      explicit: tourParam === '1',
+      ready: true,
+    })
+    if (!go) return
+    autoStarted.current = true
+    const t = setTimeout(() => {
+      markGuideSeen(MODEL_GUIDE)
+      tourStart()
+    }, 350)
+    return () => { clearTimeout(t); autoStarted.current = false }
+  }, [tourParam, tourStart])
 
   // ── ?embed=1 — the preview opens onto a demo frame ──────────────────────
   // The same move the guide makes on a first visit (tour.onStart above): no
