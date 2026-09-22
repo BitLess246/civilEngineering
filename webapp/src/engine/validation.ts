@@ -50,6 +50,8 @@ import { cyclicStressRatio, crr75 } from './soils/liquefaction'
 import { nGamma, generalBearingCapacity } from './bearingGeneral'
 import { coulombKa, mononobeOkabe } from './coulomb'
 import { stressSection, sectionResultants } from './memberStress'
+import { influenceLines, ilAt } from './influenceTruss'
+import { buildBeam, effectPoints, ilTotalArea } from './influenceBeam'
 import type { RectSection } from './model'
 
 export interface ValidationCase {
@@ -91,6 +93,71 @@ const cantilever = (() => {
     moment: { manual: P * L, software: Math.abs(res.members[0].Mz[0]) },                          // kN·m
     slope: { manual: (P * L ** 2) / (2 * EIz), software: Math.abs(res.d[6 + 5]) },                // rad (θz at tip)
   }
+})()
+
+// ── Influence lines — against the BEAM ANALOGY and the IL's own definition ───
+//
+// Two engines ship on /influence-lines (`influenceTruss`, `influenceBeam`) and
+// neither had a row here, which `CLAUDE.md` L9 says must not happen: "the map
+// must never lag the code again."
+//
+// The hand values below are deliberately NOT restatements of what the engines
+// compute, which is the tautology trap `docs/AuditRemediation.md` E4 records
+// for C003. Both engines work station by station from equilibrium — section
+// cuts and joint equilibrium for the truss, rigid-body statics per load
+// position for the beam. Every "manual" number here comes from somewhere else:
+// simple-beam bending theory, or the definition of an influence line itself.
+const influence = (() => {
+  // A Pratt through truss: 24 m span, 6 panels, 3 m deep.
+  const L = 24, h = 3
+  const t = influenceLines({ type: 'Pratt', deck: 'through', panels: 6, span: L, height: h })
+
+  // THE BEAM ANALOGY. A parallel-chord truss carries moment as a couple in its
+  // chords, so a chord force is the SIMPLE-BEAM MOMENT at the section divided
+  // by the truss depth. That is a statement about bending, arrived at without
+  // cutting a single panel — and the engine never computes a beam moment.
+  //   top chord U2–U3, unit load at midspan: M = L/4, so F = (L/4)/h
+  const topChord = { manual: (L / 4) / h, software: Math.abs(ilAt(t, 'U2-U3', L / 2)) }
+  //   bottom chord L2–L3 peaks with the load at its far panel point, x = L/3:
+  //   M = x(L−x)/L = 8·16/24
+  const xB = 8
+  const botChord = {
+    manual: ((xB * (L - xB)) / L) / h,
+    software: Math.abs(ilAt(t, 'L2-L3', xB)),
+  }
+
+  // A simply supported beam, 12 m.
+  const Lb = 12
+  const beam = buildBeam({
+    length: Lb, supports: [{ x: 0, kind: 'pin' }, { x: Lb, kind: 'roller' }], hinges: [],
+  })
+  const mid = effectPoints(beam, { kind: 'moment', x: Lb / 2 })
+
+  // THE AREA UNDER A MOMENT IL, times a uniform load, IS the moment that load
+  // causes. So the area under the midspan IL must be exactly the w·L²/8
+  // coefficient — L²/8. This is the strongest row of the five: it ties the
+  // engine's trapezoidal integration of its own stations to the single most
+  // familiar result in structural engineering, by a completely separate route.
+  const momentArea = { manual: (Lb * Lb) / 8, software: ilTotalArea(mid) }
+
+  // THE SHEAR IL JUMPS BY EXACTLY 1 across the section, whatever the section:
+  // the unit load crossing it transfers from one side of the cut to the other.
+  // Left ordinate is −a/L, right is 1 − a/L, and the difference is the unit
+  // load itself. A property of the DEFINITION, not of this span.
+  const a = 3
+  const sh = effectPoints(beam, { kind: 'shear', x: a })
+  const atA = sh.filter((q) => Math.abs(q.x - a) < 1e-9).map((q) => q.v)
+  const shearJump = {
+    manual: 1,
+    software: atA.length >= 2 ? Math.max(...atA) - Math.min(...atA) : NaN,
+  }
+
+  // A reaction IL is the lever rule, (L−x)/L, so the area under it is L/2 —
+  // which is also "half a uniform load goes to each end", read off the plot.
+  const react = effectPoints(beam, { kind: 'reaction', support: 0 })
+  const reactArea = { manual: Lb / 2, software: ilTotalArea(react) }
+
+  return { topChord, botChord, momentArea, shearJump, reactArea }
 })()
 
 // ── Fixed–fixed beam, central point load — deflection P·L³/192EI ──────────────
@@ -764,6 +831,46 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'fixed-fixed-defl', category: 'Analysis', title: 'Fixed–fixed beam, central load',
     reference: 'Roark / matrix analysis', formula: 'δ = P·L³ / (192·E·I)',
     manual: fixedFixed.manual, software: fixedFixed.software, unit: 'mm', tol: 1e-3,
+  },
+  {
+    id: 'il-truss-top-chord', category: 'Analysis',
+    title: 'Truss IL — top chord at midspan vs the beam analogy',
+    reference: 'Hibbeler, Structural Analysis — parallel-chord truss',
+    formula: 'F = M / h = (L/4) / h,  unit load at midspan',
+    manual: influence.topChord.manual, software: influence.topChord.software,
+    unit: 'kN/kN', tol: 1e-9,
+  },
+  {
+    id: 'il-truss-bottom-chord', category: 'Analysis',
+    title: 'Truss IL — bottom chord peak vs the beam analogy',
+    reference: 'Hibbeler, Structural Analysis — parallel-chord truss',
+    formula: 'F = M / h = x(L−x)/(L·h),  unit load at the panel point',
+    manual: influence.botChord.manual, software: influence.botChord.software,
+    unit: 'kN/kN', tol: 1e-9,
+  },
+  {
+    id: 'il-beam-moment-area', category: 'Analysis',
+    title: 'Beam IL — midspan moment IL area vs w·L²/8',
+    reference: 'Müller-Breslau / simple-beam bending',
+    formula: '∫ IL dx = L² / 8',
+    manual: influence.momentArea.manual, software: influence.momentArea.software,
+    unit: 'm²', tol: 1e-9,
+  },
+  {
+    id: 'il-beam-shear-jump', category: 'Analysis',
+    title: 'Beam IL — shear IL jumps by the unit load at the section',
+    reference: 'Definition of an influence line',
+    formula: '(1 − a/L) − (−a/L) = 1',
+    manual: influence.shearJump.manual, software: influence.shearJump.software,
+    unit: 'kN/kN', tol: 1e-9,
+  },
+  {
+    id: 'il-beam-reaction-area', category: 'Analysis',
+    title: 'Beam IL — reaction IL area vs half a uniform load',
+    reference: 'Lever rule / statics',
+    formula: '∫ (L−x)/L dx = L / 2',
+    manual: influence.reactArea.manual, software: influence.reactArea.software,
+    unit: 'm', tol: 1e-9,
   },
   {
     id: 'steel-phimp', category: 'Steel', title: 'Compact W-beam plastic moment (short Lb)',
