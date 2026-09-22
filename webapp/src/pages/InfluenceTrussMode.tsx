@@ -193,8 +193,13 @@ export function TrussMode() {
           <div className="space-y-5">
             <ResultCard title={`Selected member — ${sel.label} (${KIND_NAME[sel.kind]}${selReal ? `, ${sel.nodes}` : ''})`}>
               <Row label={`Force at x = ${f2(xc)} m`} value={`${signed(ordNow)} kN/kN`} sub={tc(ordNow) === '—' ? 'zero member' : tc(ordNow) === 'T' ? 'tension' : 'compression'} />
-              <Row label="IL maximum" value={`+${f3(ext.max)} kN/kN`} sub={`unit load at x = ${f2(ext.maxX)} m`} />
-              <Row label="IL minimum" value={`${f3(ext.min)} kN/kN`} sub={`unit load at x = ${f2(ext.minX)} m`} />
+              {/* The position goes in the VALUE, not the sub. `Row`'s sub is
+                  `w-32 truncate` by design, and "unit load at x = 14.00 m"
+                  does not fit 8rem — it shipped reading "unit load at x =
+                  14.00…", ellipsising the one number the row exists to give.
+                  This is also the shape `BeamMode` already uses. */}
+              <Row label="IL maximum" value={`+${f3(ext.max)} kN/kN at x = ${f2(ext.maxX)} m`} />
+              <Row label="IL minimum" value={`${ext.min >= 0 ? '+' : ''}${f3(ext.min)} kN/kN at x = ${f2(ext.minX)} m`} />
               <Row label={`Uniform ${f2(w)} kN/m over ${f2(aEff)}–${f2(bEff)} m`} value={`${signed(fUdl)} kN`} sub={`area = ${f3(area)} m`} />
             </ResultCard>
 
@@ -306,12 +311,31 @@ function TrussFigure({ res, xc, selId, onSelect, ordAt }: {
         </g>
       ))}
 
-      {/* unit load at the scrub position */}
+      {/* Unit load at the scrub position.
+          CASED IN WHITE, because it is drawn INSIDE the truss and lands on a
+          panel point — which is exactly where a vertical is. At the default
+          (x = 14, panel point L2) the amber shaft and member V2 were one
+          stroke and neither could be read.
+          Hanging it under the deck was the first fix and it is not robust:
+          `sc` is limited by the DEPTH on a deep truss, which puts the deck on
+          the canvas floor with the node labels already below it and nowhere
+          left to hang anything. A casing works at every proportion, keeps the
+          arrow on the load's true position, and is what a draughtsman does
+          where two lines have to cross. */}
       <g>
         <line x1={X(xc)} y1={Y(deckY) - 44} x2={X(xc)} y2={Y(deckY) - 2} stroke={HAIR} strokeDasharray="3 3" strokeWidth={1} />
+        <line x1={X(xc)} y1={Y(deckY) - 46} x2={X(xc)} y2={Y(deckY) - 10} stroke="#ffffff" strokeWidth={5.5} strokeLinecap="round" />
         <line x1={X(xc)} y1={Y(deckY) - 44} x2={X(xc)} y2={Y(deckY) - 12} stroke={AMBER} strokeWidth={2.2} strokeLinecap="round" />
-        <path d={`M${X(xc) - 5},${Y(deckY) - 18} L${X(xc)},${Y(deckY) - 9} L${X(xc) + 5},${Y(deckY) - 18} Z`} fill={AMBER} />
-        <text x={X(xc)} y={Y(deckY) - 50} textAnchor="middle" fontSize={10} fill={AMBER} fontFamily="'IBM Plex Mono', monospace">1 kN</text>
+        <path d={`M${X(xc) - 5},${Y(deckY) - 18} L${X(xc)},${Y(deckY) - 9} L${X(xc) + 5},${Y(deckY) - 18} Z`}
+          fill={AMBER} stroke="#ffffff" strokeWidth={1.4} />
+        {/* Beside the arrow, not centred on it: centred, the label straddled
+            the vertical and its casing cut a notch through the member, so
+            "1 kN" read as two fragments. Flipped to whichever side keeps it
+            inside the drawing. */}
+        <text x={X(xc) + (xc > geom.span / 2 ? -8 : 8)} y={Y(deckY) - 46}
+          textAnchor={xc > geom.span / 2 ? 'end' : 'start'} fontSize={10} fill={AMBER}
+          fontFamily="'IBM Plex Mono', monospace" stroke="#ffffff" strokeWidth={2.6}
+          paintOrder="stroke" strokeLinejoin="round">1 kN</text>
       </g>
     </svg>
   )

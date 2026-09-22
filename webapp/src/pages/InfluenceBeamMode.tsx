@@ -23,12 +23,21 @@ import { INK, BRAND, FAIL, AMBER, FAINT, MUTED, HAIR, TINT_T, TINT_C, TINT_LOAD,
 
 type EffKind = 'reaction' | 'shear' | 'moment' | 'hinge'
 
-const SAMPLE_LOADS = { length: 12, supports: [{ x: 3, kind: 'pin' as const }, { x: 12, kind: 'roller' as const }], hinges: [] }
+/**
+ * What the page opens with.
+ *
+ * A layout, not a worked example. It used to be called the "sample problem"
+ * and the results card was headed "answers (a)–(d)", which framed the page as
+ * somebody else's exercise rather than as the user's own calculation — and it
+ * only held while the inputs were untouched, so the most informative card on
+ * the page vanished the moment anyone used it.
+ */
+const DEFAULTS = { length: 12, supports: [{ x: 3, kind: 'pin' as const }, { x: 12, kind: 'roller' as const }], hinges: [] }
 
 export function BeamMode() {
   const [length, setLength] = useState(12)
-  const [supports, setSupports] = useState<BeamSupport[]>(SAMPLE_LOADS.supports)
-  const [hinges, setHinges] = useState<number[]>(SAMPLE_LOADS.hinges)
+  const [supports, setSupports] = useState<BeamSupport[]>(DEFAULTS.supports)
+  const [hinges, setHinges] = useState<number[]>(DEFAULTS.hinges)
   const [effKind, setEffKind] = useState<EffKind>('moment')
   const [effX, setEffX] = useState(6)
   const [effSup, setEffSup] = useState(0)
@@ -39,23 +48,23 @@ export function BeamMode() {
   const [pLive, setPLive] = useState(90)
   const [wDead, setWDead] = useState(25)
   const [fbd, setFbd] = useState<'unit' | 'governing'>('governing')
-  const [isSample, setIsSample] = useState(true)
 
-  const touch = () => setIsSample(false)
-  const setLen = (v: number) => { touch(); setLength(v) }
-  const setSup = (i: number, patch: Partial<BeamSupport>) => { touch(); setSupports((ss) => ss.map((s, k) => (k === i ? { ...s, ...patch } : s))) }
-  const addSup = () => { touch(); setSupports((ss) => [...ss, { x: Math.round((length / 2) * 100) / 100, kind: 'roller' }]) }
-  const delSup = (i: number) => { touch(); setSupports((ss) => ss.filter((_, k) => k !== i)) }
-  const setHge = (i: number, x: number) => { touch(); setHinges((hh) => hh.map((h, k) => (k === i ? x : h))) }
-  const addHinge = () => { touch(); setHinges((hh) => [...hh, Math.round((length / 2) * 100) / 100]) }
-  const delHinge = (i: number) => { touch(); setHinges((hh) => hh.filter((_, k) => k !== i)) }
-  const loadSample = () => {
-    setLength(SAMPLE_LOADS.length)
-    setSupports(SAMPLE_LOADS.supports.map((s) => ({ ...s })))
-    setHinges([...SAMPLE_LOADS.hinges])
+  // No "is this still the sample?" flag. The governing-placement card below
+  // now follows whatever section is selected, so there is nothing to hide
+  // when the inputs change and no state to keep in step with them.
+  const setLen = setLength
+  const setSup = (i: number, patch: Partial<BeamSupport>) => setSupports((ss) => ss.map((s, k) => (k === i ? { ...s, ...patch } : s)))
+  const addSup = () => setSupports((ss) => [...ss, { x: Math.round((length / 2) * 100) / 100, kind: 'roller' }])
+  const delSup = (i: number) => setSupports((ss) => ss.filter((_, k) => k !== i))
+  const setHge = (i: number, x: number) => setHinges((hh) => hh.map((h, k) => (k === i ? x : h)))
+  const addHinge = () => setHinges((hh) => [...hh, Math.round((length / 2) * 100) / 100])
+  const delHinge = (i: number) => setHinges((hh) => hh.filter((_, k) => k !== i))
+  const resetInputs = () => {
+    setLength(DEFAULTS.length)
+    setSupports(DEFAULTS.supports.map((s) => ({ ...s })))
+    setHinges([...DEFAULTS.hinges])
     setEffKind('moment'); setEffX(6); setEffSup(0); setEffHinge(0); setUnitX(0)
     setTarget('min'); setWLive(50); setPLive(90); setWDead(25)
-    setIsSample(true)
   }
 
   const input: BeamInput = { length, supports, hinges }
@@ -73,9 +82,9 @@ export function BeamMode() {
     <div className="space-y-5">
           <Card title="Beam, supports & hinges" hint="supports must equal hinges + 2">
             <div className="sm:col-span-2 lg:col-span-3">
-              <button type="button" onClick={loadSample}
+              <button type="button" onClick={resetInputs}
                 className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                Load the sample problem — beam ABCD, 12 m, lane load 50 kN/m + 90 kN, dead 25 kN/m
+                Reset inputs — 12 m, pin at 3 m, roller at 12 m, lane 50 kN/m + 90 kN, dead 25 kN/m
               </button>
             </div>
             <Num label="Length L" unit="m" value={length} onChange={setLen} min={1} max={80} step="0.5" />
@@ -133,7 +142,7 @@ export function BeamMode() {
                 options={hinges.map((h, i) => [String(i), `H${i + 1} at x = ${f2(h)} m`] as [string, string])} />
             )}
             {(effKind === 'shear' || effKind === 'moment') && (
-              <Num label="Section position" unit="m" value={effX} onChange={(v) => { touch(); setEffX(v) }} min={0} max={length} step="0.25" />
+              <Num label="Section position" unit="m" value={effX} onChange={setEffX} min={0} max={length} step="0.25" />
             )}
           </Card>
 
@@ -151,9 +160,9 @@ export function BeamMode() {
           <Card title="Load placement">
             <Pick label="Go for" value={target} onChange={(v) => setTarget(v as 'max' | 'min')}
               options={[['max', 'Maximum value — patch the positive regions'], ['min', 'Minimum value — patch the negative regions']]} />
-            <Num label="Live UDL w" unit="kN/m" value={wLive} onChange={(v) => { touch(); setWLive(v) }} min={0} max={200} step="0.5" />
-            <Num label="Concentrated live P" unit="kN" value={pLive} onChange={(v) => { touch(); setPLive(v) }} min={0} max={500} step="1" />
-            <Num label="Dead UDL (whole span)" unit="kN/m" value={wDead} onChange={(v) => { touch(); setWDead(v) }} min={0} max={200} step="0.5" />
+            <Num label="Live UDL w" unit="kN/m" value={wLive} onChange={setWLive} min={0} max={200} step="0.5" />
+            <Num label="Concentrated live P" unit="kN" value={pLive} onChange={setPLive} min={0} max={500} step="1" />
+            <Num label="Dead UDL (whole span)" unit="kN/m" value={wDead} onChange={setWDead} min={0} max={200} step="0.5" />
             <p className="text-[10px] text-faint sm:col-span-2 lg:col-span-3">
               The patch covers the sign regions of the line, the concentrated load stands on the
               extreme ordinate, and the dead load always covers the full span.
@@ -172,7 +181,7 @@ export function BeamMode() {
             <ul className="mt-2 list-disc pl-5 text-sm text-fail">
               {problems.map((p) => <li key={p}>{p}</li>)}
             </ul>
-            <p className="mt-2 text-xs text-muted">Fix the layout with the editors on the left — supports must equal hinges + 2, and every rigid body must be held against rotation. The sample problem button above restores the classic ABCD beam.</p>
+            <p className="mt-2 text-xs text-muted">Fix the layout with the editors on the left — supports must equal hinges + 2, and every rigid body must be held against rotation. The reset button above restores the starting layout.</p>
           </div>
         </div>
       </div>
@@ -201,13 +210,21 @@ export function BeamMode() {
       ? `Hinge shear H${effect.hinge + 1} (x = ${f2(hinges[Math.min(effect.hinge, hinges.length - 1)] ?? 0)} m)`
       : `${effect.kind === 'shear' ? 'Shear' : 'Moment'} at ${letters.find((l) => Math.abs(l.x - effXc) < 1e-9)?.letter ?? 'x'} (x = ${f2(effXc)} m)`
 
-  // The board-exam sample, straight from the engine: moment and shear lines at
-  // C (x = 6), the live loads placed on the matching sign regions, dead over
-  // the whole span. Shown whenever the sample flag is up (any edit clears it).
-  const sample = (() => {
-    if (!isSample) return null
-    const mM = effectPoints(model, { kind: 'moment', x: 6 })
-    const mV = effectPoints(model, { kind: 'shear', x: 6 })
+  // THE TWO PLACEMENT QUESTIONS, at whatever section is selected.
+  //
+  // Where a uniform lane load has to sit, and what the worst moment and shear
+  // at the section then are. This used to be hard-coded to x = 6 and labelled
+  // "C" — correct only for the layout the page opened with — and it was gated
+  // behind an untouched-inputs flag, so it disappeared as soon as anyone
+  // changed anything. It now follows `effXc`, which means it is right for
+  // every layout and never has to be hidden.
+  //
+  // Only for a SECTION effect: "moment at" and "shear at" are the questions,
+  // and a reaction or a hinge shear has no section to ask them about.
+  const governing = (() => {
+    if (effect.kind !== 'moment' && effect.kind !== 'shear') return null
+    const mM = effectPoints(model, { kind: 'moment', x: effXc })
+    const mV = effectPoints(model, { kind: 'shear', x: effXc })
     const negLen = signRegions(mM, -1).reduce((a, r) => a + r.length, 0)
     const posLen = signRegions(mM, 1).reduce((a, r) => a + r.length, 0)
     const deadM = wDead * ilTotalArea(mM)
@@ -220,6 +237,9 @@ export function BeamMode() {
       maxPosV: pV.liveTotal + deadV,
     }
   })()
+
+  /** The section's station letter, or its position when it is not at one. */
+  const secName = letters.find((l) => Math.abs(l.x - effXc) < 1e-9)?.letter ?? `x = ${f2(effXc)} m`
 
   // Free-body values: the unit-load state, or the governing placement with
   // every reaction (and hinge shear) summed from its own influence line.
@@ -296,14 +316,14 @@ export function BeamMode() {
         ],
       })
     }
-    if (sample) {
+    if (governing) {
       out.push({
-        title: 'Sample problem — answers (a)–(d)',
+        title: `Governing lane-load placements at ${secName}`,
         lines: [
-          { text: `(a) Total length under the live UDL for maximum negative moment at C: ${f2(sample.negLen)} m — the overhang A–B, the only stretch where the M_C influence line is negative.` },
-          { text: `(b) Total length under the dead UDL: ${f2(length)} m — dead load acts on the entire beam. Its net moment at C is ${signed(sample.deadM)} kN·m; the positive region of the line alone measures ${f2(sample.posLen)} m.` },
-          { text: `(c) Maximum negative moment at C: ${signed(sample.maxNegM)} kN·m = dead ${signed(sample.deadM)} + live ${signed(sample.pM.liveTotal)} (UDL ${signed(sample.pM.udlEffect)} over ${f2(sample.negLen)} m + the 90 kN at A: ${signed(sample.pM.pointEffect ?? NaN)}).` },
-          { text: `(d) Maximum positive shear at C: ${signed(sample.maxPosV)} kN = dead ${signed(sample.deadV)} + live ${signed(sample.pV.liveTotal)} (UDL ${signed(sample.pV.udlEffect)} over the positive regions + the 90 kN just right of C: ${signed(sample.pV.pointEffect ?? NaN)}).` },
+          { text: `Length under the live UDL for the worst negative moment at ${secName}: ${f2(governing.negLen)} m — the negative region${governing.negLen > 0 ? '' : 's'} of the M line, the only stretch where a downward patch reduces the moment.` },
+          { text: `Length under the dead UDL: ${f2(length)} m — dead load acts on the entire beam, so it cannot be placed. Its net moment at ${secName} is ${signed(governing.deadM)} kN·m; the positive region of the line alone measures ${f2(governing.posLen)} m.` },
+          { text: `Worst negative moment at ${secName}: ${signed(governing.maxNegM)} kN·m = dead ${signed(governing.deadM)} + live ${signed(governing.pM.liveTotal)} (UDL ${signed(governing.pM.udlEffect)} over ${f2(governing.negLen)} m + the ${f2(pLive)} kN point load on the most negative ordinate: ${signed(governing.pM.pointEffect ?? NaN)}).` },
+          { text: `Worst positive shear at ${secName}: ${signed(governing.maxPosV)} kN = dead ${signed(governing.deadV)} + live ${signed(governing.pV.liveTotal)} (UDL ${signed(governing.pV.udlEffect)} over the positive regions + the point load on the most positive ordinate: ${signed(governing.pV.pointEffect ?? NaN)}).` },
         ],
       })
     }
@@ -326,12 +346,12 @@ export function BeamMode() {
 
         {/* ── results & drawings ── */}
         <div className="space-y-5">
-          {sample && (
-            <ResultCard title="Sample problem — answers (a)–(d)">
-              <Row label="(a) Length under the live UDL for max negative M at C" value={`${f2(sample.negLen)} m`} sub="the overhang A–B — the negative region of the M_C line" />
-              <Row label="(b) Length under the dead UDL" value={`${f2(length)} m`} sub={`the whole beam; net M_C from dead = ${signed(sample.deadM)} kN·m (positive region: ${f2(sample.posLen)} m)`} />
-              <Row label="(c) Maximum negative moment at C" value={`${signed(sample.maxNegM)} kN·m`} sub={`dead ${signed(sample.deadM)} + live ${signed(sample.pM.liveTotal)} (w·A ${signed(sample.pM.udlEffect)}, P at A ${signed(sample.pM.pointEffect ?? NaN)})`} />
-              <Row label="(d) Maximum positive shear at C" value={`${signed(sample.maxPosV)} kN`} sub={`dead ${signed(sample.deadV)} + live ${signed(sample.pV.liveTotal)} (w·A ${signed(sample.pV.udlEffect)}, P just right of C ${signed(sample.pV.pointEffect ?? NaN)})`} />
+          {governing && (
+            <ResultCard title={`Governing lane-load placements at ${secName}`}>
+              <Row label={`Length under the live UDL for the worst negative M at ${secName}`} value={`${f2(governing.negLen)} m`} sub="the negative region of the moment line" />
+              <Row label="Length under the dead UDL" value={`${f2(length)} m`} sub={`the whole beam; net M = ${signed(governing.deadM)} kN·m`} />
+              <Row label={`Worst negative moment at ${secName}`} value={`${signed(governing.maxNegM)} kN·m`} sub={`dead ${signed(governing.deadM)} + live ${signed(governing.pM.liveTotal)}`} />
+              <Row label={`Worst positive shear at ${secName}`} value={`${signed(governing.maxPosV)} kN`} sub={`dead ${signed(governing.deadV)} + live ${signed(governing.pV.liveTotal)}`} />
             </ResultCard>
           )}
 
@@ -675,7 +695,11 @@ export function BeamILPlot({ pts, length, unitX, regions, unitLabel, valueAt }: 
       {(regions ?? []).map((r, i) => (
         <g key={i}>
           <rect x={X(r.a)} y={padT} width={Math.max(1, X(r.b) - X(r.a))} height={H - padT - padB} fill={TINT_LOAD} opacity={0.75} />
-          <text x={(X(r.a) + X(r.b)) / 2} y={H - padB + 26} textAnchor="middle" fontSize={9} fill="#b45309" fontFamily={MONO} fontWeight={600}>load {f2(r.b - r.a)} m</text>
+          {/* "patch", not "load", and it names a LENGTH. Reading "load 3.00 m"
+              directly under the x tick row, a metre from a tick reading
+              "3.00", it was impossible to tell a patch length from a load
+              POSITION — the two quantities the chart's x axis is about. */}
+          <text x={(X(r.a) + X(r.b)) / 2} y={H - padB + 27} textAnchor="middle" fontSize={9} fill="#b45309" fontFamily={MONO} fontWeight={600}>patch {f2(r.b - r.a)} m long</text>
         </g>
       ))}
 
@@ -715,12 +739,27 @@ export function BeamILPlot({ pts, length, unitX, regions, unitLabel, valueAt }: 
       {pts.map((p, k) => {
         const jump = k > 0 && Math.abs(pts[k - 1].x - p.x) < 1e-9
         const jumpStart = k < pts.length - 1 && Math.abs(pts[k + 1].x - p.x) < 1e-9
-        const anchor = jump ? 'end' : jumpStart ? 'start' : 'middle'
-        const dx = jump ? -7 : jumpStart ? 7 : 0
+        // At the PLOT EDGES a centred label overhangs the frame: at x = 0 it
+        // reached left past the y axis and sat on the axis's own "−2.00", so
+        // the floor ordinate and the axis scale read as one stacked pair of
+        // numbers. Anchor inward there, the same way a jump pair splits.
+        const atLeft = X(p.x) - padL < 14
+        const atRight = W - padR - X(p.x) < 14
+        const anchor = jump ? 'end' : jumpStart ? 'start' : atLeft ? 'start' : atRight ? 'end' : 'middle'
+        const dx = jump ? -7 : jumpStart ? 7 : atLeft ? 4 : atRight ? -4 : 0
+        // A NEGATIVE ordinate's label went BELOW its point, and the extreme
+        // negative ordinate sits on the plot floor — so its label landed at
+        // H − padB + 14 while the x tick labels sit at H − padB + 15. One
+        // pixel apart, and the two printed on top of each other: at the
+        // default layout the origin read as a single smear of "-2.000" and
+        // "0.00". Flipping the deepest ordinate's label to ABOVE its point
+        // puts it inside the plot, where there is nothing to hit.
+        const onFloor = Y(p.v) > H - padB - 12
+        const above = p.v >= 0 || onFloor
         return (
           <g key={k}>
             <circle cx={X(p.x)} cy={Y(p.v)} r={2.6} fill={Math.abs(p.v) > 5e-7 ? BRAND : '#b9b5aa'} />
-            <text x={X(p.x) + dx} y={p.v >= 0 ? Y(p.v) - 7 : Y(p.v) + 14} textAnchor={anchor} fontSize={9} fill={MUTED} fontFamily={MONO}>{f3(p.v)}</text>
+            <text x={X(p.x) + dx} y={above ? Y(p.v) - 7 : Y(p.v) + 14} textAnchor={anchor} fontSize={9} fill={MUTED} fontFamily={MONO}>{f3(p.v)}</text>
           </g>
         )
       })}
