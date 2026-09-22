@@ -14,7 +14,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  segments, points, crowdedPairs, extent, MIN_FEATURE_GAP, MIN_EXTENT,
+  segments, points, arcBox, crowdedPairs, extent, MIN_FEATURE_GAP, MIN_EXTENT,
 } from './iconLegibility'
 import { RIBBON_ICONS, ACTION_ICONS } from './ribbonIcons'
 import { GROUP_ICONS } from './toolGroupIcons'
@@ -97,10 +97,22 @@ describe('extent', () => {
     expect(e.h).toBe(10)
   })
 
-  it('reads an arc’s endpoint and not its radii and flags', () => {
-    // `A5 5 0 0 1 14 19` names ONE point, (14, 19). A naive pair scan read
-    // (5, 5), (0, 0) and (1, 14) — a radius, two flags and a rotation.
-    expect(points('M4 9H14A5 5 0 0 1 14 19')).toEqual([[4, 9], [14, 9], [14, 19]])
+  it('reads an arc as its box, never as its radii and flags', () => {
+    // Two things this pins. A naive pair scan read `A5 5 0 0 1 14 19` as the
+    // points (5, 5), (0, 0) and (1, 14) — a radius, two flags and a rotation,
+    // none of which are coordinates. And reading only the ENDPOINT measured
+    // a circle whose endpoints share an axis as zero wide, which is what made
+    // `Timber` report 0.0×17.6.
+    //
+    // Chord (14,9)→(14,19) is 10 long with r = 5, so it is a semicircle about
+    // (14, 14) and its box is (9,9)–(19,19). The endpoint is inside that box,
+    // so it does not need pushing separately.
+    expect(points('M4 9H14A5 5 0 0 1 14 19')).toEqual([
+      [4, 9], [14, 9], [9, 9], [19, 19],
+    ])
+    for (const p of points('M4 9H14A5 5 0 0 1 14 19')) {
+      expect(p, 'a flag or a rotation leaked in as a point').not.toEqual([0, 0])
+    }
   })
 
   it('counts a filled dot to its edge, not its centre', () => {
@@ -109,18 +121,37 @@ describe('extent', () => {
   })
 })
 
-describe('the ribbon marks read at the size they ship at', () => {
-  const RIBBON = {
+describe('every mark in the app reads at the size it ships at', () => {
+  /**
+   * NO ALLOWLIST. There was one: applying the rule to the eleven sidebar marks
+   * found five crowded and two small, and they were named with their
+   * measurements rather than redrawn, because rewriting eleven shipped icons
+   * inside a PR about the ribbon would have made that diff unreviewable.
+   *
+   * They are redrawn now, so the list is gone — which is the point of having
+   * written it down instead of skipping the set. What the 4× render showed,
+   * and what makes this more than a rule-following exercise: four of the five
+   * were genuinely unreadable in the rail. `Analysis` drew a bowtie, `Concrete`
+   * a double-edged box with nothing in it, `Geotechnical` a hatched rectangle,
+   * `Foundations` a blob. The rule found them from the geometry alone.
+   *
+   * `Timber` was the exception and it is worth keeping straight: it read fine
+   * and the PROXY was wrong, because it is two arcs whose every named point
+   * shares x = 12. `arcBox` fixed the proxy; the mark never changed.
+   */
+  const ALL = {
     ...Object.fromEntries(Object.entries(RIBBON_ICONS).map(([k, v]) => [`ribbon/${k}`, v])),
     ...Object.fromEntries(Object.entries(ACTION_ICONS).map(([k, v]) => [`action/${k}`, v])),
+    ...Object.fromEntries(Object.entries(GROUP_ICONS).map(([k, v]) => [`sidebar/${k}`, v])),
   }
 
   it('found them all', () => {
-    expect(Object.keys(RIBBON).length).toBe(16)
+    // 12 ribbon tabs + 4 actions + 11 sidebar groups.
+    expect(Object.keys(ALL).length).toBe(27)
   })
 
   it('keeps parallel strokes far enough apart to stay two strokes', () => {
-    const crowded = Object.entries(RIBBON)
+    const crowded = Object.entries(ALL)
       .map(([k, icon]) => [k, crowdedPairs(icon)] as const)
       .filter(([, hits]) => hits.length > 0)
       .map(([k, hits]) => `${k}: ${hits.join('; ')}`)
@@ -128,7 +159,7 @@ describe('the ribbon marks read at the size they ship at', () => {
   })
 
   it('fills its box, because a small drawing is a crowded drawing', () => {
-    const small = Object.entries(RIBBON)
+    const small = Object.entries(ALL)
       .map(([k, icon]) => [k, extent(icon)] as const)
       .filter(([, e]) => e.w < MIN_EXTENT || e.h < MIN_EXTENT)
       .map(([k, e]) => `${k}: ${e.w.toFixed(1)}×${e.h.toFixed(1)}`)
@@ -136,52 +167,36 @@ describe('the ribbon marks read at the size they ship at', () => {
   })
 })
 
-describe('the SIDEBAR marks, which shipped before this rule existed', () => {
-  /**
-   * Known failures, with their measurements — NOT an exemption.
-   *
-   * Applying the rule to the eleven sidebar marks found five crowded and two
-   * small. They ship today and they are drawn at 15–22 px in the rail, so this
-   * is a real finding and not a theoretical one; redrawing them is also not a
-   * ribbon change, and quietly rewriting eleven shipped icons inside a PR about
-   * the ribbon is how a diff stops being reviewable. So they are named here,
-   * with the numbers, and the rule binds every mark that is NOT on this list —
-   * which is the part that matters, because it is what a new mark has to pass.
-   *
-   * `Timber` is different in kind and the entry says so: it is two arcs whose
-   * every named point shares x = 12, so `points` reads its width as 0. The
-   * mark is fine; the PROXY cannot see a circle drawn as arcs. Fixing that
-   * means computing arc extrema, which is the other half of the follow-up.
-   */
-  const KNOWN = {
-    crowded: ['Concrete', 'Analysis', 'Steel', 'Foundations', 'Geotechnical'],
-    small: ['Analysis', 'Timber'],
-  }
-
-  it('finds exactly the crowding already known about, and no more', () => {
-    const crowded = Object.entries(GROUP_ICONS)
-      .filter(([, icon]) => crowdedPairs(icon).length > 0)
-      .map(([k]) => k)
-    expect(crowded.sort()).toEqual([...KNOWN.crowded].sort())
+describe('arcBox — what let a circle measure zero units wide', () => {
+  it('bounds a semicircle by the circle it lies on', () => {
+    // Timber's own geometry: a half arc from (12, 3.2) to (12, 20.8) with r 8.8.
+    // Its endpoints share x, so an endpoint-only box is a vertical line.
+    const box = arcBox(12, 3.2, 8.8, 8.8, true, false, 12, 20.8)
+    const xs = box.map((p) => p[0])
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(17.6, 6)
   })
 
-  it('finds exactly the small marks already known about, and no more', () => {
-    const small = Object.entries(GROUP_ICONS)
-      .filter(([, icon]) => { const e = extent(icon); return e.w < MIN_EXTENT || e.h < MIN_EXTENT })
-      .map(([k]) => k)
-    expect(small.sort()).toEqual([...KNOWN.small].sort())
+  it('centres the circle on the chord midpoint when the chord is a diameter', () => {
+    const box = arcBox(2, 12, 10, 10, true, false, 22, 12)
+    expect(box).toEqual([[2, 2], [22, 22]])
   })
 
-  it('holds every OTHER sidebar mark to the rule', () => {
-    // The point of listing the failures rather than skipping the set: the six
-    // that pass are guarded, and a new sidebar mark cannot join the list
-    // without someone editing it.
-    const exempt = new Set([...KNOWN.crowded, ...KNOWN.small])
-    for (const [k, icon] of Object.entries(GROUP_ICONS)) {
-      if (exempt.has(k)) continue
-      expect(crowdedPairs(icon), k).toEqual([])
-      const e = extent(icon)
-      expect(Math.min(e.w, e.h), k).toBeGreaterThanOrEqual(MIN_EXTENT)
-    }
+  it('grows radii that cannot span the chord, as a browser does', () => {
+    // SVG F.6.6: r = 1 cannot reach from (0,0) to (10,0), so it is scaled to
+    // 5 and the arc becomes a semicircle. Silently keeping r = 1 would put
+    // the box in the wrong place entirely.
+    const box = arcBox(0, 0, 1, 1, false, true, 10, 0)
+    expect(box[0][0]).toBeCloseTo(0, 6)
+    expect(box[1][0]).toBeCloseTo(10, 6)
+  })
+
+  it('treats a zero radius as the straight line the spec says it is', () => {
+    expect(arcBox(1, 2, 0, 5, false, false, 7, 9)).toEqual([[1, 2], [7, 9]])
+  })
+
+  it('sees Timber through the full extent path', () => {
+    const e = extent(GROUP_ICONS.Timber)
+    expect(e.w).toBeCloseTo(17.6, 1)
+    expect(e.h).toBeCloseTo(17.6, 1)
   })
 })
