@@ -36,54 +36,90 @@ export const ICON_STROKE = 1.6
 
 export const GROUP_ICONS: Record<string, GroupIcon> = {
   Concrete: {
-    // A beam section with its cage: the first thing drawn on any RC sheet.
-    depicts: 'reinforced beam section with four bars and a tie',
-    paths: ['M5 4H19V20H5Z', 'M7.5 6.5H16.5V17.5H7.5Z'],
+    // A beam section with its bars: the first thing drawn on any RC sheet.
+    //
+    // TALLER THAN IT IS WIDE, which is the difference between an RC section
+    // and a die showing four. A square box with four dots in it is exactly
+    // what the previous attempt drew, and the render showed it — the geometry
+    // was legible and the SUBJECT was wrong. A beam section is 300×500; making
+    // the mark 14×20 says so before anything else does.
+    //
+    // No tie, and that is a size decision. The section, a tie inside it AND
+    // four bars inside that is three nested things in a 22 px square; rendered
+    // at 22, 15 and 88 side by side, the tie and the bars merged into one
+    // thick edge at both shipping sizes and only the 88 px study showed the
+    // cage. The bars are the identity, so they get the room.
+    depicts: 'reinforced beam section with four bars',
+    paths: ['M5 2H19V22H5Z'],
     dots: [
-      { cx: 9, cy: 8, r: 1.15 }, { cx: 15, cy: 8, r: 1.15 },
-      { cx: 9, cy: 16, r: 1.15 }, { cx: 15, cy: 16, r: 1.15 },
+      { cx: 9.5, cy: 6.5, r: 1.8 }, { cx: 14.5, cy: 6.5, r: 1.8 },
+      { cx: 9.5, cy: 17.5, r: 1.8 }, { cx: 14.5, cy: 17.5, r: 1.8 },
     ],
   },
   Analysis: {
-    // Simply supported span with its deflected shape — the whole of first-year
-    // structural analysis in one mark.
-    depicts: 'simply supported beam, deflected, on triangular supports',
+    // A CANTILEVER and its deflected shape, off a hatched support face.
+    //
+    // Three attempts, and the third is a different structure for a reason
+    // worth recording. A simply supported span was the obvious choice and it
+    // cannot be drawn at 15 px: its deflected curve MEETS the straight beam at
+    // both ends, so the two strokes enclose an area, and the mark reads as a
+    // container. Deepen the sag to separate them and it is a bucket; shallow
+    // it to look like a real deflection and the two strokes merge, which is
+    // what the first version did (1.4 units apart — the worst mark in the app,
+    // a bowtie at 22 px). Adding end ticks to break the bucket added handles
+    // to it instead.
+    //
+    // A cantilever has no second bearing, so the shape never closes: a
+    // straight beam and a curve leaving it, which is unambiguous at every
+    // size. It is also the statics self-check this repo's own solver tests
+    // are anchored on, δ = PL³/3EI.
+    depicts: 'cantilever and its deflected shape off a hatched support',
     paths: [
-      'M3 8H21',
-      'M3 8C7.5 15 16.5 15 21 8',
-      'M6 8L3.6 12.2H8.4Z', 'M18 8L15.6 12.2H20.4Z',
-      'M2.6 13.6H9.4', 'M14.6 13.6H21.4',
+      'M4 2V22',
+      'M1.5 4.5L4 2', 'M1.5 9.5L4 7', 'M1.5 14.5L4 12', 'M1.5 19.5L4 17',
+      'M4 7H21',
+      'M4 7C12 7 16 11 21 18',
     ],
   },
   Steel: {
     // A W-shape end view. Flanges and web, nothing else — an I is the whole
     // identity of the discipline.
+    //
+    // Three strokes, not five. The flange RETURNS were 1.6 units off the
+    // flange face, so at 22 px each flange drew as one thick bar and the
+    // detail they were there to show was the first thing lost. A flange is a
+    // line at this size.
     depicts: 'wide-flange section, end view',
-    paths: [
-      'M4 4.5H20', 'M4 19.5H20', 'M12 4.5V19.5',
-      'M6.5 4.5V6.1H17.5V4.5', 'M6.5 19.5V17.9H17.5V19.5',
-    ],
+    paths: ['M3 4H21', 'M3 20H21', 'M12 4V20'],
   },
   Foundations: {
     // Column stub on a spread footing, ground hatched below — the section a
-    // footing schedule is drawn from.
+    // footing schedule is drawn from. The ground line was 2.5 units under the
+    // pad and merged with it; it is 3.5 now, and the hatch is at 5.
     depicts: 'column on a spread footing over hatched ground',
     paths: [
       'M10 3V12', 'M14 3V12',
       'M4 12H20V16H4Z',
-      'M2.5 18.5H21.5',
-      'M4.5 21.5L6.5 18.5', 'M9 21.5L11 18.5', 'M13.5 21.5L15.5 18.5', 'M18 21.5L20 18.5',
+      'M2.5 19.5H21.5',
+      'M4 22.5L6.5 19.5', 'M9 22.5L11.5 19.5', 'M14 22.5L16.5 19.5', 'M19 22.5L21.5 19.5',
     ],
   },
   Geotechnical: {
     // A bore log: strata of different thickness down a hole, which is how the
     // ground is actually known.
+    //
+    // A CLOSED COLUMN, not a grid. The hole's two walls used to run past the
+    // strata boundaries top and bottom, so four horizontals crossing two
+    // verticals drew a window — legible, and the wrong picture. Closing the
+    // column makes the boundaries read as strata IN something. The uneven
+    // spacing (5, 5, 8) is the whole point of a log and is why the bands are
+    // not thirds.
+    //
+    // The version before this also carried strata ticks either side of the
+    // hole, 2.7–2.8 units off the boundaries they annotated: eight crowded
+    // pairs, the most of any mark, and it filled the log in solid.
     depicts: 'borehole log through three strata',
-    paths: [
-      'M3 5.5H21', 'M3 11H21', 'M3 16.5H21', 'M3 21H21',
-      'M8.5 3V22', 'M15.5 3V22',
-      'M3.5 8.2H7', 'M17 8.2H20.5', 'M3.5 13.8H7', 'M17 13.8H20.5',
-    ],
+    paths: ['M5 3H19V21H5Z', 'M5 8H19', 'M5 13H19'],
   },
   'Seismic & Loads': {
     // An accelerogram over its baseline — the record a time-history runs on.

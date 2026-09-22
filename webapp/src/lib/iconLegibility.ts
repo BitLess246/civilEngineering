@@ -46,6 +46,45 @@ export const MIN_FEATURE_GAP = 3
  */
 export const MIN_EXTENT = 14
 
+/**
+ * A box containing the elliptical arc from (x0, y0) to (x1, y1).
+ *
+ * CONSERVATIVE ON PURPOSE. This returns the corners of the box around the
+ * whole ELLIPSE the arc lies on, not the arc's own extrema — so for a quarter
+ * arc it over-reports. That is the safe direction for the lower-bound "is the
+ * mark big enough" test the caller runs: it can let a marginal drawing
+ * through, never reject a good one. The same trade-off the curve control
+ * points already make.
+ *
+ * The centre comes from the SVG spec's endpoint-to-centre conversion
+ * (F.6.5), with the radii scaled up per F.6.6 when they are too small to
+ * span the chord — which is what a browser does, so the box matches what is
+ * actually drawn. Rotation is ignored, which widens the box further, never
+ * narrows it.
+ */
+export function arcBox(
+  x0: number, y0: number, rx: number, ry: number,
+  largeArc: boolean, sweep: boolean, x1: number, y1: number,
+): number[][] {
+  const ax = Math.abs(rx), ay = Math.abs(ry)
+  // A zero radius is a straight line by the spec; the endpoints bound it.
+  if (!(ax > 0) || !(ay > 0)) return [[x0, y0], [x1, y1]]
+  const dx2 = (x0 - x1) / 2, dy2 = (y0 - y1) / 2
+  // F.6.6: grow the radii until they can reach across the chord.
+  const lam = (dx2 * dx2) / (ax * ax) + (dy2 * dy2) / (ay * ay)
+  const k = lam > 1 ? Math.sqrt(lam) : 1
+  const RX = ax * k, RY = ay * k
+  const num = RX * RX * RY * RY - RX * RX * dy2 * dy2 - RY * RY * dx2 * dx2
+  const den = RX * RX * dy2 * dy2 + RY * RY * dx2 * dx2
+  const co = den > 0 ? Math.sqrt(Math.max(0, num / den)) : 0
+  const sign = largeArc === sweep ? -1 : 1
+  const cxp = sign * co * ((RX * dy2) / RY)
+  const cyp = sign * co * (-(RY * dx2) / RX)
+  const cx = cxp + (x0 + x1) / 2
+  const cy = cyp + (y0 + y1) / 2
+  return [[cx - RX, cy - RY], [cx + RX, cy + RY]]
+}
+
 export interface Segment {
   x1: number; y1: number; x2: number; y2: number
 }
@@ -134,8 +173,15 @@ export function points(d: string): number[][] {
     if (cmd === 'H') { x = n[0]; out.push([x, y]) }
     else if (cmd === 'V') { y = n[0]; out.push([x, y]) }
     else if (cmd === 'A') {
-      // rx ry rotation large-arc sweep x y — only the last pair is a point.
-      for (let i = 0; i + 7 <= n.length; i += 7) { x = n[i + 5]; y = n[i + 6]; out.push([x, y]) }
+      // rx ry rotation large-arc sweep x y. Only the last pair is a point —
+      // but the ARC BULGES away from it, and `Timber` is two arcs whose every
+      // named point shares x = 12, so endpoints alone measured a circle as
+      // zero units wide. Bound the arc by the circle it lies on instead.
+      for (let i = 0; i + 7 <= n.length; i += 7) {
+        const [rx, ry, , laf, sf, ex, ey] = n.slice(i, i + 7)
+        out.push(...arcBox(x, y, rx, ry, laf === 1, sf === 1, ex, ey))
+        x = ex; y = ey
+      }
     } else if (cmd !== 'Z') {
       for (let i = 0; i + 1 < n.length; i += 2) { x = n[i]; y = n[i + 1]; out.push([x, y]) }
     }
