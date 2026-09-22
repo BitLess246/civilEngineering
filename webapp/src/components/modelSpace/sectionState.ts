@@ -64,15 +64,29 @@ export function parseSectionState(raw: string | null | undefined): SectionState 
 
 // ── the store ─────────────────────────────────────────────────────────────
 
-let storedState: string | null = null
-try {
-  if (typeof globalThis !== 'undefined') {
-    const ls = (globalThis as { localStorage?: Storage }).localStorage
-    if (ls) storedState = ls.getItem(SECTIONS_KEY)
-  }
-} catch { /* quota, or blocked */ }
+/**
+ * `localStorage`, or undefined where there isn't one.
+ *
+ * Undefined in three real cases and they all mean the same thing here: a
+ * browser set to block site data (the property access itself throws), a test
+ * running in Node, and SSR. Every caller treats absence as "don't persist",
+ * which degrades to the behaviour the page had before folds were stored.
+ *
+ * ONE HELPER, TWO CALLERS, and that is the point of it. It was inlined into
+ * the read path and deleted, leaving the WRITE path calling a function that no
+ * longer existed — a hard `tsc` error, and at runtime a `ReferenceError`
+ * swallowed by the `try` around it, so folds silently stopped being saved
+ * while the page went on looking like they were. See `persists what it was
+ * given` below, which is the test that was missing.
+ */
+const storage = (): Storage | undefined => {
+  try {
+    return typeof globalThis !== 'undefined'
+      ? (globalThis as { localStorage?: Storage }).localStorage : undefined
+  } catch { return undefined }               // a browser set to block site data
+}
 
-let state: SectionState = parseSectionState(storedState ?? null)
+let state: SectionState = parseSectionState(storage()?.getItem(SECTIONS_KEY) ?? null)
 const listeners = new Set<() => void>()
 
 export function subscribeSections(fn: () => void): () => void {

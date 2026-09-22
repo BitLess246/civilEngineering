@@ -10,6 +10,8 @@
 import { type ReactNode } from 'react'
 import type { SolveProgress } from '../../engine/progress'
 import { LAT_DIRS, type Tab } from './tabs'
+import { actionIcon, ribbonIcon } from '../../lib/ribbonIcons'
+import { DrawnIcon } from '../DrawnIcon'
 import { useSyncExternalStore } from 'react'
 import { isCollapsed, sectionsSnapshot, subscribeSections, toggleSectionInStore } from './sectionState'
 
@@ -132,18 +134,76 @@ export function Swatches({ items }: { items: readonly (readonly [string, string]
     </div>
   )
 }
-/** Hairline between two ribbon groups. */
-
-/** Hairline between two ribbon groups. */
+/**
+ * Hairline between two ribbon groups.
+ *
+ * FULL HEIGHT of the group block, not a 16 px stub, because the blocks are now
+ * two rows tall (commands, then the group's name). A short rule floating beside
+ * a tall block reads as a stray mark; a rule the height of what it separates
+ * reads as the edge of a section, which is what it is.
+ */
 export function Rule() {
-  return <span aria-hidden className="mx-1.5 h-4 w-px shrink-0 bg-hairline" />
+  return <span aria-hidden className="mx-1 w-px shrink-0 self-stretch bg-hairline" />
 }
 
+/**
+ * A ribbon command that DOES something, rather than switching panel.
+ *
+ * The same box as `TabBtn` — same width, same mark-over-word — because the
+ * File block sits in the same row as the tab groups and a control that is
+ * nearly the same shape reads as a mistake where one that is exactly the same
+ * shape reads as a section. What differs is the state it can be in: a tab is
+ * current or not, an action is available or not.
+ *
+ * NO `aria-current`. An action is not a location.
+ */
+export function ActionBtn({ label, title, icon, disabled, onClick }: {
+  label: string
+  /** The tooltip, which carries what the short label cannot — the shortcut,
+   *  the undo depth, or why the control is unavailable. */
+  title: string
+  icon: string
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} title={title} aria-label={label}
+      className="flex w-[76px] flex-col items-center gap-1 rounded-[5px] px-1 py-1.5 text-[10.5px] font-semibold leading-tight text-muted transition hover:bg-brand-tint hover:text-ink disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted">
+      <DrawnIcon icon={actionIcon(icon)} size={20} />
+      <span className="w-full truncate text-center">{label}</span>
+    </button>
+  )
+}
+
+/**
+ * One ribbon command: its drawn mark over its word.
+ *
+ * ICON OVER LABEL, not label alone. Twelve words in a row is a list you read
+ * every time; twelve marks over twelve words is a shape you learn once and
+ * then aim at. The word stays — an icon-only ribbon makes the first week worse
+ * to make the second better, and this page has tabs a user may meet twice a
+ * year (Pushover) beside ones they use hourly (Geometry).
+ *
+ * A FIXED COLUMN WIDTH, so the marks line up vertically down the ribbon and
+ * the labels centre under them. Without it "Geometry" and "Modal" set their
+ * own widths and the row of icons goes ragged — the difference between a
+ * ribbon and a row of buttons that happen to have pictures.
+ *
+ * 76 px, MEASURED. At the first guess of 62 the content box was 54 and four
+ * of the sixteen labels overflowed it — "Properties" wanting 62, "Geometry"
+ * and "Nonlinear" 58, "Pushover" 55 — so the ribbon shipped reading
+ * "Geome…  Proper…". 76 gives a 68 px content box, 6 px clear of the widest
+ * word. `truncate` stays as the graceful failure for a future label or a
+ * wider fallback font; it should never actually fire, and the readings above
+ * are what say so.
+ */
 export function TabBtn({ id, label, active, onClick }: { id: Tab; label: string; active: boolean; onClick: (t: Tab) => void }) {
   return (
-    <button type="button" onClick={() => onClick(id)}
-      className={`rounded-[5px] px-2.5 py-[5px] text-[11.5px] font-semibold transition ${active ? 'bg-brand text-on-solid' : 'text-muted hover:bg-brand-tint hover:text-ink'}`}>
-      {label}
+    <button type="button" onClick={() => onClick(id)} aria-current={active ? 'page' : undefined}
+      className={`flex w-[76px] flex-col items-center gap-1 rounded-[5px] px-1 py-1.5 text-[10.5px] font-semibold leading-tight transition ${
+        active ? 'bg-brand text-on-solid' : 'text-muted hover:bg-brand-tint hover:text-ink'}`}>
+      <DrawnIcon icon={ribbonIcon(id)} size={20} />
+      <span className="w-full truncate text-center">{label}</span>
     </button>
   )
 }
