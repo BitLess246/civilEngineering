@@ -153,8 +153,8 @@ export const ANALYSIS_TOOLS: DocTool[] = [
     name: 'Influence Lines',
     route: '/influence-lines',
     group: 'Analysis & modelling',
-    summary: 'Draws the influence line of every member of a simply-supported bridge truss under a unit load walking the deck, and integrates a uniform-load patch over it.',
-    basis: 'Unit-load method on a statically determinate truss — joint equilibrium at every load position; lines are exact polygons between panel points.',
+    summary: 'Two influence-line calculators in one page: every member of a simply-supported bridge truss, and any determinate continuous (Gerber) beam with internal hinges — with the lane-load placement that answers the classic maximum-effect questions.',
+    basis: 'Unit-load method on statically determinate structures — joint equilibrium at every truss panel point; per-body equilibrium (ΣFy, ΣM) for hinged beams; lines are exact polygons between stations.',
     sections: [
       {
         id: 'il-truss',
@@ -167,10 +167,21 @@ export const ANALYSIS_TOOLS: DocTool[] = [
         ],
       },
       {
+        id: 'il-beam',
+        title: 'Continuous beam (hinged)',
+        controls: [
+          { kind: 'field', name: 'Length, supports, hinges', unit: 'm', what: 'Any layout that stays determinate — supports must equal hinges + 2. Hinges are moment releases; a support over a hinge joins the left body. The solver refuses mechanisms outright.' },
+          { kind: 'choice', name: 'Effect', what: 'Reaction at a support, shear or moment at a section, or the shear a hinge transmits. The shear line carries both one-sided values at its section — the classical jump.' },
+          { kind: 'field', name: 'w live, P live, w dead', unit: 'kN/m, kN', what: 'Placement machinery: the uniform patch covers the sign regions of the line ("total length to load"), the concentrated load stands on the extreme ordinate, and the dead load always covers the full span — live, dead and combined values reported separately.' },
+          { kind: 'output', name: 'Sample problem (a)–(d)', what: 'One click loads the board-exam classic — beam ABCD 12 m on B and D, lane load 50 kN/m + 90 kN, dead 25 kN/m — and reports the four answers from the engine: patch length for max negative M at C, dead length, maximum negative moment and maximum positive shear at C.' },
+          { kind: 'output', name: 'Free-body diagram', what: 'The unit-load state or the governing placement, with every reaction and hinge shear drawn to its solved value.' },
+        ],
+      },
+      {
         id: 'il-load',
         title: 'Moving unit load',
         controls: [
-          { kind: 'field', name: 'Position x', unit: 'm', what: 'Where the 1 kN unit load stands. Between panel points the deck beams share it with adjacent floor beams, so the ordinate interpolates linearly.' },
+          { kind: 'field', name: 'Position x', unit: 'm', what: 'Where the 1 kN unit load stands. Between panel points the deck beams share it with adjacent floor beams (truss), and beam lines are exactly linear between stations.' },
           { kind: 'choice', name: 'Member', what: 'Whose influence line to plot — both reactions included, and every member is clickable in the elevation.' },
         ],
       },
@@ -179,8 +190,8 @@ export const ANALYSIS_TOOLS: DocTool[] = [
         title: 'Uniform load patch and results',
         controls: [
           { kind: 'field', name: 'w, from a, to b', unit: 'kN/m, m', what: 'A uniform patch over [a, b] loads the member with w times the exact trapezoid area under its influence line.' },
-          { kind: 'output', name: 'Ordinates table', what: 'The influence-line value at every panel point, marked tension or compression.' },
-          { kind: 'output', name: 'Extremes', what: 'Largest and smallest ordinate with the load position that produces them — the panel points are the only candidates on a polygonal line.' },
+          { kind: 'output', name: 'Ordinates table', what: 'The influence-line value at every station, marked with its sign (tension/compression on the truss, positive/negative on the beam).' },
+          { kind: 'output', name: 'Extremes', what: 'Largest and smallest ordinate with the load position that produces them — the panel points (truss) or stations (beam) are the only candidates on a polygonal line.' },
         ],
       },
     ],
