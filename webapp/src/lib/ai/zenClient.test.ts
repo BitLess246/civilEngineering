@@ -6,8 +6,10 @@ import {
 const okClient = (data: unknown): FunctionsInvoker => ({
   functions: { invoke: async () => ({ data, error: null }) },
 })
-const errClient = (status: number): FunctionsInvoker => ({
-  functions: { invoke: async () => ({ data: null, error: { context: { status } } }) },
+const errClient = (status: number, body?: unknown): FunctionsInvoker => ({
+  functions: {
+    invoke: async () => ({ data: null, error: { context: { status, json: async () => body ?? null } } }),
+  },
 })
 const req = { model: 'big-pickle', messages: [{ role: 'user' as const, content: 'size a footing' }] }
 
@@ -36,8 +38,17 @@ describe('chatWithAssistant', () => {
     expect(await chatWithAssistant(okClient({ reply: 7 }), 'tok', req)).toEqual({ ok: false, reason: 'failed' })
   })
 
+  it('names a rejected server key instead of asking for a retry', async () => {
+    expect(await chatWithAssistant(errClient(502, { error: 'upstream', status: 401 }), 'tok', req))
+      .toEqual({ ok: false, reason: 'bad-key' })
+    // Any other upstream status, or an unreadable body, stays generic.
+    expect(await chatWithAssistant(errClient(502, { error: 'upstream', status: 429 }), 'tok', req))
+      .toEqual({ ok: false, reason: 'failed' })
+    expect(await chatWithAssistant(errClient(502), 'tok', req)).toEqual({ ok: false, reason: 'failed' })
+  })
+
   it('every reason has user-facing words', () => {
-    for (const r of ['not-configured', 'unauthenticated', 'assistant-off', 'bad-request', 'failed'] as const) {
+    for (const r of ['not-configured', 'unauthenticated', 'assistant-off', 'bad-request', 'bad-key', 'failed'] as const) {
       expect(assistantFailureMessage(r).length).toBeGreaterThan(10)
     }
   })

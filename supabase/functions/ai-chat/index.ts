@@ -52,7 +52,7 @@ const MAX_TOKENS = 1500
 
 async function callZen(
   url: string, key: string, body: unknown,
-): Promise<{ ok: true; json: unknown } | { ok: false }> {
+): Promise<{ ok: true; json: unknown } | { ok: false; status: number | null }> {
   let upstream: Response
   try {
     upstream = await fetch(url, {
@@ -63,18 +63,20 @@ async function callZen(
     })
   } catch (e) {
     console.error('ai-chat: zen unreachable:', e instanceof Error ? e.message : e)
-    return { ok: false }
+    return { ok: false, status: null }
   }
   if (!upstream.ok) {
-    // Log the status, return none of the body: it is Zen's wording, not ours,
-    // and must never carry a hint of the key back to the browser.
+    // The STATUS goes back to the browser; the body never does. It is Zen's
+    // wording, not ours, and must never carry a hint of the key back — but
+    // the bare number is what tells a bad key (401) from a bad model (404)
+    // from a limit (429) without dashboard access. Logged in full here.
     console.error(`ai-chat: zen answered ${upstream.status}`)
-    return { ok: false }
+    return { ok: false, status: upstream.status }
   }
   try {
     return { ok: true, json: await upstream.json() }
   } catch {
-    return { ok: false }
+    return { ok: false, status: null }
   }
 }
 
@@ -113,7 +115,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       tool_choice: 'auto',
       max_output_tokens: MAX_TOKENS,
     })
-    if (!res.ok) return jsonWithCors({ error: 'upstream' }, 502)
+    if (!res.ok) return jsonWithCors({ error: 'upstream', status: res.status }, 502)
     const { reply, actions } = extractResponsesActions((res.json ?? {}) as ResponsesPayload)
     return jsonWithCors({ reply, actions, model: parsed.model })
   }
@@ -125,7 +127,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     tools: [openCalculatorToolSchema()],
     tool_choice: 'auto',
   })
-  if (!res.ok) return jsonWithCors({ error: 'upstream' }, 502)
+  if (!res.ok) return jsonWithCors({ error: 'upstream', status: res.status }, 502)
   const { reply, actions } = extractAssistantActions(
     (res.json as { choices?: ZenChoice[] } | null)?.choices?.[0],
   )

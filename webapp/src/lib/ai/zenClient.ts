@@ -23,6 +23,7 @@ export type AssistantFailure =
   | 'unauthenticated'
   | 'assistant-off'
   | 'bad-request'
+  | 'bad-key'
   | 'failed'
 
 export type AssistantResult =
@@ -61,6 +62,8 @@ export function assistantFailureMessage(reason: AssistantFailure): string {
       return 'The assistant is not switched on for this deployment yet (its server key is missing).'
     case 'bad-request':
       return 'That message could not be sent. Try a shorter one.'
+    case 'bad-key':
+      return 'The assistant could not reach its model service — its server key was rejected. An admin needs to re-check it.'
     case 'failed':
       return 'The assistant could not answer right now. Please try again.'
   }
@@ -69,6 +72,21 @@ export function assistantFailureMessage(reason: AssistantFailure): string {
 function contextStatus(error: unknown): number | null {
   const ctx = (error as { context?: { status?: unknown } })?.context
   return typeof ctx?.status === 'number' ? ctx.status : null
+}
+
+/**
+ * The Zen status the function attached to its 502, if any. Read defensively
+ * like `reasonFromError` in billing/portal.ts — the context body may already
+ * be consumed, in which case there is simply no number to report.
+ */
+async function upstreamStatus(error: unknown): Promise<number | null> {
+  const ctx = (error as { context?: { json?: () => Promise<unknown> } })?.context
+  try {
+    const body = (await ctx?.json?.()) as { status?: unknown } | undefined
+    return typeof body?.status === 'number' ? body.status : null
+  } catch {
+    return null
+  }
 }
 
 export async function chatWithAssistant(
@@ -98,7 +116,13 @@ export async function chatWithAssistant(
     // A 503 is the missing server key; anything else is generic. The function
     // distinguishes them in its body, but the status alone is enough to word
     // the widget correctly without parsing an already-consumed error context.
-    return { ok: false, reason: status === 503 ? 'assistant-off' : 'failed' }
+    if (status === 503) return { ok: false, reason: 'assistant-off' }
+    // A 502 carries the Zen status the function saw: 401 means the server key
+    // itself was rejected, which is an admin action rather than a retry.
+    if (status === 502 && (await upstreamStatus(error)) === 401) {
+      return { ok: false, reason: 'bad-key' }
+    }
+    return { ok: false, reason: 'failed' }
   }
   const payload = (data ?? {}) as FunctionPayload
   if (typeof payload.reply !== 'string' || typeof payload.model !== 'string') {
