@@ -79,6 +79,7 @@ describe('every function is covered by the deploy loop', () => {
       .filter((n) => !n.startsWith('_'))
       .sort()
     expect(names).toEqual([
+      'ai-chat',
       'billing-change-plan', 'billing-history', 'billing-portal',
       'billing-webhook', 'guest-quota',
     ])

@@ -3348,3 +3348,28 @@ not the repo. **No new defects → no new PR from the pass itself.**
 - Next candidates if looping continues: `sub` code glosses for first-timers,
   palette frequency weighting, print-report safety signal.
 - Drawing-audit D5 (`preserveAspectRatio` default on 12 SVGs, cosmetic P3).
+
+---
+
+# AI calculation helper on Zen free models (Sep 2026)
+
+Branch `feature/ai-assistant-zen` (Phase 1). Floating widget on every tool
+page, backed by a new `ai-chat` Supabase Edge Function; the Zen key lives in
+function secrets (`OPENCODE_ZEN_API_KEY`, set Sep 2026) and never the bundle.
+
+- **Free models only**, enforced server-side before any upstream call: the 5
+  chat-completions free models + `muse-spark-1.3-contributor-free` via the
+  `/responses` protocol (`modelProtocol()` picks endpoint, tool schema and
+  parser together so the formats can't mix).
+- **Scoped answers**: server-built system prompt, client `system` messages
+  rejected; off-topic questions get one verbatim refusal. The model's only
+  function is `open_calculator` over a catalog snapshot pinned to `ALL_TOOLS`
+  by `assistantCatalog.test.ts`.
+- **Navigate + prefill**: action cards save to sessionStorage and route; only
+  `/load-combinations` consumes prefills so far (peek-then-discard,
+  StrictMode-safe). JWT verification ON (guests via anon key); no trial
+  metering — rate limiting is the open S5 follow-up (Phase 2).
+- Deploy: the `supabase-functions.yml` loop picks `ai-chat` up with no
+  workflow change. Key must exist before merge or the widget reports off.
+- Pre-existing red on main, verified via stash and left alone:
+  `sectionState.test.ts` suite, one `ribbonIcons.test.ts` assertion.
