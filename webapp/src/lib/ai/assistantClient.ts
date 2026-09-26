@@ -75,7 +75,7 @@ function contextStatus(error: unknown): number | null {
 }
 
 /**
- * The Zen status the function attached to its 502, if any. Read defensively
+ * The upstream status the function attached to its 502, if any. Read defensively
  * like `reasonFromError` in billing/portal.ts — the context body may already
  * be consumed, in which case there is simply no number to report.
  */
@@ -117,7 +117,7 @@ export async function chatWithAssistant(
     // distinguishes them in its body, but the status alone is enough to word
     // the widget correctly without parsing an already-consumed error context.
     if (status === 503) return { ok: false, reason: 'assistant-off' }
-    // A 502 carries the Zen status the function saw: 401 means the server key
+    // A 502 carries the upstream status the function saw: 401 means the server key
     // itself was rejected, which is an admin action rather than a retry.
     if (status === 502 && (await upstreamStatus(error)) === 401) {
       return { ok: false, reason: 'bad-key' }

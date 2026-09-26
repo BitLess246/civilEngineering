@@ -7,60 +7,37 @@
 // `open_calculator` tool schema — so neither the browser nor a hand-written
 // request can widen what the assistant answers or which models it may use.
 //
-// TWO protocols, one allowlist. Most free models speak OpenAI-compatible
-// /chat/completions; Muse-Spark free speaks /responses. The function branches
-// on `modelProtocol()` and each path has its own schema builder and response
-// parser below, so the two wire formats can never be mixed.
-//
-// The Zen key never reaches the browser. The function reads it from its
-// own secrets (`supabase secrets set OPENCODE_ZEN_API_KEY=…`).
+// Upstream is OpenRouter (OpenAI-compatible /chat/completions), free models
+// only. Was OpenCode Zen: Zen's free tier refuses raw API calls
+// (`FreeTierError` — usable only from inside OpenCode), so the proxy moved.
+// The allowlist below is the enforcement; extend it ONLY with a verified-free
+// id (0/0 pricing on /api/v1/models) that lists `tools` in
+// `supported_parameters`, plus a test row.
+// The key never reaches the browser. The function reads it from its
+// own secrets (`supabase secrets set OPENROUTER_API_KEY=…`).
 // ─────────────────────────────────────────────────────────────────────────
 
-/** Zen's OpenAI-compatible chat endpoint — the only chat upstream this proxy talks to. */
-export const ZEN_CHAT_COMPLETIONS_URL = 'https://opencode.ai/zen/v1/chat/completions'
-
-/** Zen's OpenAI-compatible responses endpoint — the only responses upstream. */
-export const ZEN_RESPONSES_URL = 'https://opencode.ai/zen/v1/responses'
+/** OpenRouter's OpenAI-compatible chat endpoint — the only upstream this proxy talks to. */
+export const UPSTREAM_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 /**
- * Free models ONLY. Anything not on these lists is refused with `model`
- * before any upstream call is made, so a paid model id can never ride this key.
+ * Free models ONLY. Anything not on this list is refused with `model` before
+ * any upstream call is made, so a paid model id can never ride this key.
  */
 export const FREE_CHAT_MODELS = [
-  'big-pickle',
-  'mimo-v2.5-free',
-  'ling-3.0-flash-fin-free',
-  'nemotron-3-ultra-free',
-  'nemotron-3.5-lightning-free',
-] as const
-
-export const FREE_RESPONSE_MODELS = [
-  'muse-spark-1.3-contributor-free',
+  'stealth/space-bunny-alpha',
 ] as const
 
 export type FreeChatModel = (typeof FREE_CHAT_MODELS)[number]
-export type FreeResponseModel = (typeof FREE_RESPONSE_MODELS)[number]
-export type FreeModel = FreeChatModel | FreeResponseModel
+export type FreeModel = FreeChatModel
 
-/** Every model the widget may offer, chat models first. */
-export const FREE_MODELS: readonly FreeModel[] = [...FREE_CHAT_MODELS, ...FREE_RESPONSE_MODELS]
+/** Every model the widget may offer. */
+export const FREE_MODELS: readonly FreeModel[] = [...FREE_CHAT_MODELS]
 
-export const DEFAULT_FREE_MODEL: FreeChatModel = 'nemotron-3.5-lightning-free'
-
-export const isFreeChatModel = (m: unknown): m is FreeChatModel =>
-  typeof m === 'string' && (FREE_CHAT_MODELS as readonly string[]).includes(m)
-
-export const isFreeResponseModel = (m: unknown): m is FreeResponseModel =>
-  typeof m === 'string' && (FREE_RESPONSE_MODELS as readonly string[]).includes(m)
+export const DEFAULT_FREE_MODEL: FreeChatModel = 'stealth/space-bunny-alpha'
 
 export const isFreeModel = (m: unknown): m is FreeModel =>
-  isFreeChatModel(m) || isFreeResponseModel(m)
-
-/** Which Zen endpoint a model id must be sent to. Unknown ids have no protocol — validation refuses them first. */
-export type ModelProtocol = 'chat' | 'responses'
-
-export const modelProtocol = (m: FreeModel): ModelProtocol =>
-  isFreeResponseModel(m) ? 'responses' : 'chat'
+  typeof m === 'string' && (FREE_CHAT_MODELS as readonly string[]).includes(m)
 
 /** A calculator the assistant may reference or open. Mirrors `ALL_TOOLS`. */
 export interface AssistantToolRef {
@@ -236,12 +213,12 @@ export interface CalculatorAction {
   note: string
 }
 
-export interface ZenToolCall {
+export interface UpstreamToolCall {
   function?: { name?: unknown; arguments?: unknown }
 }
 
-export interface ZenChoice {
-  message?: { content?: unknown; tool_calls?: ZenToolCall[] }
+export interface UpstreamChoice {
+  message?: { content?: unknown; tool_calls?: UpstreamToolCall[] }
 }
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
@@ -261,12 +238,12 @@ function toCalculatorAction(
 }
 
 /**
- * Split a Zen chat-completions choice into display text plus validated
+ * Split an upstream chat-completions choice into display text plus validated
  * calculator actions. A tool call naming an unknown route, a foreign function,
  * or unparseable arguments is DROPPED — the model proposes, this list disposes.
  */
 export function extractAssistantActions(
-  choice: ZenChoice | null | undefined,
+  choice: UpstreamChoice | null | undefined,
   routes: readonly string[] = ASSISTANT_TOOLS.map((t) => t.route),
 ): { reply: string; actions: CalculatorAction[] } {
   const message = choice?.message
@@ -284,73 +261,4 @@ export function extractAssistantActions(
     if (action) actions.push(action)
   }
   return { reply: rawContent, actions }
-}
-
-// ── Responses-protocol shapes (Muse-Spark free) ─────────────────────────────
-
-/** The `open_calculator` tool in Responses-API form: `{type:'function',…}`, not the chat `{type:'function',function:{…}}` wrapper. */
-export function openCalculatorResponsesTool(routes: readonly string[] = ASSISTANT_TOOLS.map((t) => t.route)) {
-  return {
-    type: 'function' as const,
-    name: OPEN_CALCULATOR_TOOL,
-    description:
-      'Open one of the app calculators with the inputs the user gave, so the page runs with their data prefilled. Use ONLY for a route from the enum.',
-    parameters: {
-      type: 'object',
-      properties: {
-        route: { type: 'string', enum: [...routes], description: 'The calculator page to open.' },
-        inputs: {
-          type: 'object',
-          description: 'Input field names to numbers/strings exactly as the user gave them. Omit anything not given.',
-          additionalProperties: true,
-        },
-        note: { type: 'string', description: 'One short sentence saying what was filled in.' },
-      },
-      required: ['route', 'inputs'],
-      additionalProperties: false,
-    },
-  }
-}
-
-export interface ResponsesOutputItem {
-  type?: unknown
-  content?: Array<{ type?: unknown; text?: unknown }>
-  name?: unknown
-  arguments?: unknown
-}
-
-export interface ResponsesPayload {
-  output?: ResponsesOutputItem[]
-}
-
-/**
- * Split a Zen /responses payload into display text plus validated calculator
- * actions. `message` items contribute their `output_text`; `function_call`
- * items naming anything but `open_calculator`, an unknown route, or bad JSON
- * are DROPPED — same rule as the chat path, same shared checker.
- */
-export function extractResponsesActions(
-  payload: ResponsesPayload | null | undefined,
-  routes: readonly string[] = ASSISTANT_TOOLS.map((t) => t.route),
-): { reply: string; actions: CalculatorAction[] } {
-  const texts: string[] = []
-  const actions: CalculatorAction[] = []
-  for (const item of payload?.output ?? []) {
-    if (item?.type === 'message') {
-      for (const part of item.content ?? []) {
-        if (part?.type === 'output_text' && typeof part.text === 'string') texts.push(part.text)
-      }
-    } else if (item?.type === 'function_call') {
-      if (item.name !== OPEN_CALCULATOR_TOOL) continue
-      let args: unknown = null
-      try {
-        args = typeof item.arguments === 'string' ? JSON.parse(item.arguments) : null
-      } catch {
-        continue
-      }
-      const action = toCalculatorAction(args, routes)
-      if (action) actions.push(action)
-    }
-  }
-  return { reply: texts.join(''), actions }
 }

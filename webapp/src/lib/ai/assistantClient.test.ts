@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   chatWithAssistant, assistantFailureMessage, type FunctionsInvoker,
-} from './zenClient'
+} from './assistantClient'
 
 const okClient = (data: unknown): FunctionsInvoker => ({
   functions: { invoke: async () => ({ data, error: null }) },

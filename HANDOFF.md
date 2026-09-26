@@ -3373,3 +3373,13 @@ function secrets (`OPENCODE_ZEN_API_KEY`, set Sep 2026) and never the bundle.
   workflow change. Key must exist before merge or the widget reports off.
 - Pre-existing red on main, verified via stash and left alone:
   `sectionState.test.ts` suite, one `ribbonIcons.test.ts` assertion.
+
+## 2026-09-26 — upstream moved Zen → OpenRouter (same branch series)
+
+Zen's free tier refuses raw API calls (`FreeTierError`, usable only inside
+OpenCode — diagnosed live: `/v1/models` 200, every chat call 403). The
+`ai-chat` proxy now talks to OpenRouter (`stealth/space-bunny-alpha`,
+verified 0/0 pricing + `tools` support); secret is `OPENROUTER_API_KEY`.
+You need `supabase secrets set OPENROUTER_API_KEY=sk-or-…` or the widget
+reports off. The stale `OPENCODE_ZEN_API_KEY` secret can be removed — and if
+the old Zen key was ever pasted anywhere readable, revoke it there too.

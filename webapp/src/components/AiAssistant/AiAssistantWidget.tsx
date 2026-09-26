@@ -1,5 +1,5 @@
 // Floating calculation helper — one button + panel, mounted in AppShell so it
-// is on every tool page. Scoped Q&A over the free Zen models with
+// is on every tool page. Scoped Q&A over free upstream models with
 // navigate-and-prefill calculator actions (Phase 1).
 //
 // What it will NOT do, by construction: the scope lives server-side
@@ -16,7 +16,7 @@ import {
 import {
   chatWithAssistant, assistantToken, assistantFailureMessage,
   type AssistantChatMessage, type AssistantAction,
-} from '../../lib/ai/zenClient'
+} from '../../lib/ai/assistantClient'
 import { savePendingCalculatorInputs } from '../../lib/ai/pendingAction'
 import { getClient } from '../../lib/auth/authClient'
 
