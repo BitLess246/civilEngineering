@@ -11,6 +11,7 @@ import Home from './pages/Home'
 import NotFound from './pages/NotFound'
 import { RequireAuth } from './components/RequireAuth'
 import { GuestOnly } from './components/GuestOnly'
+import { Analytics } from '@vercel/analytics/react'
 import { ModelSpaceSkeleton } from './components/ModelSpaceSkeleton'
 import { routeName } from './lib/documentTitle'
 
@@ -189,6 +190,10 @@ export default function App() {
   return (
     <>
       {askPrefs && <WelcomeDialog onClose={closePrefs} />}
+      {/* Vercel Web Analytics — one component at the root, outside the
+          routes, so it persists across navigations and tracks them. (The
+          `/react` entry, not `/next`: this is a Vite SPA.) */}
+      <Analytics />
       <Routes>
         <Route path="/" element={<Home onAuth={(m) => nav(m === 'signup' ? '/signup' : '/signin')} />} />
         <Route path="*" element={
