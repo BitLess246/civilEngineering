@@ -17,7 +17,8 @@ import { RebarRanking } from '../components/RebarRanking'
 import { buildRebarSelectionSolution, withRebarSelection } from '../lib/rebarSolution'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { Math as KTex } from '../lib/math'
-import { f0, f1 } from '../lib/format'
+import { f0, f1, f2 } from '../lib/format'
+import { usePublishPageSnapshot, type PageSnapshot } from '../lib/ai/pageContext'
 import 'katex/dist/katex.min.css'
 
 interface FormState extends BeamDesignInput { fyt: number; legs: number; comprBarDia: number }
@@ -233,6 +234,47 @@ export default function BeamDesign() {
       ? { name: 'Serviceability δ/limit', ratio: deflection.deltaL / Math.max(deflection.limitL360, 1e-9) }
       : { name: 'Serviceability δ/limit', ratio: null, note: 'enter span and service loads to run §424.2' },
   ] : []
+
+  // Assistant snapshot — the live numbers behind "why did it come out like
+  // that?". Ratios are re-stated here (not read off `checks`) so the memo
+  // stays stable across renders: `checks` is a fresh array every render and
+  // depending on it would republish on each render. The stirrup line is
+  // likewise inlined from `stirrupText` — the helper has a fresh identity
+  // every render and would do the same.
+  const beamSnapshot = useMemo<PageSnapshot | null>(() => {
+    if (!r || !cap) return null
+    return {
+      route: '/beam-design',
+      tool: 'Beam Design',
+      inputs: [
+        { label: 'b × h', value: `${f0(fd.b)} × ${f0(fd.h)} mm` },
+        { label: "f'c", value: `${f0(fd.fc)} MPa` },
+        { label: 'fy', value: `${f0(fd.fy)} MPa` },
+        { label: 'Mu', value: `${f1(demand.Mu)} kN·m${hogging ? ' (hogging)' : ''}` },
+        { label: 'Vu', value: `${f1(demand.Vu)} kN` },
+        ...(multi && active ? [{ label: 'section', value: active.label }] : []),
+      ],
+      results: [
+        { label: 'steel', value: `${r.bars}-⌀${fd.barDia}${r.mode === 'DRRB' ? ` + ${r.comprBars}-⌀${fd.comprBarDia} comp` : ''}` },
+        { label: 'φMn', value: `${f1(cap.phiMn)} kN·m` },
+        { label: 'φVn', value: `${f1(cap.phiVn)} kN` },
+        {
+          label: 'stirrups',
+          value: r.region === 'designed' || r.region === 'minimum'
+            ? `⌀${f.stirrupDia} ${f.legs}-leg @ ${f0(r.sAdopt)} mm`
+            : r.region === 'none' ? '— none' : '⚠ enlarge',
+        },
+        { label: 'Flexure Mu/φMn', value: f2(demand.Mu / cap.phiMn) },
+        { label: 'Shear Vu/φVn', value: f2(demand.Vu / cap.phiVn) },
+        ...(deflection
+          ? [{ label: 'Serviceability δ/limit', value: f2(deflection.deltaL / Math.max(deflection.limitL360, 1e-9)) }]
+          : [{ label: 'Serviceability δ/limit', value: 'not run — enter span and service loads' }]),
+        { label: 'verdict', value: allOK ? 'DESIGN OK' : 'NOT ACCEPTABLE' },
+      ],
+      notes: r.mode === 'DRRB' ? ['doubly reinforced — compression steel is effective'] : [],
+    }
+  }, [r, cap, demand.Mu, demand.Vu, deflection, allOK, f, fd, multi, active, hogging])
+  usePublishPageSnapshot('/beam-design', beamSnapshot)
 
   // One payload for both report paths — the printed calc sheet and the
   // generated PDF. Sharing it is the point: two copies of this drift, and the

@@ -8,7 +8,7 @@
 // their display names through ALL_TOOLS — a route the app does not have can
 // never be offered, because it has no name here.
 import { useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ALL_TOOLS } from '../../lib/tools'
 import {
   FREE_MODELS, DEFAULT_FREE_MODEL,
@@ -18,13 +18,14 @@ import {
   type AssistantChatMessage, type AssistantAction,
 } from '../../lib/ai/assistantClient'
 import { savePendingCalculatorInputs } from '../../lib/ai/pendingAction'
+import { formatPageSnapshot, usePageSnapshot } from '../../lib/ai/pageContext'
 import { getClient } from '../../lib/auth/authClient'
 
 interface ChatMessage extends AssistantChatMessage {
   actions?: AssistantAction[]
 }
 
-const HINT = 'Ask about a calculator — e.g. "which tool sizes a footing?", or give numbers: "D=120, L=80 on load combinations".'
+const HINT = 'Ask about the open page — e.g. "why is my flexure ratio what it is?" — or any calculator by name.'
 
 function ActionCard({ action, onOpen }: { action: AssistantAction; onOpen: (a: AssistantAction) => void }) {
   const tool = ALL_TOOLS.find((t) => t.to === action.route)
@@ -44,6 +45,10 @@ function ActionCard({ action, onOpen }: { action: AssistantAction; onOpen: (a: A
 
 export function AiAssistantWidget() {
   const nav = useNavigate()
+  const { pathname } = useLocation()
+  // The open page's live snapshot, if it opted in — attached to every
+  // request so "why did THIS come out like that?" answers from these numbers.
+  const pageSnapshot = usePageSnapshot(pathname)
   const [open, setOpen] = useState(false)
   const [model, setModel] = useState<string>(DEFAULT_FREE_MODEL)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -83,7 +88,11 @@ export function AiAssistantWidget() {
     const result = await chatWithAssistant(
       client ?? { functions: { invoke: async () => ({ data: null, error: { context: { status: 503 } } }) } },
       client ? await assistantToken() : null,
-      { model, messages: history.slice(-20) },
+      {
+        model,
+        messages: history.slice(-20),
+        ...(pageSnapshot ? { page: formatPageSnapshot(pageSnapshot) } : {}),
+      },
     )
     setBusy(false)
     if (!result.ok) {
@@ -121,7 +130,9 @@ export function AiAssistantWidget() {
           <header className="flex flex-none items-center gap-2 border-b border-hairline-2 px-3 py-2">
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold text-ink">Calculation helper</p>
-              <p className="truncate text-[11px] text-faint">Free models · answers only about this app's tools</p>
+              <p className="truncate text-[11px] text-faint">
+                {pageSnapshot ? `Seeing: ${pageSnapshot.tool}` : 'Free models · answers only about this app\u2019s tools'}
+              </p>
             </div>
             <label className="flex flex-none items-center gap-1 text-[11px] text-faint">
               <span className="sr-only">Model</span>

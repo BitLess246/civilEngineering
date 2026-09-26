@@ -4,6 +4,7 @@ import {
   ASSISTANT_TOOLS, OFF_TOPIC_REFUSAL, buildAssistantSystemPrompt,
   OPEN_CALCULATOR_TOOL, openCalculatorToolSchema,
   validateAssistantRequest, extractAssistantActions,
+  cleanPageContext, MAX_PAGE_CHARS,
 } from './aiAssistant'
 
 describe('free-model allowlist', () => {
@@ -36,6 +37,24 @@ describe('system prompt scope', () => {
     expect(prompt).toContain('kN')
     expect(prompt).toContain('clause')
   })
+
+  it('quotes the live page when given, and stays silent without one', () => {
+    expect(prompt).not.toContain('CURRENT PAGE')
+    const withPage = buildAssistantSystemPrompt(ASSISTANT_TOOLS, 'Open calculator: Beam Design\nInputs: Mu=180')
+    expect(withPage).toContain('CURRENT PAGE')
+    expect(withPage).toContain('Inputs: Mu=180')
+    expect(withPage).toMatch(/never invent values/i)
+  })
+})
+
+describe('cleanPageContext', () => {
+  it('passes text through, caps the runaway, drops the unusable', () => {
+    expect(cleanPageContext('  Mu=180  ')).toBe('Mu=180')
+    expect(cleanPageContext('x'.repeat(MAX_PAGE_CHARS + 50))?.length).toBeLessThanOrEqual(MAX_PAGE_CHARS + 1)
+    for (const bad of [undefined, null, 42, {}, '   ']) {
+      expect(cleanPageContext(bad)).toBeNull()
+    }
+  })
 })
 
 describe('open_calculator schema', () => {
@@ -51,7 +70,20 @@ describe('validateAssistantRequest', () => {
 
   it('accepts a well-formed free-model request', () => {
     expect(validateAssistantRequest({ model: 'stealth/space-bunny-alpha', messages: [msg('user', 'size a footing')] }))
-      .toEqual({ ok: true, model: 'stealth/space-bunny-alpha', messages: [{ role: 'user', content: 'size a footing' }] })
+      .toEqual({ ok: true, model: 'stealth/space-bunny-alpha', messages: [{ role: 'user', content: 'size a footing' }], page: null })
+  })
+
+  it('carries a page snapshot through, cleaned', () => {
+    const r = validateAssistantRequest({
+      model: 'stealth/space-bunny-alpha',
+      messages: [msg('user', 'why?')],
+      page: '  Open calculator: Beam Design  ',
+    })
+    expect(r).toEqual({
+      ok: true, model: 'stealth/space-bunny-alpha',
+      messages: [{ role: 'user', content: 'why?' }],
+      page: 'Open calculator: Beam Design',
+    })
   })
 
   it('refuses paid models, missing bodies, and bad message shapes', () => {

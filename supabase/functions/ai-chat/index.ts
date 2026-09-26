@@ -71,6 +71,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!parsed.ok) return jsonWithCors({ error: parsed.error }, 400)
 
   const messages: AssistantChatMessage[] = parsed.messages
+  // The live page snapshot, if the browser sent one: validated text the
+  // prompt quotes as the current page. Absent on pages that never opted in.
+  const system = buildAssistantSystemPrompt(undefined, parsed.page)
 
   let upstream: Response
   try {
@@ -87,7 +90,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       body: JSON.stringify({
         model: parsed.model,
         max_tokens: MAX_TOKENS,
-        messages: [{ role: 'system', content: buildAssistantSystemPrompt() }, ...messages],
+        messages: [{ role: 'system', content: system }, ...messages],
         tools: [openCalculatorToolSchema()],
         tool_choice: 'auto',
       }),
