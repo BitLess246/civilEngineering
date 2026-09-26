@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useLocation } from 'react-router-dom'
 import { SIDEBAR_GROUPS, ALL_TOOLS, isGatedRoute } from '../lib/tools'
 import { loadCollapsed, saveCollapsed, toggleCollapsed } from '../lib/navCollapse'
@@ -86,6 +87,17 @@ function GroupIcon({ label, size = 16 }: { label: string; size?: number }) {
  * icon, and the panel is only MOUNTED while open so its links are never in the
  * tab order of a closed group — the same rule the expanded list already
  * follows for a collapsed group.
+ *
+ * The panel renders through a portal at document.body rather than inside this
+ * wrapper. It used to be a direct child: `position: fixed` escapes the rail's
+ * overflow clip for HIT-TESTING, but Chromium still composites a fixed
+ * descendant with its scroll container — and the WebGL canvas won that
+ * compositing, so a flyout overlapping the 3D viewport painted UNDER it. At
+ * the body there is no scroll container above the panel at all, and the
+ * coordinates were already viewport-relative (`place()` reads
+ * `getBoundingClientRect`), so nothing about positioning changes. React
+ * events still bubble through the portal, which is what the blur/Escape
+ * handling below relies on.
  */
 function RailGroup({ group, activeGroup, pathname, onNavigate }: {
   group: { label: string; tools: { to: string; name: string; sub: string }[] }
@@ -134,9 +146,12 @@ function RailGroup({ group, activeGroup, pathname, onNavigate }: {
 
   // Closing on blur-out rather than on mouseleave alone: a keyboard user tabs
   // THROUGH the flyout's links, and a pointer-only close would shut the panel
-  // under them on the first Tab.
+  // under them on the first Tab. The panel is portalled OUTSIDE this wrapper
+  // in the DOM, so "outside" has to mean outside BOTH subtrees — otherwise
+  // tabbing from the icon into the panel reads as leaving and unmounts it.
   const onBlur = (e: React.FocusEvent) => {
-    if (!wrap.current?.contains(e.relatedTarget as Node | null)) setOpen(false)
+    const next = e.relatedTarget as Node | null
+    if (!wrap.current?.contains(next) && !panel.current?.contains(next)) setOpen(false)
   }
 
   // THE FLYOUT HAD TO BE CAUGHT BEFORE IT COULD BE REACHED.
@@ -169,6 +184,29 @@ function RailGroup({ group, activeGroup, pathname, onNavigate }: {
   // an unmounted node the first time the rail is collapsed with one open.
   useEffect(() => cancelClose, [])
 
+  const flyout = open && at ? (
+    <div ref={panel} id={panelId} role="group" aria-label={group.label} data-rail-flyout
+      onMouseEnter={cancelClose} onMouseLeave={armClose}
+      style={{ left: at.left, top: at.top }}
+      className="fixed z-30 w-[210px] rounded-md border border-white/10 bg-rail py-1.5 shadow-xl">
+      <p className="px-2.5 pb-1 text-[9.5px] font-bold uppercase tracking-[.18em] text-rail-muted">
+        {group.label}
+      </p>
+      {group.tools.map((t) => {
+        const active = t.to === pathname
+        return (
+          <Link key={t.to + t.name} to={t.to}
+            onClick={() => { setOpen(false); onNavigate?.() }}
+            aria-current={active ? 'page' : undefined}
+            className={`block px-2.5 py-1.5 text-[12.5px] font-medium ${
+              active ? 'bg-brand text-on-solid' : 'text-rail-muted hover:bg-sheet/10 hover:text-rail-ink'}`}>
+            {t.name}
+          </Link>
+        )
+      })}
+    </div>
+  ) : null
+
   return (
     <div ref={wrap} className="relative"
       onMouseEnter={enter} onMouseLeave={armClose}
@@ -185,28 +223,9 @@ function RailGroup({ group, activeGroup, pathname, onNavigate }: {
         <GroupIcon label={group.label} size={20} />
         <span className="w-full truncate px-0.5 text-center text-[7.5px] font-semibold uppercase leading-none tracking-wide" aria-hidden="true">{group.label}</span>
       </button>
-      {open && at && (
-        <div ref={panel} id={panelId} role="group" aria-label={group.label} data-rail-flyout
-          onMouseEnter={cancelClose} onMouseLeave={armClose}
-          style={{ left: at.left, top: at.top }}
-          className="fixed z-30 w-[210px] rounded-md border border-white/10 bg-rail py-1.5 shadow-xl">
-          <p className="px-2.5 pb-1 text-[9.5px] font-bold uppercase tracking-[.18em] text-rail-muted">
-            {group.label}
-          </p>
-          {group.tools.map((t) => {
-            const active = t.to === pathname
-            return (
-              <Link key={t.to + t.name} to={t.to}
-                onClick={() => { setOpen(false); onNavigate?.() }}
-                aria-current={active ? 'page' : undefined}
-                className={`block px-2.5 py-1.5 text-[12.5px] font-medium ${
-                  active ? 'bg-brand text-on-solid' : 'text-rail-muted hover:bg-sheet/10 hover:text-rail-ink'}`}>
-                {t.name}
-              </Link>
-            )
-          })}
-        </div>
-      )}
+      {/* Portalled (see the component note); inline where there is no
+          document, so the Node test env renders the same tree it always did. */}
+      {typeof document === 'undefined' ? flyout : flyout && createPortal(flyout, document.body)}
     </div>
   )
 }

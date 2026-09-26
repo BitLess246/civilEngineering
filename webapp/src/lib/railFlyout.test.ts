@@ -61,6 +61,24 @@ describe('the rail flyout closes on a delay, not on the first mouseleave', () =>
     expect(src).toMatch(/Escape.*cancelClose\(\); setOpen\(false\)/)
     expect(src).toMatch(/onBlur=\{onBlur\}/)
   })
+
+  it('portals the panel to document.body, out of the rail scroller', () => {
+    // `position: fixed` escapes the overflow CLIP, but Chromium still
+    // composites a fixed descendant with its scroll container — and the WebGL
+    // canvas won that compositing, so a flyout overlapping the 3D viewport
+    // painted UNDER it. At the body no scroller stands above the panel; the
+    // coordinates were already viewport-relative, so placing is untouched.
+    const src = appShell()
+    expect(src).toMatch(/import \{ createPortal \} from 'react-dom'/)
+    expect(src).toMatch(/createPortal\(flyout, document\.body\)/)
+  })
+
+  it('treats the portalled panel as inside for blur-out', () => {
+    // The portal puts the panel OUTSIDE the wrapper in the DOM. A blur check
+    // against the wrapper alone would read tabbing from the icon into the
+    // panel as leaving, and unmount the panel under the keyboard user.
+    expect(appShell()).toMatch(/!panel\.current\?\.contains\(next\)/)
+  })
 })
 
 describe('optimize leaves the report reading its own sections', () => {
