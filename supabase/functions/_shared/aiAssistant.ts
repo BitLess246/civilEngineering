@@ -21,23 +21,54 @@
 export const UPSTREAM_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 /**
- * Free models ONLY. Anything not on this list is refused with `model` before
- * any upstream call is made, so a paid model id can never ride this key.
+ * Free models ONLY, most capable first. Anything not on this list is refused
+ * with `model` before any upstream call is made, so a paid model id can never
+ * ride this key.
+ *
+ * Order is capability-descending (the "knowledge needed" half of rotation);
+ * availability is handled by falling through on retryable failures. Every id
+ * below was verified 0/0 pricing with `tools` in `supported_parameters` on
+ * /api/v1/models — extend ONLY the same way, plus a test row. The trailing
+ * entry is the previous verified worker and stays as the last resort.
  */
 export const FREE_CHAT_MODELS = [
+  'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'qwen/qwen3.8-27b:free',
+  'google/gemma-4-31b-it:free',
+  'nvidia/nemotron-3.5-lightning:free',
+  'inclusionai/ling-3.0-flash-fin:free',
+  'liquid/lfm-2.5-2.6b:free',
   'stealth/space-bunny-alpha',
 ] as const
 
 export type FreeChatModel = (typeof FREE_CHAT_MODELS)[number]
 export type FreeModel = FreeChatModel
 
-/** Every model the widget may offer. */
+/** Every model the rotation may offer. The widget no longer names one. */
 export const FREE_MODELS: readonly FreeModel[] = [...FREE_CHAT_MODELS]
-
-export const DEFAULT_FREE_MODEL: FreeChatModel = 'stealth/space-bunny-alpha'
 
 export const isFreeModel = (m: unknown): m is FreeModel =>
   typeof m === 'string' && (FREE_CHAT_MODELS as readonly string[]).includes(m)
+
+/**
+ * Context window per model, tokens. A long conversation can genuinely exceed
+ * the small models, so rotation skips an entry that cannot fit the request —
+ * capability routing by measurement, not by guessing strengths.
+ */
+const MODEL_CONTEXT_TOKENS: Readonly<Record<FreeModel, number>> = {
+  'nvidia/nemotron-3-ultra-550b-a55b:free': 1000000,
+  'qwen/qwen3.8-27b:free': 262144,
+  'google/gemma-4-31b-it:free': 262144,
+  'nvidia/nemotron-3.5-lightning:free': 1000000,
+  'inclusionai/ling-3.0-flash-fin:free': 262144,
+  'liquid/lfm-2.5-2.6b:free': 65536,
+  'stealth/space-bunny-alpha': 1000000,
+}
+
+/** Rough chars-per-token headroom: skip a model the estimate cannot fit. */
+export function fitsContext(model: FreeModel, chars: number): boolean {
+  return chars <= (MODEL_CONTEXT_TOKENS[model] ?? 0) * 3
+}
 
 /** A calculator the assistant may reference or open. Mirrors `ALL_TOOLS`. */
 export interface AssistantToolRef {
@@ -207,13 +238,22 @@ export function cleanPageContext(v: unknown): string | null {
 
 export function validateAssistantRequest(body: unknown): {
   ok: true
-  model: FreeModel
+  /** A client-named model is honoured ONLY when allowlisted (old widget
+   *  during the deploy window); otherwise the rotation picks. Never trusted
+   *  for anything but membership in the list below. */
+  model: FreeModel | null
   messages: AssistantChatMessage[]
   page: string | null
 } | { ok: false; error: RequestError } {
   if (body === null || typeof body !== 'object') return { ok: false, error: 'body' }
   const { model, messages, page } = body as { model?: unknown; messages?: unknown; page?: unknown }
-  if (!isFreeModel(model)) return { ok: false, error: 'model' }
+  // Absent is the normal case now (the widget sends none); present-but-foreign
+  // is refused, never silently replaced — a caller must know what they asked.
+  let named: FreeModel | null = null
+  if (model !== undefined) {
+    if (!isFreeModel(model)) return { ok: false, error: 'model' }
+    named = model
+  }
   if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
     return { ok: false, error: 'messages' }
   }
@@ -230,7 +270,7 @@ export function validateAssistantRequest(body: unknown): {
     if (text.length === 0 || text.length > MAX_MESSAGE_CHARS) return { ok: false, error: 'messages' }
     clean.push({ role, content: text })
   }
-  return { ok: true, model, messages: clean, page: cleanPageContext(page) }
+  return { ok: true, model: named, messages: clean, page: cleanPageContext(page) }
 }
 
 // ── Response parsing (server side) ───────────────────────────────────────────
@@ -252,7 +292,7 @@ export interface UpstreamChoice {
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v)
 
-/** Shared shape check for one parsed `open_calculator` call — both protocols end here. */
+/** Shared shape check for one parsed `open_calculator` call. */
 function toCalculatorAction(
   args: unknown,
   routes: readonly string[],
@@ -289,4 +329,83 @@ export function extractAssistantActions(
     if (action) actions.push(action)
   }
   return { reply: rawContent, actions }
+}
+
+// ── Model rotation (server side) ─────────────────────────────────────────────
+
+export interface UpstreamResponse {
+  ok: boolean
+  status: number
+  json: () => Promise<unknown>
+}
+
+export type UpstreamFetch = (
+  url: string,
+  init: { method: string; headers: Record<string, string>; body: string; signal: AbortSignal },
+) => Promise<UpstreamResponse>
+
+export type RotationResult =
+  | { ok: true; model: FreeModel; json: unknown }
+  | { ok: false; status: number | null }
+
+/** One fully-built upstream call. The function fills in the key-bearing headers. */
+export interface UpstreamCall {
+  url: string
+  method: string
+  headers: Record<string, string>
+  body: string
+}
+
+/**
+ * Walk the rotation list until one model answers.
+ *
+ * Per model, in order: skip it when the request cannot fit its context
+ * window; POST with tools; on 400 retry ONCE without tools (an entry can
+ * list tool support the serving endpoint does not honour); on 404 (rotated
+ * away), 408, 429, 5xx or a transport failure, move to the next model.
+ * Fail FAST on 401 (bad key), 402 (no credit) and 403 (forbidden) — those
+ * describe the account, not the model, so no other entry would pass either.
+ * Same for any other 4xx: the request is ours and retrying it elsewhere
+ * burns quota for nothing.
+ *
+ * `fetchImpl` is injected so the whole policy is unit-testable; the function
+ * passes the real fetch.
+ */
+export async function callWithRotation(
+  models: readonly FreeModel[],
+  chars: number,
+  buildCall: (model: FreeModel, withTools: boolean) => UpstreamCall,
+  fetchImpl: UpstreamFetch,
+  timeoutMs: number,
+): Promise<RotationResult> {
+  let lastStatus: number | null = null
+  for (const model of models) {
+    if (!fitsContext(model, chars)) continue
+    for (const withTools of [true, false]) {
+      let res: UpstreamResponse
+      try {
+        const call = buildCall(model, withTools)
+        res = await fetchImpl(call.url, {
+          method: call.method, headers: call.headers, body: call.body,
+          signal: AbortSignal.timeout(timeoutMs),
+        })
+      } catch {
+        lastStatus = null
+        break // transport failure: next model, tools are not the suspect
+      }
+      if (res.ok) {
+        try {
+          return { ok: true, model, json: await res.json() }
+        } catch {
+          lastStatus = null
+          break // unparseable body: next model
+        }
+      }
+      lastStatus = res.status
+      if (res.status === 400 && withTools) continue // downgrade: same model, no tools
+      if (res.status === 404 || res.status === 408 || res.status === 429 || res.status >= 500) break
+      return { ok: false, status: res.status } // 401/402/403/other 4xx: fail fast
+    }
+  }
+  return { ok: false, status: lastStatus }
 }

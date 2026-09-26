@@ -11,9 +11,6 @@ import { useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ALL_TOOLS } from '../../lib/tools'
 import {
-  FREE_MODELS, DEFAULT_FREE_MODEL,
-} from '../../../../supabase/functions/_shared/aiAssistant'
-import {
   chatWithAssistant, assistantToken, assistantFailureMessage,
   type AssistantChatMessage, type AssistantAction,
 } from '../../lib/ai/assistantClient'
@@ -50,7 +47,6 @@ export function AiAssistantWidget() {
   // request so "why did THIS come out like that?" answers from these numbers.
   const pageSnapshot = usePageSnapshot(pathname)
   const [open, setOpen] = useState(false)
-  const [model, setModel] = useState<string>(DEFAULT_FREE_MODEL)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -85,11 +81,12 @@ export function AiAssistantWidget() {
     // getClient is null only when Supabase is unconfigured — chatWithAssistant
     // maps a null token to 'not-configured', so pass a shim client through and
     // let the one mapping speak for both cases.
+    // No model is sent: the server rotates its free allowlist and the widget
+    // never names one. `page` carries the open calculator's live snapshot.
     const result = await chatWithAssistant(
       client ?? { functions: { invoke: async () => ({ data: null, error: { context: { status: 503 } } }) } },
       client ? await assistantToken() : null,
       {
-        model,
         messages: history.slice(-20),
         ...(pageSnapshot ? { page: formatPageSnapshot(pageSnapshot) } : {}),
       },
@@ -131,18 +128,9 @@ export function AiAssistantWidget() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold text-ink">Calculation helper</p>
               <p className="truncate text-[11px] text-faint">
-                {pageSnapshot ? `Seeing: ${pageSnapshot.tool}` : 'Free models · answers only about this app\u2019s tools'}
+                {pageSnapshot ? `Seeing: ${pageSnapshot.tool}` : 'Answers only about this app\u2019s tools'}
               </p>
             </div>
-            <label className="flex flex-none items-center gap-1 text-[11px] text-faint">
-              <span className="sr-only">Model</span>
-              <select value={model} onChange={(e) => setModel(e.target.value)} aria-label="Model"
-                className="h-7 max-w-[150px] rounded-md border border-field-line bg-field px-1 text-[11px] text-muted">
-                {FREE_MODELS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </label>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close helper"
               className="flex h-8 w-8 flex-none items-center justify-center rounded-md text-muted hover:bg-brand-tint hover:text-brand">
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>

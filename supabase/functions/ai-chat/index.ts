@@ -1,9 +1,12 @@
 // ─────────────────────────────────────────────────────────────────────────
 // AI-CHAT — the server half of the in-app calculation helper.
 //
-// The browser posts { model, messages }; this function validates both,
-// prepends its OWN system prompt (the client can never widen the scope),
-// forwards to OpenRouter's free models, and returns { reply, actions }.
+// The browser posts { messages, page? } — NO model; the rotation below picks
+// one and the widget never names it. (A client-named allowlisted model is
+// still honoured, so the pre-rotation widget keeps working across the deploy
+// window.) This function validates the messages, prepends its OWN system
+// prompt (the client can never widen the scope), walks the free-model
+// rotation until one answers, and returns { reply, actions, model }.
 //
 // Was OpenCode Zen: Zen's free tier refuses raw API calls (`FreeTierError` —
 // usable only from inside OpenCode), so the upstream moved to OpenRouter.
@@ -31,11 +34,15 @@
 import { preflight, jsonWithCors } from '../_shared/cors.ts'
 import {
   UPSTREAM_CHAT_COMPLETIONS_URL,
+  FREE_MODELS,
   buildAssistantSystemPrompt,
   openCalculatorToolSchema,
   validateAssistantRequest,
   extractAssistantActions,
+  callWithRotation,
   type AssistantChatMessage,
+  type FreeModel,
+  type UpstreamCall,
   type UpstreamChoice,
 } from '../_shared/aiAssistant.ts'
 
@@ -45,7 +52,7 @@ const env = (k: string) => Deno.env.get(k)
 const APP_REFERER = 'https://github.com/BitLess246/civilEngineering'
 const APP_TITLE = 'civilEngineering calculation helper'
 
-/** The upstream gets this long to answer before the edge gives up. */
+/** The upstream gets this long to answer before the edge gives up, per attempt. */
 const UPSTREAM_TIMEOUT_MS = 30_000
 /** Upper bound on the completion so one answer cannot run away. */
 const MAX_TOKENS = 1500
@@ -74,49 +81,47 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // The live page snapshot, if the browser sent one: validated text the
   // prompt quotes as the current page. Absent on pages that never opted in.
   const system = buildAssistantSystemPrompt(undefined, parsed.page)
+  const tools = [openCalculatorToolSchema()]
 
-  let upstream: Response
-  try {
-    upstream = await fetch(UPSTREAM_CHAT_COMPLETIONS_URL, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${key}`,
-        // OpenRouter attribution headers. Optional for auth, sent so usage
-        // shows up under the app rather than as unattributed traffic.
-        'HTTP-Referer': APP_REFERER,
-        'X-Title': APP_TITLE,
-      },
-      body: JSON.stringify({
-        model: parsed.model,
-        max_tokens: MAX_TOKENS,
-        messages: [{ role: 'system', content: system }, ...messages],
-        tools: [openCalculatorToolSchema()],
-        tool_choice: 'auto',
-      }),
-      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-    })
-  } catch (e) {
-    console.error('ai-chat: upstream unreachable:', e instanceof Error ? e.message : e)
-    return jsonWithCors({ error: 'upstream', status: null }, 502)
-  }
+  const buildCall = (model: FreeModel, withTools: boolean): UpstreamCall => ({
+    url: UPSTREAM_CHAT_COMPLETIONS_URL,
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${key}`,
+      // OpenRouter attribution headers. Optional for auth, sent so usage
+      // shows up under the app rather than as unattributed traffic.
+      'HTTP-Referer': APP_REFERER,
+      'X-Title': APP_TITLE,
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: MAX_TOKENS,
+      messages: [{ role: 'system', content: system }, ...messages],
+      ...(withTools ? { tools, tool_choice: 'auto' as const } : {}),
+    }),
+  })
 
-  if (!upstream.ok) {
+  // A client-named model narrows the rotation to itself; otherwise every
+  // allowlisted entry is a candidate, most capable first.
+  const candidates = parsed.model ? [parsed.model] : [...FREE_MODELS]
+  // Rotation skips what cannot fit, so size it on the largest thing sent: the
+  // system prompt plus the whole conversation plus the page snapshot.
+  const chars =
+    system.length + (parsed.page?.length ?? 0) +
+    messages.reduce((n, m) => n + m.content.length, 0)
+
+  const res = await callWithRotation(candidates, chars, buildCall, fetch, UPSTREAM_TIMEOUT_MS)
+  if (!res.ok) {
     // The STATUS goes back to the browser; the body never does. It is the
     // provider's wording, not ours, and must never carry a hint of the key
     // back — but the bare number is what tells a bad key (401) from denied
     // credit (402) from a limit (429) without dashboard access.
-    console.error(`ai-chat: upstream answered ${upstream.status}`)
-    return jsonWithCors({ error: 'upstream', status: upstream.status }, 502)
+    if (res.status !== null) console.error(`ai-chat: upstream answered ${res.status} (rotation exhausted)`)
+    return jsonWithCors({ error: 'upstream', status: res.status }, 502)
   }
 
-  let payload: { choices?: UpstreamChoice[] } | null
-  try {
-    payload = (await upstream.json()) as typeof payload
-  } catch {
-    return jsonWithCors({ error: 'upstream', status: null }, 502)
-  }
-
-  const { reply, actions } = extractAssistantActions(payload?.choices?.[0])
-  return jsonWithCors({ reply, actions, model: parsed.model })
+  const payload = (res.json ?? {}) as { choices?: UpstreamChoice[] }
+  const { reply, actions } = extractAssistantActions(payload.choices?.[0])
+  return jsonWithCors({ reply, actions, model: res.model })
 })
