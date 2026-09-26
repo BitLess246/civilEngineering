@@ -11,7 +11,7 @@ const errClient = (status: number, body?: unknown): FunctionsInvoker => ({
     invoke: async () => ({ data: null, error: { context: { status, json: async () => body ?? null } } }),
   },
 })
-const req = { model: 'big-pickle', messages: [{ role: 'user' as const, content: 'size a footing' }] }
+const req = { messages: [{ role: 'user' as const, content: 'size a footing' }] }
 
 describe('chatWithAssistant', () => {
   it('returns the reply with its validated actions', () => {
