@@ -92,7 +92,7 @@ async function upstreamStatus(error: unknown): Promise<number | null> {
 export async function chatWithAssistant(
   client: FunctionsInvoker,
   token: string | null,
-  req: { model: string; messages: AssistantChatMessage[] },
+  req: { model: string; messages: AssistantChatMessage[]; page?: string },
 ): Promise<AssistantResult> {
   if (!token) return { ok: false, reason: 'not-configured' }
   let data: unknown

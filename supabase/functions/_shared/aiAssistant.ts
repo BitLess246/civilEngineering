@@ -121,9 +121,25 @@ export const OFF_TOPIC_REFUSAL =
  * The server-built system prompt. The browser never sends one — any `system`
  * or `developer` message in the request is dropped by validation — so prompt
  * injection from the client side cannot widen the scope.
+ *
+ * `pageContext` is the live snapshot of the calculator the user has open
+ * (client-formatted, length-capped, validated below). It is DATA, quoted as
+ * the current page — what grounds "why did THIS come out like that?".
  */
-export function buildAssistantSystemPrompt(tools: readonly AssistantToolRef[] = ASSISTANT_TOOLS): string {
+export function buildAssistantSystemPrompt(
+  tools: readonly AssistantToolRef[] = ASSISTANT_TOOLS,
+  pageContext: string | null = null,
+): string {
   const catalog = tools.map((t) => `- ${t.route} — ${t.name} (${t.sub}) [${t.group}]`).join('\n')
+  const page = pageContext
+    ? [
+        '',
+        'CURRENT PAGE — the calculator the user has open RIGHT NOW, with its live inputs and results:',
+        pageContext,
+        '',
+        'Answer "why", "this" and "my result" questions from THESE numbers, citing the clause behind each check. Never invent values: anything not shown here is unknown until the user gives it or opens the page that computes it.',
+      ].join('\n')
+    : ''
   return [
     'You are the calculation helper inside a structural-engineering web app (NSCP 2015 / ACI 318-14 / AISC 360-16).',
     '',
@@ -135,6 +151,7 @@ export function buildAssistantSystemPrompt(tools: readonly AssistantToolRef[] = 
     '',
     'RUNNING CALCULATORS. When the user gives enough details to run one, call the `open_calculator` function with the calculator route and the inputs as field names and numbers (with units as documented: geometry m, sections mm/mm², forces kN, stress MPa). Only include inputs the user actually gave — never invent values. If details are missing, ask for them instead of calling.',
     'Explain results from what the calculator returns or computes — never fabricate numbers, and cite the code clause (e.g. NSCP §203.3.1, ACI §22.6, AISC §E3) behind each check. Keep answers short.',
+    page,
   ].join('\n')
 }
 
@@ -175,16 +192,27 @@ export interface AssistantChatMessage {
 
 export const MAX_MESSAGES = 20
 export const MAX_MESSAGE_CHARS = 4000
+/** Cap on the page snapshot: it is context, and the client caps first. */
+export const MAX_PAGE_CHARS = 3000
 
 export type RequestError = 'body' | 'model' | 'messages'
+
+/** The live page snapshot as plain text, or null when absent or unusable. */
+export function cleanPageContext(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const text = v.trim()
+  if (!text) return null
+  return text.length > MAX_PAGE_CHARS ? `${text.slice(0, MAX_PAGE_CHARS)}…` : text
+}
 
 export function validateAssistantRequest(body: unknown): {
   ok: true
   model: FreeModel
   messages: AssistantChatMessage[]
+  page: string | null
 } | { ok: false; error: RequestError } {
   if (body === null || typeof body !== 'object') return { ok: false, error: 'body' }
-  const { model, messages } = body as { model?: unknown; messages?: unknown }
+  const { model, messages, page } = body as { model?: unknown; messages?: unknown; page?: unknown }
   if (!isFreeModel(model)) return { ok: false, error: 'model' }
   if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
     return { ok: false, error: 'messages' }
@@ -202,7 +230,7 @@ export function validateAssistantRequest(body: unknown): {
     if (text.length === 0 || text.length > MAX_MESSAGE_CHARS) return { ok: false, error: 'messages' }
     clean.push({ role, content: text })
   }
-  return { ok: true, model, messages: clean }
+  return { ok: true, model, messages: clean, page: cleanPageContext(page) }
 }
 
 // ── Response parsing (server side) ───────────────────────────────────────────

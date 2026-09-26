@@ -5,6 +5,7 @@ import { ReportControls } from '../components/ReportControls'
 import { f2 } from '../lib/format'
 import { PageHeader } from '../components/calc'
 import { usePendingCalculatorInputs } from '../lib/ai/pendingAction'
+import { usePublishPageSnapshot, type PageSnapshot } from '../lib/ai/pageContext'
 
 const DEFAULTS: LoadDemands = { D: 0, L: 0, Lr: 0, W: 0, E: 0 }
 
@@ -35,6 +36,22 @@ export default function LoadCombinations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [dKey, allFinite],
   )
+
+  // Assistant snapshot — `d` is state and `r` is memoised, so both deps are
+  // stable and this republishes only when the numbers actually change.
+  const comboSnapshot = useMemo<PageSnapshot>(() => ({
+    route: '/load-combinations',
+    tool: 'Load Combinations',
+    inputs: (['D', 'L', 'Lr', 'W', 'E'] as const).map((k) => ({ label: k, value: f2(d[k]) })),
+    results: r
+      ? [
+          { label: 'governing max', value: `${r.maxCombo.id} = ${f2(r.maxCombo.value)}` },
+          { label: 'governing min', value: `${r.minCombo.id} = ${f2(r.minCombo.value)}` },
+        ]
+      : [{ label: 'results', value: 'enter finite loads' }],
+    notes: ['NSCP 2015 §203.3 LRFD, any consistent unit'],
+  }), [d, r])
+  usePublishPageSnapshot('/load-combinations', comboSnapshot)
 
   return (
         <div>
