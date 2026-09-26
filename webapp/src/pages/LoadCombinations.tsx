@@ -4,11 +4,26 @@ import { Num, Card } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
 import { f2 } from '../lib/format'
 import { PageHeader } from '../components/calc'
+import { usePendingCalculatorInputs } from '../lib/ai/pendingAction'
 
 const DEFAULTS: LoadDemands = { D: 0, L: 0, Lr: 0, W: 0, E: 0 }
 
+/** Keep only finite numbers the page knows — the assistant must never set a field to a string. */
+function sanitiseLoads(raw: Partial<LoadDemands> | null): Partial<LoadDemands> {
+  if (!raw) return {}
+  const out: Partial<LoadDemands> = {}
+  for (const k of ['D', 'L', 'Lr', 'W', 'E'] as const) {
+    const v: unknown = raw[k]
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = v
+  }
+  return out
+}
+
 export default function LoadCombinations() {
-  const [d, setD] = useState<LoadDemands>(DEFAULTS)
+  // Assistant prefill pilot: `open_calculator('/load-combinations', {D, L, …})`
+  // lands here via sessionStorage and becomes the initial state (consumed once).
+  const initialLoads = usePendingCalculatorInputs('/load-combinations', DEFAULTS)
+  const [d, setD] = useState<LoadDemands>(() => ({ ...DEFAULTS, ...sanitiseLoads(initialLoads()) }))
   const set = <K extends keyof LoadDemands>(k: K) => (v: number) =>
     setD(s => ({ ...s, [k]: v }))
 

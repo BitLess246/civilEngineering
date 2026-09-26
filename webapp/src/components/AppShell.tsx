@@ -8,6 +8,7 @@ import { DrawnIcon } from './DrawnIcon'
 import { useToolPrefs } from '../lib/useToolPrefs'
 import { visibleGroups } from '../lib/toolPrefs'
 import { CommandPalette } from './CommandPalette'
+import { AiAssistantWidget } from './AiAssistant/AiAssistantWidget'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { isEmbedLocation } from '../lib/embed'
 import { SiteFooter } from './SiteFooter'
@@ -611,6 +612,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <NavDrawer open={nav} onClose={() => setNav(false)} onOpenPalette={() => setPalette(true)} />
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
+      {/* Calculation helper — one floating button on every tool page. Inside
+          the shell (so it is everywhere tools are) but outside TrialGate (a
+          question is not a calculator run). Hidden in print and in embed. */}
+      {!embed && <AiAssistantWidget />}
     </div>
   )
 }
