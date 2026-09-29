@@ -7,11 +7,11 @@ export default function Terms() {
   return (
     <LegalLayout
       title="Terms and Conditions"
-      subtitle={`The agreement between you and ${name} for use of the ${SITE.tradeName}.`}
+      subtitle={`The agreement between you and ${name} for use of ${SITE.tradeName}.`}
     >
       <Clause n="1" title="Who you are contracting with">
         <p>
-          The {SITE.tradeName} is operated by <strong><Detail value={SITE.legalName} what="registered business name" /></strong>,
+          {SITE.tradeName} is operated by <strong><Detail value={SITE.legalName} what="registered business name" /></strong>,
           a business registered in the Philippines, with its registered address at{' '}
           <Detail value={addressOneLine()} what="registered business address" />.
         </p>
@@ -22,7 +22,7 @@ export default function Terms() {
 
       <Clause n="2" title="What this service is">
         <p>
-          The {SITE.tradeName} is engineering calculation software. It performs structural and
+          {SITE.tradeName} is engineering calculation software. It performs structural and
           geotechnical calculations to Philippine and international design codes — NSCP 2015,
           ACI 318-14, AISC 360-16 and others named on each page — and produces calculation sheets
           from the inputs you supply.

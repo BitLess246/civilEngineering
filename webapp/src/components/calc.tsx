@@ -288,7 +288,7 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
         <div>
           <div className="flex items-baseline gap-2">
             <span className="text-[14px] font-extrabold tracking-[.14em]">{BRAND_MARK}</span>
-            <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>
+            {BRAND_TAIL && <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>}
           </div>
           <h1 className="mt-2 text-[24px] font-extrabold tracking-tight">{docTitle} — Design Calculation</h1>
           <div className="mt-2 flex gap-2">

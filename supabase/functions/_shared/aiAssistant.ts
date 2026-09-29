@@ -139,7 +139,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/estimate/column', name: 'Column', sub: 'Concrete + rebar', group: 'Estimates' },
   { route: '/estimate/chb', name: 'CHB Wall', sub: 'Block count', group: 'Estimates' },
   { route: '/estimate/box-culvert', name: 'Box Culvert', sub: 'Culvert estimate', group: 'Estimates' },
-  { route: '/docs', name: 'Documentation', sub: 'Toolkit guide', group: 'Reference' },
+  { route: '/docs', name: 'Documentation', sub: 'User guide', group: 'Reference' },
   { route: '/validation', name: 'Validation', sub: 'Engine vs hand calc', group: 'Reference' },
   { route: '/pricing', name: 'Plans', sub: 'Pricing · PHP', group: 'Reference' },
 ]
@@ -172,7 +172,7 @@ export function buildAssistantSystemPrompt(
       ].join('\n')
     : ''
   return [
-    'You are the calculation helper inside a structural-engineering web app (NSCP 2015 / ACI 318-14 / AISC 360-16).',
+    'You are the calculation helper inside Zeta, a structural-engineering web app (NSCP 2015 / ACI 318-14 / AISC 360-16) operated by CIVENGG WEBSITE APPLICATION SERVICE.',
     '',
     'SCOPE — the hard rule. You answer ONLY questions about: (a) the app calculators listed below, their inputs, and how to use them; (b) the meaning of their answers, solutions and results; (c) the design-code clauses behind them. Any question outside that — general chat, homework unrelated to these tools, coding, current events, anything else — gets EXACTLY this reply and nothing more:',
     `"${OFF_TOPIC_REFUSAL}"`,
