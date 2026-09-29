@@ -69,6 +69,12 @@ export interface ContourMember {
    * beam it belongs to.
    */
   drop: number
+  /**
+   * The member's end NODES. Optional, because a member contoured on its own
+   * has no joint to meet; given, they are what lets `jointTrims` find the
+   * members that share a joint and stop this one at their face.
+   */
+  ni?: string; nj?: string
 }
 
 /**
@@ -125,19 +131,7 @@ export const RING_PER_SIDE = 6
  */
 export function sectionRing(s: StressSection, perSide = RING_PER_SIDE): Fibre[] {
   const n = Math.max(1, Math.floor(perSide))
-  const h = 2 * s.cy, b = 2 * s.cz
-  const Qz = (y: number) => (b * (h * h / 4 - y * y)) / 2
-  const Qy = (z: number) => (h * (b * b / 4 - z * z)) / 2
-  const at = (y: number, z: number): Fibre => {
-    const qz = Math.max(0, Qz(y)), qy = Math.max(0, Qy(z))
-    return {
-      y, z, label: '',
-      // Omitted rather than zero where there is no flow: `shearStress` treats a
-      // missing pair as a free surface, which is the same answer and says so.
-      ...(qz > 0 && b > 0 ? { Qz: qz, tz: b } : {}),
-      ...(qy > 0 && h > 0 ? { Qy: qy, ty: h } : {}),
-    }
-  }
+  const at = (y: number, z: number) => fibreAt(s, y, z)
   const ring: Fibre[] = []
   // Counter-clockwise from (+cy, +cz), each side split n ways and its END
   // corner left to the next side, so the ring closes without a duplicate.
@@ -152,6 +146,28 @@ export function sectionRing(s: StressSection, perSide = RING_PER_SIDE): Fibre[] 
   walk(-s.cy, -s.cz, -s.cy, s.cz)    // bottom face, −z → +z
   walk(-s.cy, s.cz, s.cy, s.cz)      // +z side, bottom → top
   return ring
+}
+
+/**
+ * One point of the bounding-rectangle section as a `Fibre`, carrying the
+ * rectangle's shear-flow data there: `Qz(y) = b(h²/4 − y²)/2` with `t = b`,
+ * and `Qy(z)` the same across the width.
+ *
+ * Shared by the ring and the end caps, so a cap's CENTROID is evaluated with
+ * the same Q the side faces use — which matters for τ, whose peak is at the
+ * centroid and which a cap averaged from its ring would understate.
+ */
+function fibreAt(s: StressSection, y: number, z: number): Fibre {
+  const h = 2 * s.cy, b = 2 * s.cz
+  const qz = Math.max(0, (b * (h * h / 4 - y * y)) / 2)
+  const qy = Math.max(0, (h * (b * b / 4 - z * z)) / 2)
+  return {
+    y, z, label: '',
+    // Omitted rather than zero where there is no flow: `shearStress` treats a
+    // missing pair as a free surface, which is the same answer and says so.
+    ...(qz > 0 && b > 0 ? { Qz: qz, tz: b } : {}),
+    ...(qy > 0 && h > 0 ? { Qy: qy, ty: h } : {}),
+  }
 }
 
 const forcesAt = (f: MemberForceArrays, i: number): MemberForces => ({
@@ -190,10 +206,161 @@ export function memberValues(m: ContourMember, key: MemberStressKey): number[][]
   return out
 }
 
-/** The domain every member shares, so two members are comparable. */
+const stressAt = (s: StressSection, f: MemberForces, fib: Fibre, key: MemberStressKey): number =>
+  key === 'sigma' ? normalStress(s, f, fib.y, fib.z)
+    : key === 'tau' ? shearStress(s, f, fib)
+      : fibreStress(s, f, fib).vonMises
+
+/** Forces at an arbitrary x, linear between the solver's stations — the same
+ *  assumption the GPU makes when it interpolates between two drawn rings. */
+function forcesAtX(f: MemberForceArrays, x: number): MemberForces {
+  const xs = f.xs
+  for (let i = 0; i < xs.length - 1; i++) {
+    if (x >= xs[i] && x <= xs[i + 1] && xs[i + 1] > xs[i]) {
+      const t = (x - xs[i]) / (xs[i + 1] - xs[i])
+      const A = forcesAt(f, i), B = forcesAt(f, i + 1)
+      return {
+        N: A.N + (B.N - A.N) * t, Vy: A.Vy + (B.Vy - A.Vy) * t, Vz: A.Vz + (B.Vz - A.Vz) * t,
+        T: A.T + (B.T - A.T) * t, My: A.My + (B.My - A.My) * t, Mz: A.Mz + (B.Mz - A.Mz) * t,
+      }
+    }
+  }
+  return forcesAt(f, x <= (xs[0] ?? 0) ? 0 : xs.length - 1)
+}
+
+// ── Joints ──────────────────────────────────────────────────────────────────
+//
+// WHY A MEMBER STOPS AT THE FACE. Every member used to be drawn node to node,
+// centreline to centreline. At a beam–column joint that put the beam's prism
+// and the column's prism in the SAME volume, carrying two different stress
+// fields, and the depth test cut between them along whatever line their
+// surfaces happened to cross — a patchwork where the colour should flow from
+// one member into the next. It also painted the beam's NODE value, its largest,
+// inside the column, where there is no beam: the critical sections of a beam
+// are measured from the support FACE (ACI 318-14 §9.4.3.2), and the node
+// moment of a centreline model is an idealisation of the joint, not a stress
+// anything in the joint carries.
+//
+// So the joint belongs to one member, the way ETABS and SAP2000 draw it: a
+// column owns the joints it passes through; a beam that CONTINUES through a
+// node owns it over one that stops there (a girder over the secondary beam it
+// carries). Everything else stops at the owner's face.
+
+/** Which member owns a joint it meets: 2 vertical, 1 continuous, 0 neither. */
+function jointRank(away: V3, others: readonly V3[]): number {
+  if (Math.abs(away[1]) > 0.98) return 2
+  return others.some((o) => away[0] * o[0] + away[1] * o[1] + away[2] * o[2] < -0.999) ? 1 : 0
+}
+
+/**
+ * How far along `away` (a unit vector) a ray from the joint travels before it
+ * leaves member `k`'s cross-section, metres.
+ *
+ * The EXIT distance, not the half-width: a beam meeting a column square-on
+ * leaves at b/2, but one meeting it on a skew, or a brace coming in on a slope,
+ * travels c/|cos θ| to reach the same face, and trimming it by the half-width
+ * would leave its end buried in the column or short of it.
+ */
+function exitDistance(away: V3, k: ContourMember): number {
+  const dir: V3 = [k.b[0] - k.a[0], k.b[1] - k.a[1], k.b[2] - k.a[2]]
+  const [, yk, zk] = localAxes(dir, k.rotDeg)
+  let best = Infinity
+  for (const [ax, c] of [[yk, k.section.cy], [zk, k.section.cz]] as const) {
+    const d = Math.abs(away[0] * ax[0] + away[1] * ax[1] + away[2] * ax[2])
+    if (d > 1e-9) best = Math.min(best, c / 1000 / d)
+  }
+  return Number.isFinite(best) ? best : 0
+}
+
+/**
+ * How much of each end to leave undrawn because another member owns the joint
+ * there: `id → [atStart, atEnd]`, metres along the member.
+ *
+ * Only members that carry their node ids take part — without them there is no
+ * way to know two members share a joint rather than merely touch. Both trims
+ * together are capped at 90% of the length, so a stub between two columns is
+ * drawn short rather than inside out.
+ */
+export function jointTrims(ms: readonly ContourMember[]): Map<string, [number, number]> {
+  type End = { m: ContourMember; away: V3; end: 0 | 1 }
+  const at = new Map<string, End[]>()
+  for (const m of ms) {
+    if (m.ni === undefined || m.nj === undefined) continue
+    const d: V3 = [m.b[0] - m.a[0], m.b[1] - m.a[1], m.b[2] - m.a[2]]
+    const L = Math.hypot(...d)
+    if (!(L > 1e-9)) continue
+    const u: V3 = [d[0] / L, d[1] / L, d[2] / L]
+    for (const [node, away, end] of [[m.ni, u, 0], [m.nj, [-u[0], -u[1], -u[2]], 1]] as const) {
+      const list = at.get(node) ?? []
+      list.push({ m, away: away as V3, end: end as 0 | 1 })
+      at.set(node, list)
+    }
+  }
+  const out = new Map<string, [number, number]>()
+  for (const ends of at.values()) {
+    const rank = ends.map((e) => jointRank(e.away, ends.filter((o) => o !== e).map((o) => o.away)))
+    ends.forEach((e, i) => {
+      let trim = 0
+      ends.forEach((k, j) => {
+        if (j === i || rank[j] <= rank[i]) return
+        const par = Math.abs(e.away[0] * k.away[0] + e.away[1] * k.away[1] + e.away[2] * k.away[2])
+        if (par > 0.999) return            // collinear: end to end, nothing to cut
+        trim = Math.max(trim, exitDistance(e.away, k.m))
+      })
+      if (trim > 0) {
+        const t = out.get(e.m.id) ?? [0, 0]
+        t[e.end] = trim
+        out.set(e.m.id, t)
+      }
+    })
+  }
+  for (const m of ms) {
+    const t = out.get(m.id)
+    if (!t) continue
+    const L = Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1], m.b[2] - m.a[2])
+    const sum = t[0] + t[1]
+    if (sum > 0.9 * L) { t[0] *= (0.9 * L) / sum; t[1] *= (0.9 * L) / sum }
+  }
+  return out
+}
+
+/** One drawn station: where it is, and the value at every ring point and at
+ *  the centroid (the latter for the end caps). */
+interface Station { x: number; ring: number[]; centre: number }
+
+/**
+ * The stations a member is DRAWN at: the solver's own, clipped to the part of
+ * the member outside the joints, with a station added exactly at each face so
+ * the drawn end carries the stress AT the face rather than at the nearest
+ * solver station inside the joint.
+ */
+function drawnStations(
+  m: ContourMember, key: MemberStressKey, trim: readonly [number, number] = [0, 0],
+): Station[] {
+  const xs = m.forces.xs
+  if (xs.length < 2) return []
+  const L = Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1], m.b[2] - m.a[2])
+  const x0 = trim[0], x1 = L - trim[1]
+  const ring = sectionRing(m.section), centre = fibreAt(m.section, 0, 0)
+  const at = (x: number, f: MemberForces): Station => ({
+    x, ring: ring.map((fib) => stressAt(m.section, f, fib, key)), centre: stressAt(m.section, f, centre, key),
+  })
+  if (!(trim[0] > 0) && !(trim[1] > 0)) return xs.map((x, i) => at(x, forcesAt(m.forces, i)))
+  const out: Station[] = [at(x0, forcesAtX(m.forces, x0))]
+  xs.forEach((x, i) => { if (x > x0 + 1e-9 && x < x1 - 1e-9) out.push(at(x, forcesAt(m.forces, i))) })
+  out.push(at(x1, forcesAtX(m.forces, x1)))
+  return out
+}
+
+/** The domain every member shares, so two members are comparable.
+ *
+ *  Taken over the DRAWN stations, joints trimmed, so the legend's extremes are
+ *  values the picture actually shows — not a node value hidden inside a
+ *  column, which would stretch the scale and wash out everything drawn. */
 export function memberContourDomain(ms: readonly ContourMember[], key: MemberStressKey): Domain {
+  const trims = jointTrims(ms)
   const all: number[] = []
-  for (const m of ms) for (const row of memberValues(m, key)) all.push(...row)
+  for (const m of ms) for (const st of drawnStations(m, key, trims.get(m.id))) all.push(...st.ring, st.centre)
   return stressDomain(all, isSignedMember(key))
 }
 
@@ -201,13 +368,15 @@ export function memberContourDomain(ms: readonly ContourMember[], key: MemberStr
 export function memberPeak(
   ms: readonly ContourMember[], key: MemberStressKey,
 ): { id: string; value: number; x: number } | null {
+  // Over the same drawn stations as the domain, so the read-out names a place
+  // on the picture — the face of a support, not a node inside a column.
+  const trims = jointTrims(ms)
   let best: { id: string; value: number; x: number } | null = null
   for (const m of ms) {
-    const vals = memberValues(m, key)
-    for (let i = 0; i < vals.length; i++) {
-      for (const v of vals[i]) {
+    for (const st of drawnStations(m, key, trims.get(m.id))) {
+      for (const v of [...st.ring, st.centre]) {
         if (!Number.isFinite(v)) continue
-        if (!best || Math.abs(v) > Math.abs(best.value)) best = { id: m.id, value: v, x: m.forces.xs[i] ?? 0 }
+        if (!best || Math.abs(v) > Math.abs(best.value)) best = { id: m.id, value: v, x: st.x }
       }
     }
   }
@@ -245,9 +414,9 @@ export function memberContourGeometry(
   ms: readonly ContourMember[], key: MemberStressKey, domain: Domain,
 ): MemberContourGeometry | null {
   const pos: number[] = [], val: number[] = [], idx: number[] = []
+  const trims = jointTrims(ms)
   for (const m of ms) {
-    const n = m.forces.xs.length
-    if (n < 2) continue
+    if (m.forces.xs.length < 2) continue
     const dir: V3 = [m.b[0] - m.a[0], m.b[1] - m.a[1], m.b[2] - m.a[2]]
     const L = Math.hypot(...dir)
     if (!(L > 1e-9)) continue
@@ -256,14 +425,16 @@ export function memberContourGeometry(
     const [, yp, zp] = localAxes(dir, m.rotDeg)
     const ring = sectionRing(m.section)
     const R = ring.length
-    const vals = memberValues(m, key)
+    const stations = drawnStations(m, key, trims.get(m.id))
+    const n = stations.length
     const base = pos.length / 3
 
-    for (let i = 0; i < n; i++) {
-      const t = Math.max(0, Math.min(1, (m.forces.xs[i] ?? 0) / L))
-      const px = m.a[0] + dir[0] * t
-      const py = m.a[1] + dir[1] * t - m.drop
-      const pz = m.a[2] + dir[2] * t
+    const axisAt = (x: number): V3 => {
+      const t = Math.max(0, Math.min(1, x / L))
+      return [m.a[0] + dir[0] * t, m.a[1] + dir[1] * t - m.drop, m.a[2] + dir[2] * t]
+    }
+    const pushRing = (st: Station) => {
+      const [px, py, pz] = axisAt(st.x)
       for (let c = 0; c < R; c++) {
         // mm → m, and out to the drawn face.
         const oy = (ring[c].y / 1000) * PROUD, oz = (ring[c].z / 1000) * PROUD
@@ -272,9 +443,10 @@ export function memberContourGeometry(
           py + yp[1] * oy + zp[1] * oz,
           pz + yp[2] * oy + zp[2] * oz,
         )
-        val.push(normalise(vals[i]?.[c] ?? 0, domain))
+        val.push(normalise(st.ring[c] ?? 0, domain))
       }
     }
+    for (const st of stations) pushRing(st)
     // R quads per bay, two triangles each, the ring closing on itself via the
     // modulo. Ring vertices are SHARED between adjacent quads, so the value
     // interpolates continuously around the section as well as along the member
@@ -286,6 +458,19 @@ export function memberContourGeometry(
         const q0 = base + (i + 1) * R + c, q1 = base + (i + 1) * R + d
         idx.push(p0, p1, q1, p0, q1, q0)
       }
+    }
+    // END CAPS. The prism used to be an open tube, and down its open end the
+    // viewer saw the dark solid member it is drawn over — the black slab on top
+    // of every roof column and at the end of every beam. Each end is closed by
+    // a fan from the centroid, on its OWN vertices (a cap shares an edge with
+    // the side faces but not a surface), carrying the section's stress: the
+    // ring's values on the rim and the centroid's own value at the hub, so τ
+    // peaks at the middle of the cap exactly as it does on the side faces.
+    for (const st of [stations[0], stations[n - 1]]) {
+      const hub = pos.length / 3
+      pos.push(...axisAt(st.x)); val.push(normalise(st.centre, domain))
+      pushRing(st)
+      for (let c = 0; c < R; c++) idx.push(hub, hub + 1 + c, hub + 1 + ((c + 1) % R))
     }
   }
   if (idx.length === 0) return null
