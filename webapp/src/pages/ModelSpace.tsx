@@ -337,6 +337,11 @@ export default function ModelSpace() {
   // different quantisations of the same ramp.
   const [bands, setBands] = useState(DEFAULT_BANDS)
   const [memStressKey, setMemStressKey] = useState<MemberStressKey>('sigma')
+  // Averaged at joints by default: exact member by member, the field breaks at
+  // every joint (a beam's σ and a column's σ are different components), which
+  // reads as a rendering fault. The blend is confined to the joint panel and
+  // the toggle says so — see lib/memberContour § Joint blending.
+  const [memBlend, setMemBlend] = useState(true)
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
   const [showConns, setShowConns] = useState(true)         // designed steel joint hardware
   const [showRebar, setShowRebar] = useState(false)        // the designed bar cages, in 3D
@@ -2251,7 +2256,8 @@ export default function ModelSpace() {
                 )}
                 {memStressInfo && (
                   <MemberStress3D members={memStressInfo.members}
-                    contourKey={memStressKey} domain={memStressInfo.domain} bands={bands} />
+                    contourKey={memStressKey} domain={memStressInfo.domain} bands={bands}
+                    blendJoints={memBlend} />
                 )}
                 {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} kinds={cageKinds} />}
                 {forceDiag && forceDiagInfo && forceDiagInfo.scale > 0 && model.members.map((m) => {
@@ -4973,6 +4979,16 @@ export default function ModelSpace() {
                             <option key={key} value={key}>{label} (MPa)</option>
                           ))}
                         </select>
+                        <label className="mt-1.5 flex items-start gap-2 text-[11px] leading-snug text-muted">
+                          <input type="checkbox" className="mt-0.5" checked={memBlend}
+                            onChange={(e) => setMemBlend(e.target.checked)} />
+                          <span>
+                            <span className="text-ink">Average through joints</span> — smooths the
+                            colour inside each joint panel only, where beam and column stresses meet
+                            and a frame analysis has no value of its own. Members read exactly
+                            everywhere else; untick for unaveraged.
+                          </span>
+                        </label>
                         {/* A FLAT FIELD GETS A SENTENCE, NOT A BAR — the same
                             rule the plate contour follows, for the same reason:
                             the fallback domain spans 0…1 and a bar labelled
