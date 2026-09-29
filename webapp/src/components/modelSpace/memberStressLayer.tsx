@@ -19,7 +19,7 @@ import {
 import type { Domain } from '../../lib/stressScale'
 import { contourMaterial } from '../../lib/contourMaterial'
 
-export function MemberStress3D({ members, contourKey, domain, bands }: {
+export function MemberStress3D({ members, contourKey, domain, bands, blendJoints }: {
   members: readonly ContourMember[]
   contourKey: MemberStressKey
   /** Passed in rather than derived, so the legend beside the picture and the
@@ -27,9 +27,12 @@ export function MemberStress3D({ members, contourKey, domain, bands }: {
   domain: Domain
   /** Discrete colour bands; 0 draws the field smooth. */
   bands: number
+  /** Average the field through the joint panels (display only) — see
+   *  `lib/memberContour` § Joint blending. */
+  blendJoints: boolean
 }) {
   const geo = useMemo(() => {
-    const built = memberContourGeometry(members, contourKey, domain)
+    const built = memberContourGeometry(members, contourKey, domain, { blendJoints })
     if (!built) return null
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.BufferAttribute(built.position, 3))
@@ -37,7 +40,7 @@ export function MemberStress3D({ members, contourKey, domain, bands }: {
     g.setIndex(built.index)
     g.computeVertexNormals()
     return g
-  }, [members, contourKey, domain])
+  }, [members, contourKey, domain, blendJoints])
 
   // Rebuilt when the ramp or the band count changes, and DISPOSED when it is
   // replaced — a ShaderMaterial is a compiled GPU program, and leaking one per

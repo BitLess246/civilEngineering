@@ -282,8 +282,17 @@ function exitDistance(away: V3, k: ContourMember): number {
  * drawn short rather than inside out.
  */
 export function jointTrims(ms: readonly ContourMember[]): Map<string, [number, number]> {
-  type End = { m: ContourMember; away: V3; end: 0 | 1 }
-  const at = new Map<string, End[]>()
+  return buildJoints(ms).trims
+}
+
+/** One member end at one joint: which way the member leaves the node, how it
+ *  ranks for ownership, and how much of it the joint takes (metres). */
+interface JointEnd { m: ContourMember; away: V3; end: 0 | 1; rank: number; trim: number }
+
+function buildJoints(ms: readonly ContourMember[]): {
+  trims: Map<string, [number, number]>; joints: JointEnd[][]
+} {
+  const at = new Map<string, JointEnd[]>()
   for (const m of ms) {
     if (m.ni === undefined || m.nj === undefined) continue
     const d: V3 = [m.b[0] - m.a[0], m.b[1] - m.a[1], m.b[2] - m.a[2]]
@@ -292,36 +301,40 @@ export function jointTrims(ms: readonly ContourMember[]): Map<string, [number, n
     const u: V3 = [d[0] / L, d[1] / L, d[2] / L]
     for (const [node, away, end] of [[m.ni, u, 0], [m.nj, [-u[0], -u[1], -u[2]], 1]] as const) {
       const list = at.get(node) ?? []
-      list.push({ m, away: away as V3, end: end as 0 | 1 })
+      list.push({ m, away: away as V3, end: end as 0 | 1, rank: 0, trim: 0 })
       at.set(node, list)
     }
   }
-  const out = new Map<string, [number, number]>()
-  for (const ends of at.values()) {
-    const rank = ends.map((e) => jointRank(e.away, ends.filter((o) => o !== e).map((o) => o.away)))
-    ends.forEach((e, i) => {
+  const trims = new Map<string, [number, number]>()
+  const joints = [...at.values()]
+  for (const ends of joints) {
+    for (const e of ends) e.rank = jointRank(e.away, ends.filter((o) => o !== e).map((o) => o.away))
+    for (const e of ends) {
       let trim = 0
-      ends.forEach((k, j) => {
-        if (j === i || rank[j] <= rank[i]) return
+      for (const k of ends) {
+        if (k === e || k.rank <= e.rank) continue
         const par = Math.abs(e.away[0] * k.away[0] + e.away[1] * k.away[1] + e.away[2] * k.away[2])
-        if (par > 0.999) return            // collinear: end to end, nothing to cut
+        if (par > 0.999) continue          // collinear: end to end, nothing to cut
         trim = Math.max(trim, exitDistance(e.away, k.m))
-      })
-      if (trim > 0) {
-        const t = out.get(e.m.id) ?? [0, 0]
-        t[e.end] = trim
-        out.set(e.m.id, t)
       }
-    })
+      e.trim = trim
+      if (trim > 0) {
+        const t = trims.get(e.m.id) ?? [0, 0]
+        t[e.end] = trim
+        trims.set(e.m.id, t)
+      }
+    }
   }
+  const scale = new Map<string, number>()
   for (const m of ms) {
-    const t = out.get(m.id)
+    const t = trims.get(m.id)
     if (!t) continue
     const L = Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1], m.b[2] - m.a[2])
     const sum = t[0] + t[1]
-    if (sum > 0.9 * L) { t[0] *= (0.9 * L) / sum; t[1] *= (0.9 * L) / sum }
+    if (sum > 0.9 * L) { const k = (0.9 * L) / sum; t[0] *= k; t[1] *= k; scale.set(m.id, k) }
   }
-  return out
+  for (const ends of joints) for (const e of ends) e.trim *= scale.get(e.m.id) ?? 1
+  return { trims, joints }
 }
 
 /** One drawn station: where it is, and the value at every ring point and at
@@ -336,6 +349,7 @@ interface Station { x: number; ring: number[]; centre: number }
  */
 function drawnStations(
   m: ContourMember, key: MemberStressKey, trim: readonly [number, number] = [0, 0],
+  extra: readonly number[] = [],
 ): Station[] {
   const xs = m.forces.xs
   if (xs.length < 2) return []
@@ -345,11 +359,19 @@ function drawnStations(
   const at = (x: number, f: MemberForces): Station => ({
     x, ring: ring.map((fib) => stressAt(m.section, f, fib, key)), centre: stressAt(m.section, f, centre, key),
   })
-  if (!(trim[0] > 0) && !(trim[1] > 0)) return xs.map((x, i) => at(x, forcesAt(m.forces, i)))
-  const out: Station[] = [at(x0, forcesAtX(m.forces, x0))]
-  xs.forEach((x, i) => { if (x > x0 + 1e-9 && x < x1 - 1e-9) out.push(at(x, forcesAt(m.forces, i))) })
-  out.push(at(x1, forcesAtX(m.forces, x1)))
-  return out
+  if (!(trim[0] > 0) && !(trim[1] > 0) && extra.length === 0) {
+    return xs.map((x, i) => at(x, forcesAt(m.forces, i)))
+  }
+  // The solver's stations keep their own forces (a duplicated x at a point
+  // load is a real jump and stays one); an inserted station is interpolated.
+  const pts: { x: number; f: MemberForces }[] = [{ x: x0, f: forcesAtX(m.forces, x0) }]
+  xs.forEach((x, i) => { if (x > x0 + 1e-9 && x < x1 - 1e-9) pts.push({ x, f: forcesAt(m.forces, i) }) })
+  for (const x of extra) {
+    if (x > x0 + 1e-6 && x < x1 - 1e-6 && !xs.some((sx) => Math.abs(sx - x) < 1e-6)) pts.push({ x, f: forcesAtX(m.forces, x) })
+  }
+  pts.push({ x: x1, f: forcesAtX(m.forces, x1) })
+  pts.sort((p, q) => p.x - q.x)
+  return pts.map((p) => at(p.x, p.f))
 }
 
 /** The domain every member shares, so two members are comparable.
@@ -383,6 +405,228 @@ export function memberPeak(
   return best
 }
 
+/** Grow the drawn prism slightly so it sits proud of the solid member instead
+ *  of z-fighting with it. 1.5% — enough to win the depth test, small enough
+ *  that the contour still reads as the member's own surface. */
+const PROUD = 1.015
+
+// ── Joint blending (display) ──────────────────────────────────────────────
+//
+// WHY THE COLOUR STOPS AT A JOINT, AND WHAT BLENDING DOES ABOUT IT. Outside a
+// joint the contour is exact beam theory, and beam theory makes the field
+// discontinuous at every joint for a real reason: a beam's σ acts along the
+// beam and a column's along the column — two different stress components on
+// two different sections — and the joint panel between them carries a 2-D/3-D
+// state that no frame analysis computes. Drawing each member exactly therefore
+// shows a hard seam wherever members meet.
+//
+// Commercial post-processors answer the same problem for shells with AVERAGED
+// contours (SAP2000/ETABS "stress averaging at joints"): a display smoothing,
+// labelled as one, that lets the field read continuously. This is that, for
+// frames, and it is confined to the joint panel:
+//
+//   · across every seam the two members meet at their AVERAGE: on the owner
+//     (the column), each vertex blends toward the incoming member's face
+//     stress read at that vertex's position in the incoming section — half
+//     weight where the vertex lies on the face the beam frames into, falling
+//     smoothly to nothing round the corners and within half a section above
+//     and below the beam; on the incoming member (the beam), each vertex
+//     within one section width of the face blends the same way toward the
+//     column's field — so the colour flows both ways and meets in the middle,
+//     and neither member's extreme is left sitting on the seam as a line;
+//   · where two owners meet end to end (the column below and above a floor),
+//     each blends halfway toward the other within its own half-depth of the
+//     node, so the field is continuous through the node too.
+//
+// Every blended value is a convex combination of values the analysis produced,
+// so the legend's range cannot grow; the incoming members are not touched, so
+// everything outside the joints still reads exactly. It is OFF unless asked
+// for, and the page says what it is.
+
+/** 1 at t = 0, 0 at t ≥ 1, smooth at both ends. */
+const fall = (t: number): number => (t >= 1 ? 0 : t <= 0 ? 1 : 1 - t * t * (3 - 2 * t))
+
+const dot3 = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+const sub3 = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+
+/** A member evaluated as a FIELD in space at one of its stations: origin on its
+ *  drawn axis, its solver axes, and the forces there. */
+interface SectionField { s: StressSection; f: MemberForces; o: V3; y: V3; z: V3 }
+
+function sectionField(m: ContourMember, x: number): SectionField {
+  const dir: V3 = [m.b[0] - m.a[0], m.b[1] - m.a[1], m.b[2] - m.a[2]]
+  const L = Math.hypot(...dir), t = Math.max(0, Math.min(1, x / L))
+  const [, y, z] = localAxes(dir, m.rotDeg)
+  return {
+    s: m.section, f: forcesAtX(m.forces, x), y, z,
+    o: [m.a[0] + dir[0] * t, m.a[1] + dir[1] * t - m.drop, m.a[2] + dir[2] * t],
+  }
+}
+
+/** The field's stress at world point p, read at p's position in the section
+ *  (clamped to the outline — p sits on another member's surface, a few mm
+ *  proud of this one's). */
+function fieldAt(F: SectionField, p: V3, key: MemberStressKey): number {
+  const d = sub3(p, F.o)
+  const y = Math.max(-F.s.cy, Math.min(F.s.cy, dot3(d, F.y) * 1000))
+  const z = Math.max(-F.s.cz, Math.min(F.s.cz, dot3(d, F.z) * 1000))
+  return stressAt(F.s, F.f, fibreAt(F.s, y, z), key)
+}
+
+/** One incoming member, as the owner's joint sees it. */
+interface Inflow { F: SectionField; u: V3; trim: number; rho: number }
+
+/** The blend context for one OWNER end at one joint. */
+interface JointBlend {
+  node: V3; axis: V3; inflows: Inflow[]; partner: SectionField | null; rhoPartner: number; zone: number
+  /**
+   * How far the owner's drawn end must reach PAST the node to cover what comes
+   * into it, metres. Every prism is drawn PROUD (1.5% over size) to win the
+   * depth test against its solid member, so a beam hung flush with the top of
+   * a roof column pokes a few mm above the column's end cap, and that sliver of
+   * the beam's own end cap read as a dark line along every seam. Zero where a
+   * column continues above — there is no cap there to fall short.
+   */
+  overshoot: number
+}
+
+function jointBlends(ms: readonly ContourMember[]): Map<string, JointBlend[]> {
+  const out = new Map<string, JointBlend[]>()
+  for (const ends of buildJoints(ms).joints) {
+    const top = Math.max(...ends.map((e) => e.rank))
+    for (const o of ends) {
+      if (o.rank !== top) continue
+      const inflows: Inflow[] = []
+      for (const k of ends) {
+        if (k === o || !(k.trim > 0)) continue
+        const Lk = Math.hypot(k.m.b[0] - k.m.a[0], k.m.b[1] - k.m.a[1], k.m.b[2] - k.m.a[2])
+        const F = sectionField(k.m, k.end === 0 ? k.trim : Lk - k.trim)
+        inflows.push({ F, u: k.away, trim: k.trim, rho: Math.min(k.m.section.cy, k.m.section.cz) / 1000 })
+      }
+      const mate = ends.find((k) => k !== o && k.rank === top && dot3(k.away, o.away) < -0.999)
+      const Lo = Math.hypot(o.m.b[0] - o.m.a[0], o.m.b[1] - o.m.a[1], o.m.b[2] - o.m.a[2])
+      const nodeX = o.end === 0 ? 0 : Lo
+      const self = sectionField(o.m, nodeX)
+      let partner: SectionField | null = null
+      if (mate) {
+        const Lm = Math.hypot(mate.m.b[0] - mate.m.a[0], mate.m.b[1] - mate.m.a[1], mate.m.b[2] - mate.m.a[2])
+        partner = sectionField(mate.m, mate.end === 0 ? 0 : Lm)
+      }
+      if (inflows.length === 0 && !partner) continue
+      const rhoPartner = Math.max(o.m.section.cy, o.m.section.cz) / 1000
+      // How far along the owner the joint reaches: each incoming section's
+      // extent along the owner axis, from where its centroid sits, plus its
+      // fade — so the refinement covers the whole blend and nothing more.
+      let zone = partner ? rhoPartner : 0, overshoot = 0
+      for (const q of inflows) {
+        const along = dot3(sub3(q.F.o, self.o), o.away)
+        const ext = (Math.abs(dot3(o.away, q.F.y)) * q.F.s.cy + Math.abs(dot3(o.away, q.F.z)) * q.F.s.cz) / 1000
+        zone = Math.max(zone, Math.abs(along) + ext + q.rho)
+        // `away` points INTO the owner, so past the node is along −away.
+        if (!partner) overshoot = Math.max(overshoot, ext * PROUD - along)
+      }
+      const list = out.get(o.m.id) ?? []
+      list.push({ node: self.o, axis: o.away, inflows, partner, rhoPartner, zone: Math.min(zone, 0.45 * Lo), overshoot: Math.max(0, overshoot) })
+      out.set(o.m.id, list)
+    }
+  }
+  return out
+}
+
+/** The displayed value at world point p on an owner, given its exact value v. */
+function blendValue(p: V3, v: number, blends: readonly JointBlend[], key: MemberStressKey): number {
+  let out = v
+  for (const J of blends) {
+    const s = Math.abs(dot3(sub3(p, J.node), J.axis))
+    if (s > J.zone + 1e-9) continue
+    if (J.partner) {
+      const w = 0.5 * fall(s / J.rhoPartner)
+      if (w > 0) out = (1 - w) * out + w * fieldAt(J.partner, p, key)
+    }
+    let sw = 0, sv = 0
+    for (const q of J.inflows) {
+      const d = sub3(p, q.F.o)
+      const along = Math.abs(dot3(d, q.u))
+      const ey = Math.max(0, Math.abs(dot3(d, q.F.y)) - q.F.s.cy / 1000)
+      const ez = Math.max(0, Math.abs(dot3(d, q.F.z)) - q.F.s.cz / 1000)
+      const phi = fall(along / (2 * q.trim)) * fall(ey / q.rho) * fall(ez / q.rho)
+      if (phi > 0) { sw += phi; sv += phi * fieldAt(q.F, p, key) }
+    }
+    if (sw > 0) { const W = 0.5 * Math.min(1, sw); out = (1 - W) * out + W * (sv / sw) }
+  }
+  return out
+}
+
+/** The incoming side of a seam: where the face is, which way the member runs
+ *  from it, how far the blend reaches, and the owner it blends toward. */
+interface SeamBlend { face: V3; u: V3; rho: number; owner: ContourMember }
+
+/** The owner's own stress at world point p: its section at the station p
+ *  projects to, read at p's position in that section. */
+function ownerAt(o: ContourMember, p: V3, key: MemberStressKey): number {
+  const dir: V3 = [o.b[0] - o.a[0], o.b[1] - o.a[1], o.b[2] - o.a[2]]
+  const L = Math.hypot(...dir)
+  const u: V3 = [dir[0] / L, dir[1] / L, dir[2] / L]
+  const x = Math.max(0, Math.min(L, dot3(sub3(p, [o.a[0], o.a[1] - o.drop, o.a[2]]), u)))
+  return fieldAt(sectionField(o, x), p, key)
+}
+
+function seamValue(p: V3, v: number, seams: readonly SeamBlend[], key: MemberStressKey): number {
+  let out = v
+  for (const q of seams) {
+    const s = Math.max(0, dot3(sub3(p, q.face), q.u))
+    const w = 0.5 * fall(s / q.rho)
+    if (w > 0) out = (1 - w) * out + w * ownerAt(q.owner, p, key)
+  }
+  return out
+}
+
+function seamBlends(ms: readonly ContourMember[]): Map<string, SeamBlend[]> {
+  const out = new Map<string, SeamBlend[]>()
+  for (const ends of buildJoints(ms).joints) {
+    const top = Math.max(...ends.map((e) => e.rank))
+    const owners = ends.filter((e) => e.rank === top)
+    for (const k of ends) {
+      if (!(k.trim > 0)) continue
+      // The owner whose face this member stops at: the one that set its trim.
+      let best: JointEnd | null = null, bestD = -1
+      for (const o of owners) {
+        if (o === k) continue
+        const d = exitDistance(k.away, o.m)
+        if (d > bestD) { bestD = d; best = o }
+      }
+      if (!best) continue
+      const Lk = Math.hypot(k.m.b[0] - k.m.a[0], k.m.b[1] - k.m.a[1], k.m.b[2] - k.m.a[2])
+      const F = sectionField(k.m, k.end === 0 ? k.trim : Lk - k.trim)
+      const list = out.get(k.m.id) ?? []
+      list.push({ face: F.o, u: k.away, rho: (2 * Math.min(k.m.section.cy, k.m.section.cz)) / 1000, owner: best.m })
+      out.set(k.m.id, list)
+    }
+  }
+  return out
+}
+
+/**
+ * The value the contour DISPLAYS for member `id` at world point p: its exact
+ * stress there (read at the station p projects to, at p's position in the
+ * section), passed through the same joint blend the mesh uses. The mesh's own
+ * vertices are this function sampled at the ring points; tests use it to ask
+ * about points that are not vertices — a seam, a node plane.
+ */
+export function displayValueAt(
+  ms: readonly ContourMember[], key: MemberStressKey, id: string, p: V3,
+  opts: { blendJoints?: boolean } = {},
+): number {
+  const m = ms.find((x) => x.id === id)
+  if (!m) return NaN
+  const v = ownerAt(m, p, key)
+  if (!opts.blendJoints) return v
+  const seams = seamBlends(ms).get(id) ?? []
+  if (seams.length) return seamValue(p, v, seams, key)
+  const blends = jointBlends(ms).get(id) ?? []
+  return blends.length ? blendValue(p, v, blends, key) : v
+}
+
 export interface MemberContourGeometry {
   position: Float32Array
   /** NORMALISED value per vertex, 0–1 — see `lib/contourMaterial` for why this
@@ -391,10 +635,6 @@ export interface MemberContourGeometry {
   index: number[]
 }
 
-/** Grow the drawn prism slightly so it sits proud of the solid member instead
- *  of z-fighting with it. 1.5% — enough to win the depth test, small enough
- *  that the contour still reads as the member's own surface. */
-const PROUD = 1.015
 
 /**
  * Build the contour skin: a prism per member, ringed at `RING_PER_SIDE` points
@@ -412,9 +652,12 @@ const PROUD = 1.015
  */
 export function memberContourGeometry(
   ms: readonly ContourMember[], key: MemberStressKey, domain: Domain,
+  opts: { blendJoints?: boolean } = {},
 ): MemberContourGeometry | null {
   const pos: number[] = [], val: number[] = [], idx: number[] = []
   const trims = jointTrims(ms)
+  const blends = opts.blendJoints ? jointBlends(ms) : new Map<string, JointBlend[]>()
+  const seams = opts.blendJoints ? seamBlends(ms) : new Map<string, SeamBlend[]>()
   for (const m of ms) {
     if (m.forces.xs.length < 2) continue
     const dir: V3 = [m.b[0] - m.a[0], m.b[1] - m.a[1], m.b[2] - m.a[2]]
@@ -425,12 +668,38 @@ export function memberContourGeometry(
     const [, yp, zp] = localAxes(dir, m.rotDeg)
     const ring = sectionRing(m.section)
     const R = ring.length
-    const stations = drawnStations(m, key, trims.get(m.id))
+    const mine = blends.get(m.id) ?? []
+    const mySeams = seams.get(m.id) ?? []
+    // Inside a blended joint the solver's stations (L/24 apart) are too coarse
+    // for a transition half a section long, so the zone gets ten of its own.
+    const extra: number[] = []
+    for (const J of mine) {
+      const fromA = Math.abs(dot3(sub3(J.node, [m.a[0], m.a[1] - m.drop, m.a[2]]), J.axis)) < 1e-6
+      for (let k = 1; k <= 10; k++) extra.push(fromA ? (J.zone * k) / 10 : L - (J.zone * k) / 10)
+    }
+    const tr = trims.get(m.id) ?? [0, 0]
+    for (const q of mySeams) {
+      const fromA = Math.abs(dot3(sub3(q.face, [m.a[0], m.a[1] - m.drop, m.a[2]]), q.u) - tr[0]) < 1e-6
+      for (let k = 1; k <= 8; k++) extra.push(fromA ? tr[0] + (q.rho * k) / 8 : L - tr[1] - (q.rho * k) / 8)
+    }
+    const shade = (p: V3, v: number) =>
+      mySeams.length ? seamValue(p, v, mySeams, key) : mine.length ? blendValue(p, v, mine, key) : v
+    const stations = drawnStations(m, key, trims.get(m.id), extra)
+    // Reach past a covered node (see JointBlend.overshoot). Only the POSITION
+    // moves; the ring keeps the node's values.
+    for (const J of mine) {
+      if (!(J.overshoot > 0)) continue
+      const fromA = Math.abs(dot3(sub3(J.node, [m.a[0], m.a[1] - m.drop, m.a[2]]), J.axis)) < 1e-6
+      if (fromA) stations[0] = { ...stations[0], x: stations[0].x - J.overshoot }
+      else stations[stations.length - 1] = { ...stations[stations.length - 1], x: stations[stations.length - 1].x + J.overshoot }
+    }
     const n = stations.length
     const base = pos.length / 3
 
     const axisAt = (x: number): V3 => {
-      const t = Math.max(0, Math.min(1, x / L))
+      // Unclamped: an end reaching past its node (overshoot) is the one case
+      // x leaves [0, L], and it is bounded by a few millimetres.
+      const t = x / L
       return [m.a[0] + dir[0] * t, m.a[1] + dir[1] * t - m.drop, m.a[2] + dir[2] * t]
     }
     const pushRing = (st: Station) => {
@@ -438,12 +707,14 @@ export function memberContourGeometry(
       for (let c = 0; c < R; c++) {
         // mm → m, and out to the drawn face.
         const oy = (ring[c].y / 1000) * PROUD, oz = (ring[c].z / 1000) * PROUD
-        pos.push(
+        const p: V3 = [
           px + yp[0] * oy + zp[0] * oz,
           py + yp[1] * oy + zp[1] * oz,
           pz + yp[2] * oy + zp[2] * oz,
-        )
-        val.push(normalise(st.ring[c] ?? 0, domain))
+        ]
+        pos.push(...p)
+        const v = st.ring[c] ?? 0
+        val.push(normalise(shade(p, v), domain))
       }
     }
     for (const st of stations) pushRing(st)
@@ -468,7 +739,8 @@ export function memberContourGeometry(
     // peaks at the middle of the cap exactly as it does on the side faces.
     for (const st of [stations[0], stations[n - 1]]) {
       const hub = pos.length / 3
-      pos.push(...axisAt(st.x)); val.push(normalise(st.centre, domain))
+      const hp = axisAt(st.x)
+      pos.push(...hp); val.push(normalise(shade(hp, st.centre), domain))
       pushRing(st)
       for (let c = 0; c < R; c++) idx.push(hub, hub + 1 + c, hub + 1 + ((c + 1) % R))
     }

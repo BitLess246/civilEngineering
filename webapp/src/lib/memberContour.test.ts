@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  sectionRing, RING_PER_SIDE, memberValues, memberContourDomain, memberPeak, jointTrims,
+  sectionRing, RING_PER_SIDE, memberValues, memberContourDomain, memberPeak, jointTrims, displayValueAt,
   memberContourGeometry, isSignedMember, MEMBER_STRESS_KEYS,
   type ContourMember, type MemberStressKey,
 } from './memberContour'
@@ -578,5 +578,156 @@ describe('the page passes the joints', () => {
     const push = page.slice(page.lastIndexOf('members.push({', i), page.indexOf('})', i))
     expect(push).toMatch(/\bni:\s*m\.i\b/)
     expect(push).toMatch(/\bnj:\s*m\.j\b/)
+  })
+})
+
+// ── Averaging through joints (display) ──────────────────────────────────────
+//
+// Exact member-by-member stress is discontinuous at every joint — a beam's σ
+// and a column's σ are different components — and it read as a rendering
+// fault. The blend averages the field inside the joint panel only. These pin
+// what it may and may not do.
+
+/** Two storeys of one column line with a beam framing in at the floor, so the
+ *  floor node has a column below, a column above and a beam. */
+function stack() {
+  const r = solveFrame3D(
+    [{ id: 'A', x: 0, y: 0, z: 0 }, { id: 'B', x: 0, y: 3, z: 0 }, { id: 'T', x: 0, y: 6, z: 0 },
+     { id: 'C', x: 6, y: 3, z: 0 }] as F3Node[],
+    [{ id: 'lo', i: 'A', j: 'B', ...props, rot: 90 },
+     { id: 'up', i: 'B', j: 'T', ...props, rot: 90 },
+     { id: 'bm', i: 'B', j: 'C', ...props }] as F3Member[],
+    [{ node: 'A', fixity: 'fixed' }, { node: 'C', fixity: 'pin' }] as F3Support[],
+    [{ kind: 'member-udl', member: 'bm', w: 30, cat: 'D' }, { kind: 'node', node: 'T', Fx: 20, cat: 'E' }],
+  )
+  expect(r, 'the stack must solve').toBeTruthy()
+  const f = new Map(r!.members.map((m) => [m.id, m]))
+  return [
+    { id: 'lo', a: [0, 0, 0], b: [0, 3, 0], rotDeg: 90, section: S, forces: f.get('lo')!, drop: 0, ni: 'A', nj: 'B' },
+    { id: 'up', a: [0, 3, 0], b: [0, 6, 0], rotDeg: 90, section: S, forces: f.get('up')!, drop: 0, ni: 'B', nj: 'T' },
+    { id: 'bm', a: [0, 3, 0], b: [6, 3, 0], rotDeg: 0, section: S, forces: f.get('bm')!, drop: 0, ni: 'B', nj: 'C' },
+  ] as ContourMember[]
+}
+const STACK = stack()
+const ON = { blendJoints: true }
+
+describe('averaging through joints', () => {
+  it('is off unless asked for, and off changes nothing', () => {
+    const dom = memberContourDomain(PORTAL, 'sigma')
+    const plain = memberContourGeometry(PORTAL, 'sigma', dom)!
+    const off = memberContourGeometry(PORTAL, 'sigma', dom, { blendJoints: false })!
+    expect([...off.position]).toEqual([...plain.position])
+    expect([...off.value]).toEqual([...plain.value])
+  })
+
+  it('meets at one value across the seam — beam side and column side agree', () => {
+    // Points on the face the beam frames into (x = 0.25 m), over its section.
+    // Exact, the two members disagree there (the fixture checks they do);
+    // averaged, both sides must show the same number.
+    let differed = false
+    for (const y of [2.76, 2.9, 3.0, 3.1, 3.24]) {
+      for (const z of [-0.14, 0, 0.14]) {
+        const p: [number, number, number] = [0.25, y, z]
+        const col = displayValueAt(PORTAL, 'sigma', 'c1', p, ON)
+        const bm = displayValueAt(PORTAL, 'sigma', 'bm', p, ON)
+        expect(col).toBeCloseTo(bm, 9)
+        if (Math.abs(displayValueAt(PORTAL, 'sigma', 'c1', p) - displayValueAt(PORTAL, 'sigma', 'bm', p)) > 0.5) differed = true
+      }
+    }
+    expect(differed, 'fixture: exact values must differ at the seam, or this proves nothing').toBe(true)
+  })
+
+  it('is continuous through a floor node, column below to column above', () => {
+    let differed = false
+    for (const x of [-0.24, 0, 0.24]) {
+      for (const z of [-0.14, 0.14]) {
+        const p: [number, number, number] = [x, 3, z]
+        expect(displayValueAt(STACK, 'sigma', 'lo', p, ON)).toBeCloseTo(displayValueAt(STACK, 'sigma', 'up', p, ON), 9)
+        if (Math.abs(displayValueAt(STACK, 'sigma', 'lo', p) - displayValueAt(STACK, 'sigma', 'up', p)) > 0.1) differed = true
+      }
+    }
+    expect(differed, 'fixture: the column must carry a real jump at the floor').toBe(true)
+  })
+
+  it('leaves every member exact outside its joints', () => {
+    // Mid-height of the column, mid-span of the beam, a column face well below
+    // the beam soffit: no blend reaches any of them.
+    const pts: [string, [number, number, number]][] = [
+      ['c1', [0.25, 1.5, 0]], ['c1', [-0.25, 2.0, 0.15]], ['bm', [3, 3.25, 0]], ['bm', [1.2, 2.75, 0.15]],
+    ]
+    for (const [id, p] of pts) {
+      expect(displayValueAt(PORTAL, 'sigma', id, p, ON)).toBe(displayValueAt(PORTAL, 'sigma', id, p))
+    }
+  })
+
+  it('never shows a value outside what the analysis produced', () => {
+    // Every blended value is a convex combination of exact values, so the
+    // averaged mesh must sit inside the exact mesh's range: the legend, which
+    // is built from exact values, stays true of the picture.
+    for (const key of ['sigma', 'tau'] as MemberStressKey[]) {
+      const dom = memberContourDomain(STACK, key)
+      const exact = memberContourGeometry(STACK, key, dom)!.value
+      const avg = memberContourGeometry(STACK, key, dom, ON)!.value
+      const lo = Math.min(...exact), hi = Math.max(...exact)
+      for (const v of avg) { expect(v).toBeGreaterThanOrEqual(lo - 1e-9); expect(v).toBeLessThanOrEqual(hi + 1e-9) }
+    }
+  })
+
+  it('refines the joint zone, so a transition half a section long is drawn, not skipped', () => {
+    // The solver's stations are L/24 apart — 125 mm on a 3 m column, the whole
+    // blend length. Without extra stations the GPU would interpolate straight
+    // across it. Ten rings on each column end at the floor, eight on the beam
+    // side of its seam.
+    const dom = memberContourDomain(STACK, 'sigma')
+    const a = memberContourGeometry(STACK, 'sigma', dom)!.value
+    const b = memberContourGeometry(STACK, 'sigma', dom, ON)!.value
+    expect(b.length).toBeGreaterThanOrEqual(a.length + (10 + 10 + 8) * R)
+  })
+
+  it('stays watertight, and covers a beam hung flush with the column top', () => {
+    // A beam whose node is its TOP (drop = h/2) ends flush with a roof column;
+    // drawn proud, it would poke a few mm above the column's cap — the dark
+    // line along the seam. The column's end must reach at least as high.
+    const hung = PORTAL.map((m) => (m.id === 'bm' ? { ...m, drop: h / 2 / 1000 } : m))
+    const g = memberContourGeometry(hung, 'sigma', memberContourDomain(hung, 'sigma'), ON)!
+    // Split the mesh by x: column c1 sits within |x| ≤ 0.26, the beam beyond
+    // its face.
+    let colTop = -Infinity, beamTop = -Infinity
+    for (let v = 0; v < g.position.length / 3; v++) {
+      const x = g.position[v * 3], y = g.position[v * 3 + 1]
+      if (Math.abs(x) < 0.2) colTop = Math.max(colTop, y)
+      else if (x > 0.3 && x < 1) beamTop = Math.max(beamTop, y)
+    }
+    expect(colTop).toBeGreaterThanOrEqual(beamTop - 1e-9)
+    const key = (i: number) => [0, 1, 2].map((c) => g.position[i * 3 + c].toFixed(6)).join(',')
+    const edges = new Map<string, number>()
+    for (let i = 0; i < g.index.length; i += 3) {
+      const tri = [g.index[i], g.index[i + 1], g.index[i + 2]].map(key)
+      for (let e = 0; e < 3; e++) {
+        const [p, q] = [tri[e], tri[(e + 1) % 3]].sort()
+        if (p !== q) edges.set(p + '|' + q, (edges.get(p + '|' + q) ?? 0) + 1)
+      }
+    }
+    expect([...edges.values()].filter((n) => n < 2).length).toBe(0)
+  })
+})
+
+describe('the page offers the averaging, on by default, and passes it through', () => {
+  const src = import.meta.glob(['../pages/ModelSpace.tsx', '../components/modelSpace/memberStressLayer.tsx'], {
+    query: '?raw', import: 'default', eager: true,
+  }) as Record<string, string>
+  const page = src['../pages/ModelSpace.tsx'], layer = src['../components/modelSpace/memberStressLayer.tsx']
+  it('defaults to averaged', () => {
+    expect(page).toMatch(/const \[memBlend, setMemBlend\] = useState\(true\)/)
+  })
+  it('hands the toggle to the layer, and the layer to the geometry', () => {
+    const i = page.indexOf('<MemberStress3D')
+    const el = page.slice(i, page.indexOf('/>', i) + 2)
+    expect(el).toMatch(/blendJoints=\{memBlend\}/)
+    expect(layer).toMatch(/memberContourGeometry\(members, contourKey, domain, \{ blendJoints \}\)/)
+    expect(layer).toMatch(/\[members, contourKey, domain, blendJoints\]/)
+  })
+  it('lets the reader switch it off, with a checkbox bound to the same state', () => {
+    expect(page).toMatch(/checked=\{memBlend\}[\s\S]{0,80}setMemBlend\(e\.target\.checked\)/)
   })
 })
