@@ -652,8 +652,13 @@ describe('averaging through joints', () => {
   it('leaves every member exact outside its joints', () => {
     // Mid-height of the column, mid-span of the beam, a column face well below
     // the beam soffit: no blend reaches any of them.
+    // Plus the two places a leaky blend would show first: the face the beam
+    // frames into, just below the joint's reach (0.55 m under the soffit), and
+    // the column's FAR face, inside the joint band but a full column width
+    // from the beam.
     const pts: [string, [number, number, number]][] = [
       ['c1', [0.25, 1.5, 0]], ['c1', [-0.25, 2.0, 0.15]], ['bm', [3, 3.25, 0]], ['bm', [1.2, 2.75, 0.15]],
+      ['c1', [0.2537, 2.2, 0]], ['c1', [-0.2537, 2.9, 0]],
     ]
     for (const [id, p] of pts) {
       expect(displayValueAt(PORTAL, 'sigma', id, p, ON)).toBe(displayValueAt(PORTAL, 'sigma', id, p))
