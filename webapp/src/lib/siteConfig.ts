@@ -55,7 +55,14 @@ export interface SiteConfig {
 }
 
 export const SITE: SiteConfig = {
-  tradeName: 'CivEngg Toolkit',
+  // THE TRADE NAME, and only the trade name. Renamed from "CivEngg Toolkit"
+  // on 29 September 2026. The LEGAL name below is unchanged and must stay
+  // unchanged: it is what the DTI registration and the payment-provider
+  // application were filed against, and the footer, Terms, Privacy Policy and
+  // Contact page state it as the operator of the product — "Zeta, operated by
+  // CIVENGG WEBSITE APPLICATION SERVICE". A trade name is free to change; the
+  // registered name is not.
+  tradeName: 'Zeta',
 
   // Registered as a sole proprietorship, 9 August 2026. These are the details
   // the payment provider's application was filed against, so they must match

@@ -9,7 +9,7 @@
  * same source rather than a second list that could disagree with them.
  */
 import { ALL_TOOLS } from './tools'
-import { BRAND_MARK } from './brand'
+import { BRAND_NAME } from './brand'
 
 /** Routes with no entry in the tool registry. */
 const EXTRA: Record<string, string> = {
@@ -25,7 +25,12 @@ const EXTRA: Record<string, string> = {
   '/contact': 'Contact',
 }
 
-const SUFFIX = `${BRAND_MARK} Toolkit`
+// The whole trade name, from the brand module. This used to read
+// `${BRAND_MARK} Toolkit` — the derived first word with the second one typed
+// in beside it, which is exactly the bypass `brand.ts` was written to end. It
+// held only while the name happened to be two words ending in "Toolkit"; on
+// the rename to Zeta every tab would have read "ZETA Toolkit".
+const SUFFIX = BRAND_NAME
 
 /**
  * What this route is CALLED — 'Beam Design', 'Sign in' — or null where nothing

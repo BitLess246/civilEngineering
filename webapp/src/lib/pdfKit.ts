@@ -284,7 +284,7 @@ export function createSheet(): Sheet {
       const markW = spacedWidth(doc.getTextWidth(BRAND_MARK), BRAND_MARK, 0.9)
       doc.text(BRAND_MARK, M, s.y, { charSpace: 0.9 })
       s.setF('sans', 'bold', 5.4, SUBTLE)
-      doc.text(BRAND_TAIL, M + markW + 2.4, s.y, { charSpace: 0.7 })
+      if (BRAND_TAIL) doc.text(BRAND_TAIL, M + markW + 2.4, s.y, { charSpace: 0.7 })
       s.y += 8
       // The verdict chip occupies the top-right 52 mm, so the title has to fit
       // in what is left or it runs underneath it. Model Space's title is short

@@ -14,7 +14,7 @@ import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { isEmbedLocation } from '../lib/embed'
 import { SiteFooter } from './SiteFooter'
 import { AccountMenu } from './AccountMenu'
-import { BRAND_MARK, BRAND_TAIL, BRAND_MONOGRAM } from '../lib/brand'
+import { BRAND_NAME, BRAND_MARK, BRAND_TAIL, BRAND_MONOGRAM } from '../lib/brand'
 import { TrialGate } from './TrialGate'
 import { ErrorBoundary } from './ErrorBoundary'
 import { watchScrollableRegions } from '../lib/scrollableRegions'
@@ -353,7 +353,7 @@ function Sidebar({ onOpenPalette, onNavigate, className, trailing, railable = fa
         <div className="flex items-center justify-between gap-2">
           <Link to="/" onClick={onNavigate} className="flex items-baseline gap-2 py-1">
             <span className="text-[15px] font-extrabold tracking-[.14em] text-rail-ink">{BRAND_MARK}</span>
-            <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-rail-muted">{BRAND_TAIL}</span>
+            {BRAND_TAIL && <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-rail-muted">{BRAND_TAIL}</span>}
           </Link>
           {railable && <RailToggle collapsed={false} onToggle={toggleRail} />}
           {trailing}
@@ -586,7 +586,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 painted over it — a measured 40px overlap at 390px. The action
                 group is `flex-none` for the same reason, from the other side. */}
             <div className="flex min-w-0 flex-1 items-center gap-2 text-[11px] text-faint">
-              <Link to="/" className="inline-flex min-h-[24px] flex-none items-center hover:text-brand">Toolkit</Link>
+              <Link to="/" className="inline-flex min-h-[24px] flex-none items-center hover:text-brand">{BRAND_NAME}</Link>
               {tool && (<>
                 <span className="hidden sm:inline">/</span>
                 <span className="hidden sm:inline">{tool.groupLabel}</span>

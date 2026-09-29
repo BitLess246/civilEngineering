@@ -5,7 +5,7 @@ import { ALL_TOOLS } from './tools'
 describe('titleFor — every route names itself', () => {
   it('names a tool route from the same registry the sidebar reads', () => {
     expect(titleFor('/beam-design')).toContain('Beam Design')
-    expect(titleFor('/beam-design')).toContain('Toolkit')
+    expect(titleFor('/beam-design')).toBe('Beam Design — Zeta')
   })
 
   it('longest prefix wins, so a sub-route keeps its own name', () => {
@@ -22,7 +22,7 @@ describe('titleFor — every route names itself', () => {
 
   it('the landing page is the brand, with no dangling separator', () => {
     expect(titleFor('/')).not.toContain('—')
-    expect(titleFor('/')).toContain('Toolkit')
+    expect(titleFor('/')).toBe('Zeta')
   })
 
   it('an unknown route still gets a title rather than an empty tab', () => {

@@ -93,7 +93,7 @@ export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], re
         </div>
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-[14px] font-extrabold tracking-[.14em]">{BRAND_MARK}</span>
-          <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>
+          {BRAND_TAIL && <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>}
         </div>
         <h1 className="mt-2 text-[24px] font-extrabold tracking-tight text-ink">{title}</h1>
         <div className="mt-2 flex gap-2">

@@ -87,7 +87,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         <div className="mx-auto flex h-[52px] max-w-[1200px] items-center gap-5 px-6">
           <Link to="/" className="flex min-h-[24px] items-baseline gap-2 py-1">
             <span className="text-[15px] font-extrabold tracking-[.14em] text-rail-ink">{BRAND_MARK}</span>
-            <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-rail-muted">{BRAND_TAIL}</span>
+            {BRAND_TAIL && <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-rail-muted">{BRAND_TAIL}</span>}
           </Link>
           {/* SEARCH IS THE NAV. Wordmark-left + four inline links + a control
               on the right is the most-recognised generated-nav fingerprint,
