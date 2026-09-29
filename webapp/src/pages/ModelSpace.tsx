@@ -1748,6 +1748,9 @@ export default function ModelSpace() {
         rotDeg: defaultAxisRotation(dir, m.axisRotation),
         section: ss, forces: fr,
         drop: levelDrop(m.role, sec.h / 1000, a, bb),
+        // The joints it meets — what stops a beam's contour at the column face
+        // instead of running it through the column to the node.
+        ni: m.i, nj: m.j,
       })
     }
     if (members.length === 0) return null

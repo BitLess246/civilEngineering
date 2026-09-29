@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  sectionRing, RING_PER_SIDE, memberValues, memberContourDomain, memberPeak,
+  sectionRing, RING_PER_SIDE, memberValues, memberContourDomain, memberPeak, jointTrims,
   memberContourGeometry, isSignedMember, MEMBER_STRESS_KEYS,
   type ContourMember, type MemberStressKey,
 } from './memberContour'
@@ -223,11 +223,13 @@ describe('geometry', () => {
   const dom = memberContourDomain([BEAM], 'sigma')
   const g = memberContourGeometry([BEAM], 'sigma', dom)!
 
-  it('emits one vertex per ring point per station, and a quad per ring bay', () => {
+  it('emits one vertex per ring point per station, a quad per ring bay, and two caps', () => {
+    // Each cap is its own rim of R vertices plus a hub at the centroid, fanned
+    // into R triangles — see 'closes both ends' below for why it exists.
     const n = BEAM.forces.xs.length
-    expect(g.position).toHaveLength(n * R * 3)
-    expect(g.value, 'one SCALAR per vertex, not three colour channels').toHaveLength(n * R)
-    expect(g.index).toHaveLength((n - 1) * R * 2 * 3)
+    expect(g.position).toHaveLength((n * R + 2 * (R + 1)) * 3)
+    expect(g.value, 'one SCALAR per vertex, not three colour channels').toHaveLength(n * R + 2 * (R + 1))
+    expect(g.index).toHaveLength(((n - 1) * R * 2 + 2 * R) * 3)
   })
 
   it('indexes only vertices that exist', () => {
@@ -393,5 +395,188 @@ describe('the page actually uses it', () => {
 
   it('builds the section through stressSection, so it is the gross section', () => {
     expect(page).toContain('stressSection(sec)')
+  })
+})
+
+// ── Joints ──────────────────────────────────────────────────────────────────
+//
+// The defect these pin: every member was a prism from node to node with open
+// ends. At a beam–column joint the two prisms occupied the same volume with
+// different stress fields, the depth test cut between them along arbitrary
+// lines, and down the open end of every roof column the dark solid member
+// showed as a black slab. Measured on the page's own 2×1-bay frame before the
+// fix; these are the numbers that replace the picture.
+
+/** A one-bay portal: two 3 m columns, a 6 m beam, fixed bases, UDL on the beam.
+ *  Columns carry the page's default rotation (90°: section depth along X), and
+ *  default to the beam's section; `col` swaps in a heavier one. */
+function portal(col: { S: StressSection; props: typeof props } = { S, props }) {
+  const r = solveFrame3D(
+    [{ id: 'A', x: 0, y: 0, z: 0 }, { id: 'B', x: 0, y: 3, z: 0 },
+     { id: 'C', x: 6, y: 3, z: 0 }, { id: 'D', x: 6, y: 0, z: 0 }] as F3Node[],
+    [{ id: 'c1', i: 'A', j: 'B', ...col.props, rot: 90 },
+     { id: 'bm', i: 'B', j: 'C', ...props },
+     { id: 'c2', i: 'D', j: 'C', ...col.props, rot: 90 }] as F3Member[],
+    [{ node: 'A', fixity: 'fixed' }, { node: 'D', fixity: 'fixed' }] as F3Support[],
+    [{ kind: 'member-udl', member: 'bm', w: 30, cat: 'D' }],
+  )
+  expect(r, 'the portal must solve').toBeTruthy()
+  const f = new Map(r!.members.map((m) => [m.id, m]))
+  const mk = (id: string, a: [number, number, number], bb: [number, number, number], ni: string, nj: string, rot: number): ContourMember =>
+    ({ id, a, b: bb, rotDeg: rot, section: id === 'bm' ? S : col.S, forces: f.get(id)!, drop: 0, ni, nj })
+  return [
+    mk('c1', [0, 0, 0], [0, 3, 0], 'A', 'B', 90),
+    mk('bm', [0, 3, 0], [6, 3, 0], 'B', 'C', 0),
+    mk('c2', [6, 0, 0], [6, 3, 0], 'D', 'C', 90),
+  ]
+}
+const PORTAL = portal()
+
+describe('joints: the column owns the joint, the beam stops at its face', () => {
+  it('trims the beam by the column half-depth at both ends, and the columns not at all', () => {
+    // Column rot 90° puts its 500 mm depth along global X — the direction the
+    // beam arrives from — so the face is 250 mm from the node.
+    const t = jointTrims(PORTAL)
+    expect(t.get('bm')![0]).toBeCloseTo(0.25, 9)
+    expect(t.get('bm')![1]).toBeCloseTo(0.25, 9)
+    expect(t.has('c1'), 'a column passes through its joint').toBe(false)
+    expect(t.has('c2')).toBe(false)
+  })
+
+  it('draws the beam from face to face, not node to node', () => {
+    const dom = memberContourDomain(PORTAL, 'sigma')
+    const beamOnly = memberContourGeometry([PORTAL[1]], 'sigma', dom)!   // no joint to meet
+    const framed = memberContourGeometry(PORTAL, 'sigma', dom)!
+    const xsOf = (g: NonNullable<typeof framed>, from: number, count: number) =>
+      Array.from({ length: count }, (_, v) => g.position[(from + v) * 3])
+    // In the framed mesh the beam's vertices follow the first column's.
+    const colVerts = (PORTAL[0].forces.xs.length) * R + 2 * (R + 1)
+    const beamX = xsOf(framed, colVerts, R)
+    for (const x of beamX) expect(Math.abs(x)).toBeCloseTo(0.25, 2)   // the face, ±PROUD on the ring
+    expect(Math.min(...xsOf(beamOnly, 0, R)), 'alone, it still runs to the node').toBeCloseTo(0, 6)
+  })
+
+  it('carries the stress AT the face — the solver station there, not the node', () => {
+    // 25 stations over 6 m are 0.25 m apart, so the face lands exactly on
+    // station 1 and the drawn face ring must equal the solver's own values
+    // there — neither station 0 (the node) nor an interpolation artefact.
+    const beam = PORTAL[1]
+    expect(beam.forces.xs[1]).toBeCloseTo(0.25, 9)
+    const dom = memberContourDomain(PORTAL, 'sigma')
+    const g = memberContourGeometry(PORTAL, 'sigma', dom)!
+    const colVerts = PORTAL[0].forces.xs.length * R + 2 * (R + 1)
+    const face = memberValues(beam, 'sigma')[1].map((v) => normalise(v, dom))
+    const node = memberValues(beam, 'sigma')[0].map((v) => normalise(v, dom))
+    for (let c = 0; c < R; c++) expect(g.value[colVerts + c]).toBeCloseTo(face[c], 5)
+    expect(Math.max(...node.map((v, c) => Math.abs(v - face[c]))),
+      'fixture must make the node and the face differ, or this proves nothing').toBeGreaterThan(0.01)
+  })
+
+  it('scales the legend and the peak to what is drawn, not a node value inside a column', () => {
+    // Heavy 800×800 columns: lightly stressed themselves, and stiff enough to
+    // give the beam its full hogging — so the beam carries the frame's peak
+    // and the question is only WHERE on the beam it is read.
+    const c = 800
+    const heavy = {
+      S: stressSection({ ...rect, id: 'S2', name: '800×800', b: c, h: c }),
+      props: { E, G: E / 2.4, A: c * c, Iz: c ** 4 / 12, Iy: c ** 4 / 12, J: rectJ(c, c) },
+    }
+    const P2 = portal(heavy)
+    const loose = P2.map(({ ni: _i, nj: _j, ...m }) => m)
+    const peak = memberPeak(P2, 'sigma')!, loosePeak = memberPeak(loose, 'sigma')!
+    expect(loosePeak.id, 'fixture: the beam must carry the peak').toBe('bm')
+    expect(Math.min(loosePeak.x, 6 - loosePeak.x), 'untrimmed, the peak is read at a node').toBeCloseTo(0, 9)
+    expect(peak.id).toBe('bm')
+    expect(peak.x).toBeGreaterThanOrEqual(0.4 - 1e-9)             // the 800-deep column's face
+    expect(peak.x).toBeLessThanOrEqual(6 - 0.4 + 1e-9)
+    expect(Math.abs(peak.value)).toBeLessThan(Math.abs(loosePeak.value))
+    expect(memberContourDomain(P2, 'sigma').max).toBeLessThan(memberContourDomain(loose, 'sigma').max)
+  })
+
+  it('uses the EXIT distance on a skew, not the half-width', () => {
+    // A beam arriving at 45° in plan: the ray leaves the 500 (X) × 300 (Z)
+    // column where |z| reaches 150 mm, at t = 0.15/sin45 = 0.2121 m. The
+    // half-width along X (0.25) would bury the end in the column.
+    const col: ContourMember = { ...PORTAL[0], ni: 'A', nj: 'B' }
+    const c = Math.SQRT1_2
+    const skew: ContourMember = { ...PORTAL[1], id: 'sk', a: [0, 3, 0], b: [4 * c, 3, 4 * c], ni: 'B', nj: 'E' }
+    expect(jointTrims([col, skew]).get('sk')![0]).toBeCloseTo(0.15 / c, 9)
+  })
+
+  it('stops a secondary beam at the face of a girder that continues through the joint', () => {
+    // Girder g1–g2 runs straight through node M along X; the secondary beam
+    // leaves M along Z. No column: the continuous girder owns the joint, and
+    // the beam stops at its side face, b/2 = 150 mm off the node.
+    const base = PORTAL[1]
+    const g1: ContourMember = { ...base, id: 'g1', a: [0, 3, 0], b: [3, 3, 0], ni: 'P', nj: 'M' }
+    const g2: ContourMember = { ...base, id: 'g2', a: [3, 3, 0], b: [6, 3, 0], ni: 'M', nj: 'Q' }
+    const sb: ContourMember = { ...base, id: 'sb', a: [3, 3, 0], b: [3, 3, 4], ni: 'M', nj: 'R' }
+    const t = jointTrims([g1, g2, sb])
+    expect(t.get('sb')![0]).toBeCloseTo(0.15, 9)
+    expect(t.has('g1'), 'collinear segments meet end to end').toBe(false)
+    expect(t.has('g2')).toBe(false)
+  })
+
+  it('leaves members alone that carry no node ids — they have no joint to meet', () => {
+    expect(jointTrims([BEAM, COLUMN]).size).toBe(0)
+  })
+
+  it('never trims a member inside out', () => {
+    // A 0.3 m stub between two 500-deep columns: 0.25 + 0.25 > 0.3.
+    const stub: ContourMember = { ...PORTAL[1], id: 'st', a: [0, 3, 0], b: [0.3, 3, 0], ni: 'B', nj: 'X' }
+    const col2: ContourMember = { ...PORTAL[0], id: 'k2', a: [0.3, 0, 0], b: [0.3, 3, 0], ni: 'Y', nj: 'X' }
+    const [a, b] = jointTrims([PORTAL[0], stub, col2]).get('st')!
+    expect(a + b).toBeLessThanOrEqual(0.9 * 0.3 + 1e-12)
+    expect(memberContourGeometry([PORTAL[0], stub, col2], 'sigma', memberContourDomain([stub], 'sigma'))).not.toBeNull()
+  })
+})
+
+describe('the prism is closed', () => {
+  it('closes both ends, so no dark solid member shows down an open tube', () => {
+    // Watertight ⇔ every edge is shared by exactly two triangles. The cap
+    // vertices are separate from the side ring's, so edges are matched by
+    // POSITION rather than index.
+    const g = memberContourGeometry(PORTAL, 'sigma', memberContourDomain(PORTAL, 'sigma'))!
+    const key = (v: number) => [0, 1, 2].map((c) => g.position[v * 3 + c].toFixed(6)).join(',')
+    const edges = new Map<string, number>()
+    for (let i = 0; i < g.index.length; i += 3) {
+      const tri = [g.index[i], g.index[i + 1], g.index[i + 2]].map(key)
+      for (let e = 0; e < 3; e++) {
+        const [p, q] = [tri[e], tri[(e + 1) % 3]].sort()
+        if (p === q) continue                      // a zero-length bay at a force jump
+        edges.set(p + '|' + q, (edges.get(p + '|' + q) ?? 0) + 1)
+      }
+    }
+    const open = [...edges.values()].filter((n) => n < 2).length
+    expect(open, 'an edge used by one triangle is an open boundary').toBe(0)
+  })
+
+  it('puts the centroid value at the hub — τ peaks there, not on the rim', () => {
+    const dom = memberContourDomain([BEAM], 'tau')
+    const g = memberContourGeometry([BEAM], 'tau', dom)!
+    const hub = BEAM.forces.xs.length * R            // the first cap's hub
+    const rim = Array.from({ length: R }, (_, c) => g.value[hub + 1 + c])
+    // Under Vy alone τ depends on y only, so the neutral-axis points on the
+    // side faces carry the centroid's value exactly: the hub EQUALS the rim's
+    // peak. What it must not be is the rim's AVERAGE — a cap interpolated from
+    // its rim would put the lowest τ of the section at its middle.
+    expect(g.value[hub]).toBeCloseTo(Math.max(...rim), 6)
+    expect(g.value[hub]).toBeGreaterThan(rim.reduce((a, v) => a + v, 0) / R + 0.05)
+  })
+})
+
+describe('the page passes the joints', () => {
+  const src = import.meta.glob('../pages/ModelSpace.tsx', {
+    query: '?raw', import: 'default', eager: true,
+  }) as Record<string, string>
+  const page = Object.values(src)[0]
+  it('gives every contour member its node ids, inside the member push', () => {
+    // Anchored inside the object the page pushes, so a node-id assignment
+    // anywhere else in a 4 000-line file cannot satisfy it.
+    const i = page.indexOf('drop: levelDrop(m.role, sec.h / 1000, a, bb)')
+    expect(i).toBeGreaterThan(-1)
+    const push = page.slice(page.lastIndexOf('members.push({', i), page.indexOf('})', i))
+    expect(push).toMatch(/\bni:\s*m\.i\b/)
+    expect(push).toMatch(/\bnj:\s*m\.j\b/)
   })
 })
