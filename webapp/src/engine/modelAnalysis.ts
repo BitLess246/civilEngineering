@@ -82,8 +82,10 @@ export function runModelAnalysis(req: ModelAnalysisReq, onProgress: (p: SolvePro
     // seismic push are exactly the ones a tension-only rule switches off
     sol = !eOnly.length ? null
       : modes.size
-        ? solveActiveSet(br.nodes, br.members, br.supports, eOnly, modes,
-            { pDelta: req.drift.pDelta, diaphragms: br.diaphragmGroups }, br.shells)?.result ?? null
+        ? solveActiveSet(br.nodes, br.members, br.supports, eOnly, modes, {
+            pDelta: req.drift.pDelta, diaphragms: br.diaphragmGroups,
+            onFactor: (it) => onProgress({ phase: 'Assembling and factoring stiffness (active set)', detail: `E-case for storey drift · iteration ${it}` }),
+          }, br.shells)?.result ?? null
         : solveWithGeometry(precomp!, eOnly, { pDelta: req.drift.pDelta })
     // Storey drift is a property of the LATERAL SYSTEM. `driftCheck` picks
     // the largest lateral displacement of any node at a storey elevation,
