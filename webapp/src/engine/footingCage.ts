@@ -14,7 +14,10 @@
 // Units: plan dimensions and levels m, bar sizes and covers mm. Model space,
 // y up.
 // ─────────────────────────────────────────────────────────────────────────
-import { hookBendDiameter, type RebarCage, type RebarRun, type Vec3 } from './rebarModel'
+import {
+  hookBendDiameter, stirrupBendDiameter, closedTieClosureAllowance, turnAngles,
+  type RebarCage, type RebarRun, type Vec3,
+} from './rebarModel'
 
 export interface FootingCageInput {
   /** Footing mark — every bar carries it. */
@@ -50,7 +53,16 @@ export interface FootingCageInput {
    * 3D view and the take-off did not know about.
    */
   matEndHook?: '90' | 'none'
+  /**
+   * The column the dowels belong to, so the pad can tie them: its section
+   * (`h` across world x, `b` across world z, as `columnCage` places it), cover
+   * and tie Ø, mm. Omitted, the dowels stand untied — the old behaviour.
+   */
+  dowelTies?: { b: number; h: number; cover: number; tieDia: number }
 }
+
+/** Largest spacing of the ties holding the dowels inside the pad, mm. */
+export const DOWEL_TIE_MAX_SPACING = 150
 
 /** §425.3.1 ℓext on the 90° hook that turns the dowel onto the mat. */
 export const DOWEL_TAIL_DB = 12
@@ -172,6 +184,51 @@ export function buildFootingCage(i: FootingCageInput): RebarCage {
       bendDia: tail > 0 ? [D] : [], count: 1,
     })
   })
+
+  // ── the ties that hold the dowels ───────────────────────────────────────
+  //
+  // Dowels stand in the pad before it is cast, with nothing above them yet to
+  // hold them to the column's bar line. Standard detailing ties them inside the
+  // footing — at least two sets — so the pour cannot knock them out of
+  // position and they land where the column's bars will lap onto them. The
+  // pad used to carry none: the section drew the dowels bare through the full
+  // depth, and neither the 3D cage nor the bar schedule had that steel.
+  //
+  // Same hoop as the column's own tie (the cover line, §425.3.2 bends), laid
+  // from just above the dowel hooks to under the pad's top cover, evenly, at
+  // no more than DOWEL_TIE_MAX_SPACING.
+  const dt = i.dowelTies
+  if (dt && i.colBars.length) {
+    const tx = Math.max(0, dt.h / 2 - dt.cover - dt.tieDia / 2) / 1000
+    const tz = Math.max(0, dt.b / 2 - dt.cover - dt.tieDia / 2) / 1000
+    const yLo = yHook + (i.colBarDia + dt.tieDia) / 2000
+    const yHi = i.yTop - (MAT_TOP_COVER + dt.tieDia / 2) / 1000
+    const span = yHi - yLo
+    if (span < 0) {
+      notes.push(`the ${Math.round(i.Dc)} mm pad has no depth above the dowel hooks for a tie — the dowels are held by the mat alone`)
+    } else {
+      const sMax = DOWEL_TIE_MAX_SPACING / 1000
+      // two where they fit a tie's thickness apart; one where only one does
+      const nTie = span < (2 * dt.tieDia) / 1000 ? 1 : Math.max(2, Math.ceil(span / sMax) + 1)
+      const Dt = stirrupBendDiameter(dt.tieDia)
+      const R = (i.colBarDia + dt.tieDia) / 2
+      const loop: Vec3[] = [
+        [cx - tx, 0, cz - tz], [cx + tx, 0, cz - tz],
+        [cx + tx, 0, cz + tz], [cx - tx, 0, cz + tz],
+      ]
+      for (let k = 0; k < nTie; k++) {
+        const y = nTie === 1 ? (yLo + yHi) / 2 : yLo + (span * k) / (nTie - 1)
+        // successive hooks at different corners, as the column's own ties
+        const path = [...loop.slice(k % 4), ...loop.slice(0, k % 4)].map(([x, , z]) => [x, y, z] as Vec3)
+        runs.push({
+          mark: `${i.mark}-T${k + 1}`, dia: dt.tieDia, role: 'tie', member: i.mark,
+          path, bendDia: [Dt, Dt, Dt, Dt], closed: true, wrapDia: i.colBarDia,
+          hookAllowance: closedTieClosureAllowance(turnAngles(loop, true)[0], R, dt.tieDia),
+          count: 1,
+        })
+      }
+    }
+  }
 
   return { member: i.mark, runs, ...(notes.length ? { notes } : {}) }
 }

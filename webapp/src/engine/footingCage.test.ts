@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildFootingCage, DOWEL_TAIL_DB, type FootingCageInput } from './footingCage'
+import { buildFootingCage, DOWEL_TAIL_DB, DOWEL_TIE_MAX_SPACING, MAT_TOP_COVER, type FootingCageInput } from './footingCage'
 import { perimeterBars } from './columnCage'
 import { cutLength } from './rebarModel'
 
@@ -138,5 +138,58 @@ describe('a corner bar goes out along the diagonal', () => {
     // 8 bars on a square column are four corners plus four mid-face bars; the
     // corners take the four diagonals between them
     expect(new Set(dirs.filter((v) => !v.includes('0'))).size).toBe(4)
+  })
+})
+
+describe('the ties holding the dowels inside the pad', () => {
+  // Dowels stand in the pad before it is cast; standard detailing ties them
+  // there — at least two sets — so the pour cannot knock them off the column's
+  // bar line. The pad used to carry none, in the cage, the bill and the sheet.
+  const ties = { b: 400, h: 400, cover: 40, tieDia: 10 }
+  const tied = buildFootingCage({ ...pad, dowelTies: ties })
+  const t = tied.runs.filter((r) => r.role === 'tie')
+  const dowels = tied.runs.filter((r) => r.role === 'dowel')
+
+  it('places at least two closed ties, all inside the pad and above the dowel hooks', () => {
+    expect(t.length).toBeGreaterThanOrEqual(2)
+    const yBot = pad.yTop - pad.Dc / 1000
+    const hookY = Math.max(...dowels.map((d) => d.path[0]![1]))
+    for (const r of t) {
+      expect(r.closed).toBe(true)
+      const y = r.path[0]![1]
+      expect(r.path.every((p) => Math.abs(p[1] - y) < 1e-12)).toBe(true)      // one level
+      expect(y).toBeGreaterThan(hookY)
+      expect(y).toBeGreaterThan(yBot)
+      expect(y).toBeLessThanOrEqual(pad.yTop - MAT_TOP_COVER / 1000 + 1e-9)
+    }
+  })
+
+  it('spaces them no wider than the limit', () => {
+    const ys = t.map((r) => r.path[0]![1]).sort((a, b) => a - b)
+    for (let k = 1; k < ys.length; k++) expect(ys[k]! - ys[k - 1]!).toBeLessThanOrEqual(DOWEL_TIE_MAX_SPACING / 1000 + 1e-9)
+  })
+
+  it('wraps every dowel — each dowel sits inside the loop, a bar radius in from it', () => {
+    const [cx, cz] = pad.centre
+    for (const r of t) {
+      const xs = r.path.map((p) => p[0]), zs = r.path.map((p) => p[2])
+      for (const [dx, dz] of pad.colBars) {
+        const x = cx + dx / 1000, z = cz + dz / 1000
+        expect(x).toBeGreaterThan(Math.min(...xs)); expect(x).toBeLessThan(Math.max(...xs))
+        expect(z).toBeGreaterThan(Math.min(...zs)); expect(z).toBeLessThan(Math.max(...zs))
+        // on the cover line: the loop's centreline is (bar + tie)/2 outside the corner bar
+        expect(Math.max(...xs) - Math.max(...pad.colBars.map(([a]) => cx + a / 1000))).toBeCloseTo((20 + 10) / 2000, 6)
+      }
+    }
+  })
+
+  it('stays out of a pad with no depth for one, and says so', () => {
+    const thin = buildFootingCage({ ...pad, Dc: 150, dowelTies: ties })
+    expect(thin.runs.some((r) => r.role === 'tie')).toBe(false)
+    expect(thin.notes?.some((n) => /no depth above the dowel hooks/.test(n))).toBe(true)
+  })
+
+  it('without the column section it places none — the old behaviour', () => {
+    expect(cage.runs.some((r) => r.role === 'tie')).toBe(false)
   })
 })

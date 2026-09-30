@@ -348,11 +348,12 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     // A bar crossing the plane rather than lying in it — a mat bar running
     // north–south, seen end-on — is a DOT, not a line. Told apart by how far it
     // travels along the sheet: a bar seen end-on goes nowhere.
-    const draw = (cage: RebarCage, over: boolean) => {
+    const draw = (cage: RebarCage, over: boolean, schedule = true) => {
       for (const r of cage.runs) {
         const pts = projectPath(runPolylines(r)[0] ?? [], S).map(([a, b]) => [sx0 + a, b] as Pt)
         if (pts.length < 2) continue
         const uLo = Math.min(...pts.map((q) => q[0])), uHi = Math.max(...pts.map((q) => q[0]))
+        const vLo = Math.min(...pts.map((q) => q[1])), vHi = Math.max(...pts.map((q) => q[1]))
         const rr = Math.max(r.dia / 2000, B * 0.007)
         // A TIE seen edge-on is one horizontal bar, and has to be drawn as one:
         // its loop projects to a line traversed twice, out along the top leg
@@ -367,12 +368,19 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
           // taken over the drawn points inherits that lean. It reported a 300
           // spacing as 295 — a small number, and the wrong one to print on a
           // drawing when the cage knows the right one.
-          tieZs.push(projectPath([r.path[0]!], S)[0]![1])
+          if (schedule) tieZs.push(projectPath([r.path[0]!], S)[0]![1])
           continue
         }
         // A bar CROSSING the plane — a mat bar running north–south, seen
-        // end-on — is a dot: it goes nowhere along the sheet.
-        if (uHi - uLo < rr) {
+        // end-on — is a dot: it goes nowhere along the sheet, in EITHER
+        // direction. This tested the horizontal travel alone, so a straight
+        // column vertical — no travel across the sheet, all of it down — was
+        // taken for a bar seen end-on and replaced by a dot at its mid-height,
+        // which is far above the drawn band. Only a vertical cranked at the
+        // floor above by more than the threshold (which grows with the pad,
+        // B·0.007) survived: on a wide pad the column's bars vanished and
+        // the section showed the dowels alone, stopping at their lap.
+        if (uHi - uLo < rr && vHi - vLo < rr) {
           const mid = pts[Math.floor(pts.length / 2)]!
           if (mid[1] >= band[0] && mid[1] <= band[1]) {
             P.push({ kind: 'circle', cx: mid[0], cy: mid[1], r: rBar, fill: REBAR })
@@ -388,6 +396,10 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     // reads as passing IN FRONT of the tie that wraps it, which is the
     // convention the rest of this sheet already draws to.
     if (cg.column) draw({ ...cg.column, runs: cg.column.runs.filter((r) => r.role === 'tie' || r.role === 'hoop') }, false)
+    // …and the ties holding the dowels inside the pad, drawn the same way but
+    // kept out of the column's tie schedule — they are the pad's steel, at the
+    // pad's spacing, and would otherwise be read as the column's pitch
+    if (cg.footing) draw({ ...cg.footing, runs: cg.footing.runs.filter((r) => r.role === 'tie') }, false, false)
     if (cg.footing) draw({ ...cg.footing, runs: cg.footing.runs.filter((r) => r.role === 'mat') }, false)
     if (cg.footing) draw({ ...cg.footing, runs: cg.footing.runs.filter((r) => r.role === 'dowel') }, true)
     if (cg.column) draw({ ...cg.column, runs: cg.column.runs.filter((r) => r.role === 'vertical') }, true)
@@ -457,15 +469,23 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const drawnPitch = cg
     ? pitchNote(pitchRuns(setLevels(tieZs), 0.012))
     : `${tieSched.map(([cc, ss]) => `${cc}@${ss}`).join(', ')},`
+  const padTies = cg?.footing?.runs.filter((r) => r.role === 'tie') ?? []
   const tieLines = cg
-    ? [`LATERAL TIES = ⌀${tieDia}`, ...(drawnPitch ? [`${drawnPitch} mm O.C.`] : [])]
+    ? [`LATERAL TIES = ⌀${tieDia}`, ...(drawnPitch ? [`${drawnPitch} mm O.C.`] : []),
+       ...(padTies.length ? [`+ ${padTies.length} IN FOOTING`] : [])]
     : [`LATERAL TIES = ⌀${tieDia}`, drawnPitch, `REST @ ${tieRest} mm O.C.`]
+  // The two leaders tap the column at their own levels, but their TEXT rows
+  // must not share a line: on a short pedestal the tie tapped 55% of the way
+  // up sits a hair below the bar callout's 60%, and the two labels printed
+  // over each other. The tie text drops to clear the bar text; its leader
+  // still starts on the tie it names.
+  const tieTextY = Math.max(tieY, vy + ts * 1.5)
   callout(rightVx, vy, secR + ts * 0.9, vy, `${colBars}-${colBarDia}mmØ VERT. BARS`, ts * 0.55, REBAR)
-  callout(stX1, tieY, secR + ts * 0.9, tieY, tieLines[0]!, ts * 0.5, INK, tieLines[1])
+  callout(stX1, tieY, secR + ts * 0.9, tieTextY, tieLines[0]!, ts * 0.5, INK, tieLines[1])
   // a third line, where the schedule needs one, under the leader's own two
   if (tieLines[2]) {
     P.push({
-      kind: 'text', x: secR + ts * 0.9, y: tieY + ts * 0.5 * 2.5, text: tieLines[2],
+      kind: 'text', x: secR + ts * 0.9, y: tieTextY + ts * 0.5 * 2.5, text: tieLines[2],
       size: ts * 0.5, anchor: 'start', color: INK, weight: 600,
     })
   }

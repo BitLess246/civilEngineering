@@ -81,7 +81,11 @@ describe('planDetails — design → plan/detail inputs', () => {
     const [b0] = footingDetailBundles(model, design, soil)
     expect(b0.detail.B).toBeGreaterThan(0)
     expect(b0.detail.H).toBeGreaterThan(0)
-    expect(b0.detail.foundingElev).toBe(-1.5)             // top of footing at embedment depth
+    // TOP of footing: the founding depth (grade → UNDERSIDE of the pad) less
+    // the pad itself — not the founding depth, which drew every pad one
+    // thickness too deep
+    expect(b0.detail.foundingElev).toBeCloseTo(-(1.5 - b0.detail.H), 9)
+    expect(b0.detail.foundingElev).toBeGreaterThan(-1.5)
     expect(b0.detail.colB).toBe(section.b)                // column size from the model section
     expect(b0.column.shape).toBe('tied')
     expect(b0.column.b).toBe(section.b)
