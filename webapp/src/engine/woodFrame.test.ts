@@ -3,6 +3,10 @@ import { generateGridModel, buildGravityLoads, plateSelfWeightKpa } from './mode
 import { modelToFrame3D } from './modelBridge'
 import { designStructure, optimizeStructure } from './pipeline'
 import { estimateTakeoff } from './takeoff'
+import { nonlinearNotApplicable, plasticMoment, axialCapacity, runPushoverModel } from './pushoverModel'
+import { runBiaxialPushover } from './biaxialFrameModel'
+import { runNonlinearFrameModel } from './nonlinearFrameModel'
+import { runNonlinearModel } from './nonlinearModel'
 import { validateMesh } from './meshValidation'
 import { WOOD_SPECIES } from './woodDesign'
 import { emptyModel, type RectSection, type StructuralModel } from './model'
@@ -198,5 +202,43 @@ describe('bridge — timber does not crack', () => {
     const g = modelToFrame3D(m).members.find((x) => x.id.startsWith('bx'))!
     const c = modelToFrame3D(m, { crackedSections: true }).members.find((x) => x.id === g.id)!
     expect(c.Iz / g.Iz).toBeCloseTo(0.35, 9)
+  })
+})
+
+// ── No plastic hinge in timber ───────────────────────────────────────────────
+// Every hinge model (pushover, biaxial pushover, both nonlinear time-histories)
+// took a timber member's hinge strength from the CONCRETE branch — an assumed
+// 1.5% of rebar in a solid timber post — and reported ductile hinges to 4%
+// drift. Timber is brittle in bending; the models now refuse it outright.
+describe('nonlinear hinge models — timber is refused, not hinged', () => {
+  const gm = { dt: 0.01, dir: 0 as const, ag: Array.from({ length: 50 }, (_, i) => Math.sin(i / 3)) }
+
+  it('names the timber members and says why', () => {
+    const m = woodModel()
+    const na = nonlinearNotApplicable(m)!
+    expect(na.members.sort()).toEqual(m.members.map((x) => x.id).sort())
+    expect(na.reason).toMatch(/brittle/)
+  })
+
+  it('a concrete or steel frame is not affected', () => {
+    const rc = woodModel(); rc.sections = rc.sections.map((s) => ({ ...s, material: undefined }))
+    const st = woodModel(); st.sections = st.sections.map((s) => ({ ...s, material: 'steel' as const, shape: 'W310x79' }))
+    expect(nonlinearNotApplicable(rc)).toBeNull()
+    expect(nonlinearNotApplicable(st)).toBeNull()
+    expect(runPushoverModel(rc)).not.toBeNull()
+  })
+
+  it('the hinge strength functions refuse a timber section', () => {
+    const s = woodModel().sections[0]
+    expect(() => plasticMoment(s)).toThrow(/timber/)
+    expect(() => axialCapacity(s)).toThrow(/timber/)
+  })
+
+  it('every hinge model refuses a timber frame instead of hinging it as concrete', () => {
+    const m = woodModel()
+    expect(() => runPushoverModel(m)).toThrow(/timber/)
+    expect(() => runBiaxialPushover(m)).toThrow(/timber/)
+    expect(() => runNonlinearFrameModel(m, gm)).toThrow(/timber/)
+    expect(() => runNonlinearModel(m, gm)).toThrow(/timber/)
   })
 })
