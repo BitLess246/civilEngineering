@@ -114,7 +114,13 @@ export function footingDetailBundles(
         barDia: r.barDia,
         bars: r.design.bars, barSpacing: r.design.barSpacing,
         colB, colH, colBars, colBarDia, tieDia, colCover: sec?.cover ?? 40,
-        foundingElev: soil.H != null ? -Math.abs(soil.H) : undefined,
+        // TOP of footing, which is what the sheet's T.O.F. label and its
+        // embedment dimension read this as. `soil.H` is the founding depth —
+        // natural grade to the UNDERSIDE of the pad (`pipeline`, "Depth of
+        // footing is a GEOTECHNICAL number") — so the top is one pad
+        // thickness above it: the pedestal the design already computed. Handed
+        // −H, every pad was drawn a pad-thickness deeper than it was designed.
+        foundingElev: soil.H != null ? -r.pedestal : undefined,
         endHook: 'none',
         ...(detailCages?.footing || detailCages?.column ? { cages: detailCages } : {}),
       },

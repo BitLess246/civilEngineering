@@ -197,3 +197,105 @@ describe('the footing sheet, drawn from the placed cages', () => {
     expect(numeric.primitives.filter((p) => p.kind === 'path').length).toBeGreaterThan(10)
   })
 })
+
+describe('section A–A draws the column verticals over the whole drawn height', () => {
+  // A straight vertical travels nothing ACROSS the sheet, only down it. The
+  // section took "no horizontal travel" to mean "seen end-on" and swapped the
+  // bar for a dot at its mid-height — a storey above the drawn band — so the
+  // bar vanished. Only a vertical cranked at the floor above by more than the
+  // threshold (which grows with the pad, B·0.007) survived, so a WIDE pad lost
+  // every column bar and showed the dowels alone, stopping at their lap.
+  const role = (b: number, h: number, id: string) =>
+    ({ id, name: id, b, h, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 })
+  const soil = { qAllow: 150, gammaSoil: 18, gammaConc: 24, H: 1.5 }
+  const model = generateGridModel({
+    baysX: [6, 6], baysZ: [6, 6], storeyH: [3, 3, 3, 3, 3],
+    column: role(400, 400, 'COL'), girder: role(300, 500, 'GIR'), beam: role(250, 450, 'BEA'), slabThickness: 150,
+  })
+  model.loads = buildGravityLoads(model, 4.8, 2.4)
+  const design = designStructure(model, soil as never)!
+  const { cages } = buildStructureCages(model, design)
+  const bundles = footingDetailBundles(model, design, soil, cages)
+
+  it('on every footing type, the column bars run from the top of the column to the pad', () => {
+    // the interior pad is the wide one this used to fail on
+    expect(Math.max(...bundles.map((b) => b.detail.B))).toBeGreaterThan(4)
+    for (const b of bundles) {
+      const d = buildFootingDetail(b.detail)
+      const B = b.detail.B, cw = b.detail.colB / 1000
+      const sx0 = B + 1.05 * B                          // section centre, as the sheet lays it out
+      const colTop = -(Math.abs(b.detail.foundingElev!) + 0.3)
+      const full = d.primitives.filter((p) => {
+        if (p.kind !== 'path' || (p as { stroke?: string }).stroke !== STEEL) return false
+        const xs = p.cmds.map((c) => c.x), ys = p.cmds.map((c) => c.y)
+        const inCol = xs.every((x) => Math.abs(x - sx0) < cw / 2)
+        return inCol && Math.min(...ys) <= colTop + 0.1 && Math.max(...ys) >= -0.02
+      })
+      // both faces of the column at least — and in fact every bar position
+      expect(full.length, b.mark).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('keeps the bar and tie callouts on separate lines on a short pedestal', () => {
+    // With the pad at its true level the interior pedestal is 850 mm, and the
+    // tie tapped 55% up the column landed within a text height of the bar
+    // callout at 60% — the two labels printed over each other.
+    for (const b of bundles) {
+      const d = buildFootingDetail(b.detail)
+      const ts = b.detail.B * 0.075
+      const y = (re: RegExp) => (d.primitives.find((p) => p.kind === 'text' && re.test((p as { text: string }).text)) as { y: number }).y
+      expect(Math.abs(y(/VERT\. BARS$/) - y(/^LATERAL TIES/)), b.mark).toBeGreaterThanOrEqual(ts * 0.9)
+    }
+  })
+})
+
+describe('section A–A shows the ties holding the dowels in the pad', () => {
+  const role = (b: number, h: number, id: string) =>
+    ({ id, name: id, b, h, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 })
+  const soil = { qAllow: 150, gammaSoil: 18, gammaConc: 24, H: 1.5 }
+  const model = generateGridModel({
+    baysX: [6, 6], baysZ: [6, 6], storeyH: [3, 3, 3],
+    column: role(400, 400, 'COL'), girder: role(300, 500, 'GIR'), beam: role(250, 450, 'BEA'), slabThickness: 150,
+  })
+  model.loads = buildGravityLoads(model, 4.8, 2.4)
+  const design = designStructure(model, soil as never)!
+  const { cages } = buildStructureCages(model, design)
+  const bundles = footingDetailBundles(model, design, soil, cages)
+
+  it('draws them inside the pad, labels them, and leaves the column\'s own pitch alone', () => {
+    for (const b of bundles) {
+      const pad = b.detail.cages!.footing!.runs.filter((r) => r.role === 'tie')
+      expect(pad.length, b.mark).toBeGreaterThanOrEqual(2)
+      const d = buildFootingDetail(b.detail)
+      const B = b.detail.B, H = b.detail.H
+      const sx0 = B + 1.05 * B
+      // a horizontal tie stroke across the column line, between the pad's faces
+      const inPad = d.primitives.filter((p) => {
+        if (p.kind !== 'path' || (p as { stroke?: string }).stroke !== STEEL_LIGHT) return false
+        const ys = p.cmds.map((c) => c.y), xs = p.cmds.map((c) => c.x)
+        // clear of the pad's top face, where the column's own first tie set
+        // is centred (the first tie may sit up to half a spacing above it)
+        return Math.max(...ys) - Math.min(...ys) < 1e-9 && ys[0]! > 0.02 && ys[0]! < H
+          && Math.min(...xs) < sx0 && Math.max(...xs) > sx0
+      })
+      expect(inPad.length, b.mark).toBe(pad.length)
+      const t = texts(d.primitives).join(' | ')
+      expect(t).toContain(`+ ${pad.length} IN FOOTING`)
+      // the column's pitch is still the column's: the pad's ~150 would read as 1@…
+      expect(t).toMatch(/LATERAL TIES = ⌀10 \| \d+@\d{3} mm O\.C\./)
+    }
+  })
+
+  it('keeps the pad ties out of the pitch on a 4-bar column too', () => {
+    // With cross ties in every column set, a single pad tie is filtered out as
+    // a partial set anyway; a 4-bar column has no cross ties, its sets are one
+    // bar each, and a pad tie would be measured as part of its pitch.
+    const d4 = designStructure(model, soil as never)!
+    for (const c of d4.columns) c.bars = 4
+    const { cages: c4 } = buildStructureCages(model, d4)
+    for (const b of footingDetailBundles(model, d4, soil, c4)) {
+      const t = texts(buildFootingDetail(b.detail).primitives).join(' | ')
+      expect(t, b.mark).toMatch(/LATERAL TIES = ⌀10 \| \d+@\d{3} mm O\.C\./)
+    }
+  })
+})

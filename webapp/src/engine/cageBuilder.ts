@@ -562,6 +562,7 @@ export function buildStructureCages(
       }),
       colBarDia: sec.barDia,
       lap,
+      dowelTies: { b: sec.b, h: sec.h, cover: sec.cover, tieDia: sec.tieDia },
     }), spliceOf(sec, f.barDia)))
   }
 
