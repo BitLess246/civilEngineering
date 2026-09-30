@@ -103,6 +103,32 @@ describe('stressDomain', () => {
   })
 })
 
+describe('stressDomain on a real building', () => {
+  // The member contour hands this 25 values per station, 25 stations per
+  // member: an 8-storey, 4×3-bay frame is ~255 000 of them. It used to spread
+  // the array into Math.max, and V8 caps a call near 125 000 arguments — the
+  // stress view of any sizeable model threw "Maximum call stack size exceeded".
+  const N = 300_000
+  const vals = Array.from({ length: N }, (_, i) => Math.sin(i * 0.001) * 40 - 5)   // −45 … +35
+  it('takes 300 000 values without overflowing the call stack', () => {
+    expect(() => stressDomain(vals, true)).not.toThrow()
+    expect(() => stressDomain(vals, false)).not.toThrow()
+  })
+  it('gets the same answer a spread would, where a spread still fits', () => {
+    const small = vals.slice(0, 50_000)
+    const d = stressDomain(small, true), u = stressDomain(small.map(Math.abs), false)
+    expect(d.max).toBe(Math.max(...small.map(Math.abs)))
+    expect(d.min).toBe(-d.max)
+    expect(u.max).toBe(Math.max(...small.map(Math.abs)))
+  })
+  it('finds the extremes wherever they sit in a huge array', () => {
+    const big = new Array<number>(N).fill(1)
+    big[0] = -7; big[N - 1] = 12; big[N >> 1] = NaN
+    expect(stressDomain(big, true)).toMatchObject({ min: -12, max: 12, flat: false })
+    expect(stressDomain(big, false)).toMatchObject({ min: 0, max: 12, flat: false })
+  })
+})
+
 describe('normalise', () => {
   it('clamps outside the domain instead of running off the ramp', () => {
     const d = stressDomain([-10, 10], true)
