@@ -224,8 +224,8 @@ describe('the page wires it the way the analysis ran', () => {
     const worker = import.meta.glob('../engine/modelAnalysis.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
     expect(Object.values(worker)[0]).toMatch(/modelToFrame3D\(req\.model, \{ crackedSections: req\.crackedSections, shearDeformation: req\.shearDeformation, beamTopOfSteel: req\.beamTopOfSteel \}\)/)
   })
-  it('reads the governing combo\'s displacements and member results', () => {
-    expect(memo).toContain('deformedInputs(model, govRes.d, govRes.members, br)')
+  it('reads the displayed combo\'s displacements and member results', () => {
+    expect(memo).toContain('deformedInputs(model, dispRes.d, dispRes.members, br)')
   })
   it('replaces the solid model while it is on, rather than drawing over it', () => {
     expect(page).toContain('{!deformActive && model.members.map((m) => {')

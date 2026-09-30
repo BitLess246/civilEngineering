@@ -377,8 +377,8 @@ describe('the page actually uses it', () => {
   })
 
   it("takes the forces from the analysis, not from a recomputation", () => {
-    // `govRes.members` are the very objects MemberForceDiagram3D draws.
-    expect(page).toMatch(/govRes\.members\.map\(\(m\) => \[m\.id, m\]\)/)
+    // `dispRes.members` are the very objects MemberForceDiagram3D draws.
+    expect(page).toMatch(/dispRes\.members\.map\(\(m\) => \[m\.id, m\]\)/)
     expect(page).toContain('forces: fr')
   })
 
