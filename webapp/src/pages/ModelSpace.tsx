@@ -1200,7 +1200,8 @@ export default function ModelSpace() {
       const ids = new Set((model?.members ?? []).filter((m) => m.role === role).map((m) => m.section))
       return [...new Set((model?.sections ?? []).filter((s) => ids.has(s.id)).map((s) => s.name))].join(', ') || '—'
     }
-    const slabT = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall').map((p) => p.thickness))].join(', ')
+    const slabT = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall' && !p.deck).map((p) => p.thickness))].join(', ')
+    const deckCount = (model?.plates ?? []).filter((p) => p.role !== 'wall' && p.deck).length
     const barsUsed = [...new Set((model?.sections ?? []).filter((s) => s.material !== 'steel').map((s) => s.barDia))].sort((a, b) => a - b)
     const hasConcreteMems = d.beams.length > 0 || d.columns.length > 0
     const hasSteelMems    = d.steelBeams.length > 0 || d.steelColumns.length > 0
@@ -1217,7 +1218,7 @@ export default function ModelSpace() {
       ['Columns', distinct('column')],
       ['Girders', distinct('girder')],
       ['Beams', distinct('beam')],
-      ['Slabs', `t = ${slabT || '—'} mm · SDL ${slabSdls.map((v) => v.toFixed(2)).join(' / ')} kPa`],
+      ['Slabs', `${slabT ? `t = ${slabT} mm` : ''}${slabT && deckCount ? ' · ' : ''}${deckCount ? `${deckCount} timber deck${deckCount === 1 ? '' : 's'}` : ''}${!slabT && !deckCount ? '—' : ''} · SDL ${slabSdls.map((v) => v.toFixed(2)).join(' / ')} kPa`],
       ['Loads', `default SDL ${qD} kPa · LL ${qL} kPa · γc ${gammaC} kN/m³`],
       ['Soil / footing', `qa ${qa} kPa · γsoil ${gammaSoil} kN/m³ · depth H ${Hf} m`],
       ['Seismic (NSCP 208)', `Ca ${Ca} · Cv ${Cv} · R ${Rw} · I ${Ie} · Z ${Zf} · Nv ${Nv}`],
@@ -1227,7 +1228,11 @@ export default function ModelSpace() {
       // these changes the answer, and the report stated none of them — so two
       // runs of the same model could differ by 20% with nothing on the page to
       // say why. Written as the switch positions they are, on or off.
-      ['Stiffness', `${cracked ? 'cracked EI — 0.35Ig beams / 0.70Ig columns (ACI §6.6.3.1.1)' : 'gross section EI (uncracked)'} · ${shearDef ? 'Timoshenko shear deformation on' : 'Euler–Bernoulli (no shear deformation)'}`],
+      // The cracked modifiers are concrete-only (modelBridge): a steel or timber
+      // member is analysed on its gross section whatever the switch says.
+      ['Stiffness', `${cracked && hasConcreteMems
+        ? `cracked EI — 0.35Ig beams / 0.70Ig columns (ACI §6.6.3.1.1)${hasSteelMems || hasWoodMems ? ' on concrete; steel and timber gross' : ''}`
+        : 'gross section EI (uncracked)'} · ${shearDef ? 'Timoshenko shear deformation on' : 'Euler–Bernoulli (no shear deformation)'}`],
       ['Second order', pDelta ? 'P-Δ on — geometric stiffness iterated per combination' : 'first order (P-Δ off)'],
       ['Seismic system', `${seismicSystem === 'smf' ? 'special moment frame (§418.6)' : seismicSystem === 'imf' ? 'intermediate moment frame (§418.4)' : 'gravity — no §418 detailing'}${evOn ? ` · Ev = 0.5·Ca·I·D applied (§208.4.1)` : ' · Ev not applied'}`],
       ['Mass source', 'dead load only — slab area dead loads, member self-weight, dead line and point loads (§208.5.1.1); live load excluded'],
@@ -1237,7 +1242,11 @@ export default function ModelSpace() {
       ['Mass matrix', massModel === 'consistent'
         ? 'consistent — element mass matrices, rotational inertia carried; bounds the frequencies from above'
         : 'lumped at nodes, translational only — rotational DOFs carry no inertia; bounds the frequencies from below'],
-      ['Design assumptions', `${allAround ? 'column bars on all four faces' : 'column bars on two faces'} · ${tBeamOn ? 'flanged (T/L) sagging design §6.3.2' : 'rectangular web only'} · ${beamTopSteel ? 'beams set to top of steel' : 'beams on the node line'}`],
+      ['Design assumptions', [
+        ...(hasConcreteMems ? [allAround ? 'column bars on all four faces' : 'column bars on two faces',
+          tBeamOn ? 'flanged (T/L) sagging design §6.3.2' : 'rectangular web only'] : []),
+        beamTopSteel ? 'beams set to top of steel' : 'beams on the node line',
+      ].join(' · ')],
       ['Governing case', d.govName],
       ['Concrete', `${f1(d.totals.concrete)} m³ (${f1(d.totals.concreteMembers)} members + ${f1(d.totals.concreteSlabs)} slabs)`],
       ...(d.totals.steelKg > 0

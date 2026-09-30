@@ -573,6 +573,15 @@ export function estimateTakeoff(
     const prev = timberMap.get(key) ?? { name: sec.name, species, kind, count: 0, L: 0, m3: 0, boardFeet: 0 }
     timberMap.set(key, { ...prev, count: prev.count + 1, L: prev.L + L, m3: prev.m3 + vol, boardFeet: prev.boardFeet + vol * BDFT_PER_M3 })
   }
+  // Timber-deck floors: their joists and deck boards, as the deck schedule sized
+  // them. A timber frame's floors are most of its board feet — without these the
+  // bill priced the posts and beams and none of the floor they hold up.
+  for (const row of design.woodSlabs ?? []) for (const t of row.timber ?? []) {
+    timberM3 += t.m3
+    const key = `${t.name}|${t.species}|${t.kind}`
+    const prev = timberMap.get(key) ?? { ...t, count: 0, L: 0, m3: 0, boardFeet: 0 }
+    timberMap.set(key, { ...prev, count: prev.count + t.count, L: prev.L + t.L, m3: prev.m3 + t.m3, boardFeet: prev.boardFeet + t.boardFeet })
+  }
   const timberBySize = [...timberMap.values()]
   const timberBoardFeet = timberM3 * BDFT_PER_M3
   for (const t of timberBySize) boq.push({ item: `Timber — ${t.name} (${t.species})`, unit: 'm³', qty: t.m3 })

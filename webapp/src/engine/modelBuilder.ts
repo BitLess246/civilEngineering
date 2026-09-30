@@ -9,7 +9,8 @@
 import type { StructuralModel, RectSection, Node, Member, Plate, NodeSupport, MemberRole } from './model'
 import { sdlTotal } from './deadLoads'
 import { shapeByName } from './aiscSections'
-import { woodRefOf, woodUnitWeight } from './woodDesign'
+import { woodRefOf, woodUnitWeight, getWoodRef } from './woodDesign'
+import { woodSlabSelfWeight } from './woodSlab'
 import { allStairFrameLoads } from './stairPlacement'
 
 /** The fields the weight helpers read — looser than `RectSection` so the
@@ -202,9 +203,37 @@ export function memberWeightPerLength(sec: SectionLike, gammaC = GAMMA_C): numbe
 }
 
 /**
+ * The self-weight of a plate's floor, kPa — what the frame beneath it carries.
+ *
+ * An RC slab is t·γc. A timber deck is NOT: it is deck boards on joists, and
+ * its weight is the deck engine's own (`woodSlabSelfWeight`), with the joists
+ * spanning the panel's SHORTER side exactly as the pipeline designs them. The
+ * plate's `thickness` means nothing under a deck — a timber frame generated
+ * with the default 150 mm used to put 3.6 kPa of concrete that was never
+ * there onto every beam, column, footing and the seismic mass, and onto the
+ * joists themselves, which then failed at 580%.
+ */
+export function plateSelfWeightKpa(model: Pick<StructuralModel, 'nodes'>, p: Plate, gammaC = GAMMA_C): number {
+  if (!p.deck) return (p.thickness / 1000) * gammaC
+  const ref = p.deck.joistRef ?? (p.deck.joistSpecies ? getWoodRef(p.deck.joistSpecies)?.ref : undefined)
+  const nm = new Map(model.nodes.map((n) => [n.id, n]))
+  const c = p.corners.map((id) => nm.get(id))
+  if (!ref || c.some((q) => !q)) return 0
+  const [c0, c1, , c3] = c as Node[]
+  const lx = Math.hypot(c1.x - c0.x, c1.z - c0.z), lz = Math.hypot(c3.x - c0.x, c3.z - c0.z)
+  if (!(lx > 0 && lz > 0)) return 0
+  const w = woodSlabSelfWeight({
+    Lx: Math.min(lx, lz), Ly: Math.max(lx, lz), joistRef: ref,
+    joistB: p.deck.joistB, joistD: p.deck.joistD, joistSpacing: p.deck.joistSpacing,
+    deckMaterial: p.deck.deckMaterial, deckThickness: p.deck.deckThickness,
+  })
+  return w.deckSelfKpa + w.joistSelfKpa
+}
+
+/**
  * Build the gravity load set: member SELF-WEIGHT (D, kN/m from the section),
  * WALL self-weight on its supporting member (D, kN/m = t·h·γc), slab
- * SELF-WEIGHT + superimposed dead load (D, kPa), and live load (L, kPa).
+ * SELF-WEIGHT (`plateSelfWeightKpa`) + superimposed dead load (D, kPa), and live load (L, kPa).
  * Loads of other categories (e.g. seismic E) are preserved from the model.
  * `gammaC` is the concrete unit weight (kN/m³, default 24).
  */
@@ -226,7 +255,7 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
   const plateLoads: StructuralModel['loads'] = model.plates
     .filter((p) => p.role !== 'wall')
     .flatMap((p) => {
-      const qSW = (p.thickness / 1000) * gammaC
+      const qSW = plateSelfWeightKpa(model, p, gammaC)
       // per-slab NSCP-204 SDL when composed, else the global SDL argument
       const slabSdl = p.sdlItems && p.sdlItems.length > 0 ? sdlTotal(p.sdlItems) : sdl
       // per-slab NSCP 205-1 live load when chosen, else the global LL argument

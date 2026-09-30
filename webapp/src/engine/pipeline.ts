@@ -8,7 +8,7 @@
 // Every stage reuses the existing engines unchanged.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection, ModelLoad, Member, WoodDeck } from './model'
-import { enforceSectionHierarchy, refreshSelfWeight, barContinuityGroups } from './modelBuilder'
+import { enforceSectionHierarchy, refreshSelfWeight, barContinuityGroups, plateSelfWeightKpa } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { precomputeFrame, solveWithGeometry, applyF3Combo, serializePrecomp, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
 import { stitchResult } from './memberSplit'
@@ -38,7 +38,8 @@ import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, columnAxial, 
 import type { PlateClass, FlexureClause } from './steelDesign'
 import { columnKFactors, type ColumnK } from './effectiveLength'
 import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef, woodAdjusted } from './woodDesign'
-import { designWoodSlab, type WoodSlabResult } from './woodSlab'
+import { designWoodSlab, woodSlabTimberSizes, type WoodSlabResult, type WoodSlabInput } from './woodSlab'
+import type { TimberSizeQty } from './takeoff'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
 import { optimizeFootingRebar, optimizeSlabRebar, applySlabMats } from './matRebarOptimize'
@@ -272,6 +273,8 @@ export interface WoodSlabScheduleRow {
   species: string
   design: WoodSlabResult
   ok: boolean
+  /** Its joists and decking by size, for the bill of quantities. */
+  timber: TimberSizeQty[]
 }
 /**
  * One stair flight, designed on the geometry the frame gives it.
@@ -1699,21 +1702,26 @@ function designFromRuns(
     const areaL = model.loads.filter((l) => l.kind === 'area' && l.plate === p.id && l.cat === 'L').reduce((s, l) => s + (l as { q: number }).q, 0)
     if (areaD + areaL < 1e-9) continue
     // Timber deck: design the wood slab (joists span the shorter dimension) and
-    // skip the RC Direct Design Method for this panel. D/L are superimposed —
-    // the deck engine adds its own deck + joist self weight.
+    // skip the RC Direct Design Method for this panel. The deck engine adds its
+    // own deck + joist self weight, and the area-D load already holds that same
+    // weight (`plateSelfWeightKpa`, so the frame carries it) — it is taken back
+    // out here or the joists would carry their own weight twice.
     if (p.deck) {
       const ref = p.deck.joistRef ?? (p.deck.joistSpecies ? getWoodRef(p.deck.joistSpecies)?.ref : undefined)
       if (ref) {
         const span = Math.min(lx, lz), across = Math.max(lx, lz)
-        const design = designWoodSlab({
+        const input: WoodSlabInput = {
           Lx: span, Ly: across, joistRef: ref, joistKind: p.deck.joistKind,
           joistB: p.deck.joistB, joistD: p.deck.joistD, joistSpacing: p.deck.joistSpacing,
           joistSupport: p.deck.joistSupport, deckMaterial: p.deck.deckMaterial,
           deckThickness: p.deck.deckThickness, deckWidth: p.deck.deckWidth,
-          deckSupport: p.deck.deckSupport, deadKpa: areaD, liveKpa: areaL,
+          deckSupport: p.deck.deckSupport, deadKpa: Math.max(0, areaD - plateSelfWeightKpa(model, p)), liveKpa: areaL,
           opts: { wet: p.deck.wet },
-        })
-        woodSlabs.push({ plate: p.id, lx: span, ly: across, species: p.deck.joistSpecies ?? 'custom', design, ok: design.ok })
+        }
+        const design = designWoodSlab(input)
+        const species = p.deck.joistSpecies ?? 'custom'
+        woodSlabs.push({ plate: p.id, lx: span, ly: across, species, design, ok: design.ok,
+          timber: woodSlabTimberSizes(input, design, { joist: species }) })
         continue
       }
     }
@@ -2656,9 +2664,22 @@ function buildGrowActions(design: StructureDesign, model: StructuralModel, memSe
 }
 
 /** Apply grown timber decks back onto their plates (optimizer). */
+/** Re-size timber decks and shift each panel's area-D load by the change in
+ *  the floor's own weight — the same bookkeeping `withPlateThickness` does for
+ *  a concrete slab, since that weight is merged into the load the same way. */
 function withDecks(model: StructuralModel, decks: Map<string, WoodDeck>): StructuralModel {
   if (decks.size === 0) return model
-  return { ...model, plates: model.plates.map((p) => (decks.has(p.id) ? { ...p, deck: decks.get(p.id) } : p)) }
+  const before = new Map(model.plates.map((p) => [p.id, p]))
+  const plates = model.plates.map((p) => (decks.has(p.id) ? { ...p, deck: decks.get(p.id) } : p))
+  const after = new Map(plates.map((p) => [p.id, p]))
+  const adjusted = new Set<string>()   // shift only the FIRST area-D load per plate
+  const loads = model.loads.map((l) => {
+    if (l.kind !== 'area' || l.cat !== 'D' || !decks.has(l.plate) || adjusted.has(l.plate)) return l
+    adjusted.add(l.plate)
+    const dq = plateSelfWeightKpa(model, after.get(l.plate)!) - plateSelfWeightKpa(model, before.get(l.plate)!)
+    return { ...l, q: l.q + dq }
+  })
+  return { ...model, plates, loads }
 }
 
 /** Copy shape geometry into the section's bounding-box fields so metadata stays consistent. */

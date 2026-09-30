@@ -238,7 +238,8 @@ function releaseFlags(rel: MemberReleases | undefined): Pick<F3Member, 'relI' | 
 /** ACI 318-14 Table 6.6.3.1.1(a) — cracked flexural stiffness for factored-load
  *  analysis: beams 0.35Ig, columns 0.70Ig (braces treated as compression
  *  members → 0.70). Axial area stays 1.0Ag; J is left gross (torsional cracking
- *  is a separate §22.7 concern). Concrete members only — steel is uncracked. */
+ *  is a separate §22.7 concern). Concrete members only — steel and timber are
+ *  uncracked. */
 const CRACKED_I: Record<MemberRole, number> = { beam: 0.35, girder: 0.35, column: 0.70, brace: 0.70 }
 
 export interface BridgeOpts {
@@ -293,7 +294,12 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
     const ni = nm.get(m.i), nj = nm.get(m.j)
     const rot = ni && nj ? defaultAxisRotation([nj.x - ni.x, nj.y - ni.y, nj.z - ni.z], m.axisRotation) : (m.axisRotation ?? 0)
     const props = secById.get(m.section) ?? fallback
-    const ck = opts?.crackedSections && model.sections.find((s) => s.id === m.section)?.material !== 'steel'
+    // Concrete only (`material` unset means concrete). Timber does not crack:
+    // it used to take the concrete factors too, which softened a timber beam to
+    // 0.35 of its E·I and drew the drift, periods and moment split of a frame
+    // three times more flexible than the one being designed.
+    const mat = model.sections.find((s) => s.id === m.section)?.material
+    const ck = opts?.crackedSections && (mat === undefined || mat === 'concrete')
       ? CRACKED_I[m.role] : 1
     const { Asy, Asz, ...stiff } = props
     return {
