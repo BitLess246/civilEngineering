@@ -42,6 +42,9 @@ import { footingLayout } from '../engine/footingLayout'
 import { type ShellNode, type ShellElem, type ElementStress, recoverShellStress } from '../engine/shell'
 import { solveModelShells, designModelSlabsFE, toPanelFrames, type SlabFEScheduleRow } from '../engine/shellModel'
 import { modelToFrame3D } from '../engine/modelBridge'
+import { autoScale, maxDisplacement, DISPLACEMENT_KEYS, type DisplacementKey } from '../engine/deformedShape'
+import { deformedGeometry, deformedInputs } from '../lib/deformedContour'
+import { DeformedShape3D, UndeformedGhost } from '../components/modelSpace/deformedLayer'
 import type { LoadCategory } from '../engine/beamAnalysis'
 import { useSolver } from '../lib/useSolver'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
@@ -342,6 +345,14 @@ export default function ModelSpace() {
   // reads as a rendering fault. The blend is confined to the joint panel and
   // the toggle says so — see lib/memberContour § Joint blending.
   const [memBlend, setMemBlend] = useState(true)
+  // DEFORMED SHAPE: the structure drawn displaced, coloured by displacement.
+  // Off by default for the same reason the stress contours are — it replaces
+  // the model the user was looking at.
+  const [showDeformed, setShowDeformed] = useState(false)
+  const [defKey, setDefKey] = useState<DisplacementKey>('total')
+  /** Multiplier on the automatic amplification (1 = the largest displacement
+   *  drawn at 6% of the model's size). */
+  const [defMult, setDefMult] = useState(1)
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
   const [showConns, setShowConns] = useState(true)         // designed steel joint hardware
   const [showRebar, setShowRebar] = useState(false)        // the designed bar cages, in 3D
@@ -1767,6 +1778,35 @@ export default function ModelSpace() {
     }
   }, [model, govRes, showMemStress, memStressKey, nodePos])
 
+  /**
+   * The deformed shape of the governing combo.
+   *
+   * THE BRIDGE IS REBUILT WITH THE ANALYSIS'S OWN OPTIONS — cracked sections,
+   * shear deformation, top-of-steel — the three the solver worker passed. The
+   * curve between two nodes is ∬M/EI pinned to the nodal displacements, so it
+   * has to use the EI those displacements were solved with; a mismatch would
+   * draw a member that does not meet its own joints.
+   */
+  const deformInfo = useMemo(() => {
+    if (!showDeformed || !model || !govRes) return null
+    let br
+    try {
+      br = modelToFrame3D(model, { crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel })
+    } catch { return null }
+    const inp = deformedInputs(model, govRes.d, govRes.members, br)
+    const peak = maxDisplacement(inp.fields)
+    const amp = autoScale(peak.value, inp.diagonal) * defMult
+    const geo = deformedGeometry(inp.members, inp.slabs, defKey, amp)
+    if (!geo) return null
+    const seg: number[] = []
+    for (const m of model.members) {
+      const a = nodePos.get(m.i), b = nodePos.get(m.j)
+      if (a && b) seg.push(a.x, a.y, a.z, b.x, b.y, b.z)
+    }
+    return { geo, peak, amp, ghost: new Float32Array(seg) }
+  }, [showDeformed, model, govRes, cracked, shearDef, beamTopSteel, defKey, defMult, nodePos])
+  const deformActive = !!deformInfo
+
   // Members switched OFF by the active set of the GOVERNING combo. Each combo
   // settles on its own set, so this is combo-specific — the table below the
   // viewport lists every combo.
@@ -2096,7 +2136,7 @@ export default function ModelSpace() {
                 <FitView box={modelBox} dir={[1, 0.8, 1]} />
                 <gridHelper args={[40, 40, '#e2e8f0', '#eef2f7']} />
                 <GridBubbles3D model={model} />
-                {model.members.map((m) => {
+                {!deformActive && model.members.map((m) => {
                   const a = nodePos.get(m.i), bb = nodePos.get(m.j)
                   if (!a || !bb) return null
                   const sec = sectionFor(m.id)
@@ -2183,7 +2223,7 @@ export default function ModelSpace() {
                     </group>
                   )
                 })}
-                {model.plates.map((p) => {
+                {!deformActive && model.plates.map((p) => {
                   const cs = p.corners.map((c) => nodePos.get(c))
                   if (cs.some((c) => !c)) return null
                   return <Slab3D key={p.id} corners={cs as THREE.Vector3[]} shell={model.shellElements} deck={p.deck}
@@ -2245,16 +2285,24 @@ export default function ModelSpace() {
                 {/* The joints. Without them two collinear beams read as one
                     line, and the count of elements is not visible at all. */}
                 {skeleton && <Nodes3D nodePos={nodePos} />}
-                {showLoads && (
+                {/* Loads sit on the UNDEFORMED geometry; over a deformed shape
+                    their plane reads as a stray flat slab, so they step aside. */}
+                {showLoads && !deformActive && (
                   <Loads3D model={model} nodePos={nodePos}
                     loads={caseLoads(model, shownCase)}
                     nodeScale={lateralPeak > 0 ? lateralPeak : undefined} />
                 )}
-                {showStress && shellStress && (
+                {deformInfo && (
+                  <>
+                    <UndeformedGhost segments={deformInfo.ghost} />
+                    <DeformedShape3D geo={deformInfo.geo} bands={bands} />
+                  </>
+                )}
+                {!deformActive && showStress && shellStress && (
                   <ShellStress3D nodes={shellStress.nodes} elems={shellStress.elems}
                     stresses={shellStress.stresses} contourKey={stressKey} bands={bands} />
                 )}
-                {memStressInfo && (
+                {!deformActive && memStressInfo && (
                   <MemberStress3D members={memStressInfo.members}
                     contourKey={memStressKey} domain={memStressInfo.domain} bands={bands}
                     blendJoints={memBlend} />
@@ -4862,6 +4910,69 @@ export default function ModelSpace() {
                     </p>
                   </div>
                 )}
+                {/* DEFORMED SHAPE — displacement contour. Continuous through
+                    every joint by nature (a column top moves with the beam it
+                    carries), so unlike stress it needs no averaging. */}
+                <div>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={showDeformed} disabled={!govRes}
+                      onChange={(e) => setShowDeformed(e.target.checked)} />
+                    Show deformed shape (displacement contour)
+                  </label>
+                  {!govRes ? (
+                    <p className="mt-1 text-[11px] leading-snug text-muted">
+                      Analyse the model first — the shape is the governing combo&apos;s own
+                      displacements.
+                    </p>
+                  ) : showDeformed && deformInfo && (() => {
+                    const { geo, peak, amp } = deformInfo
+                    const d = geo.domain
+                    const ticks = rampTicks(d, 5)
+                    return (
+                      <div className="mt-1.5">
+                        <select value={defKey} aria-label="Displacement quantity"
+                          onChange={(e) => setDefKey(e.target.value as DisplacementKey)}
+                          className="w-full rounded border border-field-line bg-field px-2 py-1 text-xs text-ink">
+                          {DISPLACEMENT_KEYS.map(({ key, label }) => (
+                            <option key={key} value={key}>{label} (mm)</option>
+                          ))}
+                        </select>
+                        {d.flat ? (
+                          <p className="mt-1.5 rounded border border-hairline bg-sheet-2 px-2 py-1.5 text-[11px] leading-snug text-muted">
+                            No variation in this component to contour.
+                          </p>
+                        ) : (<>
+                          <div className="mt-1.5 flex h-3 overflow-hidden rounded-sm">
+                            {rampSwatches(24, d.signed, bands).map((c, i) => (
+                              <div key={i} className="flex-1" style={{ background: c }} />
+                            ))}
+                          </div>
+                          <div className="mt-0.5 flex justify-between font-mono text-[9.5px] tabular-nums text-faint">
+                            {ticks.map((t, i) => <span key={i}>{t}</span>)}
+                          </div>
+                        </>)}
+                        <p className="mt-1 text-[11px] leading-snug text-muted">
+                          Max |U| <span className="font-mono">{(peak.value * 1000).toFixed(2)}</span> mm
+                          {peak.id && <> on <span className="font-mono">{peak.id}</span></>} — drawn
+                          ×<span className="font-mono tabular-nums">{amp >= 10 ? amp.toFixed(0) : amp.toFixed(1)}</span>.
+                        </p>
+                        <label className="mt-1.5 flex items-center gap-2 text-[11px] text-muted">
+                          <span className="whitespace-nowrap">Exaggeration</span>
+                          <input type="range" min={0.25} max={4} step={0.25} value={defMult}
+                            aria-label="Deformation exaggeration"
+                            onChange={(e) => setDefMult(Number(e.target.value))} className="flex-1" />
+                          <span className="w-9 text-right font-mono tabular-nums">×{defMult}</span>
+                        </label>
+                        <p className="mt-1 text-[11px] leading-snug text-muted">
+                          {gov?.combo.name ?? '—'}. Members bend by their own moment diagram over
+                          the analysed EI, pinned to the solved joint displacements; slabs follow
+                          their edge beams and carry no plate bending of their own. Colour reads the
+                          true displacement at any exaggeration.
+                        </p>
+                      </div>
+                    )
+                  })()}
+                </div>
                 {/* PLATE STRESS CONTOUR.
                     The control stays visible with nothing to show and says so,
                     rather than appearing only once a solve exists — a checkbox
