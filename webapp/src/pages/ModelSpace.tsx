@@ -22,6 +22,7 @@ import { placeStair } from '../engine/stairPlacement'
 import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import type { CageKind } from '../engine/rebarModel'
 import { effectiveViewMode, ghostConcrete, surfaceStyleFor, type ViewMode } from '../components/modelSpace/viewMode'
+import { CONTOUR_OPTIONS, effectiveContour, type ContourContext, type ContourView } from '../components/modelSpace/contourView'
 import { ProjectsPanel } from '../components/ProjectsPanel'
 import { AUTOSAVE_KEY, INPUTS_KEY, DESIGN_KEY, readSessionDesign, writeSessionDesign, readOpenId } from '../lib/modelSpaceSession'
 import { emptyHistory, recordHistory, undoHistory, redoHistory, isTypingTarget, type History } from '../lib/history'
@@ -318,9 +319,12 @@ export default function ModelSpace() {
   // what the drift check, the design envelope and the report are based on, and
   // a picture you clicked to look at must not quietly change any of them.
   const [previewCase, setPreviewCase] = useState<string | null>(null)
-  // The recovered stress field, painted on the mesh it came from. Default ON
-  // once a solve exists: the reason to run it is to look at it.
-  const [showStress, setShowStress] = useState(true)
+  // ONE CONTOUR AT A TIME. Member stress, plate stress and the deformed
+  // shape were three checkboxes, and nothing stopped all three being on: the
+  // deformed shape then REPLACED the model while two stress fields were still
+  // painted on where it had been, each with its own colour bar in the panel,
+  // on three different scales. They are alternatives, so they are a radio.
+  const [contour, setContour] = useState<ContourView>('none')
   // Mx, NOT von Mises. A flat shell's membrane and bending actions are
   // decoupled (CST + DKT), so an ordinary gravity slab — transverse pressure
   // only — has IDENTICALLY ZERO membrane stress and von Mises is 0 everywhere.
@@ -328,11 +332,6 @@ export default function ModelSpace() {
   // My peak 8.39. Opening on von Mises means the feature opens showing nothing
   // on the commonest case it exists for.
   const [stressKey, setStressKey] = useState<StressKey>('Mx')
-  // BEAM/COLUMN stress, the frame counterpart of the plate contour above.
-  // Default OFF: the plate contour needs an explicit stress recovery to exist
-  // at all, but this one would appear the moment anyone analyses, on top of a
-  // model they were looking at for another reason.
-  const [showMemStress, setShowMemStress] = useState(false)
 
   // ONE band count for BOTH contours. Two settings would let the plate and the
   // member plot be drawn at different resolutions in the same picture, and a
@@ -345,10 +344,6 @@ export default function ModelSpace() {
   // reads as a rendering fault. The blend is confined to the joint panel and
   // the toggle says so — see lib/memberContour § Joint blending.
   const [memBlend, setMemBlend] = useState(true)
-  // DEFORMED SHAPE: the structure drawn displaced, coloured by displacement.
-  // Off by default for the same reason the stress contours are — it replaces
-  // the model the user was looking at.
-  const [showDeformed, setShowDeformed] = useState(false)
   const [defKey, setDefKey] = useState<DisplacementKey>('total')
   /** Multiplier on the automatic amplification (1 = the largest displacement
    *  drawn at 6% of the model's size). */
@@ -1486,6 +1481,13 @@ export default function ModelSpace() {
     : null
   const dispRes = dispCombo?.result ?? null
   const dispComboName = dispCombo?.combo.name ?? null
+  // What the contour radio can offer right now, and the one it paints: the
+  // chosen contour while it has data, none while it does not.
+  const contourCtx: ContourContext = { analysed: !!dispRes, shells: !!model?.shellElements && (model?.plates.length ?? 0) > 0 }
+  const shownContour = effectiveContour(contour, contourCtx)
+  const showStress = shownContour === 'plate'
+  const showMemStress = shownContour === 'member'
+  const showDeformed = shownContour === 'displacement'
 
 
   /**
@@ -1499,14 +1501,15 @@ export default function ModelSpace() {
    */
   const anaBridge = useMemo(() => {
     if (!model) return null
-    const wantShells = shellOn && !!model.shellElements && model.plates.length > 0
+    // the plate contour recovers the stresses itself: choosing it is enough
+    const wantShells = (shellOn || showStress) && !!model.shellElements && model.plates.length > 0
     if (!wantShells && !showDeformed) return null
     try {
       return modelToFrame3D(model, { crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel })
     } catch {
       return null
     }
-  }, [model, shellOn, showDeformed, cracked, shearDef, beamTopSteel])
+  }, [model, shellOn, showStress, showDeformed, cracked, shearDef, beamTopSteel])
 
   // Shell stress contour engine. The analysis solves the slab mesh whenever
   // the model's shells are on (the design-solve switch only decides whether
@@ -1525,7 +1528,7 @@ export default function ModelSpace() {
   }, [dispCombo])
 
   const shellOut = useMemo<{ ok: true; nodes: ShellNode[]; elems: ShellElem[]; stresses: ElementStress[]; caseName: string; source: 'frame' | 'standalone' } | { ok: false; caseName: string } | null>(() => {
-    if (!shellOn || !model || !model.shellElements || model.plates.length === 0) return null
+    if (!(shellOn || showStress) || !model || !model.shellElements || model.plates.length === 0) return null
     const caseName = dispComboName ?? 'service 1.0D + 1.0L'
     const br = anaBridge
     if (br && br.shells.length > 0 && dispRes && dispRes.d.length === 6 * br.nodes.length) {
@@ -1539,7 +1542,7 @@ export default function ModelSpace() {
     const solved = solveModelShells(model, { subdiv: model.shellSubdiv ?? 4, factors: shellFactors })
     if (!solved) return { ok: false, caseName }
     return { ok: true, nodes: solved.nodes, elems: solved.elems, stresses: solved.stresses, caseName, source: 'standalone' }
-  }, [shellOn, model, anaBridge, dispRes, shellFactors, dispComboName])
+  }, [shellOn, showStress, model, anaBridge, dispRes, shellFactors, dispComboName])
 
   // The recovered field as the 3D contour layer and the Display controls read
   // it — same recovery, same displayed case, no second engine.
@@ -1747,7 +1750,7 @@ export default function ModelSpace() {
    * Three things are resolved here rather than in the drawing code, because
    * all three are places the picture can quietly stop matching the analysis:
    *
-   *  • the FORCES are `govRes.members` — the very objects `MemberForceDiagram3D`
+   *  • the FORCES are `dispRes.members` — the very objects `MemberForceDiagram3D`
    *    draws, not a recomputation, so the contour and the diagram cannot
    *    disagree about what a member carries;
    *  • the LOCAL-AXIS ROTATION is `defaultAxisRotation`, the bridge's own
@@ -1759,8 +1762,8 @@ export default function ModelSpace() {
    *    would float half a depth above the beam.
    */
   const memStressInfo = useMemo(() => {
-    if (!model || !govRes || !showMemStress) return null
-    const byId = new Map<string, F3MemberResult>(govRes.members.map((m) => [m.id, m]))
+    if (!model || !dispRes || !showMemStress) return null
+    const byId = new Map<string, F3MemberResult>(dispRes.members.map((m) => [m.id, m]))
     const secById = new Map(model.sections.map((sx) => [sx.id, sx]))
     const cache = new Map<string, StressSection>()
     const members: ContourMember[] = []
@@ -1791,10 +1794,11 @@ export default function ModelSpace() {
       peak: memberPeak(members, memStressKey),
       approximated,
     }
-  }, [model, govRes, showMemStress, memStressKey, nodePos])
+  }, [model, dispRes, showMemStress, memStressKey, nodePos])
 
   /**
-   * The deformed shape of the governing combo.
+   * The deformed shape of the DISPLAYED combo (the Load case selector's),
+   * like the force diagrams and every other contour.
    *
    * The bridge is `anaBridge`, built with the analysis's own options: the
    * curve between two nodes is ∬M/EI pinned to the nodal displacements, so it
@@ -1802,9 +1806,9 @@ export default function ModelSpace() {
    * draw a member that does not meet its own joints.
    */
   const deformInfo = useMemo(() => {
-    if (!showDeformed || !model || !govRes || !anaBridge) return null
+    if (!showDeformed || !model || !dispRes || !anaBridge) return null
     const br = anaBridge
-    const inp = deformedInputs(model, govRes.d, govRes.members, br)
+    const inp = deformedInputs(model, dispRes.d, dispRes.members, br)
     const peak = maxDisplacement(inp.fields)
     const amp = autoScale(peak.value, inp.diagonal) * defMult
     const geo = deformedGeometry(inp.members, inp.slabs, defKey, amp)
@@ -1815,7 +1819,7 @@ export default function ModelSpace() {
       if (a && b) seg.push(a.x, a.y, a.z, b.x, b.y, b.z)
     }
     return { geo, peak, amp, ghost: new Float32Array(seg) }
-  }, [showDeformed, model, govRes, anaBridge, defKey, defMult, nodePos])
+  }, [showDeformed, model, dispRes, anaBridge, defKey, defMult, nodePos])
   const deformActive = !!deformInfo
 
   // Members switched OFF by the active set of the GOVERNING combo. Each combo
@@ -3823,10 +3827,6 @@ export default function ModelSpace() {
                   <span>Beams framed at top of steel <span className="text-muted">(node = top of beam; matches the drawings, moves the column moments)</span></span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={allAround} onChange={(e) => setAllAround(e.target.checked)} />
-                  <span>Column bars on all four faces</span>
-                </label>
-                <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" disabled={!model} checked={model?.diaphragm ?? false}
                     onChange={(e) => model && save({ ...model, diaphragm: e.target.checked })} />
                   <span>Rigid floor diaphragm</span>
@@ -3864,40 +3864,16 @@ export default function ModelSpace() {
                           : '2 triangles per panel on its corner nodes — no node between the supports, so the slab cannot deflect'}
                       </span>
                     </label>
-                    <label className="col-span-full flex items-center gap-2 pl-6 text-sm">
-                      <input type="checkbox" checked={designShells}
-                        onChange={(e) => setDesignShells(e.target.checked)} />
-                      <span>Use the slab mesh in the DESIGN solve too</span>
-                    </label>
-                    <p className="col-span-full pl-6 text-[11px] text-muted">
-                      {designShells
-                        ? 'Every beam and column result now comes from a frame with slab stiffness in it, instead of tributary line loads — measured −15% to +18% on beam design moments. The design mesh is at least 2×2 whatever is set above: two triangles deliver the panel\u2019s whole load to its corner columns and design the beams 80–90% under-loaded.'
-                        : 'Off: the design keeps the tributary load model, so the mesh changes stress plots and the analysis only. Turning it on moves every published beam and column result.'}
-                    </p>
                   </>
                 )}
-                <label className="col-span-full flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={tryBars} onChange={(e) => setTryBars(e.target.checked)} />
-                  <span>Try alternative bar sizes</span>
-                </label>
+                {/* Design-only switches (bar layout, bar-size search, the slab mesh in
+                    the DESIGN solve) live in the Design tab: here they read as analysis
+                    options, and pressing Analyze ignored every one of them. */}
                 <p className="col-span-full text-[11px] text-muted">
                   §203.3.1 live-load factor f₁ = <b>{fLive.toFixed(1)}</b>
                   {fLive === 1 ? (assembly ? ' (assembly/garage)' : ' (Lo > 4.8 kPa)') : ' (ordinary occupancy)'}.
                   {pDelta ? ' Frame solved with the geometric-stiffness P-Δ iteration.' : ' First-order (linear) frame solve.'}
                 </p>
-                {/* Slab load path — the one place this frame solve is known to sit on the
-                    unconservative side, measured against a meshed-slab reference. Stated on the
-                    card rather than only in the ⓘ, because it changes what a girder result means. */}
-                {!designShells && (
-                <p className="col-span-full rounded-md border border-warn-line bg-warn-tint px-2.5 py-2 text-[11px] leading-relaxed text-warn">
-                  <b>Slab loads reach beams by 45° tributary area</b>, not a slab mesh. Cross-checked against
-                  STAAD.Pro with the slab meshed, every input matched (2×1 bay, 2 storeys): total reaction agrees
-                  to <b>0.001%</b> and joint deflections to <b>0.2%</b>, but <b>interior girders come out 22–29%
-                  low</b> (edge girders 10–19%) and <b>column moments 25–49% low</b> — a continuous slab carries
-                  moment into the girders and columns that a tributary line load cannot. Long-span beams are
-                  7–11% conservative. Check interior girders and column moments separately.
-                </p>
-                )}
                 <div className="col-span-full">
                   <button type="button" onClick={analyze} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'analyze' ? '⏳ Analyzing…' : '▶ Analyze (3D FEM)'}
@@ -3946,7 +3922,14 @@ export default function ModelSpace() {
                     it is the same mesh the analysis solves.
                   </p>
                   <div className="col-span-full flex flex-wrap gap-2">
-                    <button type="button" onClick={() => setShellOn((v) => !v)} disabled={!model || !!busy}
+                    <button type="button" disabled={!model || !!busy}
+                      onClick={() => {
+                        // the table here and the contour on the model are one
+                        // feature: on shows both, off clears the contour it set
+                        const on = !shellOn
+                        setShellOn(on)
+                        setContour(on ? 'plate' : contour === 'plate' ? 'none' : contour)
+                      }}
                       aria-pressed={shellOn}
                       className={shellOn ? `${btn} ring-2 ring-brand/40` : btn}>
                       {shellOn ? '⬡ Hide shell stresses' : '⬡ Show shell stresses'}
@@ -4677,6 +4660,46 @@ export default function ModelSpace() {
                   Click any schedule row for its step-by-step solution and plan/elevation drawings.
                 </p>
               </Sec>
+              <Sec title="Design options" hint="used by Design & Optimize">
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={allAround} onChange={(e) => setAllAround(e.target.checked)} />
+                  <span>Column bars on all four faces</span>
+                </label>
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={tryBars} onChange={(e) => setTryBars(e.target.checked)} />
+                  <span>Try alternative bar sizes</span>
+                </label>
+                {model?.shellElements ? (<>
+                    <label className="col-span-full flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={designShells}
+                        onChange={(e) => setDesignShells(e.target.checked)} />
+                      <span>Design with the slab mesh (not tributary line loads)</span>
+                    </label>
+                    <p className="col-span-full text-[11px] text-muted">
+                      {designShells
+                        ? 'Every beam and column result now comes from a frame with slab stiffness in it, instead of tributary line loads — measured −15% to +18% on beam design moments. The design mesh is at least 2×2 whatever the Analysis tab\u2019s subdivision: two triangles deliver the panel\u2019s whole load to its corner columns and design the beams 80–90% under-loaded.'
+                        : 'Off: the design keeps the tributary load model, so the mesh changes the analysis and its contours only. Turning it on moves every published beam and column result.'}
+                    </p>
+                </>) : (
+                  <p className="col-span-full text-[11px] text-muted">
+                    Turn on shell elements in the Analysis tab to design with the slab mesh
+                    instead of tributary line loads.
+                  </p>
+                )}
+                {/* Slab load path — the one place this frame solve is known to sit on the
+                    unconservative side, measured against a meshed-slab reference. Stated on the
+                    card rather than only in the ⓘ, because it changes what a girder result means. */}
+                {!(designShells && model?.shellElements) && (
+                <p className="col-span-full rounded-md border border-warn-line bg-warn-tint px-2.5 py-2 text-[11px] leading-relaxed text-warn">
+                  <b>The design takes slab loads to the beams by 45° tributary area</b>, not a slab mesh. Cross-checked against
+                  STAAD.Pro with the slab meshed, every input matched (2×1 bay, 2 storeys): total reaction agrees
+                  to <b>0.001%</b> and joint deflections to <b>0.2%</b>, but <b>interior girders come out 22–29%
+                  low</b> (edge girders 10–19%) and <b>column moments 25–49% low</b> — a continuous slab carries
+                  moment into the girders and columns that a tributary line load cannot. Long-span beams are
+                  7–11% conservative. Check interior girders and column moments separately.
+                </p>
+                )}
+              </Sec>
             </div>
           )}
 
@@ -4906,7 +4929,37 @@ export default function ModelSpace() {
                     40% of peak from 55% anywhere on the model, which is what
                     "the contours are not continuous" turns out to mean. Every
                     FEA post-processor bands for the same reason. */}
-                {(shellStress || govRes) && (
+                {/* ONE CONTOUR — see components/modelSpace/contourView. A blocked
+                    option stays listed, disabled, with the reason under it: an
+                    option that vanishes teaches nothing about how to get it. */}
+                <fieldset>
+                  <legend className="mb-1 font-medium">Contour</legend>
+                  <div role="radiogroup" aria-label="Contour" className="grid grid-cols-2 gap-1">
+                    {CONTOUR_OPTIONS.map((o) => {
+                      const why = o.blocked(contourCtx)
+                      const on = contour === o.key
+                      return (
+                        <label key={o.key} title={why ?? undefined}
+                          className={`flex cursor-pointer items-center gap-1.5 rounded border px-2 py-1 text-[11.5px] ${
+                            why ? 'cursor-not-allowed border-hairline text-faint'
+                              : on ? 'border-brand bg-brand-tint font-semibold text-brand' : 'border-hairline text-ink hover:border-brand-hover'}`}>
+                          <input type="radio" name="contour" value={o.key} checked={on} disabled={!!why}
+                            onChange={() => setContour(o.key)} />
+                          {o.label}
+                        </label>
+                      )
+                    })}
+                  </div>
+                  {(() => {
+                    // the reason for the option the user most likely wants
+                    // and cannot have — or for the one they chose earlier
+                    const chosen = CONTOUR_OPTIONS.find((o) => o.key === contour)
+                    const why = chosen?.blocked(contourCtx)
+                      ?? (!contourCtx.analysed ? CONTOUR_OPTIONS.find((o) => o.key === 'member')!.blocked(contourCtx) : null)
+                    return why && <p className="mt-1 text-[11px] leading-snug text-muted">{why}</p>
+                  })()}
+                </fieldset>
+                {shownContour !== 'none' && (
                   <div>
                     <p className="text-[11px] font-medium text-ink">Contour bands</p>
                     <div className="mt-1 flex gap-1">
@@ -4932,17 +4985,7 @@ export default function ModelSpace() {
                     every joint by nature (a column top moves with the beam it
                     carries), so unlike stress it needs no averaging. */}
                 <div>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={showDeformed} disabled={!govRes}
-                      onChange={(e) => setShowDeformed(e.target.checked)} />
-                    Show deformed shape (displacement contour)
-                  </label>
-                  {!govRes ? (
-                    <p className="mt-1 text-[11px] leading-snug text-muted">
-                      Analyse the model first — the shape is the governing combo&apos;s own
-                      displacements.
-                    </p>
-                  ) : showDeformed && deformInfo && (() => {
+                  {showDeformed && deformInfo && (() => {
                     const { geo, peak, amp } = deformInfo
                     const d = geo.domain
                     const ticks = rampTicks(d, 5)
@@ -4982,7 +5025,7 @@ export default function ModelSpace() {
                           <span className="w-9 text-right font-mono tabular-nums">×{defMult}</span>
                         </label>
                         <p className="mt-1 text-[11px] leading-snug text-muted">
-                          {gov?.combo.name ?? '—'}. Members bend by their own moment diagram over
+                          {dispComboName ?? '—'}. Members bend by their own moment diagram over
                           the analysed EI, pinned to the solved joint displacements; slabs follow
                           their edge beams and carry no plate bending of their own. Colour reads the
                           true displacement at any exaggeration.
@@ -4997,17 +5040,13 @@ export default function ModelSpace() {
                     that materialises is a feature you have to already know
                     about to find. */}
                 <div>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={showStress} disabled={!shellStress}
-                      onChange={(e) => setShowStress(e.target.checked)} />
-                    Show plate stresses on the model
-                  </label>
-                  {!shellStress ? (
-                    <p className="mt-1 text-[11px] leading-snug text-muted">
-                      Nothing recovered yet — open <span className="font-medium">Show shell
-                      stresses</span> in the Analysis tab. Needs shell elements on.
+                  {showStress && !shellStress && shellOut && !shellOut.ok && (
+                    <p className="mt-1 text-[11px] leading-snug text-warn">
+                      The slab mesh cannot be solved on its own for {shellOut.caseName} — analyse
+                      the model, and the contour reads the frame solve instead.
                     </p>
-                  ) : showStress && (() => {
+                  )}
+                  {showStress && shellStress && (() => {
                     const { domain, peak } = contourData(
                       shellStress.nodes, shellStress.elems, shellStress.stresses, stressKey)
                     const ticks = rampTicks(domain, 5)
@@ -5084,18 +5123,7 @@ export default function ModelSpace() {
                     consumes `govRes.members` itself — expressed as stress on
                     the section, so the two views cannot disagree. */}
                 <div>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={showMemStress} disabled={!govRes}
-                      onChange={(e) => setShowMemStress(e.target.checked)} />
-                    Show beam / column stresses on the model
-                  </label>
-                  {!govRes ? (
-                    <p className="mt-1 text-[11px] leading-snug text-muted">
-                      Analyse the model first — the stresses are the governing combo&apos;s own
-                      member forces put on the section, so there is nothing to draw until
-                      those exist.
-                    </p>
-                  ) : showMemStress && memStressInfo && (() => {
+                  {showMemStress && memStressInfo && (() => {
                     const { domain, peak, members, approximated } = memStressInfo
                     const ticks = rampTicks(domain, 5)
                     const meta = MEMBER_STRESS_KEYS.find((k) => k.key === memStressKey)!
@@ -5149,8 +5177,8 @@ export default function ModelSpace() {
                           )}
                         </>)}
                         <p className="mt-1 text-[11px] leading-snug text-muted">
-                          {members.length} member{members.length === 1 ? '' : 's'} from the governing
-                          combo ({gov?.combo.name ?? '—'}) — the same forces the diagrams draw, on the
+                          {members.length} member{members.length === 1 ? '' : 's'} from{' '}
+                          {dispComboName ?? '—'} — the same forces the diagrams draw, on the
                           GROSS section. Cracked-section factors change how force distributes, not the
                           section that carries it.
                         </p>
@@ -5200,7 +5228,7 @@ export default function ModelSpace() {
                     ))}
                   </select>
                   <p className="mt-1 text-[11px] text-faint">
-                    Drives the member stress tint, the force diagrams and the shell contour together.
+                    Drives the contour, the deformed shape and the force diagrams together.
                   </p>
                 </div>
                 <div className="border-t border-hairline-2 pt-2.5">
