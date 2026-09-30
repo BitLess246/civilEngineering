@@ -3892,7 +3892,7 @@ export default function ModelSpace() {
                   <Row label="Extremes" value={`M ${f1(govRes.Mmax)} kN·m`}
                     sub={`V ${f1(govRes.Vmax)} · N ${f1(govRes.Nmax)} kN`} />
                   {orphans > 0 && <Row alert label="⚠ Orphan edges" value={`${orphans}`} sub="slab edges with no member" />}
-                  <p className="mt-1 text-[11px] text-muted">Turn on “Show beam / column stresses on the model” in the Display tab for the stress contour. Click a member for its diagrams.</p>
+                  <p className="mt-1 text-[11px] text-muted">Pick a Contour in the Display tab — beam / column stress, plate stress or displacement. Click a member for its diagrams.</p>
                 </Sec>
               )}
 

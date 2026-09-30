@@ -17,8 +17,10 @@ describe('Display tab — one contour at a time', () => {
   it('chooses the contour with a radio group, not three checkboxes', () => {
     expect(display).toMatch(/type="radio" name="contour"/)
     expect(display).toMatch(/CONTOUR_OPTIONS\.map/)
+    // …anywhere on the page: the Analysis tab's hint kept pointing at the old
+    // checkbox after it had gone
     for (const old of ['Show deformed shape', 'Show plate stresses', 'Show beam / column stresses'])
-      expect(display).not.toContain(old)
+      expect(page).not.toContain(old)
     expect(page).not.toMatch(/setShowDeformed|setShowStress|setShowMemStress/)
   })
 

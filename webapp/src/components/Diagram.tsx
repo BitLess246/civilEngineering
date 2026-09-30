@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import { DrawingFrame } from './DrawingFrame'
+import { markerLabelPos, sameValue } from '../lib/diagramLabel'
 
 export interface DiagramProps {
   /** Station coordinates along the footing, m (monotonic increasing). */
@@ -63,13 +64,14 @@ export function Diagram({
   // its subtree). Called as `marker(i, place)`, it is just more JSX inline.
   const marker = (i: number, place: 'above' | 'below') => {
     const x = sx(xs[i]), y = sy(ys[i])
-    const ly = place === 'above' ? y - 9 : y + 15
+    const label = `${fmt(ys[i])}@${xs[i].toFixed(2)}m`
+    const at = markerLabelPos(x, y, place, label, { left: padL, right: W - padR, top: padT, bottom: H - padB })
     return (
       <g>
         <path d={`M${x} ${y - 4} L${x + 4} ${y} L${x} ${y + 4} L${x - 4} ${y} Z`} fill={color} />
-        <text x={x} y={ly} fontSize={9.5} fill={color} fontWeight={700} textAnchor="middle"
+        <text x={at.x} y={at.y} fontSize={9.5} fill={color} fontWeight={700} textAnchor={at.anchor}
           paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>
-          {fmt(ys[i])}@{xs[i].toFixed(2)}m
+          {label}
         </text>
       </g>
     )
@@ -112,7 +114,8 @@ export function Diagram({
         <polyline points={linePts} fill="none" stroke={color} strokeWidth={1.8} />
 
         {markExtrema && Math.abs(ys[iMax]) > 1e-6 && marker(iMax, 'above')}
-        {markExtrema && Math.abs(ys[iMin]) > 1e-6 && marker(iMin, 'below')}
+        {/* a flat diagram (a uniform load) has one value, not a max and a min */}
+        {markExtrema && Math.abs(ys[iMin]) > 1e-6 && !sameValue(ys[iMin], ys[iMax]) && marker(iMin, 'below')}
       </svg>
     </DrawingFrame>
   )

@@ -2,6 +2,7 @@ import { useMemo, type JSX } from 'react'
 import type { ModelActivity } from '../engine/modelSchedule'
 import type { CpmActivity } from '../engine/schedule/cpm'
 import { isBindingLink } from '../engine/schedule/cpm'
+import { cpmNodeLabel } from '../lib/cpmLabel'
 
 const BOX_W = 148, BOX_H = 66, COL_W = 214, ROW_H = 108, PAD = 18
 
@@ -96,12 +97,17 @@ export function CriticalPathDiagram({ activities, cpm, critical, onEditDuration 
                 <div className="flex items-center justify-center bg-ok">
                   <input type="number" min={1} value={a.duration}
                     onChange={(e) => onEditDuration(a.id, Math.max(1, Math.round(+e.target.value || 1)))}
-                    className="h-full w-full bg-transparent text-center text-[11px] font-bold text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
+                    // `!` because index.css styles every text/number input UNLAYERED —
+                    // a white field with 0.5 rem × 0.75 rem padding — which beats
+                    // the plain utilities: the duration was white text on a white
+                    // field, pushed out of a 22 px cell. Nobody could read DUR.
+                    className="h-full w-full !rounded-none !border-0 !bg-transparent !p-0 text-center text-[11px] font-bold text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
                 </div>
                 {cell(c.ef, 'bg-[#a5d76e] text-[#1e3a0f]')}
               </div>
               <div className="flex h-[22px] items-center justify-center truncate px-1 text-[10px] font-bold text-ink-2">
-                {a.id} · {a.name.replace(/^(Floor|Columns|Footings|Level) /, '').split(' — ')[0].slice(0, 16)}
+                {/* ~24 bold 10 px characters fill the box; the id takes its share */}
+                {a.id} · {cpmNodeLabel(a.name, 21 - a.id.length)}
               </div>
               <div className="grid h-[22px] grid-cols-3 divide-x divide-white overflow-hidden rounded-b">
                 {cell(c.ls, 'bg-[#57cbbf] text-[#0f3b36]')}

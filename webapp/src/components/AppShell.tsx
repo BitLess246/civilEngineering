@@ -505,7 +505,7 @@ export function ThemeSwitch() {
       <span className="sr-only">Theme</span>
       <select value={theme} onChange={(e) => setTheme(e.target.value as typeof theme)}
         aria-label="Theme"
-        className="h-7 rounded-md border border-field-line bg-field px-1.5 text-[11px] text-muted hover:border-brand-hover hover:text-brand">
+        className="h-7 rounded-md border border-field-line bg-field !py-0 !px-1.5 text-[11px] text-muted hover:border-brand-hover hover:text-brand">
         {THEMES.map((t) => (
           <option key={t.id} value={t.id}>{t.name}</option>
         ))}
