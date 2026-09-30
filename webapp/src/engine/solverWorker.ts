@@ -7,22 +7,17 @@
 // "computing…" state). One request → one response, matched by `id`.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel } from './model'
-import { modelToFrame3D } from './modelBridge'
-import { analyzeFrame3D, solveFrame3D, applyF3Combo, type F3AnalyzeOpts } from './frame3d'
-import { analyzeActiveSet, solveActiveSet, axialModes } from './axialOnly'
-import { splitAxialModes, stitchAnalysis } from './memberSplit'
+import type { F3AnalyzeOpts } from './frame3d'
+import { runModelAnalysis, type DriftReq } from './modelAnalysis'
 import { modalAnalysis, type MassModel } from './modal'
 import { runPushoverModel, type PushoverModelOpts } from './pushoverModel'
 import { runBiaxialPushover, type BiaxialPushoverOpts } from './biaxialFrameModel'
 import { runTimeHistoryModel, makeGroundMotion, type TimeHistoryModelOpts, type GroundMotionSpec } from './timeHistoryModel'
 import { runNonlinearModel, type NonlinearModelOpts } from './nonlinearModel'
 import { runNonlinearFrameModel } from './nonlinearFrameModel'
-import { driftCheck, stabilityCheck } from './seismic'
-import { assessIrregularities } from './irregularity'
 import { designStructureAsync, optimizeStructureAsync, selectBarDiameters, type SoilOptions, type FootingPlan, type AnalyzeOptions } from './pipeline'
 import type { SolveProgress } from './progress'
 
-type DriftReq = { hasSeis: boolean; T: number; R: number; axis: 'x' | 'z'; pDelta: boolean; Z?: number }
 export type SolverRequest =
   | { id: number; kind: 'analyze'; model: StructuralModel; opts: F3AnalyzeOpts; drift: DriftReq; crackedSections?: boolean; shearDeformation?: boolean; beamTopOfSteel?: boolean }
   | { id: number; kind: 'design'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean }
@@ -46,60 +41,10 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
   const onProgress = (p: SolveProgress) => ctx.postMessage({ id: msg.id, progress: p })
   try {
     if (msg.kind === 'analyze') {
-      const br = modelToFrame3D(msg.model, { crackedSections: msg.crackedSections, shearDeformation: msg.shearDeformation, beamTopOfSteel: msg.beamTopOfSteel })
-      // Tension/compression-only members break superposition: the shared-LU
-      // combo sweep is only valid while every combo sees the same structure.
-      // When any member is limited, each combo gets its own active set instead.
-      // A beam carrying mesh nodes was cut into collinear parts by the bridge,
-      // so the solver sees `B1#0..#k` where the model has `B1`. The axial modes
-      // must follow the cut — a tension-only brace stays tension-only along its
-      // whole length — and the results must be put back on the parent id before
-      // anything downstream reads them.
-      const modes = splitAxialModes(axialModes(msg.model.members), br.memberSplits)
-      const raw = modes.size
-        ? analyzeActiveSet(br.nodes, br.members, br.supports, br.loads,
-            modes, { ...msg.opts, diaphragms: br.diaphragmGroups }, onProgress, br.shells)
-        : analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, msg.opts, onProgress, br.diaphragmGroups, br.shells)
-      const analysis = raw ? stitchAnalysis(raw, br.memberSplits) : raw
-      let drift = null
-      let irregularities = null
-      let stability = null
-      if (msg.drift.hasSeis) {
-        onProgress({ phase: 'Storey-drift check' })
-        const eOnly = applyF3Combo(br.loads, { E: 1 })
-        // the E-case gets its own active set too — the braces that carry the
-        // seismic push are exactly the ones a tension-only rule switches off
-        const sol = !eOnly.length ? null
-          : modes.size
-            ? solveActiveSet(br.nodes, br.members, br.supports, eOnly, modes,
-                { pDelta: msg.drift.pDelta, diaphragms: br.diaphragmGroups }, br.shells)?.result ?? null
-            : solveFrame3D(br.nodes, br.members, br.supports, eOnly, { pDelta: msg.drift.pDelta }, br.shells)
-        // Storey drift is a property of the LATERAL SYSTEM. `driftCheck` picks
-        // the largest lateral displacement of any node at a storey elevation,
-        // and mesh nodes sit at exactly those elevations — so a slab's own
-        // in-plane deformation could be reported as the storey's drift. Hand it
-        // the model's nodes only; the prefix is 1:1 with them by construction.
-        const frameNodes = br.nodes.slice(0, br.nodes.length - br.meshNodeCount)
-        drift = sol ? driftCheck(msg.model, frameNodes, sol.d, msg.drift.R, msg.drift.T, msg.drift.axis) : null
-        if (sol) {
-          // applied lateral storey force per level (E-case, run direction) → storey shear
-          const yById = new Map(br.nodes.map((n) => [n.id, n.y]))
-          const fByLevel = new Map<number, number>()
-          for (const ld of eOnly) {
-            if (ld.kind !== 'node') continue
-            const y = yById.get(ld.node); if (y === undefined) continue
-            const F = (msg.drift.axis === 'x' ? ld.Fx : ld.Fz) ?? 0
-            fByLevel.set(y, (fByLevel.get(y) ?? 0) + F)
-          }
-          const storeyForce = [...fByLevel].map(([elevation, F]) => ({ elevation, F }))
-          irregularities = assessIrregularities(msg.model, { nodeOrder: frameNodes, d: sol.d, storeyForce, dir: msg.drift.axis })
-          // §208.5.10.2: whether the code REQUIRES the second-order run the
-          // user may or may not have switched on. Same Δs and the same storey
-          // forces the drift check and the irregularity flags already use.
-          stability = drift ? stabilityCheck(msg.model, drift, storeyForce, { R: msg.drift.R, Z: msg.drift.Z }) : null
-        }
-      }
-      ctx.postMessage({ id: msg.id, ok: true, result: { analysis, orphans: br.orphanEdges.length, drift, irregularities, stability } })
+      // `eCase` stays in the worker: the page never read it, and it is a full
+      // DOF vector to structured-clone back for nothing
+      const { eCase: _eCase, ...result } = runModelAnalysis(msg, onProgress)
+      ctx.postMessage({ id: msg.id, ok: true, result })
     } else if (msg.kind === 'modal') {
       onProgress({ phase: 'Modal analysis' })
       const modal = modalAnalysis(msg.model, msg.nModes, msg.massModel ? { massModel: msg.massModel } : {})

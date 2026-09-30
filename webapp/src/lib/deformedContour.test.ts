@@ -220,8 +220,9 @@ describe('the page wires it the way the analysis ran', () => {
     expect(memo).toContain('const br = anaBridge')
     expect(memo).not.toContain('modelToFrame3D')
     expect(bridge).toMatch(/modelToFrame3D\(model, \{ crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel \}\)/)
-    const worker = import.meta.glob('../engine/solverWorker.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
-    expect(Object.values(worker)[0]).toMatch(/modelToFrame3D\(msg\.model, \{ crackedSections: msg\.crackedSections, shearDeformation: msg\.shearDeformation, beamTopOfSteel: msg\.beamTopOfSteel \}\)/)
+    // the worker's analyze body lives in `modelAnalysis`
+    const worker = import.meta.glob('../engine/modelAnalysis.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+    expect(Object.values(worker)[0]).toMatch(/modelToFrame3D\(req\.model, \{ crackedSections: req\.crackedSections, shearDeformation: req\.shearDeformation, beamTopOfSteel: req\.beamTopOfSteel \}\)/)
   })
   it('reads the governing combo\'s displacements and member results', () => {
     expect(memo).toContain('deformedInputs(model, govRes.d, govRes.members, br)')
