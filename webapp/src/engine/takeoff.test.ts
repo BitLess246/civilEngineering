@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { designStructure } from './pipeline'
-import { estimateTakeoff, costBill, type PriceList } from './takeoff'
+import { estimateTakeoff, costBill, nestCuts, type PriceList } from './takeoff'
 import { sdlItemKPa, sdlTotal, type SdlItem } from './deadLoads'
 import type { RectSection, StructuralModel } from './model'
 import type { StructureDesign } from './pipeline'
@@ -475,5 +475,60 @@ describe('detail steel — opening trimmers and wall curtains', () => {
     expect(t.totalSteelNetKg).toBeGreaterThan(plain.totalSteelNetKg)
     expect(t.totalSteelPurchasedKg).toBeGreaterThan(plain.totalSteelPurchasedKg)
     expect(t.steelByDia.reduce((n, r) => n + r.weightKg, 0)).toBeCloseTo(t.totalSteelPurchasedKg, 6)
+  })
+})
+
+describe('nestCuts — ties cut from 6 m stock', () => {
+  it('equal cuts: ⌈n / ⌊6/ℓ⌋⌉ bars', () => {
+    // 1.24 m stirrups: four to a bar (4.96 m), 1.04 m offcut
+    expect(nestCuts(Array(4).fill(1.24), 6)).toBe(1)
+    expect(nestCuts(Array(5).fill(1.24), 6)).toBe(2)
+    expect(nestCuts(Array(100).fill(1.24), 6)).toBe(25)
+    expect(nestCuts(Array(6).fill(1.0), 6)).toBe(1)          // exactly six to a bar
+  })
+
+  it('mixed lengths share bars: the offcut of a long cut takes a short one', () => {
+    // FFD by hand: 4.5 → bar1 (1.5 left); 2.0 → bar2 (4.0 left); 2.0 → bar2 (2.0 left);
+    // 1.5 → bar1 (0 left); 1.0 → bar2 (1.0 left). Two bars for 11.0 m of cuts.
+    expect(nestCuts([1.0, 2.0, 4.5, 2.0, 1.5], 6)).toBe(2)
+    // never fewer than the steel needs, whatever the order given
+    const cuts = [1.3, 2.7, 0.9, 1.3, 3.1, 0.9, 2.2, 1.3]
+    expect(nestCuts(cuts, 6)).toBeGreaterThanOrEqual(Math.ceil(cuts.reduce((a, b) => a + b) / 6))
+    expect(nestCuts([...cuts].reverse(), 6)).toBe(nestCuts(cuts, 6))
+  })
+
+  it('a cut at or over the stock length takes a bar to itself; none needs none', () => {
+    expect(nestCuts([6, 7.2], 6)).toBe(2)
+    expect(nestCuts([], 6)).toBe(0)
+  })
+})
+
+describe('ties are nested across the whole Ø, not per cut-list row', () => {
+  // Each closed tie in a cage is its own run (count 1). Nesting row by row
+  // bought one 6 m bar per tie: a 2×2-bay 5-storey frame billed 4 973 ⌀10
+  // bars for 6 689 m of ties.
+  const m = makeModel()
+  const t = estimateTakeoff(m, designStructure(m, soil)!, { concreteClass: 'A' })
+
+  it('buys about net/6 bars for the ties, not one per tie', () => {
+    const ties = t.cutList.filter((c) => c.tie)
+    const tieCount = ties.reduce((s, c) => s + c.count, 0)
+    expect(tieCount).toBeGreaterThan(20)
+    let checked = 0
+    for (const dia of new Set(ties.map((c) => c.dia))) {
+      const own = ties.filter((c) => c.dia === dia)
+      const count = own.reduce((s, c) => s + c.count, 0)
+      const tieNet = own.reduce((s, c) => s + c.totalM, 0)
+      // the spliced (continuous) bars of the same Ø, bought at 6 − 0.30 lap usable
+      const contNet = t.cutList.filter((c) => c.dia === dia && !c.tie).reduce((s, c) => s + c.totalM, 0)
+      const spliced = contNet > 0 ? Math.ceil(contNet / 5.7) : 0
+      const row = t.steelByDia.find((d) => d.dia === dia)!
+      const nested = nestCuts(own.flatMap((c) => Array(c.count).fill(c.cutLengthM)), 6)
+      expect(row.pieces6m).toBe(spliced + nested)
+      expect(nested).toBeLessThan(count)                                  // not one bar per tie
+      expect(nested).toBeLessThanOrEqual(Math.ceil((tieNet / 6) * 11 / 9) + 1)   // FFD bound
+      checked++
+    }
+    expect(checked).toBeGreaterThan(0)
   })
 })
