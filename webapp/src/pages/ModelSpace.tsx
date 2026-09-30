@@ -89,7 +89,7 @@ import { ModalPanel } from '../components/ModalPanel'
 import { ResponseSpectrumPanel } from '../components/ResponseSpectrumPanel'
 import { PushoverPanel } from '../components/PushoverPanel'
 import { BiaxialPushoverPanel } from '../components/BiaxialPushoverPanel'
-import type { PushoverModelResult } from '../engine/pushoverModel'
+import { nonlinearNotApplicable, type PushoverModelResult } from '../engine/pushoverModel'
 import type { BiaxialPushoverResult } from '../engine/biaxialFrameModel'
 import { TimeHistoryPanel } from '../components/TimeHistoryPanel'
 import { ShellContourPanel } from '../components/ShellContourPanel'
@@ -585,6 +585,8 @@ export default function ModelSpace() {
   // identical wherever the same feature is refused.
   const nMembers = model?.members.length ?? 0
   const nonlinearGate = gate.solve('pushover', nMembers)
+  // Timber has no plastic hinge — the hinge models refuse it (engine/pushoverModel).
+  const noHinges = useMemo(() => (model ? nonlinearNotApplicable(model) : null), [model])
   const optimizeGate = gate.solve('optimize', nMembers)
   const reportsGate = gate.action('reports')
 
@@ -4363,9 +4365,10 @@ export default function ModelSpace() {
                   lateral tangent — drift is amplified, hinges form earlier, and the collapse base shear drops.
                 </p>
                 <div className="col-span-full">
-                  <button type="button" onClick={runPushover} disabled={!model || !!busy || meshErrors || !nonlinearGate.allowed} className={btn}>
+                  <button type="button" onClick={runPushover} disabled={!model || !!busy || meshErrors || !nonlinearGate.allowed || !!noHinges} className={btn}>
                     {busy === 'pushover' ? '⏳ Pushing…' : '⤧ Run pushover'}
                   </button>
+                  {noHinges && <p className="mt-1 text-[11px] font-medium text-warn">{noHinges.reason}</p>}
                   {!nonlinearGate.allowed && <UpgradeNotice compact message={nonlinearGate.message} />}
                   {meshErrors && <p className="mt-1 text-[11px] font-medium text-fail">Resolve the mesh errors in the Analysis tab to enable pushover.</p>}
                 </div>
@@ -4413,9 +4416,10 @@ export default function ModelSpace() {
                   offsets cannot be represented by the hinge element; if the model uses them, the result panel says so.
                 </p>
                 <div className="col-span-full">
-                  <button type="button" onClick={runBiaxialPushover} disabled={!model || !!busy || meshErrors || !nonlinearGate.allowed} className={btn}>
+                  <button type="button" onClick={runBiaxialPushover} disabled={!model || !!busy || meshErrors || !nonlinearGate.allowed || !!noHinges} className={btn}>
                     {busy === 'biaxialPushover' ? '⏳ Pushing…' : '◈ Run biaxial pushover'}
                   </button>
+                  {noHinges && <p className="mt-1 text-[11px] font-medium text-warn">{noHinges.reason}</p>}
                   {!nonlinearGate.allowed && <UpgradeNotice compact message={nonlinearGate.message} />}
                 </div>
                 {busy === 'biaxialPushover' && <SolverProgress p={progress} />}
@@ -4483,9 +4487,10 @@ export default function ModelSpace() {
                   </>
                 )}
                 <div className="col-span-full">
-                  <button type="button" onClick={runNonlinear} disabled={!model || !!busy || meshErrors} className={btn}>
+                  <button type="button" onClick={runNonlinear} disabled={!model || !!busy || meshErrors || !!noHinges} className={btn}>
                     {busy === 'nonlinearTH' ? '⏳ Integrating…' : '⚡ Run nonlinear time-history'}
                   </button>
+                  {noHinges && <p className="mt-1 text-[11px] font-medium text-warn">{noHinges.reason}</p>}
                   {meshErrors && <p className="mt-1 text-[11px] font-medium text-fail">Resolve the mesh errors in the Analysis tab to enable this run.</p>}
                 </div>
                 {busy === 'nonlinearTH' && <SolverProgress p={progress} />}

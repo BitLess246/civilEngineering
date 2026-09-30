@@ -10,6 +10,11 @@
 //   steel other: Mp ≈ 1.1·Fy·Sx, Sx = Ix/(d/2)    (shape factor on elastic)
 //   concrete   : C = T solved for the neutral axis at an assumed ρ, with
 //                fs = min(fy, 600(d−c)/c) — see `flexure.rectCapacity`
+//   timber     : none — refused (`nonlinearNotApplicable`). Timber fails in
+//                bending at its extreme fibre with no yield plateau, so a
+//                concentrated plastic hinge would report ductility it does not
+//                have. It used to fall through to the concrete branch: an
+//                assumed 1.5% of rebar in a solid timber post.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection } from './model'
 import { shapeByName } from './aiscSections'
@@ -22,7 +27,27 @@ import { pushoverAnalysis, type PushoverResult } from './pushover'
 /** Axial capacity for the P–M interaction surface, kN:
  *  steel  Py = Fy·A      (squash load; A from the AISC shape, else b×h)
  *  concr. Pn0 = 0.85·f′c·Ag   (ACI pure-axial, conservatively ignoring rebar) */
+/** Why the nonlinear hinge models (pushover, biaxial pushover, nonlinear time-
+ *  history) cannot run on this model, or null when they can. Timber members
+ *  have no plastic hinge: NDS §3.3 bending is a brittle limit state, and NSCP
+ *  Table 208-11 lists no timber moment-resisting frame to take a ductility
+ *  from. The linear results (static, RSA, linear time-history) still apply. */
+export function nonlinearNotApplicable(model: Pick<StructuralModel, 'members' | 'sections'>): { reason: string; members: string[] } | null {
+  const wood = new Set(model.sections.filter((s) => s.material === 'wood').map((s) => s.id))
+  const members = model.members.filter((m) => wood.has(m.section)).map((m) => m.id)
+  return members.length === 0 ? null : {
+    members,
+    reason: 'Not applicable to timber members: timber is brittle in bending (NDS §3.3) and forms no plastic hinge, '
+      + 'and NSCP Table 208-11 has no timber moment frame. Use the linear static, response-spectrum and linear time-history results.',
+  }
+}
+
+const refuseTimber = (s: RectSection, what: string) => {
+  if (s.material === 'wood') throw new Error(`${what}: section ${s.id} is timber, which has no plastic hinge — see nonlinearNotApplicable`)
+}
+
 export function axialCapacity(s: RectSection): number {
+  refuseTimber(s, 'axialCapacity')
   if (s.material === 'steel') {
     const Fy = s.steelFy ?? 345
     const shape = s.shape ? shapeByName(s.shape) : undefined
@@ -34,6 +59,7 @@ export function axialCapacity(s: RectSection): number {
 
 /** Nominal plastic moment capacity of a section, kN·m (see file header). */
 export function plasticMoment(s: RectSection, rho = 0.015): number {
+  refuseTimber(s, 'plasticMoment')
   if (s.material === 'steel') {
     const Fy = s.steelFy ?? 345
     const shape = s.shape ? shapeByName(s.shape) : undefined
