@@ -1,48 +1,14 @@
 import { ResultCard, Row } from './qty'
 import { summarizeBiaxialPushover, type BiaxialPushoverResult } from '../engine/biaxialFrameModel'
-import { DrawingFrame } from './DrawingFrame'
+import { CapacityCurveChart } from './CapacityCurveChart'
 
-/** Base shear vs control-node displacement, with yield onset marked. */
+/** Base shear vs control-node displacement; a red point has hinges yielding. */
 function CapacityCurve({ res }: { res: BiaxialPushoverResult }) {
-  const xs = res.curve.map((p) => Math.abs(p.disp) * 1000)   // mm
-  const ys = res.curve.map((p) => Math.abs(p.shear))         // kN
-  const xMax = Math.max(...xs, 1e-9), yMax = Math.max(...ys, 1e-9)
-
-  const W = 460, H = 280, padL = 56, padR = 16, padT = 16, padB = 40
-  const x0 = padL, x1 = W - padR, y0 = H - padB, y1 = padT
-  const sx = (v: number) => x0 + (x1 - x0) * (v / xMax)
-  const sy = (v: number) => y0 - (y0 - y1) * (v / yMax)
-  const pts = res.curve.map((_, i) => `${sx(xs[i]).toFixed(1)},${sy(ys[i]).toFixed(1)}`).join(' ')
-
   return (
-    <DrawingFrame label="biaxial pushover curves">
-      <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
-        style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-        <line x1={x0} y1={y0} x2={x1} y2={y0} stroke="#475569" strokeWidth={1.2} />
-        <line x1={x0} y1={y0} x2={x0} y2={y1} stroke="#475569" strokeWidth={1.2} />
-        {[0, 0.5, 1].map((f) => (
-          <g key={`y${f}`}>
-            <line x1={x0} y1={sy(yMax * f)} x2={x1} y2={sy(yMax * f)} stroke="#e2e8f0" strokeWidth={0.8} />
-            <text x={x0 - 6} y={sy(yMax * f) + 3} fontSize={9} fill="#64748b" textAnchor="end">{(yMax * f).toFixed(0)}</text>
-          </g>
-        ))}
-        {[0, 0.5, 1].map((f) => (
-          <text key={`x${f}`} x={sx(xMax * f)} y={y0 + 14} fontSize={9} fill="#64748b" textAnchor="middle">{(xMax * f).toFixed(1)}</text>
-        ))}
-        <polyline points={pts} fill="none" stroke="#0056b3" strokeWidth={2} />
-        {res.curve.map((p, i) => (
-          <circle key={i} cx={sx(xs[i])} cy={sy(ys[i])} r={2.6}
-            fill={p.hinges > 0 ? '#dc2626' : '#0056b3'}>
-            <title>{`Δ ${xs[i].toFixed(1)} mm · V ${ys[i].toFixed(1)} kN · ${p.hinges} hinge(s) yielding`}</title>
-          </circle>
-        ))}
-        <text x={(x0 + x1) / 2} y={H - 4} fontSize={10} fill="#334155" textAnchor="middle" fontWeight={700}>
-          control-node displacement (mm)
-        </text>
-        <text x={12} y={(y0 + y1) / 2} fontSize={10} fill="#334155" textAnchor="middle" fontWeight={700}
-          transform={`rotate(-90 12 ${(y0 + y1) / 2})`}>base shear (kN)</text>
-      </svg>
-    </DrawingFrame>
+    <CapacityCurveChart label="biaxial pushover curves" points={res.curve.map((p) => ({
+      x: p.disp * 1000, y: p.shear, hot: p.hinges > 0,
+      title: `Δ ${(Math.abs(p.disp) * 1000).toFixed(1)} mm · V ${Math.abs(p.shear).toFixed(1)} kN · ${p.hinges} hinge(s) yielding`,
+    }))} />
   )
 }
 
