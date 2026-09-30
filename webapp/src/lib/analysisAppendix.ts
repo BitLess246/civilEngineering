@@ -30,6 +30,7 @@ import type { PushoverModelResult } from '../engine/pushoverModel'
 import type { BiaxialPushoverResult } from '../engine/biaxialFrameModel'
 import type { NonlinearModelResult } from '../engine/nonlinearModel'
 import type { NonlinearFrameModelResult } from '../engine/nonlinearFrameModel'
+import { hingeDemand, yieldedByDemand, yieldSummary } from './hingeEnvelope'
 import type { RebarCage } from '../engine/rebarModel'
 import type { Drawing } from '../engine/planRenderer'
 import { WOOD_SPECIES } from '../engine/woodDesign'
@@ -762,12 +763,22 @@ function nonlinearSection(i: AppendixInput): AppendixSection {
         legend: `${marks.length} of ${r.hinges.length} hinges yielded · ${ie.frame.framesCombined} frame line(s) combined, ${ie.frame.transverseDropped} transverse member(s) dropped`,
       }),
     })
-    const yielded = r.hinges.filter((x) => x.yielded)
+    // PEAK values, not the end state: a hinge is "yielded" if it yielded at any
+    // step, so the moment beside it must be the one that made it yield — see
+    // `HingeReport.envelope`.
+    const yielded = yieldedByDemand(r.hinges)
+    const summary = yieldSummary(r.hinges)
     tables.push({
       title: 'E.1 Plastic hinges — member-end hinge model',
-      head: ['Member', 'End', 'Moment (kN·m)', 'Rotation (mrad)', 'Plastic (mrad)', 'Dissipated (kN·m)', 'State'], right: [2, 3, 4, 5],
-      rows: (yielded.length ? yielded : r.hinges).map((x) => [x.member, x.end, f1(x.moment), mrad(x.rotation), mrad(x.plastic), f2(x.dissipated), x.yielded ? 'yielded' : 'elastic']),
-      note: yielded.length ? `${yielded.length} of ${r.hinges.length} hinges yielded; only those are listed.` : `None of the ${r.hinges.length} hinges yielded under this record.`,
+      head: ['Member', 'End', 'Peak moment (kN·m)', 'Capacity (kN·m)', 'Peak plastic (mrad)', 'Dissipated (kN·m)', 'First yield (s)', 'State'], right: [2, 3, 4, 5, 6],
+      rows: (yielded.length ? yielded : r.hinges).map((x) => {
+        const d = hingeDemand(x)
+        return [x.member, x.end, f1(d.moment), d.capacity != null ? f1(d.capacity) : '—', mrad(d.plastic), f2(x.dissipated),
+          d.firstYield != null ? f2(d.firstYield) : '—', x.yielded ? 'yielded' : 'elastic']
+      }),
+      note: yielded.length
+        ? `${yielded.length} of ${r.hinges.length} hinges yielded; only those are listed — ${summary?.sentence}. Moments and rotations are the peaks over the record.`
+        : `None of the ${r.hinges.length} hinges yielded under this record.`,
     })
   }
   const n = i.nonlinear

@@ -223,7 +223,7 @@ export const MODEL_TOOLS: DocTool[] = [
           { kind: 'field', name: 'Post-yield ratio b', what: 'Hinge hardening as a fraction of the member EI/L. Negative values soften.' },
           { kind: 'output', name: 'Response summary', what: 'Equivalent-frame period and condensation summary, hinges yielded / total, peak base shear against the elastic demand, peak roof drift, dissipated energy and Newton convergence.' },
           { kind: 'output', name: 'Force-reduction ratio', what: 'Peak inelastic base shear over the elastic demand. Labelled explicitly as not a code R factor.' },
-          { kind: 'output', name: 'Yielded hinges table', what: 'Worst hinges ordered by plastic rotation. When nothing yields the panel says so — an elastic outcome is a result, not a blank.' },
+          { kind: 'output', name: 'Yielded hinges table', what: 'Worst hinges ordered by plastic rotation, each with its PEAK moment over the record, the capacity it met, the largest plastic rotation it reached and when it first yielded — not the residual it ends on. A hinge that only touched its capacity is summarised as the onset of yield. When nothing yields the panel says so — an elastic outcome is a result, not a blank.' },
         ],
       },
       {
