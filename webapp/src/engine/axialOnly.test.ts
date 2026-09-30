@@ -3,6 +3,7 @@ import { solveActiveSet, analyzeActiveSet, axialModes, type AxialMode } from './
 import { solveFrame3D, analyzeFrame3D, rectJ, type F3Node, type F3Member, type F3Support, type F3Load } from './frame3d'
 import { validateMesh } from './meshValidation'
 import { emptyModel, type Member } from './model'
+import type { SolveProgress } from './progress'
 
 // A single braced bay in the X–Y plane:
 //   n3 ── n4      (top)
@@ -113,6 +114,19 @@ describe('axialOnly — active-set solve', () => {
     expect(r.iterations).toBeGreaterThan(0)
     expect(r.iterations).toBeLessThanOrEqual(5)
   })
+
+  it('announces every factorization, one per iteration, numbered from 1', () => {
+    // each iteration assembles and factors K afresh — that is the wait the
+    // caller reports, so the hook fires exactly once per solve
+    const seen: number[] = []
+    const r = solveActiveSet(nodes, members, supports, push(50), tensionOnly, { onFactor: (it) => seen.push(it) })!
+    expect(r.iterations).toBeGreaterThan(1)
+    expect(seen).toEqual(Array.from({ length: r.iterations }, (_, k) => k + 1))
+    // and the no-limited-members shortcut is one solve, still announced
+    const one: number[] = []
+    solveActiveSet(nodes, members, supports, push(50), new Map(), { onFactor: (it) => one.push(it) })
+    expect(one).toEqual([1])
+  })
 })
 
 describe('axialOnly — per-combo active set (analyzeActiveSet)', () => {
@@ -136,6 +150,23 @@ describe('axialOnly — per-combo active set (analyzeActiveSet)', () => {
     })
     // the no-op path still reports a converged, empty active set per combo
     expect(a.axial.every((x) => x === null || (x.converged && x.inactive.length === 0))).toBe(true)
+  })
+
+  it('reports each iteration\'s factorization under the combination counter', () => {
+    const ticks: SolveProgress[] = []
+    const a = analyzeActiveSet(nodes, members, supports, mixed, tensionOnly, {}, (p) => ticks.push(p))!
+    const fac = ticks.filter((t) => t.phase === 'Assembling and factoring stiffness (active set)')
+    // one tick per iteration of every solved combination
+    const iters = a.axial.reduce((n, x) => n + (x?.iterations ?? 0), 0)
+    expect(fac).toHaveLength(iters)
+    const total = a.perCombo.length
+    for (const t of fac) {
+      expect(t.total).toBe(total)
+      const combo = a.perCombo[t.current! - 1].combo.name
+      expect(t.detail?.startsWith(`${combo} · iteration `)).toBe(true)
+    }
+    // the combo tick still leads each combination
+    expect(ticks[0].phase).toBe('Analyzing load cases (active set)')
   })
 
   it('reports one active set per combination, parallel to perCombo', () => {

@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 563
+export const SOLVER_TEST_COUNT = 565
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -2489,8 +2489,16 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
         "name": "converges in a handful of iterations"
       },
       {
+        "suite": "axialOnly — active-set solve",
+        "name": "announces every factorization, one per iteration, numbered from 1"
+      },
+      {
         "suite": "axialOnly — per-combo active set (analyzeActiveSet)",
         "name": "with no limited members it reproduces analyzeFrame3D combo for combo"
+      },
+      {
+        "suite": "axialOnly — per-combo active set (analyzeActiveSet)",
+        "name": "reports each iteration's factorization under the combination counter"
       },
       {
         "suite": "axialOnly — per-combo active set (analyzeActiveSet)",

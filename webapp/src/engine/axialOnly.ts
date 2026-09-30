@@ -40,6 +40,10 @@ export interface ActiveSetOpts {
   pDelta?: boolean
   /** Rigid floor diaphragms, applied to every active-set solve. */
   diaphragms?: F3DiaphragmGroup[]
+  /** Called before each solve — every one assembles and factors K afresh for
+   *  that iteration's active members, which is where the time goes — with the
+   *  1-based iteration number, so a caller can say what it is waiting on. */
+  onFactor?: (iteration: number) => void
 }
 
 export interface ActiveSetResult {
@@ -75,10 +79,13 @@ export function solveActiveSet(
     const md = modes.get(m.id)
     return md === 'tension-only' || md === 'compression-only'
   })
-  const solve = (act: F3Member[]) =>
-    opts.diaphragms?.length
+  let nSolve = 0
+  const solve = (act: F3Member[]) => {
+    opts.onFactor?.(++nSolve)
+    return opts.diaphragms?.length
       ? solveWithGeometry(precomputeFrame(nodes, act, supports, opts.diaphragms, shells), loads, { pDelta: opts.pDelta })
       : solveFrame3D(nodes, act, supports, loads, { pDelta: opts.pDelta }, shells)
+  }
 
   // no limited members ⇒ one ordinary linear solve
   if (limited.length === 0) {
@@ -162,8 +169,14 @@ export function analyzeActiveSet(
     onProgress?.({ phase: 'Analyzing load cases (active set)', current: i + 1, total: combos.length, detail: combo.name })
     const factored = applyF3Combo(loads, combo.f)
     if (factored.length === 0) { perCombo.push({ combo, result: null, factored, skipped: true }); axial.push(null); return }
+    // Every active-set iteration re-factors K, so the factorization is
+    // reported per iteration, under the same combination counter.
+    const onFactor = (it: number) => onProgress?.({
+      phase: 'Assembling and factoring stiffness (active set)',
+      current: i + 1, total: combos.length, detail: `${combo.name} · iteration ${it}`,
+    })
     const a = solveActiveSet(nodes, members, supports, factored, modes,
-      { pDelta: opts?.pDelta, diaphragms: opts?.diaphragms }, shells)
+      { pDelta: opts?.pDelta, diaphragms: opts?.diaphragms, onFactor }, shells)
     perCombo.push({ combo, result: a?.result ?? null, factored, skipped: false })
     axial.push(a ? { inactive: a.inactive, iterations: a.iterations, converged: a.converged } : null)
     if (a && a.result.Mmax > govM) { govM = a.result.Mmax; govIdx = perCombo.length - 1 }

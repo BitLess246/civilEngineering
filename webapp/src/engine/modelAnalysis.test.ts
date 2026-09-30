@@ -61,6 +61,24 @@ describe('runModelAnalysis — the drift check solves the structure the combos s
     expect(diff / peak).toBeGreaterThan(0.01)
   })
 
+  it('on the active-set path, reports the drift E-case\'s factorizations too', () => {
+    // a tension-only diagonal sends the whole run down the active-set path,
+    // where every iteration re-factors K — the drift E-case included
+    const m = frame(false)
+    const top = m.nodes.find((n) => n.x === 6 && n.y === 4 && n.z === 0)!
+    const base = m.nodes.find((n) => n.x === 0 && n.y === 0 && n.z === 0)!
+    m.members.push({ id: 'BR1', i: base.id, j: top.id, role: 'brace', section: m.members[0].section, axialMode: 'tension-only' })
+    const phases: { phase: string; detail?: string }[] = []
+    const out = runModelAnalysis(req(m), (p) => phases.push(p))
+    expect(out.drift).not.toBeNull()
+    const fac = phases.filter((p) => p.phase === 'Assembling and factoring stiffness (active set)')
+    const drift = fac.filter((p) => p.detail?.startsWith('E-case for storey drift · iteration '))
+    expect(drift.length).toBeGreaterThan(0)
+    expect(fac.length).toBeGreaterThan(drift.length)          // the combos report theirs as well
+    // …and the shared-factorization phase does not appear: there is none here
+    expect(phases.some((p) => p.phase === 'Assembling and factoring stiffness')).toBe(false)
+  })
+
   it('reports the factorization as its own progress phase', () => {
     const phases: string[] = []
     runModelAnalysis(req(frame(false)), (p) => phases.push(p.phase))
