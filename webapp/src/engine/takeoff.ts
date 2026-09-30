@@ -38,6 +38,36 @@ const barAreaM2 = (dia: number) => (Math.PI / 4) * (dia / 1000) ** 2
  *  report can weigh a per-Ø length without re-deriving the density. */
 export const barKgPerM = (dia: number) => barAreaM2(dia) * STEEL_DENSITY
 const kgPerM = barKgPerM
+
+/**
+ * Whole stock bars (`stock`, m) needed to cut every piece in `cuts` (m):
+ * first-fit decreasing — longest cut first, into the first bar with room.
+ * FFD never uses more than 11/9·OPT + 6/9 bars (Dósa 2007), and for a pool
+ * of equal cuts it is exactly ⌈n / ⌊stock/ℓ⌋⌉. A cut longer than the stock
+ * takes a bar to itself (it is lapped, which the cut length already carries).
+ */
+export function nestCuts(cuts: readonly number[], stock: number): number {
+  // Equal cuts are grouped (to the mm) so a frame's thousands of identical
+  // ties cost one pass per LENGTH, not per tie: first-fit over a run of equal
+  // pieces fills each open bar in turn as far as it goes, then opens new bars
+  // ⌊stock/ℓ⌋ at a time — the same bars FFD would pick piece by piece.
+  const groups = new Map<number, number>()
+  for (const c of cuts) { const mm = Math.round(c * 1000); groups.set(mm, (groups.get(mm) ?? 0) + 1) }
+  const room: number[] = []
+  for (const [mm, count] of [...groups].sort((a, b) => b[0] - a[0])) {
+    const len = mm / 1000
+    if (len >= stock) { for (let k = 0; k < count; k++) room.push(0); continue }
+    let n = count
+    for (let i = 0; i < room.length && n > 0; i++) {
+      const r = room[i]!
+      const fit = Math.min(n, Math.floor((r + 1e-9) / len))
+      room[i] = r - fit * len; n -= fit
+    }
+    const per = Math.floor((stock + 1e-9) / len)
+    while (n > 0) { const take = Math.min(n, per); room.push(stock - take * len); n -= take }
+  }
+  return room.length
+}
 /**
  * Cut allowance for ONE 135° seismic hook on a stirrup or tie, mm.
  *
@@ -449,18 +479,24 @@ export function estimateTakeoff(
 
   // ── Commercial steel by Ø: continuous bars spliced, ties nested ──
   const usable = Math.max(0.5, BAR_LENGTH - lap)
+  // Ties are nested across the WHOLE pool of one Ø, not row by row. A cage
+  // places every closed tie as its own run (count 1), so nesting per row
+  // bought a full 6 m bar for each tie — a 2×2-bay 5-storey frame billed
+  // 4 973 ⌀10 bars for 6 689 m of ties.
   const cont = new Map<number, number>()                 // dia → net continuous length
-  const tiePieces = new Map<number, number>()            // dia → nested 6 m pieces
+  const tieCuts = new Map<number, number[]>()            // dia → every tie cut (m)
   const tieNet = new Map<number, number>()
   for (const c of cutList) {
     if (c.tie) {
-      const cutsPer6m = Math.max(1, Math.floor(BAR_LENGTH / c.cutLengthM))
-      tiePieces.set(c.dia, (tiePieces.get(c.dia) ?? 0) + Math.ceil(c.count / cutsPer6m))
+      const cuts = tieCuts.get(c.dia) ?? []
+      for (let k = 0; k < c.count; k++) cuts.push(c.cutLengthM)
+      tieCuts.set(c.dia, cuts)
       tieNet.set(c.dia, (tieNet.get(c.dia) ?? 0) + c.totalM)
     } else {
       cont.set(c.dia, (cont.get(c.dia) ?? 0) + c.totalM)
     }
   }
+  const tiePieces = new Map([...tieCuts].map(([dia, cuts]) => [dia, nestCuts(cuts, BAR_LENGTH)]))
   const dias = [...new Set([...cont.keys(), ...tiePieces.keys()])].sort((a, b) => a - b)
   const steelByDia: SteelByDia[] = dias.map((dia) => {
     const netCont = cont.get(dia) ?? 0
