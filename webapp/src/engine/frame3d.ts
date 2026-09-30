@@ -1195,10 +1195,24 @@ export function analyzeFrame3D(
   opts?: F3AnalyzeOpts, onProgress?: ProgressFn,
   diaphragms?: F3DiaphragmGroup[], shells?: F3Shell[],
 ): F3Analysis | null {
+  return analyzeWithGeometry(precomputeFrame(nodes, members, supports, diaphragms, shells), loads, opts, onProgress)
+}
+
+/**
+ * The NSCP combination sweep over a frame ALREADY assembled and factored.
+ *
+ * Split out of `analyzeFrame3D` so a caller that needs further solves of the
+ * same structure — the storey-drift E-case — can reuse the one factorization
+ * instead of assembling and factoring K again. `solveWithGeometry` never
+ * mutates the precompute (P-Δ works on a clone of `Kff_raw`), so sharing it
+ * is safe.
+ */
+export function analyzeWithGeometry(
+  precomp: FramePrecomp, loads: F3Load[], opts?: F3AnalyzeOpts, onProgress?: ProgressFn,
+): F3Analysis | null {
   const perCombo: F3ComboRun[] = []
   let govIdx = -1, govM = -1
   const combos = nscpCombos(opts?.f1 ?? 1.0)
-  const precomp = precomputeFrame(nodes, members, supports, diaphragms, shells)   // factor K once
   combos.forEach((combo, i) => {
     onProgress?.({ phase: 'Analyzing load cases', current: i + 1, total: combos.length, detail: combo.name })
     const factored = applyF3Combo(loads, combo.f)
