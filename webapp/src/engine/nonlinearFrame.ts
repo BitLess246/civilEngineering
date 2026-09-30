@@ -85,6 +85,29 @@ export interface HingeReport {
   yielded: boolean
   /** Energy dissipated at this hinge, kN·m. */
   dissipated: number
+  /**
+   * The WHOLE-RECORD envelope — time-history runs only. `moment`, `rotation`
+   * and `plastic` above are the state when the record ENDS, while `yielded`
+   * is true if the hinge yielded at ANY step, so on their own they describe a
+   * hinge that "yielded" at a moment it never reached: the residual left after
+   * the frame rings down. A 2×2-bay frame printed exactly that — "yielded at
+   * −8.3 kN·m, θp 0.0" for a beam end that hit its 617 kN·m capacity at 0.9 s.
+   */
+  envelope?: HingeEnvelope
+}
+
+/** Peak demand on one hinge over a time history. Units as `HingeReport`. */
+export interface HingeEnvelope {
+  /** Moment of largest magnitude over the record (signed), kN·m. */
+  peakMoment: number
+  /** The hinge's capacity at that instant — Mp, P–M-reduced if active, kN·m. */
+  capacity: number
+  /** When it occurred, s. */
+  time: number
+  /** Largest |plastic rotation| reached at any step, rad (the residual may be smaller). */
+  maxPlastic: number
+  /** Time of first yield, s; null if it never yielded. */
+  firstYield: number | null
 }
 
 export interface NLFrameStep {

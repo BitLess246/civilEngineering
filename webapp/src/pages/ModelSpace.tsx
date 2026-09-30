@@ -76,6 +76,7 @@ import { ConstructionSchedule } from '../components/ConstructionSchedule'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
   woodBeamRowSolution, woodColumnRowSolution, woodSlabRowSolution } from '../lib/modelSpaceSolutions'
 import { Diagram } from '../components/Diagram'
+import { hingeDemand, yieldedByDemand, yieldSummary } from '../lib/hingeEnvelope'
 import { DIAGRAM_GRID } from '../lib/diagramLabel'
 import { MemberForcesTable } from '../components/MemberForcesTable'
 import { ReactionsPanel } from '../components/ReactionsPanel'
@@ -4432,7 +4433,7 @@ export default function ModelSpace() {
                 <Num label="Duration" unit="s" value={nlDur} onChange={setNlDur} step="1" />
                 <Num label="Damping ζ" unit="%" value={nlZeta} onChange={setNlZeta} step="0.5" />
                 <Num label="Post-yield ratio b" unit="%" value={nlB} onChange={setNlB} step="0.5"
-                  hint="storey spring hardening (0 = elastic-perfectly-plastic)" />
+                  hint={nlKindModel === 'hinges' ? 'hinge hardening, fraction of EI/L (0 = elastic-perfectly-plastic)' : 'storey spring hardening (0 = elastic-perfectly-plastic)'} />
                 <Num label="Concrete ρ (tension)" unit="%" value={nlRho} onChange={setNlRho} step="0.1"
                   min={0.1} max={5}
                   hint="assumed steel ratio for Mp (concrete only) · 0.1–5%" />
@@ -4483,15 +4484,15 @@ export default function ModelSpace() {
                 const ie = nlHinge.inelastic!, el = nlHinge.elastic
                 const R = el && ie.response.peakBaseShear > 0
                   ? el.response.peakBaseShear / ie.response.peakBaseShear : null
-                const yielded = ie.response.hinges.filter((h) => h.yielded)
-                  .sort((a, b) => Math.abs(b.plastic) - Math.abs(a.plastic))
+                const yielded = yieldedByDemand(ie.response.hinges)
+                const ySummary = yieldSummary(ie.response.hinges)
                 return (
                   <>
                     <Sec grid={false} title="Response summary — member-end hinges">
                       <Row label="Equivalent frame period T₁" value={`${f2(ie.period)} s`}
                         sub={`${ie.frame.nodes.length} nodes · ${ie.frame.members.length} members · ${ie.frame.framesCombined} parallel frame lines combined`} />
                       <Row label="Hinges yielded" value={`${ie.response.yieldedHinges} of ${ie.response.hinges.length}`}
-                        alert={!ie.response.converged} />
+                        sub={ySummary?.tag} alert={!ie.response.converged} />
                       <Row label="Peak base shear" value={`${f1(ie.response.peakBaseShear)} kN`}
                         sub={el ? `elastic demand ${f1(el.response.peakBaseShear)} kN` : undefined} />
                       {R != null && R > 1.01 && (
@@ -4515,31 +4516,43 @@ export default function ModelSpace() {
                     )}
                     {yielded.length > 0 && (
                       <Sec grid={false} title="Yielded hinges (largest plastic rotation first)">
+                        {ySummary && (
+                          <p className="mb-2 text-[12px] leading-snug text-ink-2">
+                            {ySummary.sentence.charAt(0).toUpperCase() + ySummary.sentence.slice(1)}.
+                          </p>
+                        )}
                         <div className="overflow-x-auto">
                           <table className="w-full text-right text-[12px]">
                             <thead className="text-muted">
                               <tr className="border-b border-hairline">
                                 <th className="py-1 pr-2 text-left">Member</th><th className="py-1 pr-2 text-left">End</th>
-                                <th className="py-1 pr-2">M (kN·m)</th><th className="py-1 pr-2">θ (mrad)</th>
-                                <th className="py-1 pr-2">θp (mrad)</th><th className="py-1 pr-2">E (kN·m)</th>
+                                <th className="py-1 pr-2">Peak M (kN·m)</th><th className="py-1 pr-2">Capacity (kN·m)</th>
+                                <th className="py-1 pr-2">Peak θp (mrad)</th><th className="py-1 pr-2">E (kN·m)</th>
+                                <th className="py-1 pr-2">First yield (s)</th>
                               </tr>
                             </thead>
                             <tbody className="font-mono">
-                              {yielded.slice(0, 20).map((h) => (
-                                <tr key={`${h.member}-${h.end}`} className="border-b border-hairline-2 bg-warn-tint">
-                                  <td className="py-0.5 pr-2 text-left">{h.member}</td>
-                                  <td className="py-0.5 pr-2 text-left">{h.end}</td>
-                                  <td className="py-0.5 pr-2">{f1(h.moment)}</td>
-                                  <td className="py-0.5 pr-2">{f1(h.rotation * 1000)}</td>
-                                  <td className="py-0.5 pr-2">{f1(h.plastic * 1000)}</td>
-                                  <td className="py-0.5 pr-2">{f1(h.dissipated)}</td>
-                                </tr>
-                              ))}
+                              {yielded.slice(0, 20).map((h) => {
+                                const d = hingeDemand(h)
+                                return (
+                                  <tr key={`${h.member}-${h.end}`} className="border-b border-hairline-2 bg-warn-tint">
+                                    <td className="py-0.5 pr-2 text-left">{h.member}</td>
+                                    <td className="py-0.5 pr-2 text-left">{h.end}</td>
+                                    <td className="py-0.5 pr-2">{f1(d.moment)}</td>
+                                    <td className="py-0.5 pr-2">{d.capacity != null ? f1(d.capacity) : '—'}</td>
+                                    <td className="py-0.5 pr-2">{(d.plastic * 1000).toFixed(3)}</td>
+                                    <td className="py-0.5 pr-2">{f2(h.dissipated)}</td>
+                                    <td className="py-0.5 pr-2">{d.firstYield != null ? f2(d.firstYield) : '—'}</td>
+                                  </tr>
+                                )
+                              })}
                             </tbody>
                           </table>
                         </div>
                         <p className="mt-2 text-[10px] text-muted">
-                          θp is the permanent (plastic) rotation left in the hinge. Member ids are the condensed
+                          Peak values over the whole record — a hinge that yielded early may end the record carrying
+                          far less. Capacity is the hinge&rsquo;s Mp at that instant (P–M-reduced where active); peak θp is
+                          the largest plastic rotation it reached. Member ids are the condensed
                           frame&rsquo;s — each combines the parallel 3D members at that grid position.
                           {yielded.length > 20 && ` Showing the 20 worst of ${yielded.length}.`}
                         </p>

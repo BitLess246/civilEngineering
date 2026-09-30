@@ -22,7 +22,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { luFactor, luSolve } from './fem'
 import { bilinearProbe, bilinearCommit } from './hysteresis'
-import { assembleFrame, type NLFrameInput, type HingeReport } from './nonlinearFrame'
+import { assembleFrame, type NLFrameInput, type HingeReport, type HingeEnvelope } from './nonlinearFrame'
 import type { RayleighCoeffs } from './directTimeHistory'
 
 export interface NLDynamicInput extends Omit<NLFrameInput, 'schedule' | 'steps' | 'lambdaMax'> {
@@ -122,6 +122,9 @@ export function nonlinearFrameDynamic(inp: NLDynamicInput): NLDynamicResult | nu
 
   const disp = new Array(n).fill(0)
   const baseShear = new Array(n).fill(0)
+  // Each hinge's envelope, updated at every COMMITTED step — the report's
+  // own state is only the one the record ends in.
+  const env: HingeEnvelope[] = hinges.map(() => ({ peakMoment: 0, capacity: 0, time: 0, maxPlastic: 0, firstYield: null }))
   let converged = true, maxIterations = 0
   const record = (s: number) => {
     disp[s] = ctrlDof !== undefined ? u[ctrlDof] : 0
@@ -167,22 +170,27 @@ export function nonlinearFrameDynamic(inp: NLDynamicInput): NLDynamicResult | nu
       v[i] = vn[i] + dt * (1 - gamma) * an[i] + dt * gamma * aNext
       a[i] = aNext
     }
-    for (const h of hinges) {
-      const { state } = bilinearCommit(hingeDeform(u, h), hingeDeform(uPrev, h), h.state,
-        { k0: h.k0, Fy: hingeCapacity(u, h), b: h.b })
+    hinges.forEach((h, k) => {
+      const cap = hingeCapacity(u, h)
+      const { resp, state } = bilinearCommit(hingeDeform(u, h), hingeDeform(uPrev, h), h.state,
+        { k0: h.k0, Fy: cap, b: h.b })
       h.state = state
-    }
+      const e = env[k]
+      if (Math.abs(resp.f) > Math.abs(e.peakMoment)) { e.peakMoment = resp.f; e.capacity = cap; e.time = s * dt }
+      e.maxPlastic = Math.max(e.maxPlastic, Math.abs(state.up))
+      if (resp.yielding && e.firstYield === null) e.firstYield = s * dt
+    })
     uPrev = [...u]
     record(s)
   }
 
-  const report: HingeReport[] = hinges.map((h) => {
+  const report: HingeReport[] = hinges.map((h, k) => {
     const θ = hingeDeform(u, h)
     const { f: M, yielding } = bilinearProbe(θ, h.state, { k0: h.k0, Fy: hingeCapacity(u, h), b: h.b })
     return {
       member: h.member, end: h.end, moment: M, rotation: θ,
       plastic: h.state.up, yielded: yielding || h.state.cumPlastic > 0,
-      dissipated: h.state.dissipated,
+      dissipated: h.state.dissipated, envelope: env[k],
     }
   })
 

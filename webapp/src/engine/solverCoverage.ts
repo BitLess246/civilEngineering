@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 565
+export const SOLVER_TEST_COUNT = 568
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -2007,6 +2007,18 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "nonlinearFrameDynamic — inelastic response",
         "name": "returns null for an empty record or a massless frame"
+      },
+      {
+        "suite": "nonlinearFrameDynamic — whole-record hinge envelope",
+        "name": "a yielded hinge peaked AT its capacity, and says when it first yielded"
+      },
+      {
+        "suite": "nonlinearFrameDynamic — whole-record hinge envelope",
+        "name": "…while the moment it ENDS on is a residual below that peak — the number the table used to print"
+      },
+      {
+        "suite": "nonlinearFrameDynamic — whole-record hinge envelope",
+        "name": "a hinge that never yields has no first-yield time and peaks below capacity"
       }
     ]
   },

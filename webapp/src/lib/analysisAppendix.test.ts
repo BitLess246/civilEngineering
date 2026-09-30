@@ -779,3 +779,28 @@ describe('A.0 modelling line — the mesh density is on the record', () => {
     expect(meta({ ...model, shellElements: false })).not.toContain('shell slabs')
   })
 })
+
+describe('E.1 — a hinge row carries the demand that made it yield', () => {
+  // A hinge is "yielded" if it yielded at ANY step, so the moment beside it has
+  // to be the PEAK. The end-of-record moment made a beam end that met its
+  // 617 kN·m capacity read "yielded at −8.3 kN·m".
+  const e = buildAnalysisAppendix(full).sections.find((x) => x.letter === 'E')!
+  const t = e.tables.find((x) => x.title.startsWith('E.1'))!
+  const hs = nonlinearHinge.inelastic!.response.hinges
+  const listed = hs.some((h) => h.yielded) ? hs.filter((h) => h.yielded) : hs
+
+  it('heads the columns as peaks, with the capacity met and the time of first yield', () => {
+    expect(t.head).toEqual(['Member', 'End', 'Peak moment (kN·m)', 'Capacity (kN·m)', 'Peak plastic (mrad)',
+      'Dissipated (kN·m)', 'First yield (s)', 'State'])
+    for (const r of t.rows) expect(r).toHaveLength(t.head.length)
+  })
+
+  it('prints each hinge\'s envelope peak, not its end state', () => {
+    expect(t.rows).toHaveLength(listed.length)
+    for (const r of t.rows) {
+      const h = hs.find((x) => x.member === r[0] && x.end === r[1])!
+      expect(r[2]).toBe(h.envelope!.peakMoment.toFixed(1))
+      expect(r[3]).toBe(h.envelope!.capacity.toFixed(1))
+    }
+  })
+})

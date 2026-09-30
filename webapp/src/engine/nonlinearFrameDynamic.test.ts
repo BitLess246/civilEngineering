@@ -116,3 +116,56 @@ describe('nonlinearFrameDynamic — inelastic response', () => {
     expect(nonlinearFrameDynamic({ ...run(60, 4), mass: {} })).toBeNull()
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE ENVELOPE — what a "yielded" hinge actually reached.
+//
+// The report's moment/rotation are the state the record ENDS in, but `yielded`
+// is true if the hinge yielded at any step. A 2×2-bay 5-storey frame printed
+// "yielded at −8.3 kN·m, θp 0.0" for a beam end that met its 617 kN·m capacity
+// at 0.85 s and then rang down. The envelope carries the demand that made it
+// yield.
+// ─────────────────────────────────────────────────────────────────────────
+describe('nonlinearFrameDynamic — whole-record hinge envelope', () => {
+  // a strong 0.4 s pulse, then 3.6 s of free vibration that rings down
+  const pulse = (amp: number) => Array.from({ length: n }, (_, i) => (i * dt < 0.4 ? amp * Math.sin(12 * i * dt) : 0))
+  const Mp = 40
+  const r = nonlinearFrameDynamic({ ...run(Mp, 0), ag: pulse(8) })!
+  const yielded = r.hinges.filter((h) => h.yielded)
+
+  it('a yielded hinge peaked AT its capacity, and says when it first yielded', () => {
+    expect(yielded.length).toBeGreaterThan(0)
+    for (const h of yielded) {
+      const e = h.envelope!
+      expect(e.capacity).toBeCloseTo(Mp, 9)                      // no P–M on this frame
+      // bilinear: at yield |M| = Fy, above it only the (tiny) hardening slope
+      expect(Math.abs(e.peakMoment)).toBeGreaterThanOrEqual(Mp * (1 - 1e-6))
+      expect(Math.abs(e.peakMoment)).toBeLessThan(Mp * 1.05)
+      expect(e.firstYield).not.toBeNull()
+      expect(e.firstYield!).toBeGreaterThan(0)
+      expect(e.firstYield!).toBeLessThanOrEqual(e.time + 1e-12 + 0.4)
+      expect(e.maxPlastic).toBeGreaterThan(0)
+      expect(e.maxPlastic).toBeGreaterThanOrEqual(Math.abs(h.plastic) - 1e-15)
+    }
+  })
+
+  it('…while the moment it ENDS on is a residual below that peak — the number the table used to print', () => {
+    // After the pulse the frame rings down. What is left is partly free
+    // vibration and partly the self-equilibrating moment a yielded
+    // indeterminate frame keeps, so it need not decay to zero — here it is
+    // ~85 % of Mp — but it is never the demand that caused the yield.
+    for (const h of yielded) {
+      expect(Math.abs(h.moment)).toBeLessThan(Math.abs(h.envelope!.peakMoment) * (1 - 1e-3))
+    }
+  })
+
+  it('a hinge that never yields has no first-yield time and peaks below capacity', () => {
+    const el = nonlinearFrameDynamic(run(400, 0.2))!
+    for (const h of el.hinges) {
+      expect(h.yielded).toBe(false)
+      expect(h.envelope!.firstYield).toBeNull()
+      expect(Math.abs(h.envelope!.peakMoment)).toBeLessThan(h.envelope!.capacity)
+      expect(h.envelope!.maxPlastic).toBe(0)
+    }
+  })
+})
