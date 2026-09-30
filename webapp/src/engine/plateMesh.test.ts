@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { meshPlates, meshPrefix, emptyPlateMesh, meshNodeBound } from './plateMesh'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
-import { solveFrame3D } from './frame3d'
+import { solveFrame3D, precomputeFrame } from './frame3d'
 import { stitchResult } from './memberSplit'
 import type { RectSection, SlabOpening, StructuralModel } from './model'
 import { validateMesh } from './meshValidation'
@@ -433,5 +433,24 @@ describe('meshNodeBound — the budget check must not lie about the cost', () =>
     // 2·(3² interior) + 7·3 edge nodes = 39, not 2 × 21 = 42.
     expect(meshNodeBound(two, 4)).toBeLessThan(2 * meshNodeBound(one, 4))
     expect(meshNodeBound(two, 4)).toBe(meshPlates(two, { subdiv: 4, ...MAT }).nodes.length)
+  })
+})
+
+describe('a meshed frame factors by skyline, not dense LU', () => {
+  // `symFactorSparse` drops to dense pivoting LU whenever the free block fails
+  // its symmetry check. That fallback exists for mechanisms; reached on a
+  // healthy meshed frame it is the whole analysis — an 8-storey, 4×3-bay frame
+  // meshed 3×3 per panel spent 271 s there (6 240 DOF) against 2.4 s once the
+  // shell element was made exactly symmetric. Round-off in ONE triangle of a
+  // shell element was enough to fail the check.
+  it('a 3-storey grid meshed 2×2 per panel keeps the skyline factor', () => {
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5, 5], storeyH: [4, 3.5, 3.5], section, slabThickness: 150 })
+    m.shellElements = true
+    m.shellSubdiv = 2
+    const br = modelToFrame3D(m, { crackedSections: true, shearDeformation: true })
+    expect(br.shells.length).toBe(12 * 8)
+    const pc = precomputeFrame(br.nodes, br.members, br.supports, br.diaphragmGroups, br.shells)
+    expect(pc.free.length).toBeGreaterThan(400)
+    expect(pc.Kff?.kind).toBe('skyline')
   })
 })

@@ -472,3 +472,20 @@ describe('solveShell — sparse free block', () => {
     expect(ms).toBeLessThan(10_000)
   }, 30_000)
 })
+
+describe('triShell — the global stiffness is EXACTLY symmetric', () => {
+  // Tᵀ K T sums its two triangles in different orders, so without an explicit
+  // symmetrisation they differ by round-off — enough to fail the frame's
+  // symmetry check and send the whole meshed analysis to dense LU.
+  it('holds bit-for-bit on tilted, skewed triangles', () => {
+    const tris: [V3, V3, V3][] = [
+      [[0, 3.5, 0], [1.5, 3.5, 0], [1.5, 3.5, 1.25]],             // a slab cell
+      [[0, 0, 0], [2, 0.3, 0.1], [0.4, 1.7, 1.2]],               // skewed, tilted
+      [[6, 0, 5], [6, 3.5, 5], [6, 3.5, 3.333333333333333]],      // a wall cell
+    ]
+    for (const [a, b, c] of tris) {
+      const { Ke } = triShell(a, b, c, 24870, 0.2, 150)
+      for (let i = 0; i < 18; i++) for (let j = 0; j < 18; j++) expect(Ke[i][j]).toBe(Ke[j][i])
+    }
+  })
+})

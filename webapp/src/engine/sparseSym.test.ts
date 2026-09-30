@@ -103,6 +103,17 @@ describe('SparseSym — the storage itself', () => {
     expect(sparseIsSymmetric(B)).toBe(false)
   })
 
+  it('treats round-off in either triangle alike', () => {
+    // upper-only and lower-only noise are the same asymmetry; the lower pass
+    // used to compare to exact zero, so only one of these passed
+    const U = denseToSparse(bandSPD(10, 3))
+    sparseSet(U, 1, 6, 1e-12)                 // upper triangle only
+    expect(sparseIsSymmetric(U)).toBe(true)
+    const L = denseToSparse(bandSPD(10, 3))
+    sparseSet(L, 6, 1, 1e-12)                 // lower triangle only
+    expect(sparseIsSymmetric(L)).toBe(true)
+  })
+
   it('serialises to flat arrays and back without loss', () => {
     const A = denseToSparse(bandSPD(30, 4))
     const round = deserializeSparse(serializeSparse(A))

@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 562
+export const SOLVER_TEST_COUNT = 563
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -791,6 +791,10 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "solveShell — sparse free block",
         "name": "a model-sized mesh (6 438 DOF) solves in seconds, not minutes"
+      },
+      {
+        "suite": "triShell — the global stiffness is EXACTLY symmetric",
+        "name": "holds bit-for-bit on tilted, skewed triangles"
       }
     ]
   },

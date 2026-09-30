@@ -200,6 +200,17 @@ export function triShell(p1: V3, p2: V3, p3: V3, E: number, nu: number, t: numbe
   for (let blk = 0; blk < 6; blk++)
     for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) T[3 * blk + r][3 * blk + c] = R[r][c]
   const Ke = mul(mul(transpose(T), KL), T)   // Ke_glob = Tᵀ KL T
+  // EXACTLY symmetric. Tᵀ K T of a symmetric K is symmetric in exact
+  // arithmetic, but the two triangles are summed in different orders, so they
+  // part by round-off (4.7e-10 measured). Where one of a pair is an exact zero
+  // and its mirror is not, the assembled free block carries an entry in one
+  // triangle only, `sparseIsSymmetric` rejects it, and the frame factor drops
+  // from skyline to DENSE LU: 271 s against 1.5 s on an 8-storey frame meshed
+  // 3×3 per panel (6 240 DOF).
+  for (let i = 0; i < 18; i++) for (let j = i + 1; j < 18; j++) {
+    const s = 0.5 * (Ke[i][j] + Ke[j][i])
+    Ke[i][j] = s; Ke[j][i] = s
+  }
   return { Ke, A: f.A, f }
 }
 
