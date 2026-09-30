@@ -507,6 +507,33 @@ describe('buildFrameElevation — label collisions', () => {
     }
   })
 
+  it('a column reducing at a MIDDLE grid does not print over the next bay\'s beam mark', () => {
+    // The optimised 2×2-bay frame reduces the interior column 800×900 → 800×825
+    // at EL 3.50. The callout sat on the beam marks' own baseline and its
+    // landing ran into the next bay: "…→ 800×82" printed through "bx1.1.1".
+    const member = (o: Partial<ElevationMember> & { mark: string; role: 'beam' | 'column' }): ElevationMember =>
+      ({ u0: 0, u1: 1, yBot: 0, yTop: 1, bw: 250, d: 450, ...o })
+    const col = (mark: string, u: number, yBot: number, yTop: number, bw: number, d: number) =>
+      member({ mark, role: 'column', u0: u - d / 2000, u1: u + d / 2000, yBot, yTop, bw, d })
+    const input: FrameElevationInput = {
+      line: 'B', y: 3.5, yLo: 1.75, yHi: 5,
+      plane: elevationPlane([1, 0, 0], [0, 0, 0]),
+      members: [
+        member({ mark: 'bx0.1.1', role: 'beam', u0: 0, u1: 6, yBot: 3.05, yTop: 3.5 }),
+        member({ mark: 'bx1.1.1', role: 'beam', u0: 6, u1: 12, yBot: 3.05, yTop: 3.5 }),
+        col('c0.1.0', 0, 1.75, 3.5, 675, 750), col('c0.1.1', 0, 3.5, 5, 675, 750),
+        col('c1.1.0', 6, 1.75, 3.5, 800, 900), col('c1.1.1', 6, 3.5, 5, 800, 825),
+        col('c2.1.0', 12, 1.75, 3.5, 675, 750), col('c2.1.1', 12, 3.5, 5, 675, 750),
+      ],
+      grids: [{ u: 0, label: '1' }, { u: 6, label: '2' }, { u: 12, label: '3' }],
+      cages: [] as RebarCage[],
+      subject: new Set(['bx0.1.1', 'bx1.1.1']),
+    }
+    const d = buildFrameElevation(input)
+    expect(boxes(d).some((b) => b.t.includes('REDUCES'))).toBe(true)
+    expect(clashes(d)).toEqual([])
+  })
+
   it('the two face callouts are on SEPARATE lines, top above bottom', () => {
     const d = buildFrameElevation(bundles[0].input)
     const at = (s: string) => boxes(d).find((b) => b.t.includes(s))!

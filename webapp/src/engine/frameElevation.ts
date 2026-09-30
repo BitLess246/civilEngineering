@@ -718,8 +718,16 @@ export function buildFrameElevation(
     const above = at((m) => m.yBot >= i.y - 1e-6)
     if (!below || !above) continue
     if (below.bw === above.bw && below.d === above.d) continue
+    // UNDER the beams, on the column that reduces. Above them every baseline is
+    // spoken for — the beam marks sit at −4.4u, and this callout used to share
+    // that line, its landing running into the next bay until "→ 800×82" printed
+    // through that bay's mark. Below the soffit and above the section cuts is
+    // the one band on the sheet that carries nothing across a bay.
+    const soffit = Math.min(...i.members
+      .filter((m) => m.role === 'beam' && m.u0 <= g.u + 1e-6 && m.u1 >= g.u - 1e-6)
+      .map((m) => m.yBot), i.y)
     P.push(...angledLeader({
-      x: g.u, y: Y(i.y) - u * 1.2, ty: Y(i.y) - u * 4.4, side: 'left', within: [uMin, uMax],
+      x: g.u, y: Y(soffit) + u * 1.0, ty: Y(soffit) + u * 3.4, side: 'left', within: [uMin, uMax],
       text: `COLUMN REDUCES ${below.bw}×${below.d} → ${above.bw}×${above.d}`,
       size: u * 0.72, color: SHEET_INK,
     }))
