@@ -121,7 +121,7 @@ describe('slabs follow their deformed edge beams', () => {
 import { deformedInputs } from './deformedContour'
 import { generateGridModel } from '../engine/modelBuilder'
 import { modelToFrame3D } from '../engine/modelBridge'
-import { solveFrame3D } from '../engine/frame3d'
+import { solveFrame3D, localAxes } from '../engine/frame3d'
 import { maxDisplacement } from '../engine/deformedShape'
 
 describe('deformedInputs — the page\'s path, on a generated 2×1-bay, 2-storey frame', () => {
@@ -161,6 +161,34 @@ describe('deformedInputs — the page\'s path, on a generated 2×1-bay, 2-storey
     const mag = (v: readonly number[]) => Math.hypot(v[0], v[1], v[2])
     const ends = Math.max(mag(m.field.disp[0]), mag(m.field.disp[m.field.disp.length - 1]))
     expect(value).toBeGreaterThan(ends)
+  })
+
+  it('uses the EI the analysis solved with — every beam leaves its joint at the solved rotation', () => {
+    // Pinned ends and an in-span peak hold for ANY EI (a sabotage doubling E
+    // passed both). The end SLOPE does not: invert the first Hermite step with
+    // the bridge's true EI and it must equal θ at the joint, about the beam's
+    // own z′ — only when the drawn curve was integrated with that same EI.
+    const k = new Map(model.nodes.map((n, i) => [n.id, i]))
+    const props = new Map(br.members.map((m) => [m.id, m]))
+    const res = new Map(r.members.map((m) => [m.id, m]))
+    let checked = 0, worst = 0, scale = 0
+    for (const m of inp.members) {
+      if (Math.abs(m.field.base[0][1] - m.field.base[m.field.base.length - 1][1]) > 1e-9) continue   // beams only
+      const pr = props.get(m.field.id)!, fr = res.get(m.field.id)!
+      const EI = pr.E * pr.Iz * 1e-9
+      const dir = [0, 1, 2].map((c) => m.field.base[m.field.base.length - 1][c] - m.field.base[0][c]) as [number, number, number]
+      const [, ey, ez] = localAxes(dir, m.rotDeg)
+      const v = (i: number) => m.field.disp[i][0] * ey[0] + m.field.disp[i][1] * ey[1] + m.field.disp[i][2] * ey[2]
+      const x1 = fr.xs[1] - fr.xs[0]
+      const p0 = fr.Mz[0] / EI, p1 = fr.Mz[1] / EI, d0 = fr.Vy[0] / EI, d1 = fr.Vy[1] / EI
+      const slope = (v(1) - v(0)) / x1 - x1 * (7 * p0 + 3 * p1) / 20 - x1 * x1 * (d0 / 20 - d1 / 30)
+      const ki = k.get(m.ni)!
+      const theta = r.d[6 * ki + 3] * ez[0] + r.d[6 * ki + 4] * ez[1] + r.d[6 * ki + 5] * ez[2]
+      worst = Math.max(worst, Math.abs(slope - theta)); scale = Math.max(scale, Math.abs(theta)); checked++
+    }
+    expect(checked).toBeGreaterThan(4)
+    expect(scale).toBeGreaterThan(1e-5)
+    expect(worst / scale).toBeLessThan(1e-6)
   })
 
   it('hangs a beam half a depth below its node, and not a column', () => {
