@@ -165,7 +165,7 @@ describe('grouping', () => {
   it('splits plans from details the same way the two builders do', () => {
     const { model, design } = full()
     expect(buildSheetSet(model, design, soil)).toEqual([
-      generalNotesSheet(model),
+      generalNotesSheet(model, design),
       ...planSheets(model, design, soil),
       ...detailSheets(model, design, soil),
     ])

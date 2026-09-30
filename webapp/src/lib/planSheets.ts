@@ -21,7 +21,8 @@ import { buildFootingDetail } from '../engine/footingDetail'
 import { buildColumnStackDetail } from '../engine/columnStackDetail'
 import { buildSlabOpeningDetail } from '../engine/slabOpening'
 import { buildWallCornerDetail, buildWallIntersectionDetail, buildWallJointDetail } from '../engine/wallDetail'
-import { buildGeneralNotes, GENERAL_NOTES_REF, type GeneralNotesInput } from '../engine/generalNotes'
+import { buildGeneralNotes, GENERAL_NOTES_REF, type GeneralNotesInput, type FrameMaterials } from '../engine/generalNotes'
+import { getWoodRef } from '../engine/woodDesign'
 import { FOOTING_COVER } from '../engine/cageBuilder'
 
 /** §420.6.1.3.1 — clear cover to slab steel not exposed to earth, mm. This is
@@ -30,7 +31,7 @@ const SLAB_COVER = 20
 import {
   footingsForPlan, footingDetailBundles,
   slabOpeningBundles, wallDetailBundles, frameElevationBundles,
-  columnStackBundles,
+  columnStackBundles, isRcSection,
   type SoilInput,
 } from './planDetails'
 import { buildFrameElevation } from '../engine/frameElevation'
@@ -105,7 +106,15 @@ export function planSheets(model: StructuralModel, design: StructureDesign | nul
       footings: footingsForPlan(design),
       foundingElev: soil.H != null ? -Math.abs(soil.H) : undefined,
     })
-    if (d) out.push({ key: 'foundation-plan', group: 'Plans', title: 'Foundation plan', warnings: [], drawing: d })
+    // Footing details are drawn for RC columns only (planDetails); say so
+    // rather than let the missing sheets pass for an oversight.
+    const secById = new Map(model.sections.map((sc) => [sc.id, sc]))
+    const nonRc = model.members.some((m) => m.role === 'column' && !isRcSection(secById.get(m.section)))
+    const warnings = nonRc ? ['Footing details under steel and timber columns are not drawn yet — the base plate / pedestal detail is pending. The footing schedule on this plan still applies.'] : []
+    if (d) out.push({
+      key: 'foundation-plan', group: 'Plans', title: 'Foundation plan', warnings, drawing: d,
+      ...(nonRc ? { subtitle: 'footing details under steel / timber columns pending' } : {}),
+    })
   }
   return out
 }
@@ -213,8 +222,31 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
  * material strengths the schedule of measures quotes are the ones the job
  * actually uses, so a table row can never describe a bar nobody detailed.
  */
-export function generalNotesSheet(model: StructuralModel): PlanSheet {
-  const secs = model.sections as Partial<Record<keyof GeneralNotesInput, never>> &
+/** What the model's members and floors are made of, as the notes need it. */
+export function frameMaterials(model: StructuralModel): FrameMaterials {
+  const secById = new Map(model.sections.map((sc) => [sc.id, sc]))
+  const used = [...new Set(model.members.map((m) => m.section))].map((id) => secById.get(id)).filter((sc) => sc != null)
+  const steel = used.filter((sc) => sc.material === 'steel')
+  const wood = used.filter((sc) => sc.material === 'wood')
+  const decks = model.plates.filter((p) => p.role !== 'wall' && p.deck)
+  const uniq = <T,>(xs: T[]) => [...new Set(xs)]
+  const gradeLabel = (id: string | undefined) => (id ? getWoodRef(id)?.label ?? id : 'custom material')
+  const grades = uniq([...wood.map((sc) => gradeLabel(sc.woodSpecies)), ...decks.map((p) => gradeLabel(p.deck!.joistSpecies))])
+  return {
+    rc: used.some(isRcSection),
+    rcSlabs: model.plates.some((p) => p.role !== 'wall' && !p.deck),
+    ...(steel.length ? { steel: { Fy: uniq(steel.map((sc) => sc.steelFy ?? 345)), Fu: uniq(steel.map((sc) => sc.steelFu ?? 448)) } } : {}),
+    ...(grades.length ? { timber: { grades, wet: wood.some((sc) => sc.woodWet) || decks.some((p) => p.deck!.wet) } } : {}),
+  }
+}
+
+export function generalNotesSheet(model: StructuralModel, design?: StructureDesign | null): PlanSheet {
+  const frame = frameMaterials(model)
+  // Only REINFORCED CONCRETE sections carry bars. A steel or timber section
+  // still holds the concrete defaults it was generated with, and quoting them
+  // would put a ⌀20 in the schedule of measures that nothing on the job uses.
+  const rcSecs = model.sections.filter((sc) => isRcSection(sc))
+  const secs = rcSecs as Partial<Record<keyof GeneralNotesInput, never>> &
     { fc?: number; fy?: number; barDia?: number; tieDia?: number; cover?: number; role?: string }[]
   const num = (pick: (s: typeof secs[number]) => number | undefined) =>
     [...new Set(secs.map(pick).filter((v): v is number => typeof v === 'number' && v > 0))]
@@ -226,10 +258,15 @@ export function generalNotesSheet(model: StructuralModel): PlanSheet {
     beam: Math.min(...covers, 40), column: Math.max(...covers, 40),
     slab: SLAB_COVER, footing: FOOTING_COVER,
   }
+  // The footing mat is RC whatever the frame is, so its bars are always quoted.
+  const footBars = (design?.footings ?? []).map((f) => f.barDia).filter((d) => d > 0)
+  const concrete = model.sections.map((sc) => sc.fc).filter((v) => v > 0)
+  const rebarFy = model.sections.map((sc) => sc.fy).filter((v) => v > 0)
   const i: GeneralNotesInput = {
-    fc: num((s) => s.fc), fy: num((s) => s.fy),
-    barDias: num((s) => s.barDia), tieDias: num((s) => s.tieDia),
-    cover, seismic: true,
+    fc: frame.rc ? num((s) => s.fc) : [...new Set(concrete)],
+    fy: frame.rc ? num((s) => s.fy) : [...new Set(rebarFy)],
+    barDias: [...new Set([...num((s) => s.barDia), ...footBars])], tieDias: num((s) => s.tieDia),
+    cover, seismic: true, frame,
   }
   return {
     key: 'general-notes', group: 'General notes', title: 'General structural notes',
@@ -245,7 +282,7 @@ export function generalNotesSheet(model: StructuralModel): PlanSheet {
 /** Notes, then plans, then details — the whole set, in sheet order. */
 export function buildSheetSet(model: StructuralModel, design: StructureDesign | null, soil: SoilInput = {}, opts: SheetSetOptions = {}): PlanSheet[] {
   return [
-    generalNotesSheet(model),
+    generalNotesSheet(model, design),
     ...planSheets(model, design, soil),
     ...(design ? detailSheets(model, design, soil, opts) : []),
   ]

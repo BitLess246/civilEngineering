@@ -30,7 +30,21 @@ export type PlanPrimitive =
   // world-space path (coords in m, arc radii in m) — used for outlined rebar tubes
   | { kind: 'path'; cmds: PathCmd[]; stroke?: string; fill?: string; width?: number; dash?: number[]; closed?: boolean; fillRule?: 'evenodd' | 'nonzero'; opacity?: number; join?: 'round' | 'miter' | 'bevel'; cap?: 'round' | 'butt' | 'square' }
 
-export interface BeamScheduleRow { mark: string; size: string }
+export interface BeamScheduleRow { mark: string; size: string; notes?: string }
+
+/** What a member is on a schedule: a rolled shape by its designation, anything
+ *  rectangular by b×h (mm). */
+export function memberSize(sec: RectSection): string {
+  return sec.material === 'steel' && sec.shape ? sec.shape : `${sec.b}×${sec.h}`
+}
+
+/** The member's material as a schedule reads it — concrete strength, steel
+ *  yield, or the timber species/grade id. */
+export function materialNote(sec: RectSection): string {
+  if (sec.material === 'steel') return `Steel Fy=${sec.steelFy ?? 345} MPa`
+  if (sec.material === 'wood') return `Timber ${sec.woodSpecies ?? 'custom'}${sec.woodWet ? ' (wet)' : ''}`
+  return `f'c=${sec.fc} MPa`
+}
 export interface FootingScheduleRow { mark: string; size: string; thk: string; reinf: string }
 export interface ColumnScheduleRow { mark: string; size: string; notes: string }
 export interface SlabScheduleRow { mark: string; thk: string; type: string }
@@ -193,18 +207,18 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   const markBySize = new Map<string, string>()
   const schedule: BeamScheduleRow[] = []
   const markFor = (sec: RectSection): string => {
-    const key = `${sec.b}×${sec.h}`
+    const key = `${memberSize(sec)}|${materialNote(sec)}`
     let mk = markBySize.get(key)
-    if (!mk) { mk = `FB${markBySize.size + 1}`; markBySize.set(key, mk); schedule.push({ mark: mk, size: key }) }
+    if (!mk) { mk = `FB${markBySize.size + 1}`; markBySize.set(key, mk); schedule.push({ mark: mk, size: memberSize(sec), notes: materialNote(sec) }) }
     return mk
   }
   // column marks (C1, C2…) group by section id
   const colMarkBySec = new Map<string, string>()
   const columnSchedule: ColumnScheduleRow[] = []
   const colMarkFor = (sec: RectSection): string => {
-    const key = `${sec.b}×${sec.h}|${sec.fc}|${sec.fy}`   // identical columns share a mark
+    const key = `${memberSize(sec)}|${materialNote(sec)}`   // identical columns share a mark
     let mk = colMarkBySec.get(key)
-    if (!mk) { mk = `C${colMarkBySec.size + 1}`; colMarkBySec.set(key, mk); columnSchedule.push({ mark: mk, size: `${sec.b}×${sec.h}`, notes: `f'c=${sec.fc} MPa` }) }
+    if (!mk) { mk = `C${colMarkBySec.size + 1}`; colMarkBySec.set(key, mk); columnSchedule.push({ mark: mk, size: memberSize(sec), notes: materialNote(sec) }) }
     return mk
   }
   // slab marks (S1, S2…) group by thickness × span type
@@ -404,8 +418,12 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       P.push({ kind: 'line', x1: cs[i][0], y1: cs[i][1], x2: cs[(i + 1) % 4][0], y2: cs[(i + 1) % 4][1], stroke: PANEL, width: 0.5, dash: [0.15, 0.12] })
     const lx = maxX - minX, ly = maxZ - minZ
     const mx = (minX + maxX) / 2, mz = (minZ + maxZ) / 2
-    const twoWay = Math.max(lx, ly) / Math.max(1e-6, Math.min(lx, ly)) <= 2
-    const mk = slabMarkFor(Math.round(p.thickness), twoWay ? 'Two-way' : 'One-way')
+    // A timber deck is joists spanning the SHORT side (as the pipeline designs
+    // it) under boards: one-way, and scheduled by its joists, not a thickness.
+    const twoWay = !p.deck && Math.max(lx, ly) / Math.max(1e-6, Math.min(lx, ly)) <= 2
+    const mk = p.deck
+      ? slabMarkFor(Math.round(p.deck.deckThickness), `Timber deck on ${p.deck.joistB}×${p.deck.joistD} joists @ ${p.deck.joistSpacing}${p.deck.joistSpecies ? ` (${p.deck.joistSpecies})` : ''}`)
+      : slabMarkFor(Math.round(p.thickness), twoWay ? 'Two-way' : 'One-way')
     // two-way → one span arrow per axis (crossing); one-way → a single arrow in
     // the SHORT direction; each spans ~60% of its panel dimension
     const axes: [number, number][] = twoWay ? [[1, 0], [0, 1]] : lx <= ly ? [[1, 0]] : [[0, 1]]
@@ -479,18 +497,26 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       y = drawTable(tbX, y, 'FOOTING SCHEDULE', BEAM, [r * 1.9, r * 3.4, r * 2.0, r * 5.4], rows) + r * 1.4
     }
     if (columnSchedule.length) {
-      const rows = [['MARK', 'SIZE', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, withUnit(c.size), c.notes])]
+      const rows = [['MARK', 'SIZE', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, /^[0-9]/.test(c.size) ? withUnit(c.size) : c.size, c.notes])]
       drawTable(tbX, y, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.4, r * 4.4], rows)
     }
   } else {
     let y = tblY0
     if (schedule.length) {
-      const rows = [['MARK', 'SIZE'], ...schedule.map((s) => [s.mark, withUnit(s.size)])]
-      y = drawTable(tbX, y, 'BEAM SCHEDULE', BEAM, [r * 1.6, r * 3.6], rows) + r * 1.4
+      // A rolled shape is its own size — no unit on "W310x38.7". The material
+      // column appears only where a member is not reinforced concrete, so an
+      // all-RC plan reads exactly as it always has.
+      const unit = (s: BeamScheduleRow) => (/^[0-9]/.test(s.size) ? withUnit(s.size) : s.size)
+      const mixed = schedule.some((s) => s.notes && !s.notes.startsWith("f'c"))
+      const rows = mixed
+        ? [['MARK', 'SIZE', 'MATERIAL'], ...schedule.map((s) => [s.mark, unit(s), s.notes ?? ''])]
+        : [['MARK', 'SIZE'], ...schedule.map((s) => [s.mark, unit(s)])]
+      y = drawTable(tbX, y, 'BEAM SCHEDULE', BEAM, mixed ? [r * 1.6, r * 3.6, r * 3.4] : [r * 1.6, r * 3.6], rows) + r * 1.4
     }
     if (slabSchedule.length) {
       const rows = [['MARK', 'THK', 'TYPE'], ...slabSchedule.map((s) => [s.mark, withUnit(s.thk), s.type])]
-      drawTable(tbX, y, 'SLAB SCHEDULE', PANEL, [r * 1.6, r * 2.2, r * 3.6], rows)
+      const deck = slabSchedule.some((s) => s.type.startsWith('Timber deck'))
+      drawTable(tbX, y, 'SLAB SCHEDULE', PANEL, [r * 1.6, r * 2.2, deck ? r * 9.6 : r * 3.6], rows)
     }
   }
 

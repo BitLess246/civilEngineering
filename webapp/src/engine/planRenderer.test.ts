@@ -25,7 +25,7 @@ describe('planRenderer — framing plan geometry', () => {
   it('labels beams with marks (FB1…) and builds a matching beam schedule', () => {
     expect(texts(plan.primitives)).toContain('FB1')
     expect(plan.beamSchedule.length).toBeGreaterThan(0)
-    expect(plan.beamSchedule[0]).toEqual({ mark: 'FB1', size: '400×400' })
+    expect(plan.beamSchedule[0]).toMatchObject({ mark: 'FB1', size: '400×400' })
     expect(texts(plan.primitives)).toContain('BEAM SCHEDULE')
   })
 

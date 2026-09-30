@@ -78,6 +78,20 @@ export interface GeneralNotesInput {
   seismic?: boolean
   /** Commercial stock length, m. Defaults to the model's own. */
   stock?: number
+  /** What the frame's MEMBERS are made of. Absent means an all-RC frame, the
+   *  sheet as it always was. Footings are RC whatever the frame is. */
+  frame?: FrameMaterials
+}
+
+export interface FrameMaterials {
+  /** Any beam, girder or column of reinforced concrete. */
+  rc: boolean
+  /** Any concrete slab panel (a timber deck is not one). */
+  rcSlabs: boolean
+  /** Rolled steel members: the yield and tensile strengths used, MPa. */
+  steel?: { Fy: number[]; Fu: number[] }
+  /** Timber members or decks: species/grade labels, and whether any is in wet service. */
+  timber?: { grades: string[]; wet: boolean }
 }
 
 export interface GeneralNotesOptions {
@@ -371,13 +385,21 @@ export function generalNoteSections(i: GeneralNotesInput): NoteSection[] {
   const stock = i.stock ?? STOCK_BAR_LENGTH
   const c = i.cover
   const REF = `PER ${SCHEDULE_NAME}`
+  // Absent = the all-RC frame this sheet was written for.
+  const fr: FrameMaterials = i.frame ?? { rc: true, rcSlabs: true }
+  const codes = [
+    'NSCP 2015', 'CONCRETE TO ACI 318-14',
+    ...(fr.steel ? ['STRUCTURAL STEEL TO AISC 360-16'] : []),
+    ...(fr.timber ? ['TIMBER TO NSCP 2015 CHAPTER 6 AND NDS'] : []),
+  ]
+  const rcOnly = <T,>(xs: T[]): T[] => (fr.rc ? xs : [])
 
-  return [
+  const sections: NoteSection[] = [
     {
       head: 'GENERAL',
       lines: [
-        'DESIGN AND DETAILING TO NSCP 2015 (ACI 318-14).',
-        ...(i.seismic ? ['SPECIAL MOMENT FRAME DETAILING PER §418 APPLIES THROUGHOUT.'] : []),
+        fr.steel || fr.timber ? `DESIGN AND DETAILING TO ${codes.join(', ')}.` : 'DESIGN AND DETAILING TO NSCP 2015 (ACI 318-14).',
+        ...(i.seismic && fr.rc ? ['SPECIAL MOMENT FRAME DETAILING PER §418 APPLIES THROUGHOUT.'] : []),
         'ALL DIMENSIONS IN MILLIMETRES, ALL LEVELS IN METRES. DO NOT SCALE — WORK TO FIGURED DIMENSIONS.',
         'THESE NOTES APPLY TO EVERY SHEET IN THE SET. WHERE A DETAIL SHEET DISAGREES WITH THIS SHEET, THE DETAIL SHEET GOVERNS FOR THAT MEMBER; REPORT THE DISCREPANCY BEFORE PROCEEDING.',
         'A FLOOR LEVEL IS THE TOP OF THE BEAMS AT IT; A BEAM SOFFIT IS ITS OWN DEPTH BELOW THAT LEVEL. SET FORMWORK FROM THE LEVEL.',
@@ -395,8 +417,8 @@ export function generalNoteSections(i: GeneralNotesInput): NoteSection[] {
     {
       head: 'CLEAR COVER',
       lines: [
-        `BEAMS AND COLUMNS — ${c.beam} / ${c.column} TO OUTSIDE OF STIRRUP OR TIE.`,
-        `SLABS — ${c.slab}.`,
+        ...rcOnly([`BEAMS AND COLUMNS — ${c.beam} / ${c.column} TO OUTSIDE OF STIRRUP OR TIE.`]),
+        ...(fr.rcSlabs ? [`SLABS — ${c.slab}.`] : []),
         `FOOTINGS AND SURFACES CAST AGAINST EARTH — ${c.footing} (§420.6.1.3.1).`,
         'COVER SHALL BE MAINTAINED WITH APPROVED SPACERS AT NOT MORE THAN 1000 CENTRES.',
       ],
@@ -405,20 +427,22 @@ export function generalNoteSections(i: GeneralNotesInput): NoteSection[] {
       head: 'BENDS AND HOOKS',
       lines: [
         `STANDARD 90° AND 180° HOOKS TO TABLE 425.3.1. BEND DIAMETER AND EXTENSION ${REF}.`,
-        `TIES, STIRRUPS AND HOOPS TAKE THE TRANSVERSE BEND OF §425.3.2: ${ties.map((d) => `⌀${d} TO ⌀${Math.round(stirrupBendDiameter(d))} INSIDE`).join(', ')}.`,
-        `SEISMIC HOOKS TURN 135° WITH A TAIL OF max(6·dt, 75): ${ties.map((d) => `⌀${d} → ${seismicHookTail(d)}`).join(', ')}.`,
+        ...(ties.length ? [`TIES, STIRRUPS AND HOOPS TAKE THE TRANSVERSE BEND OF §425.3.2: ${ties.map((d) => `⌀${d} TO ⌀${Math.round(stirrupBendDiameter(d))} INSIDE`).join(', ')}.`] : []),
+        ...rcOnly([`SEISMIC HOOKS TURN 135° WITH A TAIL OF max(6·dt, 75): ${ties.map((d) => `⌀${d} → ${seismicHookTail(d)}`).join(', ')}.`]),
         `ℓdh IS MEASURED TO THE OUTSIDE OF THE BEND — ${REF}.`,
       ],
-      figure: stirrupHookFigure(ties[0] ?? 10),
+      ...(fr.rc ? { figure: stirrupHookFigure(ties[0] ?? 10) } : {}),
     },
     {
       head: 'DEVELOPMENT AND SPLICES',
       lines: [
         `TENSION LAPS ARE CLASS B UNLESS A DETAIL SAYS OTHERWISE. LENGTH ${REF}.`,
         'STAGGER SPLICES. NOT MORE THAN HALF THE BARS IN A FACE ARE LAPPED AT ONE SECTION.',
-        'LAP ZONES: BEAM TOP STEEL IN THE MIDDLE HALF OF THE SPAN, BEAM BOTTOM STEEL IN AN END QUARTER, COLUMN VERTICALS IN THE CENTRE HALF OF THE STOREY (§418.7.4.3).',
-        'HOOPS ARE CLOSED UP TO 100 C/C THROUGH THE FULL LENGTH OF EVERY LAP SPLICE.',
-        'NO SPLICE WITHIN A BEAM–COLUMN JOINT, NOR WITHIN TWICE THE MEMBER DEPTH OF A SUPPORT FACE (§418.6.3.3).',
+        ...rcOnly([
+          'LAP ZONES: BEAM TOP STEEL IN THE MIDDLE HALF OF THE SPAN, BEAM BOTTOM STEEL IN AN END QUARTER, COLUMN VERTICALS IN THE CENTRE HALF OF THE STOREY (§418.7.4.3).',
+          'HOOPS ARE CLOSED UP TO 100 C/C THROUGH THE FULL LENGTH OF EVERY LAP SPLICE.',
+          'NO SPLICE WITHIN A BEAM–COLUMN JOINT, NOR WITHIN TWICE THE MEMBER DEPTH OF A SUPPORT FACE (§418.6.3.3).',
+        ]),
         'LAP BARS IN CONTACT AND TIE THEM. SET THE LAPPING BAR BESIDE ITS PARTNER IN THE SAME LAYER, TOWARDS THE INSIDE OF THE CAGE — NOT ABOVE OR BELOW IT. COVER AND EFFECTIVE DEPTH ARE UNCHANGED BY A LAP.',
       ],
     },
@@ -471,19 +495,50 @@ export function generalNoteSections(i: GeneralNotesInput): NoteSection[] {
         'A BEAM BAR PASSING THROUGH A JOINT NEEDS A COLUMN DEPTH OF 20·db PARALLEL TO IT (§418.8.2.3).',
       ],
     },
+    ...(fr.steel ? [{
+      head: 'STRUCTURAL STEEL',
+      lines: [
+        `ROLLED SHAPES Fy = ${fr.steel.Fy.join(' / ')} MPa, Fu = ${fr.steel.Fu.join(' / ')} MPa. MILL CERTIFICATES WITH EVERY DELIVERY.`,
+        'CONNECTION PLATES Fy = 248 MPa, Fu = 400 MPa. BOLTS M20 A325, BEARING TYPE (AISC 360-16 §J3). WELDS E70XX (§J2).',
+        'EACH BEAM END IS BUILT AS THE CONNECTION SCHEDULE SAYS — MOMENT CONNECTION OR SHEAR TAB. THE ANALYSIS ASSUMED EXACTLY THAT JOINT; DO NOT SUBSTITUTE ONE FOR THE OTHER.',
+        'BASE PLATES AND ANCHOR RODS PER THE BASE-PLATE SCHEDULE (§J8). SET RODS TO A TEMPLATE BEFORE THE FOOTING POUR; GROUT UNDER EVERY PLATE WITH NON-SHRINK GROUT.',
+        'FABRICATOR’S SHOP DRAWINGS ARE SUBMITTED FOR REVIEW BEFORE ANY STEEL IS CUT.',
+      ],
+    }] : []),
+    ...(fr.timber ? [{
+      head: 'TIMBER',
+      lines: [
+        `STRESS-GRADED TIMBER: ${fr.timber.grades.join(', ')}. EVERY PIECE CARRIES ITS GRADE STAMP.`,
+        fr.timber.wet
+          ? 'DESIGNED FOR WET SERVICE (MOISTURE CONTENT ABOVE 19% SAWN / 16% GLULAM).'
+          : 'DESIGNED FOR DRY SERVICE: MOISTURE CONTENT NOT ABOVE 19% SAWN / 16% GLULAM WHEN INSTALLED AND IN USE.',
+        'MEMBER SIZES ARE ACTUAL DIMENSIONS b × d IN MILLIMETRES, NOT NOMINAL.',
+        'DECK BOARDS RUN CONTINUOUS OVER AT LEAST THREE JOISTS. JOIST SIZE AND SPACING TO THE SLAB SCHEDULE.',
+        'DO NOT NOTCH OR BORE A BEAM, JOIST OR POST EXCEPT AS DETAILED.',
+        'TIMBER DOES NOT BEAR ON CONCRETE OR SOIL DIRECTLY: SEPARATE IT, OR USE PRESERVATIVE-TREATED TIMBER.',
+        'TIMBER CONNECTIONS ARE NOT DESIGNED ON THIS SET. DETAIL THEM AND SUBMIT FOR REVIEW BEFORE FABRICATION.',
+      ],
+    }] : []),
     {
-      head: 'FOOTINGS AND SLABS',
+      head: fr.rcSlabs ? 'FOOTINGS AND SLABS' : 'FOOTINGS',
       lines: [
         'FOUNDING LEVEL IS MEASURED FROM NATURAL GROUND TO THE UNDERSIDE OF THE PAD. IT IS NOT THE COLUMN’S UNBRACED LENGTH.',
         'PROVE THE BEARING SURFACE BEFORE ANY STEEL IS PLACED. IF THE FOUNDING MATERIAL DIFFERS FROM THAT ASSUMED, STOP AND REPORT IT.',
-        'COLUMN DOWELS LAP WITH THE COLUMN BARS ABOVE; TAILS TURN OUTWARD ONTO THE MAT, CORNER DOWELS DIAGONALLY OUTWARD. DEVELOPMENT INTO THE PAD BEGINS AT THE TOP OF THE FOOTING.',
-        `SLAB OPENINGS ARE TRIMMED: ADD BARS EQUAL IN NUMBER AND SIZE TO THOSE INTERRUPTED, HALF EACH SIDE, TOP AND BOTTOM (§408.5.4.2), EACH DEVELOPED ℓd ${REF} PAST THE FACE.`,
-        'NO OPENING IS FORMED THAT IS NOT ON THE DRAWINGS.',
-        'A DIAGONAL BAR IS PLACED AT EVERY RE-ENTRANT CORNER, EACH FACE, FOR CRACK CONTROL (§424.3).',
+        ...rcOnly(['COLUMN DOWELS LAP WITH THE COLUMN BARS ABOVE; TAILS TURN OUTWARD ONTO THE MAT, CORNER DOWELS DIAGONALLY OUTWARD. DEVELOPMENT INTO THE PAD BEGINS AT THE TOP OF THE FOOTING.']),
+        ...(fr.rcSlabs ? [
+          `SLAB OPENINGS ARE TRIMMED: ADD BARS EQUAL IN NUMBER AND SIZE TO THOSE INTERRUPTED, HALF EACH SIDE, TOP AND BOTTOM (§408.5.4.2), EACH DEVELOPED ℓd ${REF} PAST THE FACE.`,
+          'NO OPENING IS FORMED THAT IS NOT ON THE DRAWINGS.',
+          'A DIAGONAL BAR IS PLACED AT EVERY RE-ENTRANT CORNER, EACH FACE, FOR CRACK CONTROL (§424.3).',
+        ] : []),
       ],
     },
   ]
+  // The reinforced-concrete MEMBER rules — beams, their anchorage, columns and
+  // joints — go only where there is an RC beam or column to apply them to.
+  return fr.rc ? sections : sections.filter((x) => !RC_MEMBER_HEADS.has(x.head))
 }
+
+const RC_MEMBER_HEADS = new Set(['BEAMS', 'ANCHORAGE AT A BEAM END', 'COLUMNS — REINFORCEMENT', 'COLUMNS — LAPS AND SPLICES', 'BEAM–COLUMN JOINTS'])
 
 /**
  * The inspection hold points, by pour.
@@ -492,8 +547,9 @@ export function generalNoteSections(i: GeneralNotesInput): NoteSection[] {
  * LOOK AT, short enough to be ticked standing in the formwork. Anything that
  * needs a paragraph to explain is a rule, and rules are in the notes.
  */
-export function constructionChecks(): NoteSection[] {
-  return [
+export function constructionChecks(frame?: FrameMaterials): NoteSection[] {
+  const fr: FrameMaterials = frame ?? { rc: true, rcSlabs: true }
+  const all: NoteSection[] = [
     {
       head: 'BEFORE THE FOOTING POUR',
       lines: [
@@ -501,7 +557,8 @@ export function constructionChecks(): NoteSection[] {
         'PAD SIZE AND THICKNESS TO SCHEDULE',
         'MAT BAR SIZE AND SPACING, BOTH WAYS',
         'COVER TO EARTH ON SPACERS',
-        'DOWEL NUMBER, POSITION AND PROJECTION RECORDED',
+        ...(fr.rc ? ['DOWEL NUMBER, POSITION AND PROJECTION RECORDED'] : []),
+        ...(fr.steel ? ['ANCHOR RODS SET TO TEMPLATE AND PROJECTION RECORDED'] : []),
       ],
     },
     {
@@ -544,6 +601,48 @@ export function constructionChecks(): NoteSection[] {
       ],
     },
   ]
+  const steel: NoteSection[] = fr.steel ? [{
+    head: 'BEFORE AND DURING STEEL ERECTION',
+    lines: [
+      'ANCHOR RODS TO TEMPLATE: POSITION, PROJECTION AND PLUMB',
+      'SHAPES AND PLATE THICKNESSES AGAINST THE SCHEDULES',
+      'EVERY BEAM END: MOMENT CONNECTION OR SHEAR TAB AS SCHEDULED',
+      'BOLT COUNT, SIZE AND GRADE MARKING ON THE HEADS',
+      'WELD SIZE, LENGTH AND ELECTRODE; CJP WELDS INSPECTED',
+      'GROUT PACKED SOLID UNDER EVERY BASE PLATE',
+    ],
+  }] : []
+  const timber: NoteSection[] = fr.timber ? [{
+    head: 'BEFORE THE TIMBER IS CLOSED IN',
+    lines: [
+      'GRADE STAMP ON EVERY PIECE, SPECIES AND GRADE AS SCHEDULED',
+      'MOISTURE CONTENT MEASURED AND RECORDED',
+      'MEMBER SIZES ARE ACTUAL, NOT NOMINAL',
+      'JOIST SPACING AND DECK THICKNESS TO THE SLAB SCHEDULE',
+      'NO NOTCH OR HOLE THAT IS NOT DETAILED',
+      'NO TIMBER BEARING DIRECTLY ON CONCRETE OR SOIL',
+    ],
+  }] : []
+  // The pour checks exist for what is actually poured: RC columns, RC beams or
+  // slabs, and footings always.
+  const keep = (x: NoteSection) =>
+    x.head === 'BEFORE THE COLUMN POUR' ? fr.rc
+      : x.head === 'BEFORE THE BEAM AND SLAB POUR' ? fr.rc
+        : true
+  // Concrete slabs on a steel or timber frame: the slab half of the beam-and-
+  // slab pour, without the beam cage it no longer has.
+  const slabOnly: NoteSection[] = !fr.rc && fr.rcSlabs ? [{
+    head: 'BEFORE THE SLAB POUR',
+    lines: [
+      'TOP STEEL IS IN THE TOP, AND CHAIRED TO STAY THERE',
+      'BAR SIZE AND SPACING, BOTH WAYS, TO THE SLAB DESIGN',
+      'SPLICES STAGGERED AND IN THE ZONES SHOWN',
+      'TRIMMER BARS AT OPENINGS, DEVELOPED BOTH SIDES',
+    ],
+  }] : []
+  const kept = all.filter(keep)
+  kept.splice(Math.max(0, kept.findIndex((x) => x.head === 'AT EVERY POUR')), 0, ...slabOnly)
+  return [...kept, ...steel, ...timber]
 }
 
 // ── the sheet ────────────────────────────────────────────────────────────
@@ -694,7 +793,7 @@ export function buildGeneralNotes(i: GeneralNotesInput, opts: GeneralNotesOption
   const headSize = u * 1.9
 
   const secs = generalNoteSections(i)
-  const checks = constructionChecks()
+  const checks = constructionChecks(i.frame)
   const rows = measureRows(i)
   const topPad = u * 6.4
   const tableH = rows.length ? step * (1.3 + 1.7 * 1.25 + rows.length * 1.25) + step * 2.7 : 0
@@ -763,7 +862,9 @@ export function buildGeneralNotes(i: GeneralNotesInput, opts: GeneralNotesOption
   // sheet's own identity, not as a numbered note competing with the code.
   P.push({
     kind: 'text', x: 0, y: u * 3.7, size: size * 1.02, anchor: 'start', color: NOTE, weight: 600,
-    text: 'EVERY BEAM IS DRAWN ON ITS OWN FRAME ELEVATION — ONE SHEET PER GRID LINE PER FLOOR. THERE IS NO TYPICAL BEAM SHEET.',
+    text: (i.frame?.rc ?? true)
+      ? 'EVERY BEAM IS DRAWN ON ITS OWN FRAME ELEVATION — ONE SHEET PER GRID LINE PER FLOOR. THERE IS NO TYPICAL BEAM SHEET.'
+      : 'MEMBERS ARE SCHEDULED ON THE FRAMING PLANS BY MARK; CONNECTIONS AND BASE PLATES BY THEIR SCHEDULES.',
   })
 
   const top = topPad
