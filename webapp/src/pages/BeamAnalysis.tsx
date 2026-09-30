@@ -8,6 +8,7 @@ import { SECTIONS_HANDOFF_KEY } from './BeamDesign'
 import { BEAM_LOADS_HANDOFF_KEY } from './LoadPath'
 import { BeamElevation } from '../components/BeamElevation'
 import { Diagram } from '../components/Diagram'
+import { DIAGRAM_GRID } from '../lib/diagramLabel'
 import { ReportControls } from '../components/ReportControls'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
@@ -255,7 +256,7 @@ export default function BeamAnalysis() {
       </div>
 
       {r && shown && (
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className={`mt-6 gap-6 ${DIAGRAM_GRID}`}>
           <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
             <Diagram xs={r.xs} ys={r.V} title={`SHEAR — ${shown.combo.name}`} unit="kN" color="#1f77b4" vlines={vlines} decimals={1} />
           </div>

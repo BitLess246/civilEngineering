@@ -1,6 +1,6 @@
 import type { JSX } from 'react'
 import { DrawingFrame } from './DrawingFrame'
-import { markerLabelPos, sameValue } from '../lib/diagramLabel'
+import { markerLabelPos, sameValue, DIAGRAM_VIEW_W, DIAGRAM_MIN_FONT } from '../lib/diagramLabel'
 
 export interface DiagramProps {
   /** Station coordinates along the footing, m (monotonic increasing). */
@@ -31,7 +31,7 @@ const GRID = '#eef2f7'
 export function Diagram({
   xs, ys, title, unit, color = '#0056b3', vlines = [], markExtrema = true, decimals = 1,
 }: DiagramProps): JSX.Element {
-  const W = 520, H = 220
+  const W = DIAGRAM_VIEW_W, H = 220
   const padL = 52, padR = 18, padT = 28, padB = 30
   const plotW = W - padL - padR
   const plotH = H - padT - padB
@@ -105,7 +105,7 @@ export function Diagram({
         {vlines.map((v, k) => (
           <g key={`v${k}`}>
             <line x1={sx(v.x)} y1={padT} x2={sx(v.x)} y2={H - padB} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="4 3" />
-            {v.label && <text x={sx(v.x)} y={padT - 2} fontSize={8.5} fill="#94a3b8" textAnchor="middle">{v.label}</text>}
+            {v.label && <text x={sx(v.x)} y={padT - 2} fontSize={DIAGRAM_MIN_FONT} fill="#94a3b8" textAnchor="middle">{v.label}</text>}
           </g>
         ))}
 

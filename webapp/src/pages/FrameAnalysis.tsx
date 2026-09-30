@@ -5,6 +5,7 @@ import {
 import type { LoadCategory } from '../engine/beamAnalysis'
 import { FrameSketch } from '../components/FrameSketch'
 import { Diagram } from '../components/Diagram'
+import { DIAGRAM_GRID } from '../lib/diagramLabel'
 import { ReportControls } from '../components/ReportControls'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
@@ -251,7 +252,7 @@ export default function FrameAnalysis() {
             </select>
             <span className="text-xs text-muted">local x from node i · N &gt; 0 tension</span>
           </div>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className={`gap-6 ${DIAGRAM_GRID}`}>
             <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
               <Diagram xs={mem.xs} ys={mem.N} title={`AXIAL — ${mem.id}`} unit="kN" color="#7c3aed" decimals={1} />
             </div>
