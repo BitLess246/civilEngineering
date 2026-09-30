@@ -468,6 +468,7 @@ export default function ModelSpace() {
   const [nlKindModel, setNlKindModel] = useState<'shear' | 'hinges'>('hinges')
   const [nlHinge, setNlHinge] = useState<{ inelastic: NonlinearFrameModelResult | null; elastic: NonlinearFrameModelResult | null } | null>(null)
   const [slabFE, setSlabFE] = useState<SlabFEScheduleRow[] | null>(null)
+  const [slabFEFail, setSlabFEFail] = useState(false)
   const [recSpec, setRecSpec] = useState<{ spec: AccelSpectrum; design: DesignSpectrumPoint[]; name: string } | null>(null)
   const [thCsv, setThCsv] = useState<{ text: string; name: string; npts: number } | null>(null)
   const [thCsvUnits, setThCsvUnits] = useState<'g' | 'ms2'>('g')
@@ -859,6 +860,7 @@ export default function ModelSpace() {
     // Factored (1.2D + 1.6L) shell moment field → Wood-Armer slab reinforcement.
     const out = designModelSlabsFE(model, { subdiv: model.shellSubdiv ?? 4 })
     setSlabFE(out ? out.rows : null)
+    setSlabFEFail(!out)
   }
 
   // Re-sign / re-axis a base node-load set into a directional case. The base
@@ -1486,22 +1488,37 @@ export default function ModelSpace() {
   const dispComboName = dispCombo?.combo.name ?? null
 
 
-  // Shell stress contour engine. When the analysis ran with design shells, the
-  // stresses are recovered straight from THAT displayed combo's solved DOF
-  // vector — the real load path (beams, walls, real fixities, the combo's own
-  // factors) with no re-solve, and it follows the case selector for free.
-  // Otherwise (no solve yet, or shells out of the analysis) the model's shells
-  // are meshed and solved isolated, under the displayed combo's area-load
-  // factors — service 1.0D+1.0L when nothing is analysed.
-  const shellBridge = useMemo(() => {
-    if (!model || !model.shellElements || !designShells || model.plates.length === 0) return null
+  /**
+   * The bridge the ANALYSIS solved — rebuilt with the worker's own options
+   * (cracked sections, shear deformation, top-of-steel; shells whenever the
+   * model has them on, which is the bridge's default). Two readers need the
+   * structure the displayed DOF vector belongs to: the shell stress contour
+   * (mesh-node DOFs sit after the model's own) and the deformed shape (∬M/EI
+   * must use the EI the nodal displacements were solved with). Built only when
+   * one of them is showing.
+   */
+  const anaBridge = useMemo(() => {
+    if (!model) return null
+    const wantShells = shellOn && !!model.shellElements && model.plates.length > 0
+    if (!wantShells && !showDeformed) return null
     try {
-      return modelToFrame3D(model, { useShells: true, shellSubdiv: model.shellSubdiv })
+      return modelToFrame3D(model, { crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel })
     } catch {
       return null
     }
-  }, [model, designShells])
+  }, [model, shellOn, showDeformed, cracked, shearDef, beamTopSteel])
 
+  // Shell stress contour engine. The analysis solves the slab mesh whenever
+  // the model's shells are on (the design-solve switch only decides whether
+  // the DESIGN pipeline reads it), so the stresses are recovered straight from
+  // the displayed combo's solved DOF vector — the real load path (beams, walls,
+  // real fixities, the combo's own factors) with no re-solve, following the
+  // case selector for free. Only with no matching solve (not analysed yet, or
+  // the result predates a mesh change — the DOF count says which) are the
+  // shells meshed and solved isolated, under the displayed combo's area-load
+  // factors, service 1.0D+1.0L when nothing is analysed. That isolated solve
+  // has only the model's base supports, so an elevated slab is a mechanism
+  // there and comes back `ok: false` rather than as round-off stresses.
   const shellFactors = useMemo<Partial<Record<LoadCategory, number>>>(() => {
     const f = dispCombo?.combo.f
     return f && Object.values(f).some((v) => (v ?? 0) !== 0) ? { ...f } : { D: 1, L: 1 }
@@ -1510,21 +1527,19 @@ export default function ModelSpace() {
   const shellOut = useMemo<{ ok: true; nodes: ShellNode[]; elems: ShellElem[]; stresses: ElementStress[]; caseName: string; source: 'frame' | 'standalone' } | { ok: false; caseName: string } | null>(() => {
     if (!shellOn || !model || !model.shellElements || model.plates.length === 0) return null
     const caseName = dispComboName ?? 'service 1.0D + 1.0L'
-    if (shellBridge && dispRes) {
+    const br = anaBridge
+    if (br && br.shells.length > 0 && dispRes && dispRes.d.length === 6 * br.nodes.length) {
       try {
-        const stresses = toPanelFrames(
-          shellBridge.nodes, shellBridge.shells,
-          recoverShellStress(shellBridge.nodes, shellBridge.shells, { d: dispRes.d }),
-        )
+        const stresses = toPanelFrames(br.nodes, br.shells, recoverShellStress(br.nodes, br.shells, { d: dispRes.d }))
         if (stresses.length > 0) {
-          return { ok: true, nodes: shellBridge.nodes, elems: shellBridge.shells, stresses, caseName, source: 'frame' }
+          return { ok: true, nodes: br.nodes, elems: br.shells, stresses, caseName, source: 'frame' }
         }
       } catch { /* fall through to the isolated solve */ }
     }
     const solved = solveModelShells(model, { subdiv: model.shellSubdiv ?? 4, factors: shellFactors })
     if (!solved) return { ok: false, caseName }
     return { ok: true, nodes: solved.nodes, elems: solved.elems, stresses: solved.stresses, caseName, source: 'standalone' }
-  }, [shellOn, model, shellBridge, dispRes, shellFactors, dispComboName])
+  }, [shellOn, model, anaBridge, dispRes, shellFactors, dispComboName])
 
   // The recovered field as the 3D contour layer and the Display controls read
   // it — same recovery, same displayed case, no second engine.
@@ -1781,18 +1796,14 @@ export default function ModelSpace() {
   /**
    * The deformed shape of the governing combo.
    *
-   * THE BRIDGE IS REBUILT WITH THE ANALYSIS'S OWN OPTIONS — cracked sections,
-   * shear deformation, top-of-steel — the three the solver worker passed. The
+   * The bridge is `anaBridge`, built with the analysis's own options: the
    * curve between two nodes is ∬M/EI pinned to the nodal displacements, so it
    * has to use the EI those displacements were solved with; a mismatch would
    * draw a member that does not meet its own joints.
    */
   const deformInfo = useMemo(() => {
-    if (!showDeformed || !model || !govRes) return null
-    let br
-    try {
-      br = modelToFrame3D(model, { crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel })
-    } catch { return null }
+    if (!showDeformed || !model || !govRes || !anaBridge) return null
+    const br = anaBridge
     const inp = deformedInputs(model, govRes.d, govRes.members, br)
     const peak = maxDisplacement(inp.fields)
     const amp = autoScale(peak.value, inp.diagonal) * defMult
@@ -1804,7 +1815,7 @@ export default function ModelSpace() {
       if (a && b) seg.push(a.x, a.y, a.z, b.x, b.y, b.z)
     }
     return { geo, peak, amp, ghost: new Float32Array(seg) }
-  }, [showDeformed, model, govRes, cracked, shearDef, beamTopSteel, defKey, defMult, nodePos])
+  }, [showDeformed, model, govRes, anaBridge, defKey, defMult, nodePos])
   const deformActive = !!deformInfo
 
   // Members switched OFF by the active set of the GOVERNING combo. Each combo
@@ -3947,9 +3958,9 @@ export default function ModelSpace() {
                   </div>
                   {shellOn && (
                     <p className="col-span-full text-[11px] text-muted">
-                      Follows the Display tab's load-case selector. With design shells in the
-                      analysis it reads the frame solve itself; otherwise the panels are solved
-                      isolated under the displayed combo's factors.
+                      Follows the Display tab's load-case selector and reads the analysis's own
+                      frame solve. Before the model is analysed, the panels are solved isolated
+                      under the displayed combo's factors.
                     </p>
                   )}
                   <p className="col-span-full text-[11px] text-muted">
@@ -3964,14 +3975,21 @@ export default function ModelSpace() {
                   <b>The shell mesh cannot be solved on its own for {shellOut.caseName}.</b> An isolated
                   shell solve has no load path to the ground: every supported model node is restrained,
                   but an elevated slab whose panels are not tied down by shell walls (or ground-bearing
-                  panels) leaves the stiffness matrix singular. Run the analysis with design shells on —
-                  the contour then reads the frame solve, where the beams and columns carry the load — or
-                  add shell walls down to the supports.
+                  panels) leaves the stiffness matrix singular. Run the analysis (▶ Analyze) — the contour
+                  then reads the frame solve, where the beams and columns carry the load — or add shell
+                  walls down to the supports.
                 </div>
               )}
               {shellOut?.ok && (
                 <ShellContourPanel nodes={shellOut.nodes} elems={shellOut.elems} stresses={shellOut.stresses}
                   caseName={shellOut.caseName} source={shellOut.source} />
+              )}
+              {slabFEFail && (
+                <div className="col-span-full rounded-xl border border-warn-line bg-warn-tint p-3 text-[12px] leading-relaxed text-warn">
+                  <b>Wood-Armer design needs the slab mesh solved on its own</b>, and here it has no load path
+                  to the ground — an elevated slab with no shell walls under it is a mechanism without its
+                  columns. Add shell walls down to the supports, or design the slabs on the Slab Design page.
+                </div>
               )}
               {slabFE && slabFE.length > 0 && (
                 <Sec grid={false} title="Slab reinforcement — Wood-Armer (shell FE, factored)">

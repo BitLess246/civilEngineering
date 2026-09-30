@@ -21,7 +21,8 @@
 // Units (consistent kN, m): coordinates m; E MPa→kN/m² (×1e3); t mm→m (÷1e3);
 // stiffness kN/m (translation) / kN·m (rotation), matching frame3d.
 // ─────────────────────────────────────────────────────────────────────────
-import { luFactor, luSolve } from './fem'
+import { skylineFactorSparse, skylineSolve, rcmOrderSparse } from './fem'
+import { sparseSym, sparseAdd } from './sparseSym'
 
 export type V3 = [number, number, number]
 
@@ -223,19 +224,50 @@ export function solveShell(
   nodes: ShellNode[], elems: ShellElem[], supports: ShellSupport[],
   loads: ShellNodeLoad[] = [], pressures: ShellPressure[] = [],
 ): ShellResult | null {
+  // SPARSE, AND ONLY THE FREE BLOCK. This assembled a DENSE ndof×ndof K and
+  // then copied its free part into a second dense nf×nf array for pivoting LU.
+  // Every slab panel of the model goes into ONE system here, so an 8-storey,
+  // 4×3-bay frame meshed 4×4 per panel is 10 608 DOF: ~900 MB per dense copy
+  // and ~10¹² flops of elimination. Measured on one plate: 0.4 s at 2 850 DOF,
+  // 158 s at 6 216 once the block leaves cache — the tower never finished; the
+  // sparse solve takes 0.7 s and 1.8 s at 10 878. A shell DOF couples only to the DOFs of the
+  // triangles around its node, so the free block is ~50 nonzeros a row
+  // whatever the model size. Same storage and factor the frame solver moved to
+  // (`sparseSym`, LDLᵀ skyline under RCM) — without its pivoting-LU fallback,
+  // for the reason at the factor below.
   const idx = new Map(nodes.map((n, i) => [n.id, i]))
   const ndof = 6 * nodes.length
-  const K = zeros(ndof, ndof)
-  const F = new Array(ndof).fill(0)
 
+  // partition free/constrained FIRST, so assembly writes straight into the
+  // free block and never touches a constrained row
+  const fixed = new Uint8Array(ndof)
+  for (const s of supports) {
+    const b = 6 * idx.get(s.node)!
+    const fl = [s.ux, s.uy, s.uz, s.rx, s.ry, s.rz]
+    fl.forEach((v, k) => { if (v) fixed[b + k] = 1 })
+  }
+  const freeOf = new Int32Array(ndof).fill(-1)
+  const free: number[] = []
+  for (let d = 0; d < ndof; d++) if (!fixed[d]) { freeOf[d] = free.length; free.push(d) }
+  const nf = free.length
+
+  const K = sparseSym(nf)
+  const F = new Array(ndof).fill(0)
   const pById = new Map(pressures.map((p) => [p.elem, p.q]))
   for (const e of elems) {
     const n = e.nodes.map((id) => nodes[idx.get(id)!])
     const p1: V3 = [n[0].x, n[0].y, n[0].z], p2: V3 = [n[1].x, n[1].y, n[1].z], p3: V3 = [n[2].x, n[2].y, n[2].z]
     const { Ke, A, f } = triShell(p1, p2, p3, e.E, e.nu, e.t)
     const map: number[] = []
-    for (const id of e.nodes) { const b = 6 * idx.get(id)!; for (let k = 0; k < 6; k++) map.push(b + k) }
-    for (let i = 0; i < 18; i++) for (let j = 0; j < 18; j++) K[map[i]][map[j]] += Ke[i][j]
+    for (const id of e.nodes) { const b = 6 * idx.get(id)!; for (let k = 0; k < 6; k++) map.push(freeOf[b + k]) }
+    for (let i = 0; i < 18; i++) {
+      const fi = map[i]
+      if (fi < 0) continue
+      for (let j = 0; j < 18; j++) {
+        const fj = map[j]
+        if (fj >= 0) sparseAdd(K, fi, fj, Ke[i][j])
+      }
+    }
     // pressure → lumped nodal force along global normal ẑ
     const q = pById.get(e.id)
     if (q) {
@@ -253,26 +285,22 @@ export function solveShell(
     F[b + 3] += ld.Mx ?? 0; F[b + 4] += ld.My ?? 0; F[b + 5] += ld.Mz ?? 0
   }
 
-  // partition free/constrained
-  const fixed = new Set<number>()
-  for (const s of supports) {
-    const b = 6 * idx.get(s.node)!
-    const fl = [s.ux, s.uy, s.uz, s.rx, s.ry, s.rz]
-    fl.forEach((v, k) => { if (v) fixed.add(b + k) })
-  }
-  const free: number[] = []
-  for (let d = 0; d < ndof; d++) if (!fixed.has(d)) free.push(d)
-
-  const nf = free.length
-  const Kff = zeros(nf, nf)
-  for (let a = 0; a < nf; a++) for (let b = 0; b < nf; b++) Kff[a][b] = K[free[a]][free[b]]
   const Ff = free.map((d) => F[d])
-  const fac = luFactor(Kff)
-  if (!fac) return null
-  const df = luSolve(fac, Ff)
-
+  // POSITIVE DEFINITE OR NOTHING. A shell stiffness with a load path to its
+  // supports is SPD (the drilling DOF carry a small stiffness of their own), so
+  // a non-positive pivot here means a MECHANISM — typically an elevated slab
+  // meshed standalone, with no columns under it. This used to fall through to
+  // pivoting LU, which rarely meets an exactly-zero pivot: it returned a
+  // round-off solution of a singular system instead of the null this function
+  // documents, and on a large model it would re-create the dense matrix this
+  // path exists to avoid. So no LU fallback: the caller reports "cannot solve".
   const d = new Array(ndof).fill(0)
-  free.forEach((dof, k) => { d[dof] = df[k] })
+  if (nf > 0) {
+    const fac = skylineFactorSparse(K, rcmOrderSparse(K))
+    if (!fac) return null
+    const df = skylineSolve(fac, Ff)
+    free.forEach((dof, k) => { d[dof] = df[k] })
+  }
 
   const disp = new Map<string, V3>(), rot = new Map<string, V3>()
   nodes.forEach((n, i) => {

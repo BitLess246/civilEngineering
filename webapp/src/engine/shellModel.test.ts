@@ -177,3 +177,26 @@ describe('rotateInPlaneTensor / toPanelFrames', () => {
     expect(a.sigmaX).toBeCloseTo(100 * Math.cos(th) ** 2, 6)
   })
 })
+
+describe('solveModelShells — elevated slab with no shell load path', () => {
+  // A slab panel 3 m up on four columns. The standalone shell solve meshes only
+  // the plates and restrains only the model's supported nodes — the column
+  // bases, which are not in the mesh — so the slab floats. It must come back
+  // null (the page then reads the frame solve), not as round-off stresses.
+  it('returns null rather than a solution of a singular system', () => {
+    const m = panel()
+    const up: StructuralModel = {
+      ...m,
+      nodes: [
+        ...m.nodes.map((n) => ({ ...n, y: 3 })),
+        ...m.nodes.map((n) => ({ ...n, id: `b${n.id}` })),
+      ],
+      sections: [{ id: 'c', name: 'C400', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }],
+      members: m.nodes.map((n) => ({ id: `C${n.id}`, i: `b${n.id}`, j: n.id, section: 'c', role: 'column' as const })),
+      supports: m.nodes.map((n) => ({ node: `b${n.id}`, fixity: 'fixed' as const })),
+    }
+    expect(solveModelShells(up, { subdiv: 3 })).toBeNull()
+    // the same slab on the ground, its own corners supported, solves
+    expect(solveModelShells(m, { subdiv: 3 })).not.toBeNull()
+  })
+})
