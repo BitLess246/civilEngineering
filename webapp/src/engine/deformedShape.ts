@@ -137,10 +137,11 @@ export function memberDisplacement(m: DeformMember): MemberDisplacement | null {
   // so v‴ = Vy/EIz and w‴ = −(−Vz)/EIy = Vz/EIy.
   const dV = xs.map((_, k) => (EIz > 0 ? (f.Vy[k] ?? 0) / EIz : 0))
   const dW = xs.map((_, k) => (EIy > 0 ? (f.Vz[k] ?? 0) / EIy : 0))
-  // Shear strain, only if the solver itself used shear deformation. Sign pinned
-  // by the Timoshenko cantilever tests in both planes: a tip load −P gives
-  // Vy = +P (and Vz = +P for −P along z), and the member moves toward −y / −z,
-  // so γ = −V/(G·As) in both.
+  // Shear strain, only if the solver itself used shear deformation:
+  // γ = −V/(G·As) in both planes. The sign is pinned by the engine-vs-engine
+  // runs under UDL (a normal beam for y′, one rolled 90° for z′) — NOT by the
+  // tip-load cantilevers: constant V makes γ's term linear in x, and the chord
+  // correction absorbs a linear term whatever its sign.
   const GAy = m.G && m.Asy ? m.G * m.Asy * 1e-3 : 0
   const GAz = m.G && m.Asz ? m.G * m.Asz * 1e-3 : 0
   const gV = GAy > 0 ? xs.map((_, k) => -(f.Vy[k] ?? 0) / GAy) : undefined

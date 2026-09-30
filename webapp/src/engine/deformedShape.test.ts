@@ -82,10 +82,14 @@ describe('closed form', () => {
   })
 })
 
-describe('Timoshenko closed form — the shear strain\'s sign, in both planes', () => {
+describe('Timoshenko closed form — shear deflection included, in both planes', () => {
   // Tip load −P on a cantilever with shear area As: bending PLUS shear,
   //   v(x) = −P·x²(3L − x)/(6EI) − P·x/(G·As).
-  // The shear term is linear in x, so a wrong sign shows at every station.
+  // NOTE what this does NOT pin: under a tip load V is constant, so the shear
+  // strain adds a term LINEAR in x, which the chord correction to the solver's
+  // end displacements absorbs whatever its sign. A sabotage flipping it passed
+  // here. The SIGN is pinned below by the engine-vs-engine runs under UDL,
+  // where V varies along the member — one per bending plane.
   const L = 3, P = 20, As = (5 / 6) * b * h
   const GA = G * As * 1e-3
   for (const [axis, EI, load] of [['y', EIz, { Fy: -P }], ['z', EIy, { Fz: -P }]] as const) {
@@ -108,12 +112,12 @@ describe('Timoshenko closed form — the shear strain\'s sign, in both planes', 
 
 /** A one-bay portal (3 m columns, 6 m beam) with gravity, lateral and
  *  out-of-plane load. `cut` > 1 splits every member into that many elements. */
-function portal(cut: number, extra: Partial<F3Member> = {}, beamRelJ?: F3Member['relJ']) {
+function portal(cut: number, extra: Partial<F3Member> = {}, beamRelJ?: F3Member['relJ'], beamRot = 0) {
   const nodes: F3Node[] = [
     { id: 'A', x: 0, y: 0, z: 0 }, { id: 'B', x: 0, y: 3, z: 0 },
     { id: 'C', x: 6, y: 3, z: 0 }, { id: 'D', x: 6, y: 0, z: 0 },
   ]
-  const lines: [string, string, string, number][] = [['c1', 'A', 'B', 90], ['bm', 'B', 'C', 0], ['c2', 'D', 'C', 90]]
+  const lines: [string, string, string, number][] = [['c1', 'A', 'B', 90], ['bm', 'B', 'C', beamRot], ['c2', 'D', 'C', 90]]
   const mem: F3Member[] = [], loads: F3Load[] = [
     { kind: 'node', node: 'B', Fx: 30, Fz: -12, cat: 'E' }, { kind: 'node', node: 'C', Fz: 8, cat: 'E' },
   ]
@@ -140,8 +144,8 @@ function portal(cut: number, extra: Partial<F3Member> = {}, beamRelJ?: F3Member[
 }
 
 /** Compare the coarse model's drawn curves with the fine model's nodes. */
-function compare(extra: Partial<F3Member> = {}, beamRelJ?: F3Member['relJ']) {
-  const coarse = portal(1, extra, beamRelJ), fine = portal(12, extra, beamRelJ)
+function compare(extra: Partial<F3Member> = {}, beamRelJ?: F3Member['relJ'], beamRot = 0) {
+  const coarse = portal(1, extra, beamRelJ, beamRot), fine = portal(12, extra, beamRelJ, beamRot)
   let worst = 0, scale = 0
   for (const [id, , , rot] of coarse.lines) {
     const mem = coarse.mem.find((m) => m.id === id)!
@@ -171,6 +175,14 @@ describe('engine vs engine — one element per member against twelve', () => {
 
   it('stays exact with Timoshenko shear deformation on', () => {
     const { worst, scale } = compare({ Asy: (5 / 6) * b * h, Asz: (5 / 6) * b * h })
+    expect(worst / scale).toBeLessThan(1e-6)
+  })
+
+  it('pins the z′-plane shear sign — gravity on a beam rolled 90°', () => {
+    // Rolled 90°, the beam's local z′ is vertical: the UDL bends it in x′–z′
+    // and Vz VARIES along it, so the shear strain's sign is visible here.
+    const { worst, scale } = compare({ Asy: (5 / 6) * b * h, Asz: (5 / 6) * b * h }, undefined, 90)
+    expect(scale).toBeGreaterThan(1e-4)
     expect(worst / scale).toBeLessThan(1e-6)
   })
 
