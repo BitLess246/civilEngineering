@@ -14,6 +14,7 @@ import type { StructureDesign, SteelBeamScheduleRow } from './pipeline'
 import { boltGeomFromPositions, eccentricBoltGroup, type BoltPos } from './steelDesign'
 import { shapeByName } from './aiscSections'
 import { localAxes, defaultAxisRotation, type V3 } from './frame3d'
+import { resolveSteelConnections, throughCarrier } from './steelJoints'
 
 // ── Material constants ──────────────────────────────────────────────────────
 const PHI_SHEAR_BOLT = 0.75           // AISC §J3.6
@@ -29,7 +30,6 @@ const PHI_WELD = 0.75
 const phiWeldPerMm = (w: number) => PHI_WELD * 0.6 * FEXX * 0.707 * w / 1000
 
 const PHI_CJP = 0.9                   // AISC Table J2.5 complete-joint-penetration
-const MOMENT_CONN_THRESHOLD = 0.2     // use moment conn when Mu/φMn > this
 
 // ── Plate stock ──────────────────────────────────────────────────────────────
 const PLATE_STOCK = [6, 8, 10, 12, 16, 19, 22, 25] // mm, standard stock
@@ -119,6 +119,8 @@ export interface BeamConnection {
   /** Top-flange cope on the SUPPORTED beam (beam-to-beam fin plates only):
    *  clears the carrying girder's flange (AISC SCM Part 9 coped-beam detail). */
   cope?: { lengthMm: number; depthMm: number }
+  /** Why the connection fails for a reason its capacities do not show. */
+  note?: string
   ok: boolean
 }
 
@@ -259,6 +261,7 @@ export function designSteelJoints(
   const nodeMap  = new Map<string, ModelNode>(model.nodes.map((n) => [n.id, n]))
   const beamRow  = new Map<string, SteelBeamScheduleRow>(design.steelBeams.map((b) => [b.id, b]))
   const colIds   = new Set<string>(design.steelColumns.map((c) => c.id))
+  const resolved = resolveSteelConnections(model)
 
   // Build adj: node → list of member ids that touch it
   const adj = new Map<string, string[]>()
@@ -334,15 +337,13 @@ export function designSteelJoints(
         // If no design row (can happen for non-designed members): use a minimal shear
         const Vu = row?.Vu ?? 5
         const Mu = row?.Mu ?? 0
-        const phiMn = row?.phiMn ?? 1
 
-        // The user's explicit connection type at the end framing into THIS node
-        // governs; otherwise infer from the moment demand. A 'simple' end is a
-        // pin (shear tab); 'moment' forces a moment connection.
+        // The connection this end was ANALYSED with (engine/steelJoints): a
+        // 'simple' end is a released pin → shear tab; anything else was held
+        // rigid → moment connection. Never inferred from the demand afterwards —
+        // that detailed pins on ends the analysis had kept rigid.
         const end = mem.i === nodeId ? 'iEnd' : 'jEnd'
-        const connKind = mem.connections?.[end]
-        const useMoment = connKind === 'moment'
-          || (connKind !== 'simple' && phiMn > 1e-9 && (Mu / phiMn) > MOMENT_CONN_THRESHOLD)
+        const useMoment = resolved.get(mid)?.[end] !== 'simple'
 
         // Elastic eccentric bolt group (each bolt placed & checked individually).
         // Web-face tabs carry the larger extended-plate eccentricity.
@@ -428,13 +429,13 @@ export function designBeamBeamJoints(
   const beamRow = new Map<string, SteelBeamScheduleRow>(design.steelBeams.map((b) => [b.id, b]))
   const secOf = new Map(model.sections.map((sec) => [sec.id, sec]))
   const memMap = new Map(model.members.map((m) => [m.id, m]))
+  const resolved = resolveSteelConnections(model)
 
-  // nodes that already host a steel column joint (handled by designSteelJoints)
+  // nodes that host a column: a steel one is a beam-to-column joint
+  // (designSteelJoints), and a beam end on ANY column resolves to a moment
+  // connection (engine/steelJoints), never to a fin plate on a girder
   const colNodes = new Set<string>()
-  for (const c of design.steelColumns) {
-    const cm = memMap.get(c.id)
-    if (cm) { colNodes.add(cm.i); colNodes.add(cm.j) }
-  }
+  for (const cm of model.members) if (cm.role === 'column') { colNodes.add(cm.i); colNodes.add(cm.j) }
 
   const adj = new Map<string, string[]>()
   for (const m of model.members)
@@ -446,35 +447,13 @@ export function designBeamBeamJoints(
     (adj.get(nodeId) ?? []).map((id) => memMap.get(id)!).filter((m) =>
       (m.role === 'beam' || m.role === 'girder') && secOf.get(m.section)?.material === 'steel')
 
-  // unit horizontal direction of member m pointing AWAY from `nodeId`
-  const outDir = (m: { i: string; j: string }, nodeId: string): [number, number] | null => {
-    const a = nodeMap.get(nodeId), bId = m.i === nodeId ? m.j : m.i
-    const b = nodeMap.get(bId)
-    if (!a || !b) return null
-    const dx = b.x - a.x, dz = b.z - a.z
-    const L = Math.hypot(dx, dz)
-    return L > 1e-9 ? [dx / L, dz / L] : null
-  }
-
   const joints: BeamBeamJoint[] = []
   for (const node of model.nodes) {
     if (colNodes.has(node.id)) continue
     const mems = flexAt(node.id)
     if (mems.length < 3) continue   // need a through pair + ≥1 supported beam
 
-    // carrier = collinear pair through the node (outward dirs opposed);
-    // among candidates prefer girders, then the deeper shape.
-    let carrier: [typeof mems[number], typeof mems[number]] | null = null
-    let carrierDepth = -1
-    for (let a = 0; a < mems.length; a++)
-      for (let b = a + 1; b < mems.length; b++) {
-        const da = outDir(mems[a], node.id), db = outDir(mems[b], node.id)
-        if (!da || !db) continue
-        if (da[0] * db[0] + da[1] * db[1] > -0.999) continue   // not collinear-through
-        const shp = shapeByName(secOf.get(mems[a].section)?.shape ?? '')
-        const depth = (shp?.d ?? 0) + (mems[a].role === 'girder' ? 1e6 : 0)
-        if (depth > carrierDepth) { carrierDepth = depth; carrier = [mems[a], mems[b]] }
-      }
+    const carrier = throughCarrier(model, node.id, mems)
     if (!carrier) continue
 
     const girderSec = secOf.get(carrier[0].section)
@@ -489,6 +468,14 @@ export function designBeamBeamJoints(
       const ni = nodeMap.get(mem.i)!, nj = nodeMap.get(mem.j)!
       const row = beamRow.get(mem.id)
       const Vu = row?.Vu ?? 5
+      // A supported end resolves to a pin (engine/steelJoints) and was analysed
+      // as one. Set explicitly rigid, it was analysed holding moment the fin
+      // plate below cannot carry — and a beam-to-girder moment splice is not a
+      // detail this module designs — so say so instead of passing it.
+      const kind = resolved.get(mem.id)?.[mem.i === node.id ? 'iEnd' : 'jEnd']
+      const note = kind !== 'simple'
+        ? 'Analysed as a moment connection to the girder, which is not designed here — detail it, or set this end to Simple (pin).'
+        : undefined
       const bolts = designBolts(Vu, { dia: 20 })
       const tab = designShearTab(Vu, bolts.n)
       const tabOk = tab.phiVn >= Vu - 1e-6 && tab.phiWeldVn >= Vu - 1e-6
@@ -502,7 +489,8 @@ export function designBeamBeamJoints(
         beamId: mem.id, role: mem.role, spanDir: spanDirOf(ni, nj),
         faceType: 'web', beamElement: 'web', connType: 'shear-tab',
         pinned: true, Vu, Mu: 0, bolts, tab, cope,
-        ok: bolts.ok && tabOk,
+        ...(note ? { note } : {}),
+        ok: bolts.ok && tabOk && !note,
       })
     }
 

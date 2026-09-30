@@ -17,6 +17,7 @@ import { deriveWSection, E_STEEL } from './steelDesign'
 import { meshPlates, emptyPlateMesh } from './plateMesh'
 import { splitMembers, splitLoads, type SplitMap } from './memberSplit'
 import { woodRefOf } from './woodDesign'
+import { resolveSteelConnections } from './steelJoints'
 
 export interface BridgeResult {
   nodes: F3Node[]
@@ -284,6 +285,9 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
   // one the drawings hang it from. Independent of the rigid arm — that one runs
   // along the member, this one runs down — so the two SUM.
   const drop = opts?.beamTopOfSteel ? beamAxisOffsets(model) : null
+  // Steel beam ends take the connection they will be BUILT with — a beam on a
+  // girder is a pin here as it is on the drawings (engine/steelJoints).
+  const steelConn = resolveSteelConnections(model)
   const members: F3Member[] = model.members.map((m) => {
     const a = auto?.get(m.id)
     const d = drop?.get(m.id)
@@ -305,7 +309,7 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
     return {
       id: m.id, i: m.i, j: m.j, ...stiff, Iz: props.Iz * ck, Iy: props.Iy * ck,
       ...(opts?.shearDeformation ? { Asy, Asz } : {}),
-      ...releaseFlags(effectiveReleases(m)),
+      ...releaseFlags(effectiveReleases(steelConn.has(m.id) ? { ...m, connections: steelConn.get(m.id) } : m)),
       ...(offI ? { offI } : {}),
       ...(offJ ? { offJ } : {}),
       ...(rot ? { rot } : {}),

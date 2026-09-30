@@ -85,7 +85,7 @@ export const MODEL_TOOLS: DocTool[] = [
           { kind: 'field', name: 'Local axis rotation θ (°)', unit: '°', what: 'Rotation about the member axis. Blank means the default (vertical members 90°). Orients section stiffness, rigid zones and the drawn shape.' },
           { kind: 'field', name: 'Lb unbraced length (m)', unit: 'm', what: 'Brace spacing for the §F2 lateral-torsional buckling check on beams and girders. Blank uses the full member length, which is conservative.' },
           { kind: 'choice', name: 'Axial mode', what: 'Both (ordinary), tension-only or compression-only. A limited member that violates its mode is switched off and the model re-solved. This breaks superposition, so every NSCP combination is then solved on its own active set — analysis takes longer.' },
-          { kind: 'choice', name: 'End connections (i / j)', what: 'Continuous, Simple (pin — releases My and Mz) or Moment (rigid). Drives both the analysis and the steel connection design.' },
+          { kind: 'choice', name: 'End connections (i / j)', what: 'Continuous, Simple (pin — releases My and Mz) or Moment (rigid). Drives both the analysis and the steel connection design. A steel beam or girder also offers Auto, the default: a moment connection at a column, a pin where the beam lands on a girder.' },
           { kind: 'button', name: 'Delete member', what: 'Removes the member and any loads attached to it.' },
         ],
       },

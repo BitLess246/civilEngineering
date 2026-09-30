@@ -29,7 +29,7 @@ import { emptyHistory, recordHistory, undoHistory, redoHistory, isTypingTarget, 
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
 import { frameMaterialOptions, isOfferedFrameMaterial, modelIsMadeOf } from '../lib/frameMaterial'
-import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck, StairLanding } from '../engine/model'
+import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck, StairLanding, MemberConnections } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
 import { defaultAxisRotation, type F3Analysis, type F3MemberResult, type F3ComboRun, type V3 } from '../engine/frame3d'
 import { type ActiveSetAnalysis, type AxialMode } from '../engine/axialOnly'
@@ -44,6 +44,7 @@ import { footingLayout } from '../engine/footingLayout'
 import { type ShellNode, type ShellElem, type ElementStress, recoverShellStress } from '../engine/shell'
 import { solveModelShells, designModelSlabsFE, toPanelFrames, type SlabFEScheduleRow } from '../engine/shellModel'
 import { modelToFrame3D } from '../engine/modelBridge'
+import { resolveSteelConnections } from '../engine/steelJoints'
 import { autoScale, maxDisplacement, DISPLACEMENT_KEYS, type DisplacementKey } from '../engine/deformedShape'
 import { deformedGeometry, deformedInputs } from '../lib/deformedContour'
 import { DeformedShape3D, UndeformedGhost } from '../components/modelSpace/deformedLayer'
@@ -587,6 +588,8 @@ export default function ModelSpace() {
   const nonlinearGate = gate.solve('pushover', nMembers)
   // Timber has no plastic hinge — the hinge models refuse it (engine/pushoverModel).
   const noHinges = useMemo(() => (model ? nonlinearNotApplicable(model) : null), [model])
+  // What each steel beam end is built — and analysed — with (engine/steelJoints).
+  const steelConn = useMemo(() => (model ? resolveSteelConnections(model) : new Map<string, MemberConnections>()), [model])
   const optimizeGate = gate.solve('optimize', nMembers)
   const reportsGate = gate.action('reports')
 
@@ -2812,25 +2815,40 @@ export default function ModelSpace() {
                         </label>
                         <div className="mt-2 border-t border-violet-200 pt-2">
                           <p className="mb-1 text-[11px] font-semibold text-violet-800">End connections — {sel.id}</p>
-                          <div className="flex flex-wrap gap-3">
-                            {(['iEnd', 'jEnd'] as const).map((end) => (
-                              <label key={end} className="flex items-center gap-1.5 text-[11px] text-ink-2">
-                                <span>{end === 'iEnd' ? 'i' : 'j'}-end</span>
-                                <select value={sel.connections?.[end] ?? 'fixed'}
-                                  onChange={(e) => {
-                                    const k = e.target.value as 'simple' | 'moment' | 'fixed'
-                                    const next = { ...(sel.connections ?? {}), [end]: k }
-                                    updMember(sel.id, { connections: next })
-                                  }}
-                                  className="rounded border border-violet-200 px-1 py-0.5">
-                                  <option value="fixed">Continuous</option>
-                                  <option value="simple">Simple (pin)</option>
-                                  <option value="moment">Moment (rigid)</option>
-                                </select>
-                              </label>
-                            ))}
-                          </div>
-                          <span className="mt-1 block text-[10px] text-muted">Simple = shear-only pin (releases My, Mz — the connection hinge); Moment = rigid; drives both analysis and steel connection design.</span>
+                          {(() => {
+                            // A steel beam end left unset is RESOLVED (engine/steelJoints):
+                            // moment at a column, a pin where it lands on a girder.
+                            const isSteelFlex = sel.role !== 'column' && model.sections.find((sx) => sx.id === sel.section)?.material === 'steel'
+                            const auto = isSteelFlex ? steelConn.get(sel.id) : undefined
+                            const autoLabel = (end: 'iEnd' | 'jEnd') =>
+                              ({ simple: 'Simple (pin)', moment: 'Moment (rigid)', fixed: 'Continuous' } as const)[auto?.[end] ?? 'fixed']
+                            return (<>
+                              <div className="flex flex-wrap gap-3">
+                                {(['iEnd', 'jEnd'] as const).map((end) => (
+                                  <label key={end} className="flex items-center gap-1.5 text-[11px] text-ink-2">
+                                    <span>{end === 'iEnd' ? 'i' : 'j'}-end</span>
+                                    <select value={sel.connections?.[end] ?? (isSteelFlex ? '' : 'fixed')}
+                                      onChange={(e) => {
+                                        const next = { ...(sel.connections ?? {}) }
+                                        if (e.target.value) next[end] = e.target.value as 'simple' | 'moment' | 'fixed'
+                                        else delete next[end]
+                                        updMember(sel.id, { connections: next })
+                                      }}
+                                      className="rounded border border-violet-200 px-1 py-0.5">
+                                      {isSteelFlex && <option value="">Auto — {autoLabel(end)}</option>}
+                                      <option value="fixed">Continuous</option>
+                                      <option value="simple">Simple (pin)</option>
+                                      <option value="moment">Moment (rigid)</option>
+                                    </select>
+                                  </label>
+                                ))}
+                              </div>
+                              <span className="mt-1 block text-[10px] text-muted">
+                                Simple = shear-only pin (releases My, Mz — the connection hinge); Moment = rigid. The same choice drives the analysis and the steel connection design.
+                                {isSteelFlex && ' Auto: a moment connection at a column, a pin (fin plate) where the beam lands on a girder.'}
+                              </span>
+                            </>)
+                          })()}
                         </div>
                       </div>
                     )
@@ -6424,7 +6442,7 @@ export default function ModelSpace() {
             <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel connection schedule — AISC SCM<SchedChip items={[...design.joints.flatMap((j) => j.connections), ...design.beamJoints.flatMap((j) => j.connections)]} ok={(cn) => cn.ok} /></h3>
               <p className="mb-2 text-[11px] text-muted">
-                Columns oriented with depth <em>d</em> in X (flanges face ±X); X-direction girders land on the column <strong>flange</strong> face (strong-axis moment connection), Z-direction beams land on the column <strong>web</strong> face (shear tab). Bolts: M20 A325 single-shear (φRₙ = 116.5 kN/bolt). Welds: E70XX fillet, both sides of plate.
+                Columns oriented with depth <em>d</em> in X (flanges face ±X); X-direction girders land on the column <strong>flange</strong> face, Z-direction beams on the column <strong>web</strong> face. Each end is built as it was analysed: a moment connection unless the end is set Simple (a shear tab, released in the analysis); a beam landing on a girder is a pin (fin plate) by default. Bolts: M20 A325 single-shear (φRₙ = 116.5 kN/bolt). Welds: E70XX fillet, both sides of plate.
               </p>
               <table className="w-full border-collapse text-xs">
                 <thead>
@@ -6525,6 +6543,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-[11px]">
                           Fin plate
                           <div className="text-[10px] text-muted">pin — releases Mz</div>
+                          {c.note && <div className="text-[10px] font-medium">{c.note}</div>}
                         </td>
                         <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
                         <td className="py-1 pr-2 text-right">—</td>
