@@ -3,7 +3,7 @@ import type { StructuralModel } from '../engine/model'
 import type { StructureDesign } from '../engine/pipeline'
 import { planToSvg } from '../engine/planRenderer'
 import { buildSheetSet, groupSheets, type PlanSheet } from '../lib/planSheets'
-import { downloadSvg } from '../lib/downloadSvg'
+import { downloadSvg, downloadDxf, downloadDxfSet } from '../lib/downloadSvg'
 import type { SoilInput } from '../lib/planDetails'
 import { PlanViewer } from './PlanViewer'
 
@@ -18,9 +18,10 @@ function RawSvg({ svg, className, ...rest }:
  * One sheet.
  *
  * The drawing is itself the way in: clicking it opens the sheet in the
- * fullscreen viewer, where it is readable. The header keeps two explicit
- * buttons — ⛶ for the viewer, ↓ SVG for the file — so neither hides behind
- * the other.
+ * fullscreen viewer, where it is readable. The header keeps explicit
+ * buttons — ⛶ for the viewer, ↓ SVG and ↓ DXF for the file — so none hides
+ * behind another. DXF is the CAD format every package reads (DWG is
+ * Autodesk's closed binary; AutoCAD saves an opened DXF as DWG).
  *
  * The design findings a sheet carries — a hook that does not develop, a bar
  * the offset rule will not let anyone bend — are NOT printed under it here.
@@ -49,6 +50,11 @@ function Sheet({ sheet, svg, onOpen }: { sheet: PlanSheet; svg: string; onOpen: 
             <button type="button" onClick={() => downloadSvg(`${sheet.key}.svg`, svg)}
               className="rounded-md border border-hairline px-2 py-0.5 text-[11px] font-medium text-muted hover:bg-sheet-2">
               ↓ SVG
+            </button>
+            <button type="button" onClick={() => downloadDxf(`${sheet.key}.dxf`, sheet.drawing)}
+              title="DXF for AutoCAD, BricsCAD, LibreCAD… — millimetres, layered by element"
+              className="rounded-md border border-hairline px-2 py-0.5 text-[11px] font-medium text-muted hover:bg-sheet-2">
+              ↓ DXF
             </button>
           </span>
         </div>
@@ -91,10 +97,18 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
     <section className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="pl-3 text-[11px] text-faint">Click a plan to view it full screen.</p>
+        <span className="flex shrink-0 items-center gap-3">
+        <button type="button" disabled={sheets.length === 0}
+          onClick={() => downloadDxfSet(`${(model.name || 'drawings').replace(/[^\w.-]+/g, '-')}-sheets.dxf`, sheets.map((s) => s.sheet.drawing))}
+          title="Every sheet in one DXF, side by side at true scale (mm)"
+          className="rounded-md border border-hairline px-2 py-0.5 text-[11px] font-medium text-muted hover:bg-sheet-2 disabled:opacity-50">
+          ↓ All sheets (DXF)
+        </button>
         <label className="flex shrink-0 items-center gap-1.5 pl-3 text-[11px] text-muted">
           <input type="checkbox" checked={hooked} onChange={(e) => setHooked(e.target.checked)} />
           90° mat hooks
         </label>
+        </span>
       </div>
 
       {!design && (
