@@ -97,15 +97,28 @@ export interface Domain {
  * field should paint as flat, not divide by zero.
  */
 export function stressDomain(values: readonly number[], signed: boolean): Domain {
-  const finite = values.filter((v) => Number.isFinite(v))
-  if (finite.length === 0) return { min: signed ? -1 : 0, max: 1, signed, flat: true }
-  const spread = Math.max(...finite) - Math.min(...finite)
+  // ONE PASS, NO SPREAD. This used to be `Math.max(...finite)`, which passes
+  // every value as a call ARGUMENT — and V8 caps a call at roughly 125 000 of
+  // them. The member contour samples 25 points round every section at every
+  // station, so a 408-member, 8-storey frame hands this ~255 000 values and the
+  // spread threw "Maximum call stack size exceeded": the stress view of exactly
+  // the buildings people most want to look at failed outright.
+  let lo = Infinity, hi = -Infinity, absHi = 0, n = 0
+  for (const v of values) {
+    if (!Number.isFinite(v)) continue
+    n++
+    if (v < lo) lo = v
+    if (v > hi) hi = v
+    const a = Math.abs(v)
+    if (a > absHi) absHi = a
+  }
+  if (n === 0) return { min: signed ? -1 : 0, max: 1, signed, flat: true }
+  const spread = hi - lo
   if (signed) {
-    const m = Math.max(...finite.map(Math.abs))
-    const span = m > 0 ? m : 1
+    const span = absHi > 0 ? absHi : 1
     return { min: -span, max: span, signed, flat: !(spread > 0) }
   }
-  const max = Math.max(...finite, 0)
+  const max = Math.max(hi, 0)
   return { min: 0, max: max > 0 ? max : 1, signed, flat: !(spread > 0) }
 }
 
