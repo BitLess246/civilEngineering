@@ -4,6 +4,7 @@ import {
   recoverShellStress, shellNodalContour, bilinearQuad, subdivideQuadPlates,
   type ShellNode, type ShellElem, type ShellSupport, type V3, type QuadPlateSpec,
 } from './shell'
+import { luFactor, luSolve } from './fem'
 
 const E = 25000, nu = 0.3   // MPa, concrete-ish; ν=0.3 matches Timoshenko tables
 
@@ -357,4 +358,117 @@ describe('subdivideQuadPlates', () => {
     expect(central(8) / exact).toBeGreaterThan(0.9)
     expect(central(8) / exact).toBeLessThan(1.1)
   })
+})
+
+// ── The solve itself: sparse free block, SPD or nothing ─────────────────────
+// `solveShell` assembles only the free block, sparsely, and factors it LDLᵀ.
+// These pin it against the dense pivoting-LU solve it replaced, pin the null
+// it returns for a mechanism (the old LU returned round-off instead), and pin
+// that a model-sized mesh no longer takes the n³ path.
+describe('solveShell — sparse free block', () => {
+  /** The replaced algorithm, verbatim in effect: dense K, dense free block, LU. */
+  function denseSolve(nodes: ShellNode[], elems: ShellElem[], supports: ShellSupport[], F: number[]): number[] | null {
+    const idx = new Map(nodes.map((n, i) => [n.id, i]))
+    const ndof = 6 * nodes.length
+    const K = Array.from({ length: ndof }, () => new Array(ndof).fill(0))
+    for (const e of elems) {
+      const p = e.nodes.map((id) => nodes[idx.get(id)!]).map((n) => [n.x, n.y, n.z] as V3)
+      const { Ke } = triShell(p[0], p[1], p[2], e.E, e.nu, e.t)
+      const map = e.nodes.flatMap((id) => [0, 1, 2, 3, 4, 5].map((k) => 6 * idx.get(id)! + k))
+      for (let i = 0; i < 18; i++) for (let j = 0; j < 18; j++) K[map[i]][map[j]] += Ke[i][j]
+    }
+    const fixed = new Set<number>()
+    for (const s of supports) {
+      const b = 6 * idx.get(s.node)!
+      ;[s.ux, s.uy, s.uz, s.rx, s.ry, s.rz].forEach((v, k) => { if (v) fixed.add(b + k) })
+    }
+    const free = [...Array(ndof).keys()].filter((d) => !fixed.has(d))
+    const lu = luFactor(free.map((r) => free.map((c) => K[r][c])))
+    if (!lu) return null
+    const df = luSolve(lu, free.map((d) => F[d]))
+    const d = new Array(ndof).fill(0)
+    free.forEach((dof, k) => { d[dof] = df[k] })
+    return d
+  }
+
+  it('matches the dense LU solve to round-off (mixed supports, pressure, nodal forces and moments)', () => {
+    const { nodes, elems, id } = rectPlateMesh(6, 5, 6, 5, E, nu, 180)
+    // two edges clamped, one pinned, one free — no symmetry for an error to hide behind
+    const supports: ShellSupport[] = []
+    for (let j = 0; j <= 5; j++) supports.push({ node: id(0, j), ux: true, uy: true, uz: true, rx: true, ry: true, rz: true })
+    for (let i = 1; i <= 6; i++) supports.push({ node: id(i, 0), ux: true, uy: true, uz: true, rx: true, ry: true, rz: true })
+    for (let j = 1; j <= 5; j++) supports.push({ node: id(6, j), uz: true })
+    const pressures = elems.map((e, k) => ({ elem: e.id, q: 6 + (k % 7) }))
+    const loads = [
+      { node: id(3, 4), Fz: -40, Mx: 7, My: -3 },
+      { node: id(2, 5), Fx: 15, Fy: -9, Mz: 2 },
+    ]
+    const r = solveShell(nodes, elems, supports, loads, pressures)!
+    expect(r).not.toBeNull()
+    // the load vector solveShell documents: pressure lumped a third to each
+    // corner along the element normal, plus the nodal forces and moments
+    const idx = new Map(nodes.map((n, i) => [n.id, i]))
+    const F = new Array(6 * nodes.length).fill(0)
+    for (const e of elems) {
+      const p = e.nodes.map((nid) => nodes[idx.get(nid)!]).map((n) => [n.x, n.y, n.z] as V3)
+      const { A, f } = triShell(p[0], p[1], p[2], e.E, e.nu, e.t)
+      const q = pressures.find((x) => x.elem === e.id)!.q
+      for (const nid of e.nodes) for (let k = 0; k < 3; k++) F[6 * idx.get(nid)! + k] += (q * A / 3) * f.R[2][k]
+    }
+    for (const l of loads) {
+      const b = 6 * idx.get(l.node)!
+      const v = [l.Fx, l.Fy, l.Fz, l.Mx, l.My, l.Mz] as (number | undefined)[]
+      v.forEach((x, k) => { F[b + k] += x ?? 0 })
+    }
+    const ref = denseSolve(nodes, elems, supports, F)!
+    const peak = Math.max(...ref.map(Math.abs))
+    expect(peak).toBeGreaterThan(0)
+    let worst = 0
+    for (let k = 0; k < ref.length; k++) worst = Math.max(worst, Math.abs(r.d[k] - ref[k]))
+    expect(worst / peak).toBeLessThan(1e-9)
+  })
+
+  it('returns null for a mechanism instead of a round-off solution', () => {
+    const { nodes, elems, id } = rectPlateMesh(4, 4, 4, 4, E, nu, 150)
+    const pressures = elems.map((e) => ({ elem: e.id, q: 10 }))
+    // nothing holds it
+    expect(solveShell(nodes, elems, [], [], pressures)).toBeNull()
+    // one pinned corner: free to spin about it
+    expect(solveShell(nodes, elems, [{ node: id(0, 0), ux: true, uy: true, uz: true }], [], pressures)).toBeNull()
+    // the same plate held properly solves — so the null is the mechanism, not the mesh
+    const held: ShellSupport[] = [id(0, 0), id(4, 0), id(4, 4), id(0, 4)]
+      .map((node) => ({ node, ux: true, uy: true, uz: true, rx: true, ry: true, rz: true }))
+    expect(solveShell(nodes, elems, held, [], pressures)).not.toBeNull()
+  })
+
+  it('a fully restrained mesh returns zeros rather than failing', () => {
+    const { nodes, elems } = rectPlateMesh(2, 2, 1, 1, E, nu, 150)
+    const all: ShellSupport[] = nodes.map((n) => ({ node: n.id, ux: true, uy: true, uz: true, rx: true, ry: true, rz: true }))
+    const r = solveShell(nodes, elems, all, [], elems.map((e) => ({ elem: e.id, q: 5 })))!
+    expect(r.d.every((v) => v === 0)).toBe(true)
+  })
+
+  it('a model-sized mesh (6 438 DOF) solves in seconds, not minutes', () => {
+    // 36×28 cells, 1 073 nodes. Measured on the 36×27 mesh beside it: the dense
+    // path 158 s (0.4 s at 2 850 DOF — the cliff is where the dense block
+    // leaves cache), the sparse one 0.7 s, and 1.8 s at 10 878 DOF.
+    const nx = 36, ny = 28
+    const { nodes, elems, id } = rectPlateMesh(12, 9, nx, ny, E, nu, 200)
+    const supports: ShellSupport[] = []
+    for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++)
+      if (i === 0 || j === 0 || i === nx || j === ny) supports.push({ node: id(i, j), ux: true, uy: true, uz: true, rz: true })
+    const t0 = performance.now()
+    const r = solveShell(nodes, elems, supports, [], elems.map((e) => ({ elem: e.id, q: 10 })))
+    const ms = performance.now() - t0
+    expect(r).not.toBeNull()
+    expect(r!.d.every(Number.isFinite)).toBe(true)
+    // simply supported 12×9 m plate, b/a = 1.333: Timoshenko Table 8 gives
+    // α = 0.00638 (1.3) and 0.00705 (1.4) → 0.00660; w = α q a⁴ / D, a = 9 m
+    const Dp = (E * 1e3 * 0.2 ** 3) / (12 * (1 - nu * nu))
+    const exact = (0.00638 + (0.00705 - 0.00638) / 3) * 10 * 9 ** 4 / Dp
+    const w = Math.abs(r!.disp.get(id(nx / 2, ny / 2))![2])
+    expect(w / exact).toBeGreaterThan(0.97)
+    expect(w / exact).toBeLessThan(1.03)
+    expect(ms).toBeLessThan(10_000)
+  }, 30_000)
 })

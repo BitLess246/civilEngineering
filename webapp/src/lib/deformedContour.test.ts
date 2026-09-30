@@ -212,10 +212,14 @@ describe('the page wires it the way the analysis ran', () => {
   const src = import.meta.glob('../pages/ModelSpace.tsx', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
   const page = Object.values(src)[0]
   const memo = page.slice(page.indexOf('const deformInfo = useMemo('), page.indexOf('const deformActive'))
+  // the bridge is shared with the shell stress contour (`anaBridge`)
+  const bridge = page.slice(page.indexOf('const anaBridge = useMemo('), page.indexOf('const shellFactors'))
   it('rebuilds the bridge with the SAME three options the solver worker used', () => {
     // The curve is ∬M/EI pinned to solved joints: a different EI draws a
     // member that misses its own nodes.
-    expect(memo).toMatch(/modelToFrame3D\(model, \{ crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel \}\)/)
+    expect(memo).toContain('const br = anaBridge')
+    expect(memo).not.toContain('modelToFrame3D')
+    expect(bridge).toMatch(/modelToFrame3D\(model, \{ crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel \}\)/)
     const worker = import.meta.glob('../engine/solverWorker.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
     expect(Object.values(worker)[0]).toMatch(/modelToFrame3D\(msg\.model, \{ crackedSections: msg\.crackedSections, shearDeformation: msg\.shearDeformation, beamTopOfSteel: msg\.beamTopOfSteel \}\)/)
   })

@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 557
+export const SOLVER_TEST_COUNT = 562
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -775,6 +775,22 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "subdivideQuadPlates",
         "name": "refining the subdivision converges a simply-supported plate toward Timoshenko"
+      },
+      {
+        "suite": "solveShell — sparse free block",
+        "name": "matches the dense LU solve to round-off (mixed supports, pressure, nodal forces and moments)"
+      },
+      {
+        "suite": "solveShell — sparse free block",
+        "name": "returns null for a mechanism instead of a round-off solution"
+      },
+      {
+        "suite": "solveShell — sparse free block",
+        "name": "a fully restrained mesh returns zeros rather than failing"
+      },
+      {
+        "suite": "solveShell — sparse free block",
+        "name": "a model-sized mesh (6 438 DOF) solves in seconds, not minutes"
       }
     ]
   },
@@ -863,6 +879,10 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "rotateInPlaneTensor / toPanelFrames",
         "name": "reports both triangle families of one panel in the SAME frame"
+      },
+      {
+        "suite": "solveModelShells — elevated slab with no shell load path",
+        "name": "returns null rather than a solution of a singular system"
       }
     ]
   },
