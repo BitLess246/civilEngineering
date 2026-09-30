@@ -28,6 +28,7 @@ import { AUTOSAVE_KEY, INPUTS_KEY, DESIGN_KEY, readSessionDesign, writeSessionDe
 import { emptyHistory, recordHistory, undoHistory, redoHistory, isTypingTarget, type History } from '../lib/history'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
+import { frameMaterialOptions, isOfferedFrameMaterial, modelIsMadeOf } from '../lib/frameMaterial'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck, StairLanding } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
 import { defaultAxisRotation, type F3Analysis, type F3MemberResult, type F3ComboRun, type V3 } from '../engine/frame3d'
@@ -248,7 +249,7 @@ export default function ModelSpace() {
   const [psE, setPsE] = useState(150); const [psFci, setPsFci] = useState(24)
   const [gammaC, setGammaC] = useState(n('gammaC', 24))            // concrete unit weight, kN/m³
   // Material: 'concrete' (RC), 'steel' (AISC W-shapes) or 'wood' (timber) for the frame members.
-  const [material, setMaterial] = useState<'concrete' | 'steel' | 'wood'>((si.material as 'concrete' | 'steel' | 'wood') ?? 'concrete')
+  const [materialPick, setMaterial] = useState<'concrete' | 'steel' | 'wood'>((si.material as 'concrete' | 'steel' | 'wood') ?? 'concrete')
   // Timber (wood frame): species/grade, sawn vs glulam, wet service.
   // Timber material as separate species + grade (migrating any legacy composite id).
   const legacyWood = WOOD_SPECIES[s('woodSpecies', 'DFL-2')]
@@ -372,6 +373,9 @@ export default function ModelSpace() {
       return raw ? splitSharedSections(JSON.parse(raw) as StructuralModel) : null
     } catch { return null }
   })
+  // A withheld frame material (lib/frameMaterial) holds only while the model on
+  // screen is actually made of it; restored inputs alone do not bring it back.
+  const material = isOfferedFrameMaterial(materialPick) || modelIsMadeOf(model, materialPick) ? materialPick : 'concrete'
   const [selected, setSelected] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<F3Analysis | null>(null)
   /** Per-combo active set (tension/compression-only members); null when none. */
@@ -3035,8 +3039,9 @@ export default function ModelSpace() {
                   setMaterial(next)
                   if (model) generate(next)          // auto-regenerate grid with new frame material
                 }}
-                  options={[['concrete', 'Reinforced concrete'], ['steel', 'Structural steel (AISC W)'], ['wood', 'Timber (wood frame)']]} />
+                  options={frameMaterialOptions(material)} />
                 <p className="col-span-full -mt-1 text-[11px] text-muted">
+                  {!isOfferedFrameMaterial(material) && 'Steel and timber frames are being reworked and are not offered for new models; this model keeps its material. '}
                   {material === 'steel'
                     ? 'Members become AISC W-shapes designed to AISC 360-16 LRFD (§F flexure, §G shear, §E/§H1 columns); base plates per §J8. Slabs/footings stay reinforced concrete.'
                     : material === 'wood'

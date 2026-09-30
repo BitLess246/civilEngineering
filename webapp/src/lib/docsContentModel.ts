@@ -94,7 +94,7 @@ export const MODEL_TOOLS: DocTool[] = [
         title: 'Properties tab',
         body: 'Materials and section sizes. The frame material chosen here decides which design path every member takes.',
         controls: [
-          { kind: 'choice', name: 'Frame material', what: 'Concrete, steel or timber. Switching it changes the design engine, the schedules produced, and which panels below apply.' },
+          { kind: 'choice', name: 'Frame material', what: 'Reinforced concrete. Steel and timber frames are temporarily withdrawn while their plans, connection design and nonlinear analysis are reworked; a model already made of either keeps its material.' },
           { kind: 'choice', name: 'Column / Girder / Beam family + shape', what: 'AISC shape selection per role, used when the frame material is steel. Family filters the shape list (W, HSS, PIPE…).' },
           { kind: 'field', name: 'Steel Fy / Fu', unit: 'MPa', what: 'Yield and tensile strength for steel members.' },
           { kind: 'choice', name: 'Material source / Species / Grade', what: 'Timber reference values — the NDS species and grade whose allowable stresses are used.' },
