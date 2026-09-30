@@ -8,6 +8,7 @@ import type { MemberLoadRequest } from '../lib/modelMemberResults'
 import { Card } from '../components/qty'
 import { initialLetterhead } from '../lib/letterhead'
 import { Diagram } from '../components/Diagram'
+import { DIAGRAM_GRID } from '../lib/diagramLabel'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { buildCombinedFootingSolution } from '../lib/combinedFootingSolution'
 import { Math } from '../lib/math'
@@ -352,7 +353,7 @@ export default function CombinedFootingDesign() {
 
       {/* ── Diagrams (full width) ── */}
       {samples && (
-        <div className={`mt-6 grid grid-cols-1 gap-6 ${flexible && flex ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
+        <div className={`mt-6 gap-6 ${DIAGRAM_GRID}`}>
           <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
             <Diagram xs={samples.x} ys={samples.w} title="SOIL REACTION (w)" unit="kN/m"
               color="#16a34a" vlines={vlines} markExtrema={!flexible} decimals={1} />

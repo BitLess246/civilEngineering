@@ -76,6 +76,7 @@ import { ConstructionSchedule } from '../components/ConstructionSchedule'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
   woodBeamRowSolution, woodColumnRowSolution, woodSlabRowSolution } from '../lib/modelSpaceSolutions'
 import { Diagram } from '../components/Diagram'
+import { DIAGRAM_GRID } from '../lib/diagramLabel'
 import { MemberForcesTable } from '../components/MemberForcesTable'
 import { ReactionsPanel } from '../components/ReactionsPanel'
 import { DisplacementTable } from '../components/DisplacementTable'
@@ -5476,7 +5477,7 @@ export default function ModelSpace() {
                         <td colSpan={8} className="bg-sheet-2/60 px-2 pb-2">
                           {k === 0 && bm.deflection && <BeamServiceability r={bm.deflection} id={bm.id} L={bm.L} />}
                           {wantDraw && bm.diag && (
-                            <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                            <div className={`mb-3 gap-3 ${DIAGRAM_GRID}`}>
                               <Diagram xs={bm.diag.xs} ys={loadFromShear(bm.diag.xs, bm.diag.Vy)} title="LOAD w (≈ −dV/dx)" unit="kN/m"
                                 color="#475569" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
                               <Diagram xs={bm.diag.xs} ys={bm.diag.Vy} title="SHEAR Vy" unit="kN"

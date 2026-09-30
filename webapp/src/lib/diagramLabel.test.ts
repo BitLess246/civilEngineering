@@ -37,3 +37,34 @@ describe('markerLabelPos', () => {
     expect(markerLabelPos(box.right, 100, 'above', TEXT, box)).toMatchObject({ x: box.right - 2, anchor: 'end' })
   })
 })
+
+describe('a row of diagrams never squeezes one below its legibility floor', () => {
+  it('the grid column minimum (35 rem) holds the narrowest unscrolled Diagram', async () => {
+    const { minDrawingWidth } = await import('./drawingScale')
+    const { DIAGRAM_VIEW_W, DIAGRAM_MIN_FONT, DIAGRAM_GRID } = await import('./diagramLabel')
+    const floor = minDrawingWidth(DIAGRAM_VIEW_W, DIAGRAM_MIN_FONT)
+    expect(floor).toBeGreaterThan(500)                   // ≈ 551 px — why 3-up at 1600 px clipped
+    expect(floor).toBeLessThanOrEqual(35 * 16)
+    expect(DIAGRAM_GRID).toContain('minmax(min(100%,35rem),1fr)')
+  })
+
+  it('DIAGRAM_MIN_FONT really is the smallest text Diagram sets', async () => {
+    const src = (await import('../components/Diagram.tsx?raw')).default as string
+    const sizes = [...src.matchAll(/fontSize=\{([\d.]+)\}/g)].map((m) => Number(m[1]))
+    expect(sizes.length).toBeGreaterThan(3)
+    expect(Math.min(...sizes)).toBeGreaterThanOrEqual(8.5)
+    expect(src).toContain('fontSize={DIAGRAM_MIN_FONT}')
+  })
+
+  it('every page that tiles Diagrams uses the shared grid, not a fixed column count', () => {
+    const pages = import.meta.glob('../pages/*.tsx', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+    const users = Object.entries(pages).filter(([, s]) => s.includes("from '../components/Diagram'"))
+    expect(users.length).toBeGreaterThanOrEqual(4)
+    for (const [file, s] of users) {
+      expect(s, file).toContain('DIAGRAM_GRID')
+      // the grid directly around a run of Diagrams carries no fixed lg/xl column count
+      for (const m of s.matchAll(/<div className=[^>]*>\s*(?:\{[^}]*\}\s*)?(?:<div[^>]*>\s*)?<Diagram /g))
+        expect(m[0], file).not.toMatch(/(lg|xl):grid-cols-[23]/)
+    }
+  })
+})
