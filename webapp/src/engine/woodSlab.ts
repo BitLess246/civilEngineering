@@ -150,6 +150,21 @@ function flexuralRun(p: {
   }
 }
 
+/** The floor's own weight, kPa: the deck board (γ·t) and the joists smeared
+ *  over the panel area. The frame carries exactly this under a timber deck —
+ *  `designWoodSlab` adds it on top of the superimposed load it is given. */
+export function woodSlabSelfWeight(
+  i: Pick<WoodSlabInput, 'Lx' | 'Ly' | 'joistRef' | 'joistB' | 'joistD' | 'joistSpacing' | 'joistSpan' | 'deckMaterial' | 'deckRef' | 'deckThickness'>,
+): { deckSelfKpa: number; joistSelfKpa: number; joistCount: number } {
+  const deckRef = i.deckRef ?? (i.deckMaterial === 'bamboo-slat' ? BAMBOO_SLAT_REF : i.joistRef)
+  const joistSpan = i.joistSpan ?? i.Lx
+  const deckSelfKpa = (woodUnitWeight(deckRef.G) * i.deckThickness) / 1000     // γ·t, kN/m³·mm/1000 = kN/m²
+  const joistCount = Math.max(2, Math.floor((i.Ly * 1000) / i.joistSpacing) + 1)
+  const joistVolPerM = (i.joistB * i.joistD) / 1e6                              // m³ per linear m
+  const joistSelfKpa = (woodUnitWeight(i.joistRef.G) * joistVolPerM * joistCount * joistSpan) / (i.Lx * i.Ly)
+  return { deckSelfKpa, joistSelfKpa, joistCount }
+}
+
 /** Design a wood slab (deck + repetitive joists) to NDS §3 / NSCP §6 (ASD). */
 export function designWoodSlab(i: WoodSlabInput): WoodSlabResult {
   const joistKind = i.joistKind ?? 'sawn'
@@ -162,11 +177,8 @@ export function designWoodSlab(i: WoodSlabInput): WoodSlabResult {
   const deflTotalLimit = i.deflTotalLimit ?? 240
 
   // ── self weights (kPa) ──
-  const deckSelfKpa = (woodUnitWeight(deckRef.G) * i.deckThickness) / 1000     // γ·t, kN/m³·mm/1000 = kN/m²
-  const joistCount = Math.max(2, Math.floor((i.Ly * 1000) / i.joistSpacing) + 1)
-  // smear the joist self weight over the floor area for the pressure summary
+  const { deckSelfKpa, joistSelfKpa, joistCount } = woodSlabSelfWeight(i)
   const joistVolPerM = (i.joistB * i.joistD) / 1e6                              // m³ per linear m
-  const joistSelfKpa = (woodUnitWeight(i.joistRef.G) * joistVolPerM * joistCount * joistSpan) / (i.Lx * i.Ly)
 
   const superKpa = i.deadKpa + i.liveKpa
   const deadTotKpa = i.deadKpa + deckSelfKpa + joistSelfKpa

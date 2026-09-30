@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { generateGridModel, buildGravityLoads } from './modelBuilder'
+import { generateGridModel, buildGravityLoads, plateSelfWeightKpa } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
-import { designStructure } from './pipeline'
+import { designStructure, optimizeStructure } from './pipeline'
+import { estimateTakeoff } from './takeoff'
 import { validateMesh } from './meshValidation'
 import { WOOD_SPECIES } from './woodDesign'
 import { emptyModel, type RectSection, type StructuralModel } from './model'
@@ -111,5 +112,91 @@ describe('mesh validation — timber sanity (L1 rule)', () => {
   it('accepts a valid timber frame with no timber errors', () => {
     const issues = validateMesh(woodModel())
     expect(issues.some((i) => i.code === 'WOOD_SPECIES' || i.code === 'WOOD_DIMS')).toBe(false)
+  })
+})
+
+// ── A timber frame's FLOORS ──────────────────────────────────────────────────
+// Every floor of a generated timber frame is a deck-on-joist panel. Its weight
+// is the boards and the joists, not the plate's `thickness` at γc: the default
+// 150 mm put 3.6 kPa of concrete that was never there onto the frame, and onto
+// the joists, which then failed at 580%.
+const DECK = {
+  joistSpecies: 'DFL-2', joistKind: 'sawn' as const, joistB: 50, joistD: 200, joistSpacing: 400,
+  joistSupport: 'simple' as const, deckMaterial: 'plank' as const, deckThickness: 25, deckSupport: 'continuous' as const,
+}
+function deckFrame(): StructuralModel {
+  const m = woodModel()                                  // 6 × 5 m panel, one storey
+  m.plates = m.plates.map((p) => ({ ...p, deck: { ...DECK } }))
+  m.loads = buildGravityLoads(m, 1.0, 1.9)               // SDL 1.0 kPa, LL 1.9 kPa
+  return m
+}
+// Hand calc (joists span the 5 m side, repeat across 6 m):
+//   16 joists = ⌊6000/400⌋ + 1 · 0.05×0.20 m · 5 m over 30 m² = 0.026667 m³/m²
+//   deck board 0.025 m³/m²  → floor = γ·0.051667,  γ = G·9.81 of DFL-2
+const gDFL2 = WOOD_SPECIES['DFL-2'].ref.G * 9.81
+const floorSW = gDFL2 * (0.025 + (16 * 0.05 * 0.2 * 5) / 30)
+
+describe('timber deck — the floor weighs what it is made of', () => {
+  it('the deck plate carries boards + joists, not t·γc of concrete', () => {
+    const m = deckFrame()
+    const qD = m.loads.find((l) => l.kind === 'area' && l.cat === 'D') as { q: number }
+    expect(plateSelfWeightKpa(m, m.plates[0])).toBeCloseTo(floorSW, 6)
+    expect(qD.q).toBeCloseTo(1.0 + floorSW, 6)
+    expect(floorSW).toBeLessThan(0.1 * (200 / 1000) * 24)   // under a tenth of the 200 mm slab it replaced
+  })
+
+  it('an RC plate is still t·γc', () => {
+    const m = woodModel()
+    expect(plateSelfWeightKpa(m, m.plates[0], 24)).toBeCloseTo(0.2 * 24, 9)
+  })
+
+  const design = designStructure(deckFrame(), soil)!
+  it('the deck engine is given the superimposed load only — its own weight is not counted twice', () => {
+    const s = design.woodSlabs[0]!
+    expect(s.design.loads.deadKpa).toBeCloseTo(1.0, 6)
+    expect(s.design.loads.deckSelfKpa + s.design.loads.joistSelfKpa).toBeCloseTo(floorSW, 6)
+  })
+
+  it('a deck panel is no concrete slab in the totals', () => {
+    expect(design.totals.concreteSlabs).toBe(0)
+  })
+
+  it('the bill of quantities buys the joists and the deck boards', () => {
+    const t = estimateTakeoff(deckFrame(), design)
+    const joist = t.timberBySize.find((r) => r.name === '50×200')!
+    expect(joist.count).toBe(16)
+    expect(joist.L).toBeCloseTo(16 * 5, 9)
+    expect(t.timberBySize.some((r) => r.name.startsWith('deck '))).toBe(true)
+    const deckM3 = design.woodSlabs[0]!.design.takeoff.joistM3 + design.woodSlabs[0]!.design.takeoff.deckM3
+    const frameM3 = t.timberBySize.filter((r) => !r.name.startsWith('deck ') && r.name !== '50×200').reduce((s, r) => s + r.m3, 0)
+    expect(t.timberM3).toBeCloseTo(frameM3 + deckM3, 9)
+  })
+
+  it('re-sizing a deck in the optimiser moves the frame load with it', () => {
+    const r = optimizeStructure(deckFrame(), soil)!
+    for (const p of r.model.plates) {
+      const qD = r.model.loads.filter((l) => l.kind === 'area' && l.cat === 'D' && l.plate === p.id)
+        .reduce((s, l) => s + (l as { q: number }).q, 0)
+      expect(qD).toBeCloseTo(1.0 + plateSelfWeightKpa(r.model, p), 6)
+    }
+  })
+})
+
+describe('bridge — timber does not crack', () => {
+  it('ACI §6.6.3.1.1 modifiers leave a timber member on its gross section', () => {
+    const m = woodModel()
+    const gross = modelToFrame3D(m).members, cracked = modelToFrame3D(m, { crackedSections: true }).members
+    for (const g of gross) {
+      const c = cracked.find((x) => x.id === g.id)!
+      expect(c.Iz).toBeCloseTo(g.Iz, 6)
+      expect(c.Iy).toBeCloseTo(g.Iy, 6)
+    }
+  })
+  it('a concrete member still takes them', () => {
+    const m = woodModel()
+    m.sections = m.sections.map((s) => ({ ...s, material: undefined }))
+    const g = modelToFrame3D(m).members.find((x) => x.id.startsWith('bx'))!
+    const c = modelToFrame3D(m, { crackedSections: true }).members.find((x) => x.id === g.id)!
+    expect(c.Iz / g.Iz).toBeCloseTo(0.35, 9)
   })
 })
