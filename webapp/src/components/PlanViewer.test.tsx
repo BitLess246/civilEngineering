@@ -138,7 +138,7 @@ describe('PlansPanel wiring (source guards)', () => {
   })
 
   it('both save buttons share the one download helper — no second copy', () => {
-    expect(plansPanelSrc).toMatch(/import \{ downloadSvg \} from '\.\.\/lib\/downloadSvg'/)
+    expect(plansPanelSrc).toMatch(/import \{ downloadSvg, downloadDxf, downloadDxfSet \} from '\.\.\/lib\/downloadSvg'/)
     expect(plansPanelSrc).not.toMatch(/function download\(/)
   })
 

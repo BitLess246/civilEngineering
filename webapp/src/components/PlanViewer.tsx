@@ -17,7 +17,7 @@
 import { useCallback, useEffect, type JSX } from 'react'
 import { stepIndex, type PlanSheet } from '../lib/planSheets'
 import { isTypingTarget } from '../lib/history'
-import { downloadSvg } from '../lib/downloadSvg'
+import { downloadSvg, downloadDxf } from '../lib/downloadSvg'
 
 export function PlanViewer({ sheets, index, onNavigate, onClose }: {
   /** The set in DISPLAY order — the same order the tab stacks the sheets in,
@@ -73,6 +73,10 @@ export function PlanViewer({ sheets, index, onNavigate, onClose }: {
           <button type="button" onClick={() => downloadSvg(`${s.key}.svg`, at.svg)}
             className="rounded-md border border-white/20 px-2.5 py-1 text-[11px] font-medium text-white/80 hover:bg-sheet/10">
             ↓ SVG
+          </button>
+          <button type="button" onClick={() => downloadDxf(`${s.key}.dxf`, s.drawing)}
+            className="rounded-md border border-white/20 px-2.5 py-1 text-[11px] font-medium text-white/80 hover:bg-sheet/10">
+            ↓ DXF
           </button>
           <button type="button" onClick={onClose} aria-label="Close full screen view"
             className="rounded-md border border-white/20 px-2.5 py-1 text-[11px] font-medium text-white/80 hover:bg-sheet/10">
