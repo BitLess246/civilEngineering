@@ -121,9 +121,13 @@ export function sparseIsSymmetric(A: SparseSym, tol = 1e-9): boolean {
       if (Math.abs(a - b) > tol * (1 + Math.abs(a) + Math.abs(b))) return false
     }
     // an entry present only in the lower triangle is just as much an asymmetry
-    for (const [j] of A.rows[i]) {
-      if (j >= i) continue
-      if (!A.rows[j].has(i) && (A.rows[i].get(j) ?? 0) !== 0) return false
+    // — judged by the SAME tolerance as the upper pass gives an entry whose
+    // mirror is missing (b = 0 there). This compared to exact zero, so round-
+    // off noise in one triangle failed while the same noise in the other
+    // passed, and a failure here sends the factor to dense LU.
+    for (const [j, a] of A.rows[i]) {
+      if (j >= i || A.rows[j].has(i)) continue
+      if (Math.abs(a) > tol * (1 + Math.abs(a))) return false
     }
   }
   return true
