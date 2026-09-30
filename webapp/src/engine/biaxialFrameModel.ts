@@ -45,6 +45,7 @@ import {
   type Hinge3Report,
 } from './nonlinearFrame3d'
 import type { BiaxialSurfaceSpec } from './biaxialHinge'
+import { resolveSteelConnections } from './steelJoints'
 
 /**
  * WEAK-axis plastic moment, kN·m — the companion to `pushoverModel`'s
@@ -130,6 +131,7 @@ export function modelToBiaxialFrame(
   const scale = opts.mpScale ?? 1
   const usePM = opts.pmInteraction !== false && !opts.elastic
   const surface = opts.surface ?? { kind: 'power' as const }
+  const steelConn = resolveSteelConnections(model)
   const releases: string[] = [], offsets: string[] = []
   let nHingeable = 0
 
@@ -138,7 +140,7 @@ export function modelToBiaxialFrame(
     const sec = src ? secById.get(src.section) : undefined
 
     if (src) {
-      const rel = effectiveReleases(src)
+      const rel = effectiveReleases(steelConn.has(src.id) ? { ...src, connections: steelConn.get(src.id) } : src)
       const anyRel = (e?: Record<string, boolean | undefined>) => !!e && Object.values(e).some(Boolean)
       if (anyRel(rel.iEnd) || anyRel(rel.jEnd)) releases.push(f.id)
       if (src.offsets?.iEnd || src.offsets?.jEnd) offsets.push(f.id)

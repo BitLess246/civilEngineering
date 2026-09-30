@@ -36,7 +36,11 @@ describe('steel joint / connection design', () => {
   })
 
   it('shear tab: plate capacity and weld capacity both ≥ Vu', () => {
-    const shearJoints = joints.flatMap((j) => j.connections.filter((c) => c.connType === 'shear-tab'))
+    // a shear tab is what a SIMPLE end is built with — mark every beam end Simple
+    const ms = makeModel()
+    for (const mem of ms.members) if (mem.role !== 'column') mem.connections = { iEnd: 'simple', jEnd: 'simple' }
+    const js = designSteelJoints(ms, designStructure(ms, soil)!)
+    const shearJoints = js.flatMap((j) => j.connections.filter((c) => c.connType === 'shear-tab'))
     expect(shearJoints.length).toBeGreaterThan(0)
     for (const c of shearJoints) {
       expect(c.tab.phiVn).toBeGreaterThanOrEqual(c.Vu - 1e-6)
@@ -217,7 +221,10 @@ describe('designBeamBeamJoints — beams framing into a girder web (fin plates)'
       { id: 'g2', i: 'gm', j: 'gb', role: 'girder', section: 'g2s' },
       { id: 'sb', i: 'gm', j: 'sc', role: 'beam', section: 'sbs' },
     )
-    m.supports.push({ node: 'ga', fixity: 'pin' }, { node: 'gb', fixity: 'pin' }, { node: 'sc', fixity: 'pin' })
+    // The girder ends are FIXED: its line must be held against twist. The
+    // supported beam is a pin at the girder (engine/steelJoints), so with pinned
+    // girder ends nothing would restrain the line's rotation about its own axis.
+    m.supports.push({ node: 'ga', fixity: 'fixed' }, { node: 'gb', fixity: 'fixed' }, { node: 'sc', fixity: 'pin' })
     m.loads = [
       ...buildGravityLoads(m, 4.8, 2.4),
       { kind: 'member-point', member: 'sb', t: 0.4, P: 60, cat: 'D' },
