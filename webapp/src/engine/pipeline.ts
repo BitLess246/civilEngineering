@@ -1614,7 +1614,7 @@ function designFromRuns(
     return {
       node, P, Pu, design: d, barDia, selection: choice.selection,
       pedestal: Math.max(0, soil.H - d.Dc / 1000),
-      ok: d.qNet > 0 && d.punchOK && d.beamOK && d.barsFit && choice.db !== null,
+      ok: d.qNet > 0 && d.punchOK && d.beamOK && d.minDepthOK && d.barsFit && choice.db !== null,
       gov,
     }
   }

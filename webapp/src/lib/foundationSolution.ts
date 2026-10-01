@@ -6,7 +6,7 @@
 // (iteration / approximate). Computed with the same engine formulas so the
 // steps always agree with the Results panel.
 // ─────────────────────────────────────────────────────────────────────────
-import { ALPHA_S, criticalSection, oneWayVc, twoWayVc, type ColumnPosition } from '../engine/shear'
+import { ALPHA_S, MIN_FOOTING_DEPTH, criticalSection, oneWayVc, twoWayVc, type ColumnPosition } from '../engine/shear'
 import { type SolutionStep, type SolutionLine, sn0, sn1, sn2, sn3, sn4 } from './solution'
 
 /** How the sheet names the minimum it adopted. */
@@ -41,6 +41,8 @@ export interface SolutionCtx {
   Bx: number; By: number; Dc: number; qNet: number; qu: number
   dPunch: number; dBeamLong: number; dBeamShort: number; dProvided: number
   punchOK: boolean; beamOK: boolean
+  /** NSCP §413.3.1.2: d ≥ 150 mm over the bottom mat. Absent = not reported. */
+  minDepthOK?: boolean
   long: SteelCtx; short: (SteelCtx & { bandBars: number; bandFraction: number }) | null
   ecc: { e: number; qMax: number; qMin: number; kernOK: boolean } | null
 }
@@ -200,20 +202,26 @@ function thicknessStep(c: SolutionCtx): SolutionStep {
   const dFlex = c.Dc - c.cover - c.barDia / 2
   if (c.analysis === 'analyze') {
     const adequate = c.punchOK && c.beamOK
+    const minOK = c.minDepthOK ?? true
     return {
       title: 'Depth adequacy',
       lines: [
         eq(String.raw`d_{prov} = D_c - cover - d_b = ${sn0(c.Dc)} - ${sn0(c.cover)} - ${sn0(c.barDia)} = ${sn0(c.dProvided)}\ \text{mm}`),
         eq(String.raw`d_{prov} = ${sn0(c.dProvided)} \;${adequate ? '\\ge' : '<'}\; \max(d_{punch},d_{beam}) = \max(${sn0(c.dPunch)},${sn0(c.dBeamLong)}) = ${sn0(Math.max(c.dPunch, c.dBeamLong))}\ \text{mm}\;${adequate ? '\\checkmark' : '\\times'}`),
+        ...(c.minDepthOK === undefined ? [] : [
+          eq(String.raw`d_{prov} = ${sn0(c.dProvided)} \;${minOK ? '\\ge' : '<'}\; ${MIN_FOOTING_DEPTH}\ \text{mm}\quad\text{(§413.3.1.2)}\;${minOK ? '\\checkmark' : '\\times'}`),
+        ]),
       ],
-      note: adequate ? 'The provided section satisfies both shear checks.' : 'The provided section is inadequate in shear — increase D_c.',
+      note: !adequate ? 'The provided section is inadequate in shear — increase D_c.'
+        : !minOK ? `Shear is satisfied, but §413.3.1.2 needs at least ${MIN_FOOTING_DEPTH} mm over the bottom mat — increase D_c.`
+          : 'The provided section satisfies both shear checks.',
     }
   }
   return {
     title: 'Slab thickness',
     lines: [
-      txt('The thickness is set by the larger shear requirement plus cover and one bar diameter, rounded up to 25 mm.'),
-      eq(String.raw`D_c = \max(d_{punch},d_{beam}) + cover + d_b = \max(${sn0(c.dPunch)},${sn0(Math.max(c.dBeamLong, c.dBeamShort))}) + ${sn0(c.cover)} + ${sn0(c.barDia)} \to \mathbf{${sn0(c.Dc)}}\ \text{mm}`),
+      txt(`The thickness is set by the larger shear requirement — but never less than ${MIN_FOOTING_DEPTH} mm over the bottom mat (§413.3.1.2) — plus cover and one bar diameter, rounded up to 25 mm.`),
+      eq(String.raw`D_c = \max(d_{punch},d_{beam},${MIN_FOOTING_DEPTH}) + cover + d_b = \max(${sn0(c.dPunch)},${sn0(Math.max(c.dBeamLong, c.dBeamShort))},${MIN_FOOTING_DEPTH}) + ${sn0(c.cover)} + ${sn0(c.barDia)} \to \mathbf{${sn0(c.Dc)}}\ \text{mm}`),
       // TWO EFFECTIVE DEPTHS, and the sheet printed one of them unlabelled
       // next to the other. Flexure is checked on the layer nearest the tension
       // face; shear is checked on the mean of the two mats, because it is

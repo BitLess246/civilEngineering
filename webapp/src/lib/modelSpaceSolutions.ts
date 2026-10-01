@@ -91,7 +91,7 @@ export function footingRowSolution(sec: RectSection, soil: SoilOptions, row: Foo
     barDia: sec.barDia, cover: 75, surcharge: 0, position: 'interior',
     Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
     dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.dProvided,
-    punchOK: r.punchOK, beamOK: r.beamOK,
+    punchOK: r.punchOK, beamOK: r.beamOK, minDepthOK: r.minDepthOK,
     long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
     short: null, ecc: null,
   }

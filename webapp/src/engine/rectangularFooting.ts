@@ -5,7 +5,7 @@
 // band per NSCP 2015 §413.3.3.3 / ACI 318-14 §13.3.3.3).
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing } from './bearing';
-import { punchingDepth, oneWayShearDepth, depthSolved, type ColumnPosition } from './shear';
+import { punchingDepth, oneWayShearDepth, depthSolved, MIN_FOOTING_DEPTH, type ColumnPosition } from './shear';
 import { flexuralSteel, matLayout, type AsMinBasis } from './flexure';
 
 /** How the plan dimensions are determined. */
@@ -67,6 +67,8 @@ export interface RectFootingResult {
   dProvided: number;
   punchOK: boolean;
   beamOK: boolean;
+  /** §413.3.1.2: d ≥ 150 mm over the bottom mat. */
+  minDepthOK: boolean;
 }
 
 function roundUp(v: number, step: number): number {
@@ -115,14 +117,14 @@ export function designRectangularFooting(i: RectFootingInput): RectFootingResult
     ({ Bx, By } = sizePlan(i.serviceLoad / qNet, i.sizing));
     qu = i.ultimateLoad / (Bx * By);
     ({ dPunch, dBeamLong, dBeamShort } = shearDepths(qu, Bx, By));
-    Dc = roundUp(Math.max(dPunch, dBeamLong, dBeamShort) + i.cover + i.barDia, 25) / 1000;
+    Dc = roundUp(Math.max(dPunch, dBeamLong, dBeamShort, MIN_FOOTING_DEPTH) + i.cover + i.barDia, 25) / 1000;
   } else {
     for (let k = 0; k < 8; k++) {
       qNet = qNetAt(Dc);
       ({ Bx, By } = sizePlan(i.serviceLoad / qNet, i.sizing));
       qu = i.ultimateLoad / (Bx * By);
       ({ dPunch, dBeamLong, dBeamShort } = shearDepths(qu, Bx, By));
-      const newDc = roundUp(Math.max(dPunch, dBeamLong, dBeamShort) + i.cover + i.barDia, 25) / 1000;
+      const newDc = roundUp(Math.max(dPunch, dBeamLong, dBeamShort, MIN_FOOTING_DEPTH) + i.cover + i.barDia, 25) / 1000;
       if (Math.abs(newDc - Dc) < 1e-4) { Dc = newDc; break; }
       Dc = newDc;
     }
@@ -149,6 +151,8 @@ export function designRectangularFooting(i: RectFootingInput): RectFootingResult
   const shearOK = (dReq: number) => geometryOK && depthSolved(dReq) && dProvided >= dReq;
   const punchOK = shearOK(dPunch);
   const beamOK = shearOK(Math.max(dBeamLong, dBeamShort));
+  // §413.3.1.2 — met by construction when designing; checked when analysing a given D_c.
+  const minDepthOK = geometryOK && dProvided >= MIN_FOOTING_DEPTH;
   const dFlex = DcMm - i.cover - i.barDia / 2;
 
   // Long direction: cantilever in x, bars run along x and spread across By.
@@ -182,6 +186,6 @@ export function designRectangularFooting(i: RectFootingInput): RectFootingResult
       As: flexShort.As, rho: flexShort.rho, usedMin: flexShort.usedMin,
       bars: layoutShort.n, spacing: layoutShort.spacing, bandBars, bandFraction,
     },
-    analysis, method, dProvided, punchOK, beamOK,
+    analysis, method, dProvided, punchOK, beamOK, minDepthOK,
   };
 }

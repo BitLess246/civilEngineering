@@ -5,7 +5,7 @@
 // peak pressure (conservative), punching on the average pressure.
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing } from './bearing';
-import { punchingDepth, oneWayShearDepth, depthSolved, type ColumnPosition } from './shear';
+import { punchingDepth, oneWayShearDepth, depthSolved, MIN_FOOTING_DEPTH, type ColumnPosition } from './shear';
 import { flexuralSteel, matLayout, type AsMinBasis } from './flexure';
 
 export interface EccentricFootingInput {
@@ -64,6 +64,8 @@ export interface EccentricFootingResult {
   dProvided: number;
   punchOK: boolean;
   beamOK: boolean;
+  /** §413.3.1.2: d ≥ 150 mm over the bottom mat. */
+  minDepthOK: boolean;
   /** Analyze only: peak service pressure within q_net. */
   bearingOK: boolean;
 }
@@ -115,7 +117,7 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
     qMaxService = (i.serviceLoad / (B * B)) * (1 + (6 * e) / B);
     quMax = (i.ultimateLoad / (B * B)) * (1 + (6 * eU) / B);
     ({ dPunch, dBeam } = shearDepths(B, quMax));
-    Dc = roundUp(Math.max(dPunch, dBeam) + i.cover + i.barDia, 25) / 1000;
+    Dc = roundUp(Math.max(dPunch, dBeam, MIN_FOOTING_DEPTH) + i.cover + i.barDia, 25) / 1000;
   } else {
     for (let k = 0; k < 10; k++) {
       qNet = qNetAt(Dc);
@@ -123,7 +125,7 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
       qMaxService = (i.serviceLoad / (B * B)) * (1 + (6 * e) / B);
       quMax = (i.ultimateLoad / (B * B)) * (1 + (6 * eU) / B);
       ({ dPunch, dBeam } = shearDepths(B, quMax));
-      const newDc = roundUp(Math.max(dPunch, dBeam) + i.cover + i.barDia, 25) / 1000;
+      const newDc = roundUp(Math.max(dPunch, dBeam, MIN_FOOTING_DEPTH) + i.cover + i.barDia, 25) / 1000;
       if (Math.abs(newDc - Dc) < 1e-4) { Dc = newDc; break; }
       Dc = newDc;
     }
@@ -151,6 +153,8 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
   const shearOK = (dReq: number) => geometryOK && depthSolved(dReq) && dProvided >= dReq;
   const punchOK = shearOK(dPunch);
   const beamOK = shearOK(dBeam);
+  // §413.3.1.2 — met by construction when designing; checked when analysing a given D_c.
+  const minDepthOK = geometryOK && dProvided >= MIN_FOOTING_DEPTH;
   const bearingOK = geometryOK && qMaxService <= qNet + 1e-9;
   const dFlex = DcMm - i.cover - i.barDia / 2;
   const arm = (B - cm) / 2;
@@ -169,6 +173,6 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
     dPunch, dBeam, dFlex, kernOK: e <= B / 6 + 1e-9,
     steelArea: flex.As, rho: flex.rho, usedMinSteel: flex.usedMin,
     minGoverning: flex.minGoverning, asMinBeam: flex.asMinBeam, asMinSlab: flex.asMinSlab, bars: layout.n, barSpacing: layout.spacing,
-    analysis, method, dProvided, punchOK, beamOK, bearingOK,
+    analysis, method, dProvided, punchOK, beamOK, minDepthOK, bearingOK,
   };
 }
