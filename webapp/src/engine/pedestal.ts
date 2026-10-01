@@ -10,8 +10,12 @@
 // checks the block for what the base delivers to it.
 //
 //   size     square, side = the column's larger plan dimension + 250 mm
-//            (steel) / + 200 mm (timber), rounded up to 50, at least 400 /
-//            300 — room for the plate and anchor-rod edge distance.
+//            (steel) / + 300 mm (timber), rounded up to 50, at least 400 /
+//            300 — room for the plate and anchor-rod edge distance. A post
+//            base's rods stand OUTSIDE the post (d/2 + 50), where a steel
+//            plate's sit inside the flange tips; +300 keeps a ⌀16 rod 6·da =
+//            96 mm from the face (ACI 318-14 §17.7.2, untorqued) — at +200 it
+//            was 50 mm and on the pedestal's own bar line.
 //   demand   Pu (+ its own weight at 1.2), and at its BASE the column-base
 //            moment plus the base shear × pedestal height, each axis.
 //   capacity ACI 318-14 / NSCP §410 strain compatibility, bars all around;
@@ -58,7 +62,7 @@ export interface PedestalResult {
 export const pedestalSide = (column: 'steel' | 'wood', colD: number, colB: number): number =>
   column === 'steel'
     ? Math.max(400, Math.ceil((Math.max(colD, colB) + 250) / 50) * 50)
-    : Math.max(300, Math.ceil((Math.max(colD, colB) + 200) / 50) * 50)
+    : Math.max(300, Math.ceil((Math.max(colD, colB) + 300) / 50) * 50)
 
 /** φMn of the section at a given factored axial load, by interpolating the
  *  φ-scaled interaction curve (Pn descending along it). */
@@ -119,3 +123,45 @@ export function designPedestal(i: PedestalInput): PedestalResult {
     util: w.util, ok: w.util <= 1,
   }
 }
+
+/** Anchor-rod embedment into a pedestal, mm: 12·da (the hooked-rod rule of
+ *  thumb), a 300 mm floor, and never closer than 100 mm to the pad. Not an
+ *  ACI 318 Ch. 17 breakout design — the sheet says so. */
+export const anchorEmbed = (dia: number, pedestalHeight: number): number =>
+  Math.max(150, Math.min(Math.max(300, 12 * dia), Math.round(pedestalHeight * 1000 - 100)))
+
+/** What sits on a pedestal: plate N (along d) × B × t, rods, grout bed — mm. */
+export interface PedestalBearing {
+  plate: { N: number; B: number; t: number }
+  rods: { n: number; dia: number; embed: number }
+  grout: number
+}
+
+/**
+ * The hardware on a pedestal, sized once for the sheet and the take-off.
+ *
+ * Steel: the designed base plate (`designBasePlate`, whose defaults are 4
+ * rods ⌀25) on a 25 mm grout bed. Timber: a NOMINAL post base — a 10 mm plate
+ * 100 mm proud of the post each way along d (where its two ⌀16 rods stand) and
+ * 20 mm across b, set straight on the concrete. Nothing checks the post base;
+ * the drawing says so.
+ */
+export function pedestalBearing(
+  column: 'steel' | 'wood', colD: number, colB: number, height: number,
+  plate?: { N: number; B: number; t: number },
+): PedestalBearing {
+  if (column === 'steel') {
+    const p = plate ?? { N: colD + 100, B: colB + 100, t: 20 }
+    return { plate: p, rods: { n: 4, dia: 25, embed: anchorEmbed(25, height) }, grout: 25 }
+  }
+  return {
+    plate: { N: colD + 200, B: colB + 40, t: 10 },
+    rods: { n: 2, dia: 16, embed: anchorEmbed(16, height) },
+    grout: 0,
+  }
+}
+
+/** One anchor rod's cut length, mm: through grout and plate, a nut-and-washer
+ *  projection of 3·da above, the embedment below, and the 90° foot (4·da). */
+export const anchorRodLength = (b: PedestalBearing): number =>
+  b.rods.embed + b.grout + b.plate.t + 3 * b.rods.dia + 4 * b.rods.dia

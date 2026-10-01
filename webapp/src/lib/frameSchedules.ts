@@ -13,6 +13,7 @@ import type { BeamConnection } from '../engine/steelConnections'
 import { shapeByName } from '../engine/aiscSections'
 import { buildScheduleSheet, type ScheduleTable } from '../engine/scheduleSheet'
 import type { Drawing } from '../engine/planRenderer'
+import { pedestalMarks } from './planDetails'
 
 const STEEL_DENSITY = 7850   // kg/m³
 const f0 = (v: number) => v.toFixed(0), f1 = (v: number) => v.toFixed(1), f2 = (v: number) => v.toFixed(2)
@@ -34,6 +35,29 @@ const connType = (c: BeamConnection, beamToBeam = false): string =>
 
 const weldOf = (c: BeamConnection): string =>
   `${c.tab.weldSizeMm} E70XX${c.connType === 'moment-flange-weld' ? ' + CJP flg' : c.connType === 'moment-web-plate' ? ' + ext. plates' : ''}`
+
+/** The RC pedestals under one material's columns, one line per PD mark —
+ *  the marks the footing sheets carry. Null where there are none. */
+function pedestalTable(design: StructureDesign, material: 'steel' | 'wood'): ScheduleTable | null {
+  const marks = pedestalMarks(design)
+  const rows = (design.pedestals ?? []).filter((p) => p.material === material)
+  if (!rows.length) return null
+  const lines = group(rows, (p) => marks.get(p.node) ?? p.node).map((g) => {
+    const d = g[0].design
+    return {
+      row: [marks.get(g[0].node) ?? '—', g.map((p) => p.node).join(', '), `${d.side}×${d.side}`, f2(d.height),
+        `${d.bars}-⌀${d.barDia}`, `⌀${d.tieDia} @ ${d.tieSpacing}`, pct(Math.max(...g.map((p) => p.design.util)))],
+      ok: g.every((p) => p.ok),
+    }
+  })
+  return {
+    heading: 'RC PEDESTAL SCHEDULE',
+    columns: [{ head: 'MARK', w: 7 }, { head: 'NODES', w: 24 }, { head: 'SIZE mm', w: 10 }, { head: 'HEIGHT m', w: 9, align: 'end' }, { head: 'VERT.', w: 9 }, { head: 'TIES', w: 11 }, { head: 'MAX UTIL', w: 9, align: 'end' }],
+    rows: lines.map((l) => l.row),
+    failRows: lines.flatMap((l, i) => (l.ok ? [] : [i])),
+    note: 'Top of footing to grade. NSCP §410 strain compatibility, biaxial by the linear load contour; plus 2 tie sets within the top 125 mm around the anchor rods (§410.7.6.1.6).',
+  }
+}
 
 /** The steel member, base-plate and connection schedules. Empty for a frame with no steel. */
 export function steelScheduleDrawings(design: StructureDesign): { key: string; title: string; drawing: Drawing }[] {
@@ -63,6 +87,8 @@ export function steelScheduleDrawings(design: StructureDesign): { key: string; t
     failRows: design.basePlates.flatMap((b, i) => (b.ok ? [] : [i])),
     note: 'AISC 360-16 §J8 / Design Guide 1. N along the column depth d, B along bf. Non-shrink grout under every plate.',
   })
+  const ped = pedestalTable(design, 'steel')
+  if (ped) tables.push(ped)
   const conns = [
     ...design.joints.flatMap((j) => j.connections.map((c) => ({ node: j.nodeId, c, bb: false }))),
     ...design.beamJoints.flatMap((j) => j.connections.map((c) => ({ node: j.nodeId, c, bb: true }))),
@@ -75,7 +101,7 @@ export function steelScheduleDrawings(design: StructureDesign): { key: string; t
     note: 'Each end is built as analysed: a moment connection unless the end is Simple (a pin, released in the analysis). Plates Fy 248 MPa; bolts single shear.',
   } : null
 
-  const out = [{ key: 'steel-schedules', title: 'Steel member and base-plate schedules', drawing: buildScheduleSheet(tables, { title: 'STEEL MEMBER AND BASE-PLATE SCHEDULES', sheetRef: 'S-07' }) }]
+  const out = [{ key: 'steel-schedules', title: 'Steel member, base-plate and pedestal schedules', drawing: buildScheduleSheet(tables, { title: 'STEEL MEMBER, BASE-PLATE & PEDESTAL SCHEDULES', sheetRef: 'S-07' }) }]
   if (connTable) out.push({ key: 'steel-connection-schedule', title: 'Steel connection schedule', drawing: buildScheduleSheet([connTable], { title: 'STEEL CONNECTION SCHEDULE', detailNo: '2', sheetRef: 'S-07' }) })
   return out
 }
@@ -111,5 +137,7 @@ export function timberScheduleDrawings(model: StructuralModel, design: Structure
     failRows: design.woodSlabs.flatMap((s, i) => (s.ok ? [] : [i])),
     note: 'Joists span the short side of the panel; deck boards run continuous over at least three joists. Service deflection L/360 live, L/240 total.',
   })
+  const ped = pedestalTable(design, 'wood')
+  if (ped) tables.push(ped)
   return tables.length ? [{ key: 'timber-schedules', title: 'Timber member and deck schedules', drawing: buildScheduleSheet(tables, { title: 'TIMBER MEMBER AND DECK SCHEDULES', sheetRef: 'S-07' }) }] : []
 }

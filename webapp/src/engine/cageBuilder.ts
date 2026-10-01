@@ -75,6 +75,12 @@ export interface StructureCages {
  *  ground gets 75 mm cover. */
 export const FOOTING_COVER = 75
 
+/** The cage mark of the pedestal at a base node — the member id a take-off or
+ *  a sheet looks its steel up by. */
+export const pedestalMark = (node: string) => `PED-${node}`
+/** NSCP §410.7.6.1.6: the band at a pedestal's top the anchor-bolt ties sit in, m. */
+export const PEDESTAL_ANCHOR_BAND = 0.125
+
 export interface StructureCageOptions {
   /**
    * Turn the footing mat bars up at each end with a 90° hook (§425.3.1).
@@ -266,6 +272,8 @@ export function buildStructureCages(
 
   /** Pedestal at a base node, m — the column between the node and the pad top. */
   const pedestalAt = new Map(design.footings.map((f) => [f.node, f.pedestal]))
+  /** The designed RC pedestal under a steel / timber column, by base node. */
+  const pedestalRow = new Map((design.pedestals ?? []).map((p) => [p.node, p]))
 
   const cages: RebarCage[] = []
   /** Push a cage, tagged with the kind of element it belongs to — the tag a
@@ -533,6 +541,31 @@ export function buildStructureCages(
     }), spliceOf(sec, sec.barDia, [0.35])))
   }
 
+  // ── RC pedestals under steel and timber columns ─────────────────────────
+  //
+  // From the pad's top up to the base node, where the base plate or post base
+  // sits. Straight verticals stopping under the top cover (nothing laps on
+  // above) and the designed tie spacing between, plus the anchor-bolt ties of
+  // NSCP §410.7.6.1.6 / ACI 318-14 §10.7.6.1.6: at least two ties within the
+  // top 125 mm, placed as a closely hooped band at 50 mm.
+  for (const p of design.pedestals ?? []) {
+    const at = pos.get(p.node)
+    if (!at) { unplaced.push(`pedestal@${p.node}`); continue }
+    const d = p.design
+    const sec = secOf(p.column)
+    // The steel stops under the top cover — the base plate's grout bed is
+    // what sits on the concrete there, and nothing laps on above.
+    const yTop = at.y - sec.cover / 1000
+    const top: [number, number] = [at.y - PEDESTAL_ANCHOR_BAND, yTop]
+    add('column', spliceCage(buildColumnCage({
+      mark: pedestalMark(p.node), b: d.side, h: d.side, cover: sec.cover,
+      barDia: d.barDia, bars: d.bars, tieDia: d.tieDia,
+      sConfined: d.tieSpacing, sOutside: d.tieSpacing, lo: 0,
+      centre: [at.x, at.z], yBottom: at.y - d.height, yTop,
+      jointGaps: [top], jointFill: [top], jointHoopSpacing: 50,
+    }), spliceOf(sec, d.barDia)))
+  }
+
   // ── footings: the mat, and the dowels the column laps onto ──────────────
   //
   // Placed last because a dowel copies the column's own bar positions, so the
@@ -542,8 +575,15 @@ export function buildStructureCages(
     const col = model.members.find((m) => m.role === 'column' && (m.i === f.node || m.j === f.node))
     const at = pos.get(f.node)
     if (!col || !at) { unplaced.push(`footing@${f.node}`); continue }
-    const sec = secOf(col.id)
-    const cd = design.columns.find((c) => c.id === col.id)
+    // Under a steel or timber column the dowels lap onto the PEDESTAL's bars,
+    // not the column's: a W-shape has no verticals, and dowels set out from
+    // its section's nominal bar fields were steel standing in no concrete.
+    const ped = pedestalRow.get(f.node)?.design
+    const colSec = secOf(col.id)
+    const sec: RectSection = ped
+      ? { ...colSec, b: ped.side, h: ped.side, barDia: ped.barDia, tieDia: ped.tieDia }
+      : colSec
+    const cd = ped ? { bars: ped.bars } : design.columns.find((c) => c.id === col.id)
     const lap = calcDevLength({
       db: sec.barDia, fc: sec.fc, fy: sec.fy,
       topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,

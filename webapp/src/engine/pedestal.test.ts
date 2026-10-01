@@ -6,11 +6,12 @@ const base = { fc: 28, fy: 415, height: 1.2, barDia: 16, tieDia: 10, cover: 40 }
 const axial = (Pu: number) => ({ Pu, Mx: 0, Mz: 0, Vx: 0, Vz: 0 })
 
 describe('pedestal — size', () => {
-  it('a W310x79 (d 306, bf 254) gets 306 + 250 → 600 mm; a 300×400 post 400 + 200 → 600', () => {
+  it('a W310x79 (d 306, bf 254) gets 306 + 250 → 600 mm; a 300×400 post 400 + 300 → 700', () => {
     expect(pedestalSide('steel', 306, 254)).toBe(600)
-    expect(pedestalSide('wood', 400, 300)).toBe(600)
+    // the post base's ⌀16 rods at d/2 + 50 = 250 stand 100 mm from the face ≥ 6·16 (§17.7.2)
+    expect(pedestalSide('wood', 400, 300)).toBe(700)
     expect(pedestalSide('steel', 100, 100)).toBe(400)   // the floor
-    expect(pedestalSide('wood', 50, 50)).toBe(300)
+    expect(pedestalSide('wood', 0, 0)).toBe(300)
   })
 })
 
@@ -72,6 +73,8 @@ describe('pedestal — design (hand calcs on a 600 × 600 × 1.2 m block)', () =
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { designStructure } from './pipeline'
 import { estimateTakeoff } from './takeoff'
+import { buildStructureCages, pedestalMark } from './cageBuilder'
+import { pedestalMarks } from '../lib/planDetails'
 import type { RectSection } from './model'
 
 describe('pipeline — steel and timber columns stand on RC pedestals', () => {
@@ -112,6 +115,68 @@ describe('pipeline — steel and timber columns stand on RC pedestals', () => {
     expect(plain.pedestals).toEqual([])
     const f = d.footings[0], w = 24 * 0.36 * soil.H
     expect(f.P).toBeGreaterThanOrEqual(w)
+  })
+
+  it('cages each pedestal: its bars from the pad to under the top cover, two anchor-bolt tie sets in the top 125 mm (§410.7.6.1.6)', () => {
+    const { cages } = buildStructureCages(m, d)
+    for (const p of d.pedestals!) {
+      const c = cages.find((x) => x.member === pedestalMark(p.node))!
+      const at = m.nodes.find((n) => n.id === p.node)!
+      const verts = c.runs.filter((r) => r.role === 'vertical')
+      expect(verts).toHaveLength(p.design.bars)
+      for (const v of verts) {
+        const ys = v.path.map((q) => q[1])
+        expect(Math.max(...ys)).toBeCloseTo(at.y - 0.04, 6)                  // 40 cover
+        expect(Math.min(...ys)).toBeCloseTo(at.y - p.design.height, 6)       // pad top
+        expect(v.dia).toBe(p.design.barDia)
+      }
+      // a tie SET is a hoop plus its cross ties, stacked a diameter apart
+      const topSets = new Set(c.runs
+        .filter((r) => (r.role === 'tie' || r.role === 'hoop') && r.path[0]![1] > at.y - 0.125)
+        .map((r) => Math.round((r.path[0]![1] - at.y) / 0.03)))
+      expect(topSets.size).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('sets the footing dowels out on the pedestal’s bars, not on the steel section’s nominal ones', () => {
+    const { cages } = buildStructureCages(m, d)
+    const p = d.pedestals![0]!
+    const ped = cages.find((x) => x.member === pedestalMark(p.node))!
+    const ftg = cages.find((x) => x.member === `F-${p.node}`)!
+    const dowels = ftg.runs.filter((r) => r.role === 'dowel')
+    expect(dowels).toHaveLength(p.design.bars)
+    const key = (q: readonly number[]) => `${q[0]!.toFixed(3)},${q[2]!.toFixed(3)}`
+    const barsAt = new Set(ped.runs.filter((r) => r.role === 'vertical').map((r) => key(r.path[0]!)))
+    for (const dw of dowels) expect(barsAt.has(key(dw.path[dw.path.length - 1]!))).toBe(true)
+  })
+
+  it('bills each pedestal: side²·h of concrete, 4·side·h of forms, its cage’s steel, and the plates and rods on top', () => {
+    const t = estimateTakeoff(m, d)
+    const rows = t.byElement.filter((e) => e.kind === 'Pedestal')
+    expect(rows).toHaveLength(6)
+    for (const r of rows) {
+      const p = d.pedestals!.find((x) => x.node === r.id)!.design
+      expect(r.concreteM3).toBeCloseTo(0.36 * p.height, 9)
+      expect(r.formworkM2).toBeCloseTo(4 * 0.6 * p.height, 9)
+      // 12-⌀20 × (h − 40 cover) alone is 2.47 kg/m × 12 × 1.285 ≈ 38 kg; ties on top
+      expect(r.steelKg).toBeGreaterThan(12 * 2.466 * (p.height - 0.04))
+      expect(r.steelKg).toBeLessThan(12 * 2.466 * p.height * 2)
+    }
+    const conc = t.boq.find((b) => b.item === 'Pedestal — concrete')!
+    expect(conc.qty).toBeCloseTo(rows.reduce((a, r) => a + r.concreteM3, 0), 9)
+    const plates = t.boq.filter((b) => b.item.startsWith('Base plate PL '))
+    expect(plates.reduce((a, b) => a + b.qty, 0)).toBe(6)
+    const rods = t.boq.filter((b) => b.item.startsWith('Anchor rod ⌀25'))
+    expect(rods.reduce((a, b) => a + b.qty, 0)).toBe(24)
+    // the plates are hardware, not part of the frame's structural tonnage
+    expect(d.totals.steelKg).toBeCloseTo(t.structuralSteelKg, 3)
+  })
+
+  it('marks pedestals PD-n by type: same size, bars, ties and height share a mark', () => {
+    const marks = pedestalMarks(d)
+    expect(marks.size).toBe(6)
+    const sig = (n: string) => { const x = d.pedestals!.find((p) => p.node === n)!.design; return `${x.side}${x.bars}${x.tieSpacing}${x.height}` }
+    for (const [a, ma] of marks) for (const [b, mb] of marks) expect(ma === mb).toBe(sig(a) === sig(b))
   })
 
   it('an RC frame is unchanged: no pedestals, bases lowered to the pad as before', () => {

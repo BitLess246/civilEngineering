@@ -93,6 +93,37 @@ export interface FootingDetailInput {
    * build cages from.
    */
   cages?: FootingDetailCages
+  /**
+   * A STEEL OR TIMBER column standing on an RC pedestal. Set, the "column" the
+   * rest of this input describes (colB, colBars, ties…) is the PEDESTAL — an
+   * RC stub from the pad up to grade, detailed exactly as a column stub is —
+   * and what stands on it is drawn on top: grout bed, plate, anchor rods and a
+   * stub of the column itself. `aboveGrade` defaults to 0 for a pedestal,
+   * because its top is the column's base node, which is at grade.
+   */
+  bearing?: FootingBearing
+}
+
+/** What stands on a pedestal (`FootingDetailInput.bearing`), mm throughout. */
+export interface FootingBearing {
+  kind: 'steel' | 'wood'
+  /** Pedestal mark (PD-n), carried into the title. */
+  mark?: string
+  /** The column's designation, as the schedule writes it — W310x79, 150×200 … */
+  column: string
+  /** Column depth along the sheet's x and width across it. */
+  colD: number
+  colB: number
+  /** Rolled-shape flange thickness — draws the flanges in the section. */
+  tf?: number
+  /** Base plate N (sheet x) × B (sheet y) × t. */
+  plate: { N: number; B: number; t: number }
+  /** Anchor rods: count (4 at the plate corners), diameter, embedment. */
+  rods: { n: number; dia: number; embed: number }
+  /** Non-shrink grout bed under the plate. */
+  grout: number
+  /** Lines added under the bearing callouts — what was and was not checked. */
+  notes?: string[]
 }
 
 /** The cages a footing sheet can draw from, and where they sit. */
@@ -156,7 +187,7 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const tieSched = f.tieSchedule ?? [[2, 50], [2, 75], [5, 100], [7, 150]]
   const tieRest = f.tieRest ?? 200
   const hg = f.gravel ?? 0.1
-  const aboveGrade = f.aboveGrade ?? 0.3
+  const aboveGrade = f.aboveGrade ?? (f.bearing ? 0 : 0.3)
   const embed = f.foundingElev != null ? Math.abs(f.foundingElev) : Math.max(1.0, H * 3)
   const cg = f.cages
 
@@ -238,6 +269,24 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     columnSectionPrimitives(P, 0, 0, cw, { b: f.colB, h: f.colH ?? f.colB, cover: f.colCover ?? 40, barDia: colBarDia, tieDia, bars: colBars },
       { concrete: SHEET_CONCRETE, outline: COL, rebar: REBAR, tie: TIE_INK }, TIEW)
   }
+  // THE PLATE ABOVE, hidden — the plan is a cut just above the pad, so the
+  // base plate and its rods are over it and drawn dashed, as anything above a
+  // cut is.
+  const brg = f.bearing
+  const rodAt = (b: FootingBearing): Pt[] => {
+    const pn = b.plate.N / 1000, pb = b.plate.B / 1000
+    const e = Math.max(50, 2 * b.rods.dia) / 1000
+    const xs = [-pn / 2 + e, pn / 2 - e], ys = [-pb / 2 + e, pb / 2 - e]
+    const all: Pt[] = xs.flatMap((x) => ys.map((y) => [x, y] as Pt))
+    // 4 at the corners; 2 (a light post base) on the centreline across the plate
+    return b.rods.n >= 4 ? all : [[xs[0]!, 0], [xs[1]!, 0]]
+  }
+  if (brg) {
+    const pn = brg.plate.N / 1000, pb = brg.plate.B / 1000
+    P.push({ kind: 'rect', x: -pn / 2, y: -pb / 2, w: pn, h: pb, stroke: INK, fill: 'none', width: 0.9, dash: [B * 0.02, B * 0.012] })
+    for (const [x, y] of rodAt(brg))
+      P.push({ kind: 'circle', cx: x, cy: y, r: Math.max(brg.rods.dia / 2000, B * 0.008), stroke: INK, fill: 'none', width: 0.8 })
+  }
   // A–A cut line through the centre.
   //
   // Clear of the left dimension chain, which stands at hp + 1.2·ts: the marker
@@ -266,6 +315,8 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   // labels
   P.push({ kind: 'text', x: 0, y: hp + ts * 1.4, text: `${n}-${f.barDia}mmØ BOTHWAY`, size: ts * 0.7, anchor: 'middle', color: REBAR, weight: 700 })
   P.push({ kind: 'text', x: 0, y: hp + ts * 2.5, text: 'PLAN', size: ts * 0.85, anchor: 'middle', color: INK, weight: 700 })
+  if (brg)
+    P.push({ kind: 'text', x: 0, y: hp + ts * 3.4, text: `${brg.kind === 'steel' ? 'BASE PLATE' : 'POST BASE'} & ANCHOR RODS ABOVE (DASHED)`, size: ts * 0.45, anchor: 'middle', color: INK, weight: 600 })
 
   // ══ SECTION A–A (to the right) ═════════════════════════════════════════
   const sx0 = hp + gap + hp
@@ -286,7 +337,7 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   // measured to the column's outermost STEEL, not to its concrete — the bars
   // and the ties stand outside the rectangle in this view, and aligning to the
   // rect left the last letter under the outer tie line.
-  P.push({ kind: 'text', x: cl - ts * 1.4, y: gradeZ - ts * 0.5, text: 'NATURAL GRADE LINE', size: ts * 0.5, anchor: 'end', color: INK, weight: 600 })
+  P.push({ kind: 'text', x: cl - ts * 1.4, y: gradeZ - ts * 0.5, text: f.bearing ? 'T.O. PEDESTAL = NATURAL GRADE' : 'NATURAL GRADE LINE', size: ts * 0.5, anchor: 'end', color: INK, weight: 600 })
   // footing + column — cut concrete, each with its own cover hairline
   P.push({ kind: 'rect', x: secL, y: footTop, w: B, h: H, stroke: INK, fill: SHEET_CONCRETE, width: 1.3 })
   P.push({ kind: 'rect', x: cl, y: colTop, w: cw, h: -colTop, stroke: INK, fill: SHEET_CONCRETE, width: 1.3 })
@@ -432,6 +483,80 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   // also the one callout that could not be told from the hatching.
   const callout = (ex: number, ey: number, tx: number, ty: number, text: string, size: number, color?: string, text2?: string) =>
     P.push(...leader({ x: ex, y: ey, tx, ty, text, text2, size, color, weight: 600 }))
+  // THE COLUMN ON THE PEDESTAL — grout bed, plate, rods and a stub of the
+  // column, cut on A–A like everything else in this view. Its callouts stack
+  // up the right-hand side ABOVE the pedestal's own, which all sit below its
+  // top.
+  function bearingSection(b: FootingBearing) {
+    const pn = b.plate.N / 1000, pt = b.plate.t / 1000, gr = b.grout / 1000
+    const gTop = colTop - gr, pTop = gTop - pt
+    const stubH = Math.max(0.45, ts * 6)
+    const sTop = pTop - stubH
+    const d = b.colD / 1000
+    // grout bed, the width of the plate
+    if (gr > 0) P.push({ kind: 'rect', x: sx0 - pn / 2, y: gTop, w: pn, h: gr, stroke: INK, fill: PANEL, width: 0.6 })
+    // the plate, cut — solid, as steel in section is drawn on the set
+    P.push({ kind: 'rect', x: sx0 - pn / 2, y: pTop, w: pn, h: pt, stroke: INK, fill: INK, width: 0.8 })
+    // the column stub, broken at the top
+    if (b.kind === 'steel') {
+      const tf = Math.max((b.tf ?? 12) / 1000, 0.006)
+      P.push({ kind: 'rect', x: sx0 - d / 2, y: sTop, w: d, h: stubH, stroke: INK, fill: 'none', width: 1.0 })
+      P.push({ kind: 'rect', x: sx0 - d / 2, y: sTop, w: tf, h: stubH, stroke: INK, fill: INK, width: 0.6 })
+      P.push({ kind: 'rect', x: sx0 + d / 2 - tf, y: sTop, w: tf, h: stubH, stroke: INK, fill: INK, width: 0.6 })
+    } else {
+      P.push({ kind: 'rect', x: sx0 - d / 2, y: sTop, w: d, h: stubH, stroke: INK, fill: 'none', width: 1.0 })
+      // grain, so the post reads as timber rather than an empty box
+      for (let k = 1; k < 4; k++) {
+        const x = sx0 - d / 2 + (d * k) / 4
+        P.push({ kind: 'path', stroke: STONE, width: 0.5, fill: 'none', cmds: [
+          { c: 'M', x, y: sTop + stubH * 0.05 },
+          { c: 'L', x: x + d * 0.03, y: sTop + stubH * 0.5 },
+          { c: 'L', x, y: pTop - stubH * 0.05 },
+        ] })
+      }
+      // the post base's side straps
+      const st = 0.008, sh = Math.min(0.25, stubH * 0.6)
+      for (const sgn of [-1, 1])
+        P.push({ kind: 'rect', x: sx0 + sgn * (d / 2) + (sgn < 0 ? -st : 0), y: pTop - sh, w: st, h: sh, stroke: INK, fill: INK, width: 0.6 })
+    }
+    // break line across the top of the stub
+    const zz = ts * 0.25
+    P.push({ kind: 'path', stroke: INK, width: 0.8, fill: 'none', cmds: [
+      { c: 'M', x: sx0 - d / 2 - zz, y: sTop }, { c: 'L', x: sx0 - zz, y: sTop },
+      { c: 'L', x: sx0 - zz * 0.4, y: sTop - zz }, { c: 'L', x: sx0 + zz * 0.4, y: sTop + zz },
+      { c: 'L', x: sx0 + zz, y: sTop }, { c: 'L', x: sx0 + d / 2 + zz, y: sTop },
+    ] })
+    // anchor rods in the plane of the cut: down through plate and grout into
+    // the pedestal, turned at the foot; a nut and washer on the plate
+    const rd = b.rods.dia / 1000, emb = b.rods.embed / 1000
+    const rodXs = [...new Set(rodAt(b).map(([x]) => x))]
+    for (const rx of rodXs) {
+      const x = sx0 + rx, foot = colTop + emb, turn = Math.sign(rx) * Math.min(0.1, 4 * rd)
+      wire([[x, pTop - 2.5 * rd], [x, foot], [x - turn, foot]], INK, 1.4)
+      P.push({ kind: 'rect', x: x - 1.0 * rd, y: pTop - 1.2 * rd, w: 2.0 * rd, h: 1.0 * rd, stroke: INK, fill: INK, width: 0.5 })
+    }
+    // callouts, stacked up the right
+    const tx = secR + ts * 0.9, sz = ts * 0.5
+    const rodX = sx0 + Math.max(...rodXs)
+    // lowest tap first, so the text rows climb in the order the leaders start
+    // and no two leaders cross
+    const rows: [number, number, string, string?][] = [
+      [rodX, colTop + emb * 0.6, `${b.rods.n}-⌀${b.rods.dia} ANCHOR RODS`, `${b.rods.embed} mm EMBED., HOOKED`],
+      ...(gr > 0 ? [[sx0 + pn / 2 - ts * 0.1, gTop + gr / 2, `${b.grout} mm NON-SHRINK GROUT`] as [number, number, string]] : []),
+      [sx0 + pn / 2 - ts * 0.1, pTop + pt / 2, `${b.kind === 'steel' ? 'BASE PL' : 'POST BASE PL'} ${b.plate.N}×${b.plate.B}×${b.plate.t} mm`],
+      [sx0 + d / 2, sTop + stubH * 0.4, b.kind === 'steel' ? `${b.column} STEEL COLUMN` : `${b.column} TIMBER POST`],
+    ]
+    rows.forEach(([ex, ey, t1, t2], k) => {
+      const ty = colTop - ts * (0.6 + 1.5 * k) + (k === 0 ? ts * 0.9 : 0)
+      callout(ex, ey, tx, ty, t1, sz, INK, t2)
+    })
+    // the notes read downward, from above the last callout
+    const notes = b.notes ?? []
+    const n0 = colTop - ts * (0.6 + 1.5 * rows.length) - ts * 0.75 * (notes.length - 1)
+    notes.forEach((line, k) => {
+      P.push({ kind: 'text', x: tx, y: n0 + ts * 0.75 * k, text: line, size: sz * 0.9, anchor: 'start', color: INK, weight: 500 })
+    })
+  }
   // → a column vertical bar
   const rightVx = secVx.length ? Math.max(...secVx) : cr - c
   const vy = colTop * 0.6
@@ -453,7 +578,10 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     const groups: number[][] = []
     let group: number[] = []
     for (const z of sorted) {
-      if (group.length && z - group[group.length - 1]! > (4 * tieDia) / 1000) { groups.push(group); group = [] }
+      // Members of one set are stacked ONE diameter apart; the next set is a
+      // pitch away. Clustering at four diameters merged the two anchor-bolt
+      // tie sets at a pedestal's top (§410.7.6.1.6), 43 mm apart, into one.
+      if (group.length && z - group[group.length - 1]! > (1.6 * tieDia) / 1000) { groups.push(group); group = [] }
       group.push(z)
     }
     if (group.length) groups.push(group)
@@ -491,6 +619,7 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   }
   // → the bottom mat bar
   callout(secR - c, zLong, secR + ts * 0.9, zLong + ts * 0.7, `${n}-${f.barDia}mmØ BOTHWAY`, ts * 0.55, REBAR)
+  if (brg) bearingSection(brg)
   // Right-aligned clear of the column, as the grade label is: run out from the
   // footing's left edge it was fourteen characters long and printed through the
   // column it labels the level of.
@@ -500,9 +629,11 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
 
   // ══ detail-tag title block ═════════════════════════════════════════════
   const detailNo = opts.detailNo ?? '1', sheetRef = opts.sheetRef ?? 'S-05', scale = opts.scale ?? '1:25 MTS'
-  const title = `COLUMN FOOTING DETAIL — ${f.mark}`
+  const title = f.bearing
+    ? `FOOTING & PEDESTAL DETAIL — ${f.mark}${f.bearing.mark ? ` / ${f.bearing.mark}` : ''}`
+    : `COLUMN FOOTING DETAIL — ${f.mark}`
   // title sits below BOTH views (the plan runs deeper than the section here)
-  const tbR = ts * 1.2, tbY = Math.max(hp + ts * 2.5, gravBot + ts * 2.4) + ts * 2.6, tbX = -hp
+  const tbR = ts * 1.2, tbY = Math.max(hp + ts * (f.bearing ? 3.4 : 2.5), gravBot + ts * 2.4) + ts * 2.6, tbX = -hp
   // The house block. This sheet used to draw the rule in two pieces — one
   // across the tag, one under the title, at different widths and with a gap
   // between them — so the bisector read as cut at both ends.

@@ -23,7 +23,8 @@ import type { StructuralModel, RectSection } from './model'
 import type { StructureDesign } from './pipeline'
 import { concreteMaterials, type ConcreteClass, type ConcreteMaterials } from './quantities'
 import { shapeByName } from './aiscSections'
-import { buildStructureCages } from './cageBuilder'
+import { buildStructureCages, pedestalMark } from './cageBuilder'
+import { pedestalBearing, anchorRodLength } from './pedestal'
 import { cutLength, type RebarRole } from './rebarModel'
 import { designSlabOpening, slabOpeningBundles } from './slabOpening'
 import { designWallDetail } from './wallDetail'
@@ -102,7 +103,7 @@ export interface CutItem {
   tie: boolean             // true → closed stirrup/tie cut nested from 6 m bars
 }
 export interface ElementQty {
-  kind: 'Beam' | 'Girder' | 'Column' | 'Footing' | 'Combined footing' | 'Slab' | 'Wall'
+  kind: 'Beam' | 'Girder' | 'Column' | 'Pedestal' | 'Footing' | 'Combined footing' | 'Slab' | 'Wall'
   id: string
   concreteM3: number
   formworkM2: number
@@ -298,6 +299,26 @@ export function estimateTakeoff(
     // well billed every column's lap twice.
     const intersections = (cage?.runs ?? []).filter((r) => r.role === 'tie').length * c.bars
     byElement.push({ kind: 'Column', id: c.id, concreteM3, formworkM2, steelKg, intersections })
+  }
+
+  // ── RC pedestals under steel / timber columns ──
+  // Concrete and forms off the designed block; steel off its placed cage
+  // (`PED-<node>`), the same bars the footing sheet draws — anchor-bolt ties
+  // at the top included. The plate and rods on top are bought separately
+  // (below, after the structural steel).
+  for (const p of design.pedestals ?? []) {
+    const s = p.design.side / 1000, h = p.design.height
+    const tag = `Pedestal ${p.node}`
+    const cage = cageOf(pedestalMark(p.node))
+    let steelKg = 0
+    for (const r of cage?.runs ?? []) {
+      steelKg += add(tag, cutMark(r.role), r.dia, r.count, cutLength(r) / 1000, r.closed === true)
+    }
+    const ties = (cage?.runs ?? []).filter((r) => r.role === 'tie' || r.role === 'hoop').length
+    byElement.push({
+      kind: 'Pedestal', id: p.node, concreteM3: s * s * h, formworkM2: 4 * s * h, steelKg,
+      intersections: ties * p.design.bars,
+    })
   }
 
   // ── Isolated footings ──
@@ -557,6 +578,26 @@ export function estimateTakeoff(
     shapeMap.set(sec.shape, { kg: prev.kg + kg, L: prev.L + L, kgPerM: wKgM })
     boq.push({ item: `Structural steel — ${sec.shape}`, unit: 'm', qty: L })
   }
+
+  // ── Base plates / post bases and their anchor rods, one set per pedestal ──
+  // Grouped by size, so the bill reads as a fabricator orders them.
+  const plateBoq = new Map<string, number>(), rodBoq = new Map<string, number>()
+  for (const p of design.pedestals ?? []) {
+    const col = model.members.find((m) => m.id === p.column)
+    const sec = col ? secOf(col.id) : undefined
+    if (!sec) continue
+    const bp = design.basePlates.find((b) => b.node === p.node)
+    if (p.material === 'steel' && !bp) continue
+    const hw = pedestalBearing(p.material, sec.h, sec.b, p.design.height,
+      bp ? { N: Math.round(bp.design.N), B: Math.round(bp.design.B), t: bp.tAdopt } : undefined)
+    const { N, B, t } = hw.plate
+    const plate = `${p.material === 'steel' ? 'Base plate' : 'Post base (nominal)'} PL ${N}×${B}×${t}`
+    plateBoq.set(plate, (plateBoq.get(plate) ?? 0) + 1)
+    const rod = `Anchor rod ⌀${hw.rods.dia} × ${(anchorRodLength(hw) / 1000).toFixed(2)} m, hooked, w/ nut & washer`
+    rodBoq.set(rod, (rodBoq.get(rod) ?? 0) + hw.rods.n)
+  }
+  for (const [item, qty] of plateBoq) boq.push({ item, unit: 'pcs', qty })
+  for (const [item, qty] of rodBoq) boq.push({ item, unit: 'pcs', qty })
 
   // ── Timber members (wood frame): volume + board feet by section size × species ──
   const timberMap = new Map<string, TimberSizeQty>()

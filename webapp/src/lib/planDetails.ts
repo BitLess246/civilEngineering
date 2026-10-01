@@ -6,7 +6,11 @@
 import type { StructuralModel, RectSection } from '../engine/model'
 import type { StructureDesign } from '../engine/pipeline'
 import type { PlanFooting } from '../engine/planRenderer'
-import type { FootingDetailInput } from '../engine/footingDetail'
+import type { FootingDetailInput, FootingBearing } from '../engine/footingDetail'
+import type { PedestalScheduleRow } from '../engine/pipeline'
+import { shapeByName } from '../engine/aiscSections'
+import { pedestalMark } from '../engine/cageBuilder'
+import { pedestalBearing } from '../engine/pedestal'
 import type { WallDetailInput } from '../engine/wallDetail'
 import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 import type { FrameElevationInput, ElevationMember } from '../engine/frameElevation'
@@ -76,20 +80,32 @@ export function footingDetailBundles(
   // the base column member sitting at a footing node (lowest y among its ends)
   const colAt = (node: string) => model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
 
-  const seen = new Set<string>()
+  // WF-n is the PAD's mark — the foundation plan's, by side × thickness in
+  // design order. A sheet is drawn per distinct pad AND pedestal, because two
+  // pads of one size can carry different pedestals and plates.
+  const padMark = new Map<string, string>()
+  const drawn = new Set<string>()
+  const pdMarks = pedestalMarks(design)
+  const pedAt = new Map((design.pedestals ?? []).map((p) => [p.node, p]))
   const bundles: FootingDetailBundle[] = []
   for (const r of design.footings) {
     const key = `${Math.round(r.design.B * 1000)}x${Math.round(r.design.Dc)}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    const mark = `WF-${seen.size}`
+    if (!padMark.has(key)) padMark.set(key, `WF-${padMark.size + 1}`)
+    const mark = padMark.get(key)!
     const mem = colAt(r.node)
-    const sec: RectSection | undefined = mem ? secById.get(mem.section) : undefined
-    // The sheet draws the column as an RC stub with its bars lapping onto
-    // dowels. Under a steel or timber column that is not what is built, so no
-    // sheet rather than a wrong one (the mark is still consumed, so WF-n stays
-    // the foundation plan's WF-n).
-    if (mem && !isRcSection(sec)) continue
+    const colSec: RectSection | undefined = mem ? secById.get(mem.section) : undefined
+    const ped = pedAt.get(r.node)
+    const sheetKey = ped ? `${key}|${pdMarks.get(r.node)}` : key
+    if (drawn.has(sheetKey)) continue
+    // Under a steel or timber column the RC stub the sheet draws is the
+    // PEDESTAL, with the plate and the column stood on top. Without a designed
+    // pedestal there is nothing true to draw — no sheet rather than a wrong one.
+    if (mem && !isRcSection(colSec) && !ped) continue
+    drawn.add(sheetKey)
+    const bearing = ped && mem && colSec ? footingBearing(design, ped, colSec, pdMarks.get(r.node)) : undefined
+    const sec: RectSection | undefined = ped && colSec
+      ? { ...colSec, b: ped.design.side, h: ped.design.side, barDia: ped.design.barDia, tieDia: ped.design.tieDia }
+      : colSec
     // THE SHEET'S AXES, NOT THE SECTION'S NAMES. `FootingDetailInput.colB` is
     // the column's width along the sheet's x and `colH` its depth along the
     // sheet's y; a `RectSection` names them the other way round, because a
@@ -101,8 +117,8 @@ export function footingDetailBundles(
     const colB = sec?.h ?? 400, colH = sec?.b ?? colB
     const colBarDia = sec?.barDia ?? 16, tieDia = sec?.tieDia ?? 10
     const colRow = mem ? colRowById.get(mem.id) : undefined
-    const colBars = Math.max(4, colRow?.bars ?? 8)
-    const tieSpacing = colRow?.tieSpacingFinal
+    const colBars = ped ? ped.design.bars : Math.max(4, colRow?.bars ?? 8)
+    const tieSpacing = ped ? ped.design.tieSpacing : colRow?.tieSpacingFinal
     // The PLACED steel for this footing and the column on it. The sheet draws
     // from these when they are there; a caller with a design but no model
     // (the standalone foundation calculator) passes none and gets the numeric
@@ -113,7 +129,7 @@ export function footingDetailBundles(
     const detailCages = at && mem
       ? {
         footing: cages.find((cc) => cc.member === `F-${r.node}`),
-        column: cages.find((cc) => cc.member === mem.id),
+        column: cages.find((cc) => cc.member === (ped ? pedestalMark(r.node) : mem.id)),
         centre: [at.x, at.z] as [number, number],
         yTop: at.y - r.pedestal,
       }
@@ -134,6 +150,7 @@ export function footingDetailBundles(
         foundingElev: soil.H != null ? -r.pedestal : undefined,
         endHook: 'none',
         ...(detailCages?.footing || detailCages?.column ? { cages: detailCages } : {}),
+        ...(bearing ? { bearing } : {}),
       },
       column: {
         shape: 'tied', b: colB, h: colH,
@@ -142,6 +159,57 @@ export function footingDetailBundles(
     })
   }
   return bundles
+}
+
+/**
+ * PD-n for every designed pedestal, by base node — one mark per distinct
+ * pedestal (side, bars, ties, height) in design order, the way WF-n marks
+ * pads. Shared by the footing sheets and the pedestal schedule so the two
+ * agree about which pedestal is PD-2.
+ */
+export function pedestalMarks(design: StructureDesign): Map<string, string> {
+  const byType = new Map<string, string>()
+  const out = new Map<string, string>()
+  for (const p of design.pedestals ?? []) {
+    const d = p.design
+    const key = `${d.side}|${d.bars}x${d.barDia}|${d.tieDia}@${d.tieSpacing}|${Math.round(d.height * 1000)}`
+    if (!byType.has(key)) byType.set(key, `PD-${byType.size + 1}`)
+    out.set(p.node, byType.get(key)!)
+  }
+  return out
+}
+
+/** What stands on a pedestal, for the footing sheet: the designed base plate
+ *  under a steel column, a nominal post base under a timber one. */
+function footingBearing(
+  design: StructureDesign, ped: PedestalScheduleRow, colSec: RectSection, mark?: string,
+): FootingBearing | undefined {
+  // the sheet's x is world X, which a modelled column's `h` runs across
+  const colD = colSec.h, colB = colSec.b
+  if (ped.material === 'steel') {
+    const bp = design.basePlates.find((b) => b.node === ped.node)
+    const shape = colSec.shape ? shapeByName(colSec.shape) : undefined
+    if (!bp) return undefined
+    const hw = pedestalBearing('steel', colD, colB, ped.design.height,
+      { N: Math.round(bp.design.N), B: Math.round(bp.design.B), t: bp.tAdopt })
+    return {
+      kind: 'steel', mark, column: bp.shape,
+      colD: shape?.d ?? colD, colB: shape?.bf ?? colB, tf: shape?.tf,
+      ...hw,
+      notes: [
+        'PLATE BEARING & ROD TENSION CHECKED (AISC 360 §J8, §J3)',
+        'CONCRETE BREAKOUT / PULLOUT (ACI 318 CH. 17) NOT CHECKED',
+      ],
+    }
+  }
+  const w = design.woodColumns.find((c) => c.id === ped.column)
+  const d = w?.d ?? colD, b = w?.b ?? colB
+  return {
+    kind: 'wood', mark, column: `${b}×${d}`,
+    colD: d, colB: b,
+    ...pedestalBearing('wood', d, b, ped.design.height),
+    notes: ['POST BASE IS NOMINAL — NOT DESIGNED;', 'SIZE TO NDS §12 / SUPPLIER BEFORE ISSUE'],
+  }
 }
 
 /**

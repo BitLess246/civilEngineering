@@ -4,6 +4,7 @@ import { designStructure } from '../engine/pipeline'
 import { shapeByName } from '../engine/aiscSections'
 import { buildSheetSet } from './planSheets'
 import { steelScheduleDrawings, timberScheduleDrawings } from './frameSchedules'
+import { pedestalMarks } from './planDetails'
 import type { RectSection, StructuralModel } from '../engine/model'
 import type { PlanPrimitive } from '../engine/planRenderer'
 
@@ -49,6 +50,18 @@ describe('steel schedule sheets', () => {
     expect(t).toContain(`${b.design.N.toFixed(0)}×${b.design.B.toFixed(0)}×${b.tAdopt}`)
   })
 
+  it('schedules the pedestals by the PD marks the footing sheets carry', () => {
+    expect(t).toContain('RC PEDESTAL SCHEDULE')
+    const marks = pedestalMarks(d)
+    for (const mk of new Set(marks.values())) expect(t).toContain(mk)
+    const p = d.pedestals![0]!.design
+    expect(t).toContain(`${p.bars}-⌀${p.barDia}`)
+    expect(t).toContain(`⌀${p.tieDia} @ ${p.tieSpacing}`)
+    // every node listed once, under its own mark
+    const listed = t.slice(t.indexOf('RC PEDESTAL SCHEDULE')).filter((x) => /^n\d/.test(x)).flatMap((x) => x.split(', '))
+    expect(listed.sort()).toEqual(d.pedestals!.map((q) => q.node).sort())
+  })
+
   it('lands in the sheet set under its own group, and an RC frame gets none', () => {
     expect(buildSheetSet(m, d, soil).filter((s) => s.group === 'Steel schedules')).toHaveLength(2)
     const rc = frame({ ...steel, material: undefined, shape: undefined })
@@ -72,6 +85,11 @@ describe('timber schedule sheets', () => {
   it('a deck that fails reads CHECK, in the failure ink', () => {
     const failing = d.woodSlabs.filter((s) => !s.ok).length
     expect(t.filter((x) => x === 'CHECK').length).toBeGreaterThanOrEqual(failing)
+  })
+
+  it('schedules the pedestals under the posts', () => {
+    expect(t).toContain('RC PEDESTAL SCHEDULE')
+    expect(t).toContain(`${d.pedestals![0]!.design.side}×${d.pedestals![0]!.design.side}`)
   })
 
   it('lands in the sheet set under its own group', () => {
