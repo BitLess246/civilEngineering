@@ -5,7 +5,7 @@ import {
   OPEN_CALCULATOR_TOOL, openCalculatorToolSchema,
   validateAssistantRequest, extractAssistantActions,
   cleanPageContext, MAX_PAGE_CHARS,
-  fitsContext, callWithRotation,
+  fitsContext, callWithRotation, hasUsableAnswer,
   type FreeModel, type UpstreamCall, type UpstreamFetch, type AttemptLog,
 } from './aiAssistant'
 
@@ -327,5 +327,33 @@ describe('callWithRotation', () => {
         expect(l.ms).toBeGreaterThanOrEqual(0)
       }
     })
+
+    it('an empty 200 is no answer: it hands over to the next model, and the log says why', async () => {
+      const empty = { choices: [{ message: { content: '  ' } }] }
+      const good = { choices: [{ message: { content: 'Mu = 300.2 kN·m' } }] }
+      const fetchImpl: UpstreamFetch = async (_u, init) => {
+        const { model } = JSON.parse(init.body) as { model: string }
+        return { ok: true, status: 200, json: async () => (model === MODELS[0] ? empty : good) }
+      }
+      const buildCall = (model: FreeModel): UpstreamCall => ({ url: 'x', method: 'POST', headers: {}, body: JSON.stringify({ model }) })
+      const logs: AttemptLog[] = []
+      const r = await callWithRotation(MODELS, 100, buildCall, fetchImpl, 1000, { accept: hasUsableAnswer, log: (a) => logs.push(a) })
+      expect(r).toEqual({ ok: true, model: MODELS[1], json: good })
+      expect(logs.map((l) => [l.model, l.status])).toEqual([[MODELS[0], 'empty'], [MODELS[1], 200]])
+      // without `accept`, a 200 is taken as is — the old contract
+      expect(await callWithRotation(MODELS, 100, buildCall, fetchImpl, 1000)).toEqual({ ok: true, model: MODELS[0], json: empty })
+    })
+  })
+})
+
+describe('hasUsableAnswer', () => {
+  it('text or a valid calculator action is an answer; nothing, whitespace or a foreign tool is not', () => {
+    const msg = (m: unknown) => ({ choices: [{ message: m }] })
+    expect(hasUsableAnswer(msg({ content: 'φ = 0.90' }))).toBe(true)
+    expect(hasUsableAnswer(msg({ content: '', tool_calls: [{ function: { name: OPEN_CALCULATOR_TOOL, arguments: JSON.stringify({ route: '/beam-design', inputs: {} }) } }] }))).toBe(true)
+    for (const bad of [msg({ content: '' }), msg({ content: ' \n ' }), msg({ content: null }), { choices: [] }, null, {},
+      msg({ content: '', tool_calls: [{ function: { name: 'run_shell', arguments: '{}' } }] })]) {
+      expect(hasUsableAnswer(bad)).toBe(false)
+    }
   })
 })

@@ -340,6 +340,19 @@ export function extractAssistantActions(
   return { reply: rawContent, actions }
 }
 
+/**
+ * Whether an upstream 200 actually answered: some text, or a well-formed
+ * calculator action. A free endpoint can return 200 with an empty message —
+ * measured on the live function, a reasoning model that spent its whole token
+ * budget thinking — and the user then gets "…". Rotation treats that like a
+ * failure and hands over.
+ */
+export function hasUsableAnswer(json: unknown): boolean {
+  const choice = (json as { choices?: UpstreamChoice[] } | null)?.choices?.[0]
+  const { reply, actions } = extractAssistantActions(choice)
+  return reply.trim().length > 0 || actions.length > 0
+}
+
 // ── Model rotation (server side) ─────────────────────────────────────────────
 
 export interface UpstreamResponse {
@@ -366,7 +379,7 @@ export interface UpstreamCall {
 }
 
 /** One upstream attempt, for the function's logs — model, outcome, time. Never content. */
-export interface AttemptLog { model: FreeModel; withTools: boolean; status: number | 'transport' | 'aborted' | 'timeout'; ms: number }
+export interface AttemptLog { model: FreeModel; withTools: boolean; status: number | 'transport' | 'aborted' | 'timeout' | 'empty'; ms: number }
 
 export interface RotationOptions {
   /** Start the next model alongside a pending one after this long, ms. */
@@ -377,6 +390,8 @@ export interface RotationOptions {
   deadlineMs?: number
   log?: (a: AttemptLog) => void
   now?: () => number
+  /** Whether a 200 body is an answer; one that is not hands over like a 5xx. */
+  accept?: (json: unknown) => boolean
 }
 
 /** Free endpoints answer in 15–30 s when they answer at all (measured Oct 2026). */
@@ -404,7 +419,8 @@ type AttemptOutcome =
  * Per model the policy is unchanged: skip it when the request cannot fit its
  * context window; POST with tools; on 400 retry ONCE without tools (an entry
  * can list tool support the serving endpoint does not honour); on 404
- * (rotated away), 408, 429, 5xx or a transport failure, move on. Fail FAST on
+ * (rotated away), 408, 429, 5xx, a transport failure, or a 200 that `accept`
+ * says is no answer, move on. Fail FAST on
  * 401 (bad key), 402 (no credit) and 403 (forbidden) — those describe the
  * account, not the model — and on any other 4xx, which is our request.
  *
@@ -442,14 +458,19 @@ export function callWithRotation(
         opts.log?.({ model, withTools, status, ms: now() - t0 })
         return { kind: 'next', status: null } // tools are not the suspect
       }
-      opts.log?.({ model, withTools, status: res.status, ms: now() - t0 })
       if (res.ok) {
+        let json: unknown
         try {
-          return { kind: 'ok', json: await res.json() }
+          json = await res.json()
         } catch {
+          opts.log?.({ model, withTools, status: 'empty', ms: now() - t0 })
           return { kind: 'next', status: null } // unparseable body
         }
+        const usable = opts.accept ? opts.accept(json) : true
+        opts.log?.({ model, withTools, status: usable ? res.status : 'empty', ms: now() - t0 })
+        return usable ? { kind: 'ok', json } : { kind: 'next', status: null }
       }
+      opts.log?.({ model, withTools, status: res.status, ms: now() - t0 })
       if (res.status === 400 && withTools) continue // downgrade: same model, no tools
       if (res.status === 404 || res.status === 408 || res.status === 429 || res.status >= 500) {
         return { kind: 'next', status: res.status }
