@@ -6,7 +6,7 @@
 // + one-way thickness, and longitudinal + transverse flexure.
 // The Winkler "flexible" method is a separate follow-up.
 // ─────────────────────────────────────────────────────────────────────────
-import { punchingDepth } from './shear';
+import { punchingDepth, MIN_FOOTING_DEPTH } from './shear';
 import { flexuralSteel, matLayout } from './flexure';
 
 export interface CombinedFootingInput {
@@ -194,7 +194,8 @@ export function designCombinedFooting(i: CombinedFootingInput): CombinedFootingR
   // inch-pound 2√f'c converts to. Inverted here because d is the unknown.
   const dB = (VuBeam * 1000) / (0.75 * 0.17 * Math.sqrt(i.fc) * (ByBeam * 1000));
   const Dc_beam = roundUp(dB + i.cover + i.barDia, 25);
-  const Dc = Math.max(Dc_punch, Dc_beam);
+  // §413.3.1.2: at least 150 mm over the bottom mat, whatever shear asks for
+  const Dc = Math.max(Dc_punch, Dc_beam, roundUp(MIN_FOOTING_DEPTH + i.cover + i.barDia, 25));
 
   // ── Longitudinal flexure at the critical sections ──
   const dFlex = Dc - i.cover - i.barDia / 2;

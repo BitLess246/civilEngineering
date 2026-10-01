@@ -3,7 +3,7 @@
 // flexure into one design. Pure & typed; the React UI consumes this directly.
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing, squareSize } from './bearing';
-import { punchingDepth, oneWayShearDepth, depthSolved, type ColumnPosition } from './shear';
+import { punchingDepth, oneWayShearDepth, depthSolved, MIN_FOOTING_DEPTH, type ColumnPosition } from './shear';
 import { flexuralSteel, matLayout, type AsMinBasis } from './flexure';
 
 export interface SquareFootingInput {
@@ -99,6 +99,8 @@ export interface SquareFootingResult {
   /** Capacity checks — always true for 'design'; meaningful for 'analyze'. */
   punchOK: boolean;
   beamOK: boolean;
+  /** §413.3.1.2: d ≥ 150 mm over the bottom mat. */
+  minDepthOK: boolean;
   /** Property-line geometry — present whenever `position` is not interior. */
   offset: ColumnOffset | null;
 }
@@ -210,7 +212,7 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
     qu = i.ultimateLoad / (B * B);
     dPunch = reqPunch(qu);
     dBeam = reqBeam(qu, B);
-    Dc = roundUp(Math.max(dPunch, dBeam) + i.cover + i.barDia, 25) / 1000;
+    Dc = roundUp(Math.max(dPunch, dBeam, MIN_FOOTING_DEPTH) + i.cover + i.barDia, 25) / 1000;
   } else {
     // Iteration — D_c feeds back into q_net, so solve to a fixed point.
     for (let k = 0; k < 8; k++) {
@@ -219,7 +221,7 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
       qu = i.ultimateLoad / (B * B);
       dPunch = reqPunch(qu);
       dBeam = reqBeam(qu, B);
-      const newDc = roundUp(Math.max(dPunch, dBeam) + i.cover + i.barDia, 25) / 1000;
+      const newDc = roundUp(Math.max(dPunch, dBeam, MIN_FOOTING_DEPTH) + i.cover + i.barDia, 25) / 1000;
       if (Math.abs(newDc - Dc) < 1e-4) { Dc = newDc; break; }
       Dc = newDc;
     }
@@ -263,6 +265,8 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
     geometryOK && depthSolved(dReq) && dProvided >= dReq;
   const punchOK = shearOK(dPunch);
   const beamOK = shearOK(dBeam);
+  // §413.3.1.2 — met by construction when designing; checked when analysing a given D_c.
+  const minDepthOK = geometryOK && dProvided >= MIN_FOOTING_DEPTH;
 
   const dFlex = DcMm - i.cover - i.barDia / 2;
   const arm = (B - cm) / 2;                         // cantilever from column face, m
@@ -287,7 +291,7 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
     bars: layout.n, barSpacing: layout.spacing,
     barSpacingMax: layout.sMax, spacingGoverned: layout.spacingGoverned,
     barsFit: layout.clearOK,
-    analysis, method, dProvided, punchOK, beamOK,
+    analysis, method, dProvided, punchOK, beamOK, minDepthOK,
     offset: columnOffset(i, B, cy),
   };
 }

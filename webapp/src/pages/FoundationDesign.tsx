@@ -13,7 +13,7 @@ import { designRectangularFooting } from '../engine/rectangularFooting'
 import { designEccentricSquareFooting } from '../engine/eccentricFooting'
 import { netBearing } from '../engine/bearing'
 import { factoredLoad } from '../engine/loads'
-import type { ColumnPosition } from '../engine/shear'
+import { MIN_FOOTING_DEPTH, type ColumnPosition } from '../engine/shear'
 import { FootingSchematic } from '../components/FootingSchematic'
 import { ExcelImport } from '../components/ExcelImport'
 import type { BatchResult } from '../lib/foundationExcel'
@@ -115,6 +115,8 @@ interface View {
   Bx: number; By: number; Dc: number; qNet: number; qu: number
   dPunch: number; dBeamLong: number; dBeamShort: number; dProvided: number
   punchOK: boolean; beamOK: boolean
+  /** §413.3.1.2: d ≥ 150 mm over the bottom mat. */
+  minDepthOK: boolean
   long: DirSteel
   short: (DirSteel & { bandBars: number; bandFraction: number }) | null
   ecc: { e: number; qMax: number; qMin: number; kernOK: boolean } | null
@@ -247,7 +249,7 @@ export default function FoundationDesign() {
         type: 'square', loading: 'eccentric', analysis: r.analysis, method: r.method,
         Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.quMax,
         dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.dProvided,
-        punchOK: r.punchOK, beamOK: r.beamOK && r.bearingOK,
+        punchOK: r.punchOK, beamOK: r.beamOK && r.bearingOK, minDepthOK: r.minDepthOK,
         long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho,
           minGoverning: r.minGoverning, asMinBeam: r.asMinBeam, asMinSlab: r.asMinSlab },
         short: null,
@@ -263,7 +265,7 @@ export default function FoundationDesign() {
         type: 'square', loading: 'concentric', analysis: r.analysis, method: r.method,
         Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
         dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.dProvided,
-        punchOK: r.punchOK, beamOK: r.beamOK,
+        punchOK: r.punchOK, beamOK: r.beamOK, minDepthOK: r.minDepthOK,
         long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho,
           minGoverning: r.minGoverning, asMinBeam: r.asMinBeam, asMinSlab: r.asMinSlab },
         short: null, ecc: null, offset: r.offset,
@@ -279,7 +281,7 @@ export default function FoundationDesign() {
       type: 'rectangular', loading: 'concentric', analysis: r.analysis, method: r.method,
       Bx: r.Bx, By: r.By, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
       dPunch: r.dPunch, dBeamLong: r.dBeamLong, dBeamShort: r.dBeamShort, dProvided: r.dProvided,
-      punchOK: r.punchOK, beamOK: r.beamOK,
+      punchOK: r.punchOK, beamOK: r.beamOK, minDepthOK: r.minDepthOK,
       long: r.long, short: r.short, ecc: null,
       // The rectangular and eccentric paths do not carry the property-line
       // geometry yet; `columnOffset` is a pure function of B and c, so it is
@@ -320,7 +322,7 @@ export default function FoundationDesign() {
       barDia: dbEff, cover: form.cover, surcharge: form.surcharge, position: form.position, asMinBasis: form.asMinBasis,
       Bx: view.Bx, By: view.By, Dc: view.Dc, qNet: view.qNet, qu: view.qu,
       dPunch: view.dPunch, dBeamLong: view.dBeamLong, dBeamShort: view.dBeamShort, dProvided: view.dProvided,
-      punchOK: view.punchOK, beamOK: view.beamOK,
+      punchOK: view.punchOK, beamOK: view.beamOK, minDepthOK: view.minDepthOK,
       long: view.long, short: view.short, ecc: view.ecc,
     }
     return withRebarSelection(
@@ -337,7 +339,7 @@ export default function FoundationDesign() {
   // A pad whose resultant leaves the kern is not an OK design however its
   // shear checks land — it lifts off the soil. The banner used to read
   // "DESIGN OK — all checks pass" beside a drawing showing uplift.
-  const allOK = !!view && view.punchOK && view.beamOK
+  const allOK = !!view && view.punchOK && view.beamOK && view.minDepthOK
     && (!view.ecc || view.ecc.kernOK) && (!view.offset || view.offset.kernOK)
   const governing = punchRatio >= beamRatio ? 'two-way punching shear' : 'one-way beam shear'
 
@@ -389,6 +391,7 @@ export default function FoundationDesign() {
             checks={[
               { name: 'Two-way (punching) shear — d req/prov', ratio: punchRatio, ok: view.punchOK },
               { name: 'One-way (beam) shear — d req/prov', ratio: beamRatio, ok: view.beamOK },
+              { name: `Min. depth over the mat — ${MIN_FOOTING_DEPTH}/d prov (§413.3.1.2)`, ratio: MIN_FOOTING_DEPTH / view.dProvided, ok: view.minDepthOK },
               ...(view.offset ? [{
                 name: `Resultant in the kern — e/(B/6) · ${form.position} column`,
                 ratio: view.offset.kernRatio,
@@ -585,7 +588,9 @@ export default function FoundationDesign() {
                 ? (view.analysis === 'analyze' ? 'SECTION OK — all checks pass' : 'DESIGN OK — all checks pass')
                 : view.offset && !view.offset.kernOK
                   ? 'CHECK FAILED — resultant outside the kern'
-                  : 'CHECK FAILED — section inadequate'}
+                  : view.punchOK && view.beamOK && !view.minDepthOK
+                    ? `CHECK FAILED — d under the ${MIN_FOOTING_DEPTH} mm minimum`
+                    : 'CHECK FAILED — section inadequate'}
               governing={`Governing: ${governing} · d req/prov ${globalThis.Math.max(punchRatio, beamRatio).toFixed(2)}`}
               stats={[
                 { label: 'Plan size', value: view.type === 'square' ? `${f2(view.Bx)} × ${f2(view.By)}` : `${f2(view.Bx)} × ${f2(view.By)}`, unit: 'm' },
@@ -595,6 +600,7 @@ export default function FoundationDesign() {
               checks={[
                 { name: 'Punching shear (d req / prov)', ratio: punchRatio },
                 { name: 'Beam shear (d req / prov)', ratio: beamRatio },
+                { name: `Min. depth over the mat (${MIN_FOOTING_DEPTH} / d prov, §413.3.1.2)`, ratio: MIN_FOOTING_DEPTH / view.dProvided },
                 // VerdictCheck reads pass/fail off the ratio itself, so the
                 // kern check is stated as e/(B/6) — over 1.00 is uplift.
                 ...(view.offset ? [{
@@ -628,8 +634,8 @@ export default function FoundationDesign() {
             <div className="rounded-lg border border-hairline bg-sheet p-4">
               <h2 className="mb-2 text-[13.5px] font-bold text-ink">Results</h2>
               {view.analysis === 'analyze' && (
-                <Row label="Adequacy" value={view.punchOK && view.beamOK ? '✓ section OK' : '✗ inadequate in shear'}
-                  check={`punching ${view.punchOK ? '✓' : '✗'} · beam ${view.beamOK ? '✓' : '✗'}`} />
+                <Row label="Adequacy" value={!(view.punchOK && view.beamOK) ? '✗ inadequate in shear' : view.minDepthOK ? '✓ section OK' : `✗ d < ${MIN_FOOTING_DEPTH} mm (§413.3.1.2)`}
+                  check={`punching ${view.punchOK ? '✓' : '✗'} · beam ${view.beamOK ? '✓' : '✗'} · min. depth ${view.minDepthOK ? '✓' : '✗'}`} />
               )}
               {view.analysis === 'design' && (
                 <Row label="Method" value={view.method === 'iteration' ? 'Iteration' : 'Approximate'} />

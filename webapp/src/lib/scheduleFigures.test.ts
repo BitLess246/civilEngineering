@@ -72,7 +72,11 @@ describe('the drawings', () => {
   it('cuts the column at mid-height with its ties in the plane', () => {
     const d = columnSectionDrawing(model, cages, col, rect)!
     expect(d.title).toBe('SECTION — MID-HEIGHT')
-    expect(d.result.bars.length).toBe(Math.max(4, col.bars))
+    // Every one of the column's bars is in the cut — and where a stock-length
+    // lap splice runs through mid-height (§418.7.4.3 puts it in the centre
+    // half), its lapped partner too, so up to two per bar.
+    expect(d.result.bars.length).toBeGreaterThanOrEqual(Math.max(4, col.bars))
+    expect(d.result.bars.length).toBeLessThanOrEqual(2 * Math.max(4, col.bars))
     expect(d.result.ties.length).toBeGreaterThan(0)
   })
 

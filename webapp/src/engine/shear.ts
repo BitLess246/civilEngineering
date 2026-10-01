@@ -36,6 +36,14 @@ export const depthSolved = (d: number): boolean =>
   Number.isFinite(d) && d < MAX_SHEAR_DEPTH;
 
 /**
+ * NSCP 2015 §413.3.1.2 / ACI 318-14 §13.3.1.2: the depth of a footing's bottom
+ * reinforcement shall be at least 150 mm, mm. A floor on every footing
+ * designer's adopted depth — shear alone sized a lightly loaded pad to 175 mm,
+ * leaving 90 mm over the mat.
+ */
+export const MIN_FOOTING_DEPTH = 150;
+
+/**
  * Two-way (punching) shear strength Vc, kN — the minimum of the three
  * ACI 318-14 §22.6.5.2 expressions.
  * @param fc       f′c, MPa

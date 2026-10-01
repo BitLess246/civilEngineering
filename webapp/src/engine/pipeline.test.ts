@@ -1554,10 +1554,12 @@ describe('the column base is supported at the top of the footing', () => {
     // The plain two-pass does NOT guarantee this. It designs on the drops from
     // the pass BEFORE it and never re-reads its own, so on a frame where one
     // pass does not settle the pads, the columns are analysed at one pedestal
-    // and scheduled at another. `m()` is such a frame — pass 1 wants 1.350 and
-    // the design built on 1.350 wants 1.325 — and the seeded path is what
-    // closes that gap.
-    const model = m()
+    // and scheduled at another. This frame is one — pass 1 wants 1.225 and the
+    // design built on 1.225 wants 1.200 — and the seeded path is what closes
+    // that gap. (`m()` was, until §413.3.1.2 floored its light pads at one
+    // depth both passes agree on.)
+    const model = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3, 3, 3], section })
+    model.loads = buildGravityLoads(model, 8.7, 2.4)
     const seeded = designStructure(model, soil, {}, {}, undefined, undefined,
       pedestalDrops(designStructure(model, soil)!))!
     const twoPass = designStructure(model, soil)!
