@@ -352,14 +352,15 @@ export function enforceSectionHierarchy(model: StructuralModel): StructuralModel
       // girders ≥ the beams they meet (concrete only — steel sections own their shape)
       for (const m of mem) if (m.role === 'girder') {
         const s = secOf(m)!
-        if (s.material === 'steel') continue
+        // steel sections own their shape; timber sizes are bought, not cast
+        if (s.material === 'steel' || s.material === 'wood') continue
         if (s.b < beamW) { s.b = beamW; changed = true }
       }
       const flexW = Math.max(beamW, widthOf(mem, ['girder']))
       // columns ≥ the widest beam/girder at the joint, kept square-or-taller
       for (const m of mem) if (m.role === 'column') {
         const s = secOf(m)!
-        if (s.material === 'steel') continue
+        if (s.material === 'steel' || s.material === 'wood') continue
         if (s.b < flexW) { s.b = flexW; changed = true }
         if (s.h < s.b) { s.h = s.b; changed = true }
       }
@@ -400,6 +401,17 @@ export function enforceSectionHierarchy(model: StructuralModel): StructuralModel
           continue   // req unchanged (this segment now equals it)
         }
         req = { name: shp.name, A: shp.A }
+      }
+    } else if (secs.some((s) => s.material === 'wood')) {
+      // Timber: a post below takes the WHOLE size of a bigger one above —
+      // b and h raised independently could make a size no yard stocks.
+      let req: typeof secs[number] | null = null
+      for (const s of secs) {
+        if (req && s.b * s.h < req.b * req.h) {
+          Object.assign(s, { b: req.b, h: req.h, woodKind: req.woodKind, woodSpecies: req.woodSpecies, woodGrade: req.woodGrade, woodRef: req.woodRef })
+          continue
+        }
+        req = s
       }
     } else {
       let reqB = 0, reqH = 0
