@@ -6,12 +6,14 @@
 // member is adequate when the actual stress f ≤ F′.  Reference design values
 // below are NDS Supplement Table 4A/4D (visually-graded sawn lumber, SI
 // conversion 1 psi = 0.00689476 MPa) and Table 5A (glulam); NSCP §6 Philippine
-// species (Yakal, Apitong, Guijo …) share the method and can be supplied as
-// custom reference values.
+// species (Yakal, Apitong, Guijo …) are in the library from NSCP 2015 Table
+// 615.2-1 (`phWoodSpecies`), at the 80% / 63% / 50% stress grades.
 //
 // Units: geometry mm; forces kN; moments kN·m; stresses MPa.  Section is a
 // solid rectangle b (width) × d (depth); bending about the strong axis (depth).
 // ─────────────────────────────────────────────────────────────────────────
+
+import { PH_WOODS, PH_GRADES, PH_EMIN_RATIO } from './phWoodSpecies'
 
 /** Tabulated ASD reference design values for a species/grade (MPa). */
 export interface WoodRefValues {
@@ -75,6 +77,20 @@ const LIBRARY_SPEC: SpeciesSpec[] = [
     { grade: '24F', gradeLabel: '24F-1.8E (24F-V4)', ref: { Fb: mpa(2400), Ft: mpa(1100), Fv: mpa(265), FcPerp: mpa(650), Fc: mpa(1650), E: mpa(1_800_000), Emin: mpa(950_000), G: 0.50 } },
   ] },
 ]
+
+// Philippine woods, NSCP 2015 Table 615.2-1 (see `phWoodSpecies`): one species
+// entry per wood, its three stress grades as grades. Ids are 'PH-YAKAL-80' etc.
+const phKey = (name: string) => `PH-${name.toUpperCase().replace(/[^A-Z]+/g, '')}`
+for (const [name, botanical, group, G, ...rows] of PH_WOODS) {
+  LIBRARY_SPEC.push({
+    species: phKey(name), speciesLabel: `${name} (${botanical}) — group ${group}`, kind: 'sawn', origin: 'NSCP',
+    grades: PH_GRADES.map((g, k) => {
+      const [Fb, E, Fc, FcPerp, Fv] = rows[k]
+      return { grade: String(g), gradeLabel: `${g}% stress grade`,
+        ref: { Fb, Ft: Fb, Fv, FcPerp, Fc, E: E * 1000, Emin: E * 1000 * PH_EMIN_RATIO, G } }
+    }),
+  })
+}
 
 /** Flat id → material lookup (id = `${species}-${grade}`), derived from the
  *  structured spec.  Ids are stable ('DFL-SS', 'HF-2', 'GLULAM-24F', …). */

@@ -28,9 +28,10 @@ describe('structured library — species / grade separation', () => {
     for (const id of ['DFL-SS', 'DFL-1', 'DFL-2', 'HF-2', 'SPF-2', 'SP-2', 'GLULAM-24F'])
       expect(getWoodRef(id), id).toBeTruthy()
   })
-  it('speciesList returns the distinct species (DFL first, 5 total)', () => {
+  it('speciesList returns the distinct species (the five NDS ones first, then the 45 NSCP Philippine woods)', () => {
     const sp = speciesList()
-    expect(sp.map((s) => s.species)).toEqual(['DFL', 'HF', 'SPF', 'SP', 'GLULAM'])
+    expect(sp.slice(0, 5).map((s) => s.species)).toEqual(['DFL', 'HF', 'SPF', 'SP', 'GLULAM'])
+    expect(sp).toHaveLength(50)
     expect(sp[0].label).toBe('Douglas Fir-Larch')
   })
   it('gradesOf lists the grades within a species', () => {
