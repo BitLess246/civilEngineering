@@ -28,7 +28,7 @@ import { AUTOSAVE_KEY, INPUTS_KEY, DESIGN_KEY, readSessionDesign, writeSessionDe
 import { emptyHistory, recordHistory, undoHistory, redoHistory, isTypingTarget, type History } from '../lib/history'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
-import { frameMaterialOptions, isOfferedFrameMaterial, modelIsMadeOf } from '../lib/frameMaterial'
+import { frameMaterialOptions, isOfferedFrameMaterial, modelIsMadeOf, switchFrameDefaults, switchWoodDefault, type FrameFormDefaults } from '../lib/frameMaterial'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck, StairLanding, MemberConnections } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
 import { defaultAxisRotation, type F3Analysis, type F3MemberResult, type F3ComboRun, type V3 } from '../engine/frame3d'
@@ -1572,8 +1572,14 @@ export default function ModelSpace() {
     ? { nodes: shellOut.nodes, elems: shellOut.elems, stresses: shellOut.stresses }
     : null
 
-  const generate = (matOverride?: 'concrete' | 'steel' | 'wood', woodOverride?: { sel?: WoodSpecies; wet?: boolean }) => {
+  const generate = (
+    matOverride?: 'concrete' | 'steel' | 'wood', woodOverride?: { sel?: WoodSpecies; wet?: boolean },
+    formOverride?: FrameFormDefaults,
+  ) => {
     const mat = { fc, fy, barDia, tieDia, cover }
+    // The member sizes and SDL to build with — a material switch passes the
+    // ones it just set, because the state setters have not landed this tick.
+    const form: FrameFormDefaults = formOverride ?? { col: [colB, colH], gir: [girB, girH], bea: [beaB, beaH], qD }
     const role = (b: number, h: number, id: string): RectSection => ({ id, name: `${b}×${h}`, b, h, ...mat })
     // steel role: bounding box b = bf, h = d from the chosen AISC shape, tagged
     // material/shape so the bridge, design pipeline and 3D extrusion pick it up.
@@ -1595,9 +1601,9 @@ export default function ModelSpace() {
     const steel = chosen === 'steel', wood = chosen === 'wood'
     const m = generateGridModel({
       baysX: parseList(baysX), baysZ: parseList(baysZ), storeyH: parseList(storeyH),
-      column: steel ? steelRole(colShape, 'COL') : wood ? woodRole(colB, colH, 'COL') : role(colB, colH, 'COL'),
-      girder: steel ? steelRole(girShape, 'GIR') : wood ? woodRole(girB, girH, 'GIR') : role(girB, girH, 'GIR'),
-      beam: steel ? steelRole(beaShape, 'BEA') : wood ? woodRole(beaB, beaH, 'BEA') : role(beaB, beaH, 'BEA'),
+      column: steel ? steelRole(colShape, 'COL') : wood ? woodRole(...form.col, 'COL') : role(...form.col, 'COL'),
+      girder: steel ? steelRole(girShape, 'GIR') : wood ? woodRole(...form.gir, 'GIR') : role(...form.gir, 'GIR'),
+      beam: steel ? steelRole(beaShape, 'BEA') : wood ? woodRole(...form.bea, 'BEA') : role(...form.bea, 'BEA'),
       slabThickness: slabThk,
     })
     // Wood frame → the floor slabs are timber decks too: give every floor panel a
@@ -1606,7 +1612,7 @@ export default function ModelSpace() {
     if (wood) m.plates = m.plates.map((p) => p.role === 'wall' ? p
       : { ...p, deck: { ...DEFAULT_DECK, joistSpecies: wsel.id, joistKind: wsel.kind, wet } })
     // gravity loads: member self-weight (D), slab self-weight + SDL (D), LL (L)
-    m.loads = buildGravityLoads(m, qD, qL, gammaC)
+    m.loads = buildGravityLoads(m, form.qD, qL, gammaC)
     setSelected(null)
     setSeisXZ(null)
     setRsaGen(null)
@@ -3066,8 +3072,19 @@ export default function ModelSpace() {
               <Sec title="Frame material">
                 <Pick label="Members" value={material} onChange={(v) => {
                   const next = v as 'concrete' | 'steel' | 'wood'
+                  // the form follows the material where the user left it at
+                  // the old one's defaults: stocked sizes and a light SDL for
+                  // timber, back to the RC ones on the way out
+                  const form = switchFrameDefaults(material, next, { col: [colB, colH], gir: [girB, girH], bea: [beaB, beaH], qD })
+                  setColB(form.col[0]); setColH(form.col[1])
+                  setGirB(form.gir[0]); setGirH(form.gir[1])
+                  setBeaB(form.bea[0]); setBeaH(form.bea[1])
+                  setQD(form.qD)
+                  const wd = next === 'wood' ? switchWoodDefault(woodSpeciesId, woodGrade) : null
+                  if (wd) { setWoodSpeciesId(wd.species); setWoodGrade(wd.grade) }
+                  const sel = wd && matSource === 'library' ? resolveWoodSpecies(wd.species, wd.grade) : undefined
                   setMaterial(next)
-                  if (model) generate(next)          // auto-regenerate grid with new frame material
+                  if (model) generate(next, sel ? { sel } : undefined, form)   // auto-regenerate grid with new frame material
                 }}
                   options={frameMaterialOptions(material)} />
                 <p className="col-span-full -mt-1 text-[11px] text-muted">

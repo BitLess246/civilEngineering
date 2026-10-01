@@ -317,6 +317,29 @@ cage: `transverseStations` + `pitchRuns` give "4@220, 18@213, 4@220",
 `faceTally` counts THRU vs EXTRA and dimensions the curtailments.
 `RebarCage.notes` and the lap tally become the sheet's `designNotes`.
 
+## Steel and timber frames — withheld, fixed, re-offered (Sep–Oct 2026)
+
+An end-to-end check of the steel and timber frame paths found them unfit to
+build from, so both were withheld from the Model Space material dropdown
+(#824, `lib/frameMaterial.ts`) while the gaps closed, one PR per phase:
+
+| PR | What closed |
+|---|---|
+| #823 | Timber correctness: a deck weighs its boards + joists, not t·γc; no cracked-section factors on timber |
+| #825 | Pushover / biaxial / NLTH refused for timber (`nonlinearNotApplicable`) — no RC hinges on a post |
+| #826 | Steel connections follow the analysis (`steelJoints.ts`): moment unless Simple, and Simple ends are released in the analysis |
+| #827, #828 | Material-aware plans + general notes; steel and timber schedule sheets (S-07) |
+| #829 | 45 Philippine woods from NSCP 2015 Table 615.2-1 (`phWoodSpecies.ts`, ids `PH-<NAME>-<80/63/50>`) |
+| #830, #831 | RC pedestal under every steel/timber column (`pedestal.ts`): designed, caged (`PED-<node>`, §410.7.6.1.6 anchor ties), drawn on the footing sheet with the plate/post base, billed, scheduled (PD-n), shown in 3D |
+| #832 | (found on the way) footing minimum depth §413.3.1.2 — d ≥ 150 mm, all four footing designers |
+| #833 | Timber grows through stocked sawn sizes then 24F glulam (`timberStock.ts`); never a size nobody sells |
+| this | All three materials offered again; switching to timber starts on stocked sizes, the 1.0 kPa timber-floor SDL and PH Apitong 80% |
+
+**Still open, stated on the sheets rather than hidden:** anchor-rod concrete
+breakout (ACI Ch. 17) is not checked; the timber post base is nominal, not
+designed; sawn members longer than 6.1 m stock are not flagged; the base plate
+is not drawn in 3D. NSCP Table 615.2-2 (additional species) is not loaded.
+
 ## Per-joint details, and the steel drawings that do not exist yet (Sep 2026)
 
 **The typical detail keeps being the defect.** Three sheets in a row have been
@@ -335,7 +358,10 @@ The grid convention that names all of it is `modelGrid(model)` in
 sets now name the same position (`C-A1` and `J-A1@3.50`) and they must not
 disagree about which one is A1. Use it for anything else that names a position.
 
-**Every drawing in the app is reinforced concrete.** A steel frame is modelled,
+**(Superseded in part by the steel/timber series above — #827/#828/#831 made
+the plan set material-aware and added schedules and pedestal sheets; the drawn
+shape sections, framing elevations and connection details below are still
+open.)** Every drawing in the app was reinforced concrete. A steel frame is modelled,
 analysed (`steelSectionProps`), designed (§F2/§G2.1/§E3/§H1-1, base plates,
 connections) and scheduled end to end — and then prints no steel drawing. The
 phased plan for closing that is
