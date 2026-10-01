@@ -87,6 +87,15 @@ describe('timber schedule sheets', () => {
     expect(t.filter((x) => x === 'CHECK').length).toBeGreaterThanOrEqual(failing)
   })
 
+  it('designs a post base on every pedestal and schedules it', () => {
+    expect(d.postBases!.length).toBe(d.pedestals!.length)
+    for (const p of d.postBases!) {
+      expect(p.design.checks.map((c) => c.clause)).toEqual(expect.arrayContaining(['NDS §3.10.1', 'NDS §12.3.1', 'AISC §J4.1', 'AISC DG1', 'ACI 318-14 Ch. 17']))
+      expect(p.ok).toBe(true)
+    }
+    expect(t).toContain('POST-BASE SCHEDULE')
+  })
+
   it('schedules the pedestals under the posts', () => {
     expect(t).toContain('RC PEDESTAL SCHEDULE')
     expect(t).toContain(`${d.pedestals![0]!.design.side}×${d.pedestals![0]!.design.side}`)

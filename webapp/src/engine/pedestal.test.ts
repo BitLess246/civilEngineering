@@ -129,6 +129,13 @@ describe('pipeline — steel and timber columns stand on RC pedestals', () => {
     }
   })
 
+  it('each pad is designed around its pedestal, and stands 150 mm proud of it all round', () => {
+    for (const f of d.footings) {
+      const ped = d.pedestals!.find((p) => p.node === f.node)!.design
+      expect(f.design.B * 1000).toBeGreaterThanOrEqual(ped.side + 300 - 1e-6)
+    }
+  })
+
   it('the footing carries the pedestal’s weight', () => {
     const plain = designStructure(grid({ ...steel, material: undefined, shape: undefined, b: 254, h: 306 }), soil)!
     expect(plain.pedestals).toEqual([])

@@ -122,14 +122,17 @@ describe('the sheet set for a timber frame on timber decks', () => {
     expect(c).not.toContain('BEFORE THE BEAM AND SLAB POUR')
   })
 
-  it('stands each post on its pedestal with a post base drawn as nominal, not as designed', () => {
+  it('stands each post on its pedestal on a DESIGNED post base: plate, straps, through-bolts and rods, with what governs', () => {
     const d = designStructure(m, soil)!
     const sheets = buildSheetSet(m, d, soil).filter((s) => s.group === 'Footing details')
     expect(sheets.length).toBeGreaterThan(0)
     const text = sheets[0]!.drawing.primitives.flatMap((p) => (p.kind === 'text' ? [p.text] : [])).join(' | ')
     expect(text).toMatch(/300×400 TIMBER POST/)
     expect(text).toMatch(/2-⌀16 ANCHOR RODS/)
-    expect(text).toMatch(/NOT DESIGNED/)
+    expect(text).toMatch(/\d-⌀\d+ A307 THRU-BOLTS/)
+    expect(text).toMatch(/2-PL \d+×\d+ STRAPS/)
+    expect(text).toMatch(/POST BASE: NDS §12\.3 BOLTS, AISC §J4 STRAPS, ACI 318-14 CH\. 17 RODS/)
+    expect(text).not.toMatch(/NOT DESIGNED|NOMINAL/)
     expect(text).not.toMatch(/GROUT/)
   })
 })

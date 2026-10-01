@@ -163,9 +163,13 @@ export function pedestalBearing(
       ? { plate: p, rods: { n: 4, dia: anchors.da, embed: anchors.hef, x: anchors.x, y: anchors.y, head: 'headed' }, grout: 25 }
       : { plate: p, rods: { n: 4, dia: 25, embed: anchorEmbed(25, height), head: 'headed' }, grout: 25 }
   }
+  // a designed post base (engine/postBase) passes its plate and rods in;
+  // without one, the nominal layout the drawing used to carry
   return {
-    plate: { N: colD + 200, B: colB + 40, t: 10 },
-    rods: { n: 2, dia: 16, embed: anchorEmbed(16, height) },
+    plate: plate ?? { N: colD + 200, B: colB + 40, t: 10 },
+    rods: anchors
+      ? { n: 2, dia: anchors.da, embed: anchors.hef, x: anchors.x, y: 0, head: 'headed' }
+      : { n: 2, dia: 16, embed: anchorEmbed(16, height) },
     grout: 0,
   }
 }
