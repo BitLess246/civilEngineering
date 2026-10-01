@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   SAWN_STOCK, GLULAM_WIDTHS, GLULAM_LAM, GLULAM_ID, TIMBER_DEFAULT_SIZES, TIMBER_FLOOR_SDL,
-  isStockSawn, nextTimberSize, lighterTimberSize, toStockSize,
+  isStockSawn, nextTimberSize, lighterTimberSize, toStockSize, toGlulam, withinStockLength, SAWN_MAX_LENGTH,
 } from './timberStock'
 import { WOOD_SPECIES } from './woodDesign'
 import type { RectSection } from './model'
@@ -112,5 +112,24 @@ describe('timber stock — trimming and snapping', () => {
     expect(toStockSize(ok, 'beam')).toBe(ok)                // stocked already
     const rc: RectSection = { ...ok, material: undefined }
     expect(toStockSize(rc, 'beam')).toBe(rc)                // not timber
+  })
+})
+
+describe('timber stock — length', () => {
+  it('a sawn piece comes up to 6.1 m (20 ft); glulam to any length', () => {
+    expect(SAWN_MAX_LENGTH).toBeCloseTo(6.1, 9)
+    expect(withinStockLength('sawn', 6.0)).toBe(true)
+    expect(withinStockLength('sawn', 6.1)).toBe(true)
+    expect(withinStockLength('sawn', 7.0)).toBe(false)
+    expect(withinStockLength('glulam', 12)).toBe(true)
+  })
+  it('toGlulam keeps at least the member’s bending capacity, on a standard width in whole lams', () => {
+    const g = toGlulam(wood(100, 300), 'girder')
+    expect(g.woodKind).toBe('glulam')
+    expect(GLULAM_WIDTHS).toContain(g.b)
+    expect(g.h % GLULAM_LAM).toBe(0)
+    expect(S(g.b, g.h)).toBeGreaterThanOrEqual(S(100, 300))
+    const already = { ...wood(130, 380), woodKind: 'glulam' as const }
+    expect(toGlulam(already, 'beam')).toBe(already)
   })
 })

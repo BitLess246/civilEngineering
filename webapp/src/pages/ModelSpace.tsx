@@ -28,6 +28,7 @@ import { AUTOSAVE_KEY, INPUTS_KEY, DESIGN_KEY, readSessionDesign, writeSessionDe
 import { emptyHistory, recordHistory, undoHistory, redoHistory, isTypingTarget, type History } from '../lib/history'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
+import { SAWN_MAX_LENGTH } from '../engine/timberStock'
 import { frameMaterialOptions, isOfferedFrameMaterial, modelIsMadeOf, switchFrameDefaults, switchWoodDefault, type FrameFormDefaults } from '../lib/frameMaterial'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck, StairLanding, MemberConnections } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
@@ -6051,7 +6052,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right">{b.CL.toFixed(2)}</td>
                         <td className={`py-1 pr-2 text-right font-semibold ${b.utilM > 1 ? 'text-fail' : b.utilM > 0.9 ? 'text-warn' : 'text-ok'}`}>{(b.utilM * 100).toFixed(0)}%</td>
                         <td className={`py-1 pr-2 text-right font-semibold ${b.utilV > 1 ? 'text-fail' : b.utilV > 0.9 ? 'text-warn' : 'text-ok'}`}>{(b.utilV * 100).toFixed(0)}%</td>
-                        <td className="py-1 text-[11px] text-muted">{b.gov}</td>
+                        <td className="py-1 text-[11px] text-muted">{b.gov}{!b.stockLengthOK && <span className="block font-semibold text-fail">{f1(b.L)} m sawn &gt; {SAWN_MAX_LENGTH} m stock — glulam or a designed splice</span>}</td>
                       </tr>,
                       open && wantSol && (
                         <tr key={`${key}:sol`}>
@@ -6104,7 +6105,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right">{c.CP.toFixed(2)}</td>
                         <td className="py-1 pr-2 text-right">{c.slenderness.toFixed(0)}</td>
                         <td className={`py-1 pr-2 text-right font-semibold ${c.ratio > 1 ? 'text-fail' : c.ratio > 0.9 ? 'text-warn' : 'text-ok'}`}>{(c.ratio * 100).toFixed(0)}%</td>
-                        <td className="py-1 text-[11px] text-muted">{c.gov}</td>
+                        <td className="py-1 text-[11px] text-muted">{c.gov}{!c.stockLengthOK && <span className="block font-semibold text-fail">{f1(c.L)} m sawn &gt; {SAWN_MAX_LENGTH} m stock — glulam or a designed splice</span>}</td>
                       </tr>,
                       open && wantSol && (
                         <tr key={`${key}:sol`}>
