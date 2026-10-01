@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections, barContinuityGroups } from './modelBuilder'
-import { designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings, governingCombos, pedestalDrops, peakUtilisation, failingChecks } from './pipeline'
+import { camberFor, designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings, governingCombos, pedestalDrops, peakUtilisation, failingChecks } from './pipeline'
 import { nextHeavierW } from './aiscSections'
 import { computeSeismic } from './seismic'
 import { nscpCombos } from './beamAnalysis'
@@ -1759,5 +1759,16 @@ describe('useShells — slab stiffness in the design solve, opt-in', () => {
     // have a real design moment.
     const shell = designStructure(grid(), soil, {}, { useShells: true })!
     for (const mu of peakMu(shell)) expect(mu).toBeGreaterThan(1)
+  })
+})
+
+describe('camberFor — 0.8·ΔD down to 5 mm, none under 20 mm (AISC 303 §6.4.4)', () => {
+  it('hand values', () => {
+    expect(camberFor(0)).toBe(0)
+    expect(camberFor(24.9)).toBe(0)     // 19.9 → 15 → under 20
+    expect(camberFor(25)).toBe(20)      // exactly 20
+    expect(camberFor(26)).toBe(20)      // 20.8 → 20
+    expect(camberFor(40)).toBe(30)      // 32 → 30
+    expect(camberFor(-5)).toBe(0)       // hogging is not cambered for
   })
 })

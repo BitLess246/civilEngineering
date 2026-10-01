@@ -97,8 +97,10 @@ phase below is bound by them.
 *Tests:* every steel member's shape name appears on its framing plan; an
 all-concrete model gains no steel sheet; a mixed model gets both.
 
-### S2 — The steel section detail, and the member schedules
+### S2 — The steel section detail, and the member schedules ✔
 *Layer 9, and it unblocks S3–S5.*
+
+**Shipped.** `steelSection.ts` draws W, WT, C, L/2L, HSS and pipe, with the centroid on the member axis. The 3D extrusion reads the same outline, and `WShapeSection` is deleted. There is one S-10 sheet per shape used. `steelMarks.ts` schedules every beam end to a typical detail mark. The beam schedule carries Ri/Rj, CONN i/j and camber, and the column schedule carries base or splice. **The camber decision is settled:** it is computed, as 0.8·ΔD from the D-only chord deflection over E·Ix, rounded down to 5 mm, with none below 20 mm (AISC 303 §6.4.4). Building it found the catalogue geometry error that #839 fixed first.
 
 - `steelSection.ts`: the drawn cross-section of a shape from `aiscSections` — W,
   HSS, channel, angle — with d, bf, tf, tw dimensioned and the axes labelled.

@@ -21,7 +21,7 @@ import { jointBarRoom } from './barLayers'
 import { effectiveFlange } from './tbeam'
 import { designPrestressed, type PrestressedResult } from './prestressedBeam'
 import { minBeamThickness, type BeamSupport } from './beamDeflection'
-import { memberServiceDeflection, type MemberDeflectionResult } from './memberDeflection'
+import { memberServiceDeflection, chordDeflection, type MemberDeflectionResult } from './memberDeflection'
 import { designAxialColumn, capacityAtEccentricity, interaction, breslerReciprocal, type BarLayout, type PMPoint } from './columnDesign'
 import { calcDevLength } from './devLength'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
@@ -364,6 +364,15 @@ export interface SteelBeamScheduleRow {
   /** Estimated midspan deflection (SS bound, 5Mu L²/48EI) and L/240 limit (mm).
    *  Conservative: uses factored Mu and simply-supported boundary conditions. */
   defl: number; deflLim: number; deflOK: boolean
+  /** Envelope factored end reactions at the i and j ends, kN — what the
+   *  connection at each end is designed for and the fabricator reads. */
+  Ri: number; Rj: number
+  /** Dead-load midspan deflection off the chord, from this member's own
+   *  D-only moment diagram over E·Ix, mm — and the camber it calls for:
+   *  0.8·ΔD rounded down to 5 mm, or 0 where that is under 20 mm (camber
+   *  below ¾″ is not fabricated; AISC Code of Standard Practice §6.4.4).
+   *  Absent when no D-only solve ran. */
+  deltaD?: number; camber: number
   ok: boolean
   gov?: string
   // solution detail (section props + AISC check steps)
@@ -623,6 +632,7 @@ function designSteelBeamRow(
     id: mr.id, role, L: mr.L, shape: shape.name, Mu, Vu,
     phiMn: flex.phiMn, phiVn: shear.phiVn, ltbZone: flex.ltbZone,
     utilM, utilV, defl, deflLim, deflOK,
+    Ri: Math.abs(mr.Vy[0] ?? 0), Rj: Math.abs(mr.Vy[mr.Vy.length - 1] ?? 0), camber: 0,
     ok: utilM <= 1 + 1e-9 && utilV <= 1 + 1e-9 && deflOK,
     d, bf: bf ?? 0, tf: tf ?? 0, tw: tw ?? 0,
     Ix: p.Ix, Sx: p.Sx, Zx: p.Zx, Iy: p.Iy, ry,
@@ -634,6 +644,32 @@ function designSteelBeamRow(
     MnFLB: flex.MnFLB, governing: flex.governing,
     Aw: shear.Aw, Cv1: shear.Cv1, phiV: shear.phiV, hwTw: shear.hwTw,
   }
+}
+
+/**
+ * The dead-load deflection a steel beam is cambered against, and the camber.
+ *
+ * Integrated from the member's OWN D-only moment diagram over E·Ix (steel does
+ * not crack, so Ix is the stiffness), relative to the chord between its end
+ * nodes — the same `chordDeflection` the RC check uses. Camber is 80 % of it,
+ * the usual allowance for the deflection a cambered beam does not fully
+ * recover, rounded DOWN to 5 mm, and none at all below 20 mm (¾″): camber that
+ * small is inside the mill and fabrication tolerance of AISC 303 §6.4.4.
+ */
+/** Specified camber for a dead-load deflection ΔD (mm): 80 % of it, rounded
+ *  DOWN to 5 mm, and none below 20 mm — less than that is inside the mill
+ *  tolerance AISC 303 §6.4.4 allows, so specifying it buys nothing. */
+export function camberFor(deltaD: number): number {
+  const c = Math.floor((0.8 * Math.max(0, deltaD)) / 5 + 1e-9) * 5
+  return c >= 20 ? c : 0
+}
+
+function steelCamber(row: SteelBeamScheduleRow, dRes: F3Result | null): { deltaD?: number; camber: number } {
+  const dm = dRes?.members.find((x) => x.id === row.id)
+  if (!dm || dm.xs.length < 2 || row.Ix <= 0) return { camber: 0 }
+  const EI = 200e6 * row.Ix * 1e-12                    // kN/m² · mm⁴ → kN·m²
+  const deltaD = Math.max(0, chordDeflection(dm.xs, dm.Mz, EI).max)   // mm, sag +
+  return { deltaD, camber: camberFor(deltaD) }
 }
 
 /** Why `designSteelBeamRow` returned null, in the words the schedule shows.
@@ -1426,13 +1462,16 @@ function designFromRuns(
     if (role === 'beam' || role === 'girder') {
       if (isSteel) {
         let best: SteelBeamScheduleRow | null = null, bestSev = -1, gov = ''
+        let Ri = 0, Rj = 0
         for (const run of runs) {
           const mr = memberOf(run, m.id); if (!mr) continue
+          Ri = Math.max(Ri, Math.abs(mr.Vy[0] ?? 0))
+          Rj = Math.max(Rj, Math.abs(mr.Vy[mr.Vy.length - 1] ?? 0))
           const row = designSteelBeamRow(mr, role, sec, m.Lb); if (!row) continue
           const sev = (row.ok ? 0 : 1e9) + row.Mu
           if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
         }
-        if (best) steelBeams.push({ ...best, gov })
+        if (best) steelBeams.push({ ...best, Ri, Rj, ...steelCamber(best, dRes), gov })
         // designSteelBeamRow refuses anything §F2/§F3 does not cover — another
         // family, a tee, or a noncompact/slender web. Such a beam would
         // otherwise vanish from the schedule and read as "OK".

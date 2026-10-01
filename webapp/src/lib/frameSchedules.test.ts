@@ -5,6 +5,7 @@ import { shapeByName } from '../engine/aiscSections'
 import { buildSheetSet } from './planSheets'
 import { steelScheduleDrawings, timberScheduleDrawings } from './frameSchedules'
 import { pedestalMarks } from './planDetails'
+import { connectionMarks, markAt } from './steelMarks'
 import type { RectSection, StructuralModel } from '../engine/model'
 import type { PlanPrimitive } from '../engine/planRenderer'
 
@@ -29,7 +30,7 @@ describe('steel schedule sheets', () => {
   const t = texts(sheets[0].drawing.primitives)
 
   it('schedules every steel member, base plate and connection the design produced', () => {
-    expect(sheets.map((s) => s.key)).toEqual(['steel-schedules', 'steel-connection-schedule'])
+    expect(sheets.map((s) => s.key)).toEqual(['steel-schedules', 'steel-connection-schedule', 'steel-member-marks'])
     expect(t).toContain('STEEL MEMBER SCHEDULE')
     expect(t).toContain('BASE-PLATE SCHEDULE')
     const c = texts(sheets[1].drawing.primitives)
@@ -63,9 +64,45 @@ describe('steel schedule sheets', () => {
   })
 
   it('lands in the sheet set under its own group, and an RC frame gets none', () => {
-    expect(buildSheetSet(m, d, soil).filter((s) => s.group === 'Steel schedules')).toHaveLength(2)
+    expect(buildSheetSet(m, d, soil).filter((s) => s.group === 'Steel schedules')).toHaveLength(3)
     const rc = frame({ ...steel, material: undefined, shape: undefined })
     expect(steelScheduleDrawings(designStructure(rc, soil)!)).toEqual([])
+  })
+})
+
+describe('steel beam, column and connection-type schedules', () => {
+  const m = frame(steel)
+  const d = designStructure(m, soil)!
+  const sheet = steelScheduleDrawings(d, m).find((s) => s.key === 'steel-member-marks')!
+  const t = texts(sheet.drawing.primitives)
+  const marks = connectionMarks(d)
+
+  it('lists every steel beam once, with a mark at each end that the connection-type table defines', () => {
+    for (const b of d.steelBeams) expect(t.filter((x) => x === b.id)).toHaveLength(1)
+    const defined = new Set(marks.types.map((x) => x.mark))
+    const memById = new Map(m.members.map((x) => [x.id, x]))
+    for (const b of d.steelBeams) {
+      const mem = memById.get(b.id)!
+      for (const n of [mem.i, mem.j]) {
+        const mk = markAt(marks, b.id, n)
+        if (mk !== '—') expect(defined.has(mk), `${b.id}@${n} → ${mk}`).toBe(true)
+      }
+    }
+    for (const mk of defined) expect(t).toContain(mk)
+  })
+
+  it('prints the envelope end reactions and the camber of each beam', () => {
+    const b = d.steelBeams[0]!
+    expect(b.Ri).toBeGreaterThan(0); expect(b.Rj).toBeGreaterThan(0)
+    expect(t).toContain(b.Ri.toFixed(1))
+    expect(b.camber === 0 || b.camber >= 20).toBe(true)
+    expect(t).toContain(b.camber > 0 ? `${b.camber} mm` : 'NONE')
+  })
+
+  it('without the model, keeps only the connection-type table', () => {
+    const only = texts(steelScheduleDrawings(d).find((s) => s.key === 'steel-member-marks')!.drawing.primitives)
+    expect(only).toContain('CONNECTION TYPES')
+    expect(only).not.toContain('STEEL BEAM SCHEDULE')
   })
 })
 

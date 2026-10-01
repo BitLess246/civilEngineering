@@ -79,10 +79,13 @@ describe('the legibility frame is wired to every annotated drawing', () => {
   it('never wraps an icon, so the scroll frame stays meaningful', () => {
     // The inverse rule. A frame around a 24×24 icon would add a tab stop and a
     // scroll region announcing nothing, which is worse than the icon shrinking.
+    // A frame around `planToSvg(...)` output is annotated: the plan renderer
+    // writes a `<text>` for every text primitive, it just does so at runtime
+    // rather than in this file's source (modelSpace/figures.tsx `SheetFigure`).
     const overwrapped = Object.entries(SOURCES)
       .filter(([file, src]) =>
         !NOT_A_DRAWING.some((n) => file.endsWith(n))
-        && src.includes('<DrawingFrame') && !/<text\b/.test(src))
+        && src.includes('<DrawingFrame') && !/<text\b/.test(src) && !/\bplanToSvg\(/.test(src))
       .map(([file]) => file)
     expect(overwrapped, 'frame around something with no annotation').toEqual([])
   })
