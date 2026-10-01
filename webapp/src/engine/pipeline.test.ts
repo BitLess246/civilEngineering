@@ -219,9 +219,11 @@ describe('steel design pipeline (AISC routing + base plates)', () => {
     expect(r.totals.steelKg).toBeGreaterThan(0)
     expect(r.totals.concreteMembers).toBeCloseTo(0, 6)
     // W310x79, A = 10000 mm², at 7850 kg/m³ — over the members' own lengths,
-    // which for a column reach down to the top of its footing.
+    // node to node: a steel column stops at grade on its RC pedestal and is not
+    // run down to the footing (engine/pedestal), so 2+2 beams/girders + 4
+    // columns of this 6 × 5 × 3 m bay are exactly 34 m.
     const L = [...r.steelBeams, ...r.steelColumns].reduce((s, m) => s + m.L, 0)
-    expect(L).toBeGreaterThan(34)
+    expect(L).toBeCloseTo(34, 9)
     expect(r.totals.steelKg).toBeCloseTo(L * (10000 / 1e6) * 7850, 0)
   })
 
