@@ -40,6 +40,7 @@ import {
   validateAssistantRequest,
   extractAssistantActions,
   callWithRotation,
+  hasUsableAnswer,
   type AttemptLog,
   type AssistantChatMessage,
   type FreeModel,
@@ -55,8 +56,10 @@ const APP_TITLE = 'civilEngineering calculation helper'
 
 /** The upstream gets this long to answer before the edge gives up, per attempt. */
 const UPSTREAM_TIMEOUT_MS = 30_000
-/** Upper bound on the completion so one answer cannot run away. */
-const MAX_TOKENS = 1500
+/** Upper bound on the completion so one answer cannot run away. A reasoning
+ *  model's thinking counts against it: at 1500 one spent the lot thinking over
+ *  a long page and returned an empty answer (measured on the live function). */
+const MAX_TOKENS = 4000
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const early = preflight(req)
@@ -115,7 +118,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // One line per upstream attempt — model, outcome, time. Never content.
   const log = (a: AttemptLog) =>
     console.log(`ai-chat: ${a.model}${a.withTools ? '' : ' (no tools)'} → ${a.status} in ${a.ms} ms`)
-  const res = await callWithRotation(candidates, chars, buildCall, fetch, UPSTREAM_TIMEOUT_MS, { log })
+  const res = await callWithRotation(candidates, chars, buildCall, fetch, UPSTREAM_TIMEOUT_MS, { log, accept: hasUsableAnswer })
   if (!res.ok) {
     // The STATUS goes back to the browser; the body never does. It is the
     // provider's wording, not ours, and must never carry a hint of the key
