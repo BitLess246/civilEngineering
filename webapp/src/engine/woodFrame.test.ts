@@ -9,6 +9,7 @@ import { runNonlinearFrameModel } from './nonlinearFrameModel'
 import { runNonlinearModel } from './nonlinearModel'
 import { validateMesh } from './meshValidation'
 import { WOOD_SPECIES } from './woodDesign'
+import { isStockSawn, GLULAM_ID, GLULAM_WIDTHS, GLULAM_LAM, TIMBER_FLOOR_SDL } from './timberStock'
 import { emptyModel, type RectSection, type StructuralModel } from './model'
 
 const woodSec = (id: string, b: number, h: number): RectSection => ({
@@ -240,5 +241,37 @@ describe('nonlinear hinge models — timber is refused, not hinged', () => {
     expect(() => runBiaxialPushover(m)).toThrow(/timber/)
     expect(() => runNonlinearFrameModel(m, gm)).toThrow(/timber/)
     expect(() => runNonlinearModel(m, gm)).toThrow(/timber/)
+  })
+})
+
+describe('optimizer — a timber frame ends on sizes that can be bought', () => {
+  // a timber deck frame on the light timber SDL, starting from sizes no yard
+  // stocks (300×300 posts, 300×450 girders, 250×400 beams)
+  const start = deckFrame()
+  start.sections = start.sections.map((s) => ({ ...s, woodSpecies: 'PH-APITONG-80' }))
+  start.loads = buildGravityLoads(start, TIMBER_FLOOR_SDL, 1.9)
+  const r = optimizeStructure(start, soil, {}, 20)!
+
+  it('converges', () => {
+    expect(r.converged).toBe(true)
+  })
+
+  it('every timber section is a stocked sawn size or 24F glulam in whole lams', () => {
+    const wood = r.model.sections.filter((s) => s.material === 'wood')
+    expect(wood.length).toBeGreaterThan(0)
+    for (const s of wood) {
+      if (s.woodKind === 'glulam') {
+        expect(s.woodSpecies).toBe(GLULAM_ID)
+        expect(GLULAM_WIDTHS).toContain(Math.min(s.b, s.h))
+        expect(Math.max(s.b, s.h) % GLULAM_LAM).toBe(0)
+      } else {
+        expect(isStockSawn(s.b, s.h), `${s.id} ${s.b}×${s.h}`).toBe(true)
+      }
+    }
+  })
+
+  it('and the frame on them passes', () => {
+    expect(r.design.woodBeams.every((b) => b.ok)).toBe(true)
+    expect(r.design.woodColumns.every((c) => c.ok)).toBe(true)
   })
 })

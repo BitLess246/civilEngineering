@@ -38,6 +38,7 @@ import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, columnAxial, 
 import type { PlateClass, FlexureClause } from './steelDesign'
 import { columnKFactors, type ColumnK } from './effectiveLength'
 import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef, woodAdjusted } from './woodDesign'
+import { nextTimberSize, lighterTimberSize, toStockSize } from './timberStock'
 import { designPedestal, pedestalSide, type PedestalResult } from './pedestal'
 import { designWoodSlab, woodSlabTimberSizes, type WoodSlabResult, type WoodSlabInput } from './woodSlab'
 import type { TimberSizeQty } from './takeoff'
@@ -2187,7 +2188,7 @@ export async function optimizeStructureAsync(
       return { m: m2, d: d2 ?? d }
     }
 
-    let work = settle(model)
+    let work = settle(stockTimber(model, secRole))
     const steps: OptimizeStep[] = []
 
     let design = await designStructureWithPool(work, soil, plan, opts, pool, sub('Optimize · initial'))
@@ -2238,12 +2239,8 @@ export async function optimizeStructureAsync(
         const batchSizes = new Map<string, RectSection>()
         for (const s0 of work.sections) {
           if ((utilPerSec.get(s0.id) ?? 0) >= 0.80) continue
-          if (s0.material === 'steel' && s0.shape) {
-            const lighter = nextLighterW(s0.shape)
-            if (lighter) batchSizes.set(s0.id, applyShape(s0, lighter))
-          } else if (s0.h - 25 >= 300) {
-            batchSizes.set(s0.id, { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` })
-          }
+          const lighter = lighterSection(s0, secRole.get(s0.id) ?? '')
+          if (lighter) batchSizes.set(s0.id, lighter)
         }
         if (batchSizes.size === 0) break
         batchPass++
@@ -2260,7 +2257,7 @@ export async function optimizeStructureAsync(
         const batchSizes = new Map<string, RectSection>()
         for (const s0 of work.sections) {
           if ((utilPerSec.get(s0.id) ?? 0) >= 0.80) continue
-          if (s0.material !== 'steel' && s0.b - 25 >= 200)
+          if (s0.material !== 'steel' && s0.material !== 'wood' && s0.b - 25 >= 200)
             batchSizes.set(s0.id, { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` })
         }
         if (batchSizes.size === 0) break
@@ -2312,7 +2309,7 @@ export async function optimizeStructureAsync(
         const hCandidates = work.sections
           .filter((s0) => {
             if ((utilPerSec.get(s0.id) ?? 0) >= 0.80) return false
-            return s0.material === 'steel' && s0.shape ? !!nextLighterW(s0.shape) : s0.h - 25 >= 300
+            return !!lighterSection(s0, secRole.get(s0.id) ?? '')
           })
           .sort((a, b) => (utilPerSec.get(a.id) ?? 0) - (utilPerSec.get(b.id) ?? 0))
           .slice(0, FINETUNE_CAP)
@@ -2320,13 +2317,7 @@ export async function optimizeStructureAsync(
         let hDone = 0
         onProgress?.({ phase: 'Optimizing — fine-tuning', current: 0, total: hCandidates.length, detail: `pass ${guard}: h↓ — ${hCandidates.length} section(s) to test` })
         for (const s0 of hCandidates) {
-          let newSec: RectSection | null = null
-          if (s0.material === 'steel' && s0.shape) {
-            const lighter = nextLighterW(s0.shape)
-            if (lighter) newSec = applyShape(s0, lighter)
-          } else if (s0.h - 25 >= 300) {
-            newSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
-          }
+          const newSec = lighterSection(s0, secRole.get(s0.id) ?? '')
           if (!newSec) { onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++hDone, total: hCandidates.length, detail: `pass ${guard}: h↓ — tested ${s0.name}` }); continue }
           const trial = settle(withSizes(work, new Map([[s0.id, newSec]])))
           if (!sectionsChanged(work, trial)) { onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++hDone, total: hCandidates.length, detail: `pass ${guard}: h↓ — ${s0.name} reverted` }); continue }
@@ -2339,7 +2330,7 @@ export async function optimizeStructureAsync(
         const bCandidates = work.sections
           .filter((s0) => {
             if ((utilPerSec.get(s0.id) ?? 0) >= 0.80) return false
-            if (s0.material === 'steel' || hSucceededIds.has(s0.id)) return false
+            if (s0.material === 'steel' || s0.material === 'wood' || hSucceededIds.has(s0.id)) return false
             return s0.b - 25 >= 200
           })
           .sort((a, b) => (utilPerSec.get(a.id) ?? 0) - (utilPerSec.get(b.id) ?? 0))
@@ -2817,8 +2808,31 @@ export const RC_LIMITS = {
   flexural: { b: 600, h: 1200 },   // beams & girders
 } as const
 
+/** Every timber section on a size a yard stocks (`toStockSize`) — the
+ *  optimizer's starting point, so a typed-in 300×400 does not survive it. */
+function stockTimber(m: StructuralModel, secRole: Map<string, string>): StructuralModel {
+  if (!m.sections.some((s) => s.material === 'wood')) return m
+  return { ...m, sections: m.sections.map((s) => toStockSize(s, secRole.get(s.id) ?? '')) }
+}
+
+/**
+ * One step lighter for the optimizer's trim, or null at the floor: the next
+ * lighter W for a rolled shape, the next stocked sawn size (or one lam less of
+ * glulam) for timber, and 25 mm off h for concrete, down to 300.
+ */
+function lighterSection(s0: RectSection, role: string): RectSection | null {
+  if (s0.material === 'steel' && s0.shape) {
+    const lighter = nextLighterW(s0.shape)
+    return lighter ? applyShape(s0, lighter) : null
+  }
+  if (s0.material === 'wood') return lighterTimberSize(s0, role)
+  return s0.h - 25 >= 300 ? { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` } : null
+}
+
 function jumpSection(s: RectSection, util: number, role: string): RectSection {
   if (util <= 1 + 1e-9) return s
+  // timber grows through what can be bought — stocked sawn, then glulam
+  if (s.material === 'wood') return nextTimberSize(s, util, role)
   if (s.material === 'steel' && s.shape) {
     const n = Math.max(1, Math.min(8, Math.ceil(Math.sqrt(util) - 0.5)))
     let cur = s
@@ -2882,7 +2896,7 @@ export function optimizeStructure(
     const m2 = selectBarDiameters(m, soil, plan, opts, d)
     return m2 === m ? { m, d } : { m: m2, d: designStructure(m2, soil, plan, opts, sub(label)) ?? d }
   }
-  let work = settle(model)                            // start width-consistent
+  let work = settle(stockTimber(model, secRole))                            // start width-consistent
   const steps: OptimizeStep[] = []
 
   let design = designStructure(work, soil, plan, opts, sub('Optimize · initial'))
@@ -2978,12 +2992,8 @@ export function optimizeStructure(
       const batchSizes = new Map<string, RectSection>()
       for (const s0 of work.sections) {
         if ((utilPerSec.get(s0.id) ?? 0) >= 0.80) continue
-        if (s0.material === 'steel' && s0.shape) {
-          const lighter = nextLighterW(s0.shape)
-          if (lighter) batchSizes.set(s0.id, applyShape(s0, lighter))
-        } else if (s0.h - 25 >= 300) {
-          batchSizes.set(s0.id, { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` })
-        }
+        const lighter = lighterSection(s0, secRole.get(s0.id) ?? '')
+        if (lighter) batchSizes.set(s0.id, lighter)
       }
       if (batchSizes.size === 0) break
       batchPass++
@@ -3000,7 +3010,7 @@ export function optimizeStructure(
       const batchSizes = new Map<string, RectSection>()
       for (const s0 of work.sections) {
         if ((utilPerSec.get(s0.id) ?? 0) >= 0.80) continue
-        if (s0.material !== 'steel' && s0.b - 25 >= 200)
+        if (s0.material !== 'steel' && s0.material !== 'wood' && s0.b - 25 >= 200)
           batchSizes.set(s0.id, { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` })
       }
       if (batchSizes.size === 0) break
@@ -3050,11 +3060,11 @@ export function optimizeStructure(
     while (improved && guard++ < 4) {
       improved = false
       for (const s0 of work.sections) {
-        if (s0.material === 'steel' && s0.shape) {
-          const lighter = nextLighterW(s0.shape)
+        if ((s0.material === 'steel' && s0.shape) || s0.material === 'wood') {
+          const lighter = lighterSection(s0, secRole.get(s0.id) ?? '')
           if (!lighter) continue
           onProgress?.({ phase: 'Optimizing — fine-tuning', detail: s0.name })
-          const trial = settle(withSizes(work, new Map([[s0.id, applyShape(s0, lighter)]])))
+          const trial = settle(withSizes(work, new Map([[s0.id, lighter]])))
           if (!sectionsChanged(work, trial)) continue
           const d = tryTrim(trial, governingCombos(design))
           if (d) { work = trial; design = d; improved = true }
