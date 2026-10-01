@@ -40,6 +40,7 @@ import {
   validateAssistantRequest,
   extractAssistantActions,
   callWithRotation,
+  type AttemptLog,
   type AssistantChatMessage,
   type FreeModel,
   type UpstreamCall,
@@ -111,7 +112,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     system.length + (parsed.page?.length ?? 0) +
     messages.reduce((n, m) => n + m.content.length, 0)
 
-  const res = await callWithRotation(candidates, chars, buildCall, fetch, UPSTREAM_TIMEOUT_MS)
+  // One line per upstream attempt — model, outcome, time. Never content.
+  const log = (a: AttemptLog) =>
+    console.log(`ai-chat: ${a.model}${a.withTools ? '' : ' (no tools)'} → ${a.status} in ${a.ms} ms`)
+  const res = await callWithRotation(candidates, chars, buildCall, fetch, UPSTREAM_TIMEOUT_MS, { log })
   if (!res.ok) {
     // The STATUS goes back to the browser; the body never does. It is the
     // provider's wording, not ours, and must never carry a hint of the key

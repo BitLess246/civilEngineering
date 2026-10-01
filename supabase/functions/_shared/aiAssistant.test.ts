@@ -6,7 +6,7 @@ import {
   validateAssistantRequest, extractAssistantActions,
   cleanPageContext, MAX_PAGE_CHARS,
   fitsContext, callWithRotation,
-  type FreeModel, type UpstreamCall, type UpstreamFetch,
+  type FreeModel, type UpstreamCall, type UpstreamFetch, type AttemptLog,
 } from './aiAssistant'
 
 describe('free-model allowlist', () => {
@@ -17,7 +17,8 @@ describe('free-model allowlist', () => {
     }
     // Paid ids, yesterday's Zen ids and garbage are all refused: the list is
     // the enforcement, not the docs page it was copied from.
-    for (const bad of ['gpt-5.5', 'big-pickle', 'mimo-v2.5-free', 'muse-spark-1.3-contributor-free', '', null, 42]) {
+    // ling-fin was rotated away (404) and lfm-2.6b answered code questions wrongly.
+    for (const bad of ['inclusionai/ling-3.0-flash-fin:free', 'liquid/lfm-2.5-2.6b:free', 'gpt-5.5', 'big-pickle', 'mimo-v2.5-free', 'muse-spark-1.3-contributor-free', '', null, 42]) {
       expect(isFreeModel(bad)).toBe(false)
     }
   })
@@ -26,19 +27,29 @@ describe('free-model allowlist', () => {
 describe('fitsContext', () => {
   it('skips only the entry a long request cannot fit', () => {
     expect(FREE_MODELS.every((m) => fitsContext(m, 1000))).toBe(true)
-    expect(fitsContext('liquid/lfm-2.5-2.6b:free', 196608)).toBe(true)
-    expect(fitsContext('liquid/lfm-2.5-2.6b:free', 196609)).toBe(false)
-    // Everything else fits far past that.
-    expect(FREE_MODELS.filter((m) => m !== 'liquid/lfm-2.5-2.6b:free').every((m) => fitsContext(m, 196609))).toBe(true)
+    // 262 144-token windows hold 786 432 chars at the 3-chars-per-token sizing
+    for (const m of ['qwen/qwen3.8-27b:free', 'google/gemma-4-31b-it:free'] as const) {
+      expect(fitsContext(m, 786432)).toBe(true)
+      expect(fitsContext(m, 786433)).toBe(false)
+    }
+    // The million-token entries fit far past that.
+    expect(FREE_MODELS.slice(0, 3).every((m) => fitsContext(m, 786433))).toBe(true)
   })
 })
 
 describe('system prompt scope', () => {
   const prompt = buildAssistantSystemPrompt()
 
+  it('names genuine code questions as in scope, so they are answered, not refused', () => {
+    // A model refused "minimum cover for a beam" under the old wording.
+    for (const q of [/minimum cover for a beam/, /design a footing/, /drift limit in NSCP/]) expect(prompt).toMatch(q)
+    expect(prompt).toMatch(/NSCP 2015, ACI 318-14, AISC 360-16/)
+    expect(prompt).toMatch(/refusing a genuine engineering question is a failure/)
+  })
+
   it('carries the verbatim refusal and the scope rule', () => {
     expect(prompt).toContain(OFF_TOPIC_REFUSAL)
-    expect(prompt).toContain('ONLY')
+    expect(prompt).toMatch(/Only a question with nothing to do with engineering/)
   })
 
   it('lists every catalog route and forbids inventing tools', () => {
@@ -236,9 +247,81 @@ describe('callWithRotation', () => {
 
   it('skips entries the request cannot fit', async () => {
     const h = harness([{ ok: true, status: 200, json: {} }])
-    // Past lfm's window but inside everyone else's: it never gets called.
-    const r = await callWithRotation(MODELS, 200000, h.buildCall, h.fetchImpl, 1000)
+    // Past qwen's and gemma's windows: only the million-token entries are called.
+    const fail = harness([{ ok: false, status: 503 }])
+    await callWithRotation(MODELS, 786433, fail.buildCall, fail.fetchImpl, 1000)
+    expect(fail.calls.map((c) => c.model)).toEqual(MODELS.slice(0, 3))
+    const r = await callWithRotation(MODELS, 786433, h.buildCall, h.fetchImpl, 1000)
     expect(r.ok).toBe(true)
-    expect(h.calls.map((c) => c.model)).not.toContain('liquid/lfm-2.5-2.6b:free')
+  })
+
+  describe('hedging', () => {
+    /** Per-model latency and outcome; records start, abort and finish. */
+    const timed = (plan: Record<string, { ms: number; status: number }>) => {
+      const started: string[] = [], aborted: string[] = []
+      const buildCall = (model: FreeModel, withTools: boolean): UpstreamCall => ({
+        url: 'https://example.invalid', method: 'POST', headers: {}, body: JSON.stringify({ model, withTools }),
+      })
+      const fetchImpl: UpstreamFetch = (_url, init) => {
+        const { model } = JSON.parse(init.body) as { model: string }
+        started.push(model)
+        const p = plan[model] ?? { ms: 10_000, status: 200 }
+        return new Promise((resolve, reject) => {
+          const t = setTimeout(() => resolve({ ok: p.status < 300, status: p.status, json: async () => ({ from: model }) }), p.ms)
+          init.signal.addEventListener('abort', () => { clearTimeout(t); aborted.push(model); reject(new Error('aborted')) })
+        })
+      }
+      return { started, aborted, buildCall, fetchImpl }
+    }
+
+    it('starts the next model alongside a slow one, takes the first answer, aborts the rest', async () => {
+      const h = timed({ [MODELS[0]]: { ms: 400, status: 200 }, [MODELS[1]]: { ms: 30, status: 200 } })
+      const t0 = Date.now()
+      const r = await callWithRotation(MODELS, 100, h.buildCall, h.fetchImpl, 5000, { hedgeMs: 20 })
+      expect(r).toEqual({ ok: true, model: MODELS[1], json: { from: MODELS[1] } })
+      expect(Date.now() - t0).toBeLessThan(300)               // did not wait for the slow first model
+      expect(h.started.slice(0, 2)).toEqual([MODELS[0], MODELS[1]])
+      expect(h.aborted).toContain(MODELS[0])
+    })
+
+    it('never has more than maxParallel attempts in flight', async () => {
+      const h = timed({})                                    // everyone is slow
+      let peak = 0, live = 0
+      const fetchImpl: UpstreamFetch = (u, init) => {
+        peak = Math.max(peak, ++live)
+        return h.fetchImpl(u, init).finally(() => { live-- })
+      }
+      const r = await callWithRotation(MODELS, 100, h.buildCall, fetchImpl, 5000, { hedgeMs: 5, maxParallel: 2, deadlineMs: 120 })
+      expect(r).toEqual({ ok: false, status: 408 })           // deadline, nothing answered
+      expect(peak).toBe(2)
+      expect(h.started).toEqual(MODELS.slice(0, 2))
+      expect(h.aborted.sort()).toEqual(MODELS.slice(0, 2).sort())
+    })
+
+    it('a retryable failure hands over at once, without waiting for the hedge', async () => {
+      const h = timed({ [MODELS[0]]: { ms: 5, status: 429 }, [MODELS[1]]: { ms: 5, status: 200 } })
+      const t0 = Date.now()
+      const r = await callWithRotation(MODELS, 100, h.buildCall, h.fetchImpl, 5000, { hedgeMs: 10_000 })
+      expect(r.ok && r.model).toBe(MODELS[1])
+      expect(Date.now() - t0).toBeLessThan(1000)
+    })
+
+    it('a fatal status ends the rotation and aborts everything still in flight', async () => {
+      const h = timed({ [MODELS[0]]: { ms: 400, status: 200 }, [MODELS[1]]: { ms: 30, status: 401 } })
+      expect(await callWithRotation(MODELS, 100, h.buildCall, h.fetchImpl, 5000, { hedgeMs: 10 }))
+        .toEqual({ ok: false, status: 401 })
+      expect(h.aborted).toContain(MODELS[0])
+    })
+
+    it('logs model, outcome and time per attempt — and nothing else', async () => {
+      const h = timed({ [MODELS[0]]: { ms: 5, status: 503 }, [MODELS[1]]: { ms: 5, status: 200 } })
+      const logs: AttemptLog[] = []
+      await callWithRotation(MODELS, 100, h.buildCall, h.fetchImpl, 5000, { log: (a) => logs.push(a) })
+      expect(logs.map((l) => [l.model, l.status])).toEqual([[MODELS[0], 503], [MODELS[1], 200]])
+      for (const l of logs) {
+        expect(Object.keys(l).sort()).toEqual(['model', 'ms', 'status', 'withTools'])
+        expect(l.ms).toBeGreaterThanOrEqual(0)
+      }
+    })
   })
 })
