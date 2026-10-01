@@ -38,6 +38,8 @@ import { buildFrameElevation } from '../engine/frameElevation'
 import { buildStructureCages } from '../engine/cageBuilder'
 import { buildSteelSectionDetail } from '../engine/steelSection'
 import { buildConnectionDetail } from '../engine/steelConnectionDetail'
+import { buildSteelFrameElevation } from '../engine/steelElevation'
+import { steelElevationBundles } from './steelElevation'
 import { connectionMarks } from './steelMarks'
 import { steelScheduleDrawings, timberScheduleDrawings } from './frameSchedules'
 
@@ -156,6 +158,17 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
       title: `Grid ${b.line} — ${b.level}`,
       subtitle: `${b.input.members.filter((m) => m.role === 'beam').length} beams, ${b.input.grids.length} columns`,
       warnings: drawing.designNotes,
+      drawing,
+    })
+  })
+  // Steel lines get the whole line, base to roof: shapes to scale, top of
+  // steel, the S-11 connection mark at every beam end, and the splices.
+  steelElevationBundles(model, design).forEach((b, i) => {
+    const drawing = buildSteelFrameElevation(b.input, { detailNo: String(i + 1), sheetRef: ref('Frame elevations') })
+    out.push({
+      key: b.key, group: 'Frame elevations', title: `Grid ${b.line} — steel framing`,
+      subtitle: `${b.input.beams.length} beams, ${b.input.columns.length} column lengths, ${b.input.splices.length} splice${b.input.splices.length === 1 ? '' : 's'}`,
+      warnings: b.input.splices.filter((x) => x.kind === 'tension').map((x) => `${x.column}: splice in a column that sees net tension — design it for Tu`),
       drawing,
     })
   })

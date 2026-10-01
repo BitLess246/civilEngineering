@@ -36,7 +36,15 @@ describe('the sheet set for a steel frame', () => {
   const groups = new Set(set.map((s) => s.group))
 
   it('draws no rebar elevation or column cage sheet for a steel member', () => {
-    expect(groups.has('Frame elevations')).toBe(false)
+    // the frame elevations a steel frame gets are the STEEL framing elevations
+    // (engine/steelElevation) — shapes, marks and splices, no bars
+    const elev = set.filter((s) => s.group === 'Frame elevations')
+    expect(elev.length).toBeGreaterThan(0)
+    for (const s of elev) {
+      expect(s.key.startsWith('steel-elevation-')).toBe(true)
+      const text = s.drawing.primitives.flatMap((p) => (p.kind === 'text' ? [p.text] : [])).join(' | ')
+      expect(text).not.toMatch(/-TOP \/ |⌀\d+ @|STIRRUP|TIES/)
+    }
     expect(groups.has('Column details')).toBe(false)
   })
 

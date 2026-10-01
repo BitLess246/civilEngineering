@@ -358,10 +358,14 @@ The grid convention that names all of it is `modelGrid(model)` in
 sets now name the same position (`C-A1` and `J-A1@3.50`) and they must not
 disagree about which one is A1. Use it for anything else that names a position.
 
-**(Superseded in part by the steel/timber series above — #827/#828/#831 made
-the plan set material-aware and added schedules and pedestal sheets; the drawn
-shape sections, framing elevations and connection details below are still
-open.)** Every drawing in the app was reinforced concrete. A steel frame is modelled,
+**(Superseded — S2–S4 shipped Oct 2026: #840 shape section sheets (S-10),
+member and connection-type schedules with a mark at every beam end and computed
+camber; #841 one connection detail sheet per mark (S-11), with
+`ConnectionDetail2D` now rendering that same drawing; and the S3 PR, steel
+framing elevations per grid line with splices placed by `columnSplices`. #839
+came first: drawing the sections exposed that the AISC catalogue's geometry was
+mistranscribed — see CLAUDE.md P5 E6. S5 base-plate / anchor-rod plan, S6
+bracing, S7 take-off remain.)** Every drawing in the app was reinforced concrete. A steel frame is modelled,
 analysed (`steelSectionProps`), designed (§F2/§G2.1/§E3/§H1-1, base plates,
 connections) and scheduled end to end — and then prints no steel drawing. The
 phased plan for closing that is

@@ -114,8 +114,10 @@ all-concrete model gains no steel sheet; a mixed model gets both.
 derive it from the D-only deflection (the steel analogue of `memberDeflection`)
 or leave the column explicitly blank. Do not print a number nothing computed.
 
-### S3 — Steel framing elevations
+### S3 — Steel framing elevations ✔
 *Layer 9, consumes S2.*
+
+**Shipped.** `steelElevation.ts` with `lib/steelElevation.ts` produces one sheet per grid line carrying steel, covering every storey, under Frame elevations (S-04). Columns are drawn at the dimension the plane sees (d along the strong axis, bf across it) and beams hang below top of steel at their own d. It shows TOS levels, grid bubbles, base plates, camber, and the S-11 connection mark at every beam end. **The splice decision is settled** (`columnSplices`): a splice goes wherever the shape changes, and wherever a constant-shape run would exceed a 12 m piece. It always sits 1.2 m above the floor. It is BEARING (finished to bear, AISC 360-16 §J1.4(a)) when the column is in compression under every combination; otherwise it is flagged to be designed for the net tension, which the pipeline now records as `SteelColumnScheduleRow.Tu`.
 
 The steel analogue of `frameElevation`: one elevation per frame line, shapes
 drawn to scale, top-of-steel elevations, end connection marks, and column
