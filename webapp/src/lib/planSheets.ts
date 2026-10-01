@@ -110,14 +110,21 @@ export function planSheets(model: StructuralModel, design: StructureDesign | nul
       footings: footingsForPlan(design),
       foundingElev: soil.H != null ? -Math.abs(soil.H) : undefined,
     })
-    // Footing details are drawn for RC columns only (planDetails); say so
-    // rather than let the missing sheets pass for an oversight.
+    // A steel or timber column's footing sheet draws its RC pedestal and the
+    // plate on it (planDetails). One with no pedestal designed under it has no
+    // true sheet to draw; say so rather than let the gap pass for an oversight.
     const secById = new Map(model.sections.map((sc) => [sc.id, sc]))
-    const nonRc = model.members.some((m) => m.role === 'column' && !isRcSection(secById.get(m.section)))
-    const warnings = nonRc ? ['Footing details under steel and timber columns are not drawn yet — the base plate / pedestal detail is pending. The footing schedule on this plan still applies.'] : []
+    const peds = new Set((design.pedestals ?? []).map((p) => p.node))
+    const bare = design.footings.filter((f) => {
+      const col = model.members.find((m) => m.role === 'column' && (m.i === f.node || m.j === f.node))
+      return col && !isRcSection(secById.get(col.section)) && !peds.has(f.node)
+    })
+    const warnings = bare.length
+      ? [`No pedestal was designed under the steel/timber column at ${bare.map((f) => f.node).join(', ')}, so its footing detail is not drawn. The footing schedule on this plan still applies.`]
+      : []
     if (d) out.push({
       key: 'foundation-plan', group: 'Plans', title: 'Foundation plan', warnings, drawing: d,
-      ...(nonRc ? { subtitle: 'footing details under steel / timber columns pending' } : {}),
+      ...(bare.length ? { subtitle: `${bare.length} footing detail${bare.length > 1 ? 's' : ''} not drawn` } : {}),
     })
   }
   return out
@@ -179,9 +186,9 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
 
   footingDetailBundles(model, design, soil, cages).forEach((b, i) => {
     out.push({
-      key: `footing-detail-${slug(b.mark)}`, group: 'Footing details',
-      title: `${b.mark} — ${Math.round(b.detail.B * 1000)}×${Math.round(b.detail.B * 1000)}`,
-      subtitle: `${Math.round(b.detail.H * 1000)} thk`,
+      key: `footing-detail-${slug(b.mark)}${b.detail.bearing?.mark ? `-${slug(b.detail.bearing.mark)}` : ''}`, group: 'Footing details',
+      title: `${b.mark}${b.detail.bearing?.mark ? ` / ${b.detail.bearing.mark}` : ''} — ${Math.round(b.detail.B * 1000)}×${Math.round(b.detail.B * 1000)}`,
+      subtitle: `${Math.round(b.detail.H * 1000)} thk${b.detail.bearing ? ` · ${b.detail.colB} sq. pedestal` : ''}`,
       warnings: [],
       drawing: buildFootingDetail(
         { ...b.detail, endHook: opts.hookedMatBars ? '90' : 'none' },

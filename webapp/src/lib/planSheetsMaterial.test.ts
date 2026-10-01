@@ -35,16 +35,27 @@ describe('the sheet set for a steel frame', () => {
   const set = buildSheetSet(m, d, soil)
   const groups = new Set(set.map((s) => s.group))
 
-  it('draws no rebar elevation, column cage or footing-with-dowels sheet for a steel member', () => {
+  it('draws no rebar elevation or column cage sheet for a steel member', () => {
     expect(groups.has('Frame elevations')).toBe(false)
     expect(groups.has('Column details')).toBe(false)
-    expect(groups.has('Footing details')).toBe(false)
   })
 
-  it('says on the foundation plan why the footing details are missing', () => {
+  it('draws each footing with its RC pedestal and the base plate on it, and the plan has nothing pending', () => {
+    const sheets = set.filter((s) => s.group === 'Footing details')
+    expect(sheets.length).toBeGreaterThan(0)
+    for (const s of sheets) {
+      expect(s.title).toMatch(/^WF-\d+ \/ PD-\d+ — /)
+      const text = s.drawing.primitives.flatMap((p) => (p.kind === 'text' ? [p.text] : [])).join(' | ')
+      expect(text).toMatch(/FOOTING & PEDESTAL DETAIL — WF-\d+ \/ PD-\d+/)
+      expect(text).toMatch(/W310x79 STEEL COLUMN/)
+      expect(text).toMatch(/BASE PL \d+×\d+×\d+ mm/)
+      expect(text).toMatch(/4-⌀25 ANCHOR RODS/)
+      expect(text).toMatch(/12-20mmØ VERT\. BARS/)        // the pedestal's bars, not a W-shape's
+      expect(text).toMatch(/CONCRETE BREAKOUT .* NOT CHECKED/)
+    }
     const fp = set.find((s) => s.key === 'foundation-plan')!
-    expect(fp.warnings.join(' ')).toMatch(/steel and timber columns/)
-    expect(fp.subtitle).toMatch(/pending/)   // the tab shows subtitles, not warnings
+    expect(fp.warnings).toEqual([])
+    expect(fp.subtitle).toBeUndefined()
   })
 
   it('schedules beams and columns by their shape, with the steel grade', () => {
@@ -105,6 +116,17 @@ describe('the sheet set for a timber frame on timber decks', () => {
     const c = constructionChecks(fm).map((x) => x.head)
     expect(c).toContain('BEFORE THE TIMBER IS CLOSED IN')
     expect(c).not.toContain('BEFORE THE BEAM AND SLAB POUR')
+  })
+
+  it('stands each post on its pedestal with a post base drawn as nominal, not as designed', () => {
+    const d = designStructure(m, soil)!
+    const sheets = buildSheetSet(m, d, soil).filter((s) => s.group === 'Footing details')
+    expect(sheets.length).toBeGreaterThan(0)
+    const text = sheets[0]!.drawing.primitives.flatMap((p) => (p.kind === 'text' ? [p.text] : [])).join(' | ')
+    expect(text).toMatch(/300×400 TIMBER POST/)
+    expect(text).toMatch(/2-⌀16 ANCHOR RODS/)
+    expect(text).toMatch(/NOT DESIGNED/)
+    expect(text).not.toMatch(/GROUT/)
   })
 })
 

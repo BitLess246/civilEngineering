@@ -1089,11 +1089,13 @@ export default function ModelSpace() {
   // The bar cages, placed. Same objects the detail sheets project and the
   // take-off weighs — a view that built its own would be a fourth description
   // of the same steel, which is the thing this whole model set out to stop.
-  /** Pedestal at each base node, m — how far the column runs below it. */
-  const pedestalAt = useMemo(
-    () => new Map((design?.footings ?? []).map((f) => [f.node, f.pedestal])),
-    [design],
-  )
+  /** Pedestal at each base node, m — how far the column runs below it. A
+   *  steel or timber column does NOT run down: it stops at grade on its own
+   *  RC pedestal (drawn separately below), so its node gets no drop. */
+  const pedestalAt = useMemo(() => {
+    const rcPed = new Set((design?.pedestals ?? []).map((p) => p.node))
+    return new Map((design?.footings ?? []).filter((f) => !rcPed.has(f.node)).map((f) => [f.node, f.pedestal]))
+  }, [design])
   /**
    * The placed cages — ONE build, shared.
    *
@@ -2295,7 +2297,15 @@ export default function ModelSpace() {
                     <Footing3D key={f.key} cx={f.cx} cz={f.cz} bx={f.bx} bz={f.bz} bz1={f.bz1} bz2={f.bz2}
                       dc={f.dc} yTop={f.yTop} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label}
                       style={surface} />
-                  ))}</group>
+                  ))}
+                  {/* the RC pedestals under steel / timber columns: pad top to grade */}
+                  {(design.pedestals ?? []).map((pd) => {
+                    const p = nodePos.get(pd.node)
+                    if (!p) return null
+                    const sd = pd.design.side / 1000
+                    return <Footing3D key={`ped-${pd.node}`} cx={p.x} cz={p.z} bx={sd} bz={sd}
+                      dc={pd.design.height} yTop={p.y} style={surface} />
+                  })}</group>
                 })()}
                 {(model.walls ?? []).map((w) => {
                   const m = model.members.find((mm) => mm.id === w.member)
@@ -6423,7 +6433,7 @@ export default function ModelSpace() {
               </table>
               <p className="mt-1 text-[11px] text-muted">
                 The column base sits on an RC pedestal from the top of the footing to grade (the frame is analysed with
-                the base fixed there). Side = column + 250 mm (steel) / + 200 mm (timber); Mu at the pedestal base =
+                the base fixed there). Side = column + 250 mm (steel) / + 300 mm (timber, so the post base's rods clear the face by 6·da); Mu at the pedestal base =
                 column-base moment + base shear × height, each axis; biaxial by the linear load contour at the factored
                 axial load (own weight at 1.2); ρ from 1% (§410.6.1.1), ties ≤ min(16db, 48dt, b) (§425.7.2.1). Net uplift
                 is carried by the bars alone.
