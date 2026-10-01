@@ -218,13 +218,13 @@ describe('steel design pipeline (AISC routing + base plates)', () => {
   it('reports steel tonnage and no concrete member volume', () => {
     expect(r.totals.steelKg).toBeGreaterThan(0)
     expect(r.totals.concreteMembers).toBeCloseTo(0, 6)
-    // W310x79, A = 10000 mm², at 7850 kg/m³ — over the members' own lengths,
+    // W310x79, A = 10 100 mm² (AISC v15), at 7850 kg/m³ — over the members' own lengths,
     // node to node: a steel column stops at grade on its RC pedestal and is not
     // run down to the footing (engine/pedestal), so 2+2 beams/girders + 4
     // columns of this 6 × 5 × 3 m bay are exactly 34 m.
     const L = [...r.steelBeams, ...r.steelColumns].reduce((s, m) => s + m.L, 0)
     expect(L).toBeCloseTo(34, 9)
-    expect(r.totals.steelKg).toBeCloseTo(L * (10000 / 1e6) * 7850, 0)
+    expect(r.totals.steelKg).toBeCloseTo(L * (10100 / 1e6) * 7850, 0)
   })
 
   // AUD-001. W310x79 is compact at Fy 345, so the schedule above is a §F2
@@ -232,7 +232,7 @@ describe('steel design pipeline (AISC routing + base plates)', () => {
   it('a noncompact flange lands in §F3 and is REPORTED as such', () => {
     const m = steelModel()
     // W150x22 at Fy 345: λf = 11.52 > λpf = 9.15, web still compact.
-    m.sections = m.sections.map((s) => ({ ...s, shape: 'W150x22' }))
+    m.sections = m.sections.map((s) => ({ ...s, shape: 'W150x22.5' }))
     const d = designStructure(m, soil)!
     expect(d.steelBeams.length).toBeGreaterThan(0)
     for (const b of d.steelBeams) {
@@ -960,10 +960,10 @@ describe('optimizeStructure — steel sections', () => {
   })
 
   it('steel self-weight uses shape area × 78.5 kN/m³, not bounding box × 24', () => {
-    // W310x79: A = 10000 mm². Self-weight = 10000/1e6 × 78.5 = 0.785 kN/m
+    // W310x79: A = 10 100 mm². Self-weight = 10100/1e6 × 78.5 = 0.793 kN/m
     const r = designStructure(steelModel('W310x79'), soil)!
     const L = [...r.steelBeams, ...r.steelColumns].reduce((s, m) => s + m.L, 0)
-    expect(r.totals.steelKg).toBeCloseTo(L * (10000 / 1e6) * 7850, 0)
+    expect(r.totals.steelKg).toBeCloseTo(L * (10100 / 1e6) * 7850, 0)
   })
 })
 

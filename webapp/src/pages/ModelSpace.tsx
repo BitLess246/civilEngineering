@@ -114,7 +114,7 @@ import { FootingSchematic } from '../components/FootingSchematic'
 import { HintButton, SeismicHint, WindHint } from '../components/LoadHints'
 import { Num, Pick, Row } from '../components/qty'
 import { FitView } from '../components/FitView'
-import { shapeByName, shapesOf, effectiveSection, sectionBoundingBox, FAMILIES, type SectionFamily } from '../engine/aiscSections'
+import { shapeByName, shapesOf, effectiveSection, sectionBoundingBox, FAMILIES, canonicalShapeName, type SectionFamily } from '../engine/aiscSections'
 import { WOOD_SPECIES, speciesList, gradesOf, resolveWoodSpecies, type WoodSpecies } from '../engine/woodDesign'
 import { MaterialLibrary } from '../components/MaterialLibrary'
 import { loadCustomMaterials, saveCustomMaterials, type CustomMaterial } from '../lib/materialLibrary'
@@ -271,9 +271,9 @@ export default function ModelSpace() {
   const [colFam, setColFam] = useState<SectionFamily>((s('colFam', 'W')) as SectionFamily)
   const [girFam, setGirFam] = useState<SectionFamily>((s('girFam', 'W')) as SectionFamily)
   const [beaFam, setBeaFam] = useState<SectionFamily>((s('beaFam', 'W')) as SectionFamily)
-  const [colShape, setColShape] = useState(s('colShape', 'W310x79'))
-  const [girShape, setGirShape] = useState(s('girShape', 'W360x51'))
-  const [beaShape, setBeaShape] = useState(s('beaShape', 'W310x38.7'))
+  const [colShape, setColShape] = useState(canonicalShapeName(s('colShape', 'W310x79')))
+  const [girShape, setGirShape] = useState(canonicalShapeName(s('girShape', 'W360x51')))
+  const [beaShape, setBeaShape] = useState(canonicalShapeName(s('beaShape', 'W310x38.7')))
   const [steelFy, setSteelFy] = useState(n('steelFy', 345)); const [steelFu, setSteelFu] = useState(n('steelFu', 448))
   const [qD, setQD] = useState(n('qD', 4.8)); const [qL, setQL] = useState(n('qL', 2.4))
   // Soil (for the footing stage of the design pipeline)
@@ -371,8 +371,11 @@ export default function ModelSpace() {
     if (EMBED) return null
     try {
       const raw = sessionStorage.getItem(AUTOSAVE_KEY)
-      // migrate pre-per-member models so each member owns its section
-      return raw ? splitSharedSections(JSON.parse(raw) as StructuralModel) : null
+      // migrate pre-per-member models so each member owns its section, and
+      // retired shape names (aiscSections LEGACY_SHAPE_NAMES) to current ones
+      if (!raw) return null
+      const m = splitSharedSections(JSON.parse(raw) as StructuralModel)
+      return { ...m, sections: m.sections.map((s) => (s.shape ? { ...s, shape: canonicalShapeName(s.shape) } : s)) }
     } catch { return null }
   })
   // A withheld frame material (lib/frameMaterial) holds only while the model on

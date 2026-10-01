@@ -282,8 +282,11 @@ All shipped.
 
 ## P5 — validation-map corrections
 
-Both ✔ shipped (#737). Neither was a wrong answer in the shipped app; they were
-claims the map made that its evidence did not support.
+All ✔ shipped. E4 and E5 (#737) were not wrong answers in the shipped app;
+they were claims the map made that its evidence did not support. E6 was a
+wrong answer — unconservative steel strengths from mistranscribed geometry —
+and every steel validation row had passed through it, because each one
+re-derived from the same catalogue.
 
 18. ~~**E4 — ValidationMap row C003 is an algebraic tautology.**~~ — ✔ shipped
     (#737): the assertion restated the implementation as its own expected
@@ -302,6 +305,16 @@ claims the map made that its evidence did not support.
     89.9/76.2/69.5, so nothing could reach it. The test pins that reachability
     so a future catalogue addition surfaces rather than silently inheriting the
     superseded form.
+20. ~~**E6 — the shape catalogue's geometry was wrong.**~~ — ✔ shipped: found
+    while drawing section sheets. 144 of 221 W/WT rows were > 3 % off AISC —
+    W150x13 carried W150x18's flanges, the W690/W760/W920 heavies a 258-wide
+    series that is 356 wide — so `deriveWSection` overstated Zx by up to 33 %
+    and 7 of the 10 noncompact-flange shapes got full §F2 Mp. Every W, WT, C,
+    L, HSS and pipe row is now transcribed from the AISC Shapes Database v15.0
+    (HSS `t` is the §B4.2 design wall); names that were not AISC designations
+    resolve through `LEGACY_SHAPE_NAMES`. `aiscSections.test.ts` pins each
+    row's dimensions to its own tabulated area and `deriveWSection` to the
+    Manual's Ix/Zx, so a transcription slip cannot reach the design again.
 
 ---
 
