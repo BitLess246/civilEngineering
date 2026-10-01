@@ -36,12 +36,14 @@ import {
 } from './planDetails'
 import { buildFrameElevation } from '../engine/frameElevation'
 import { buildStructureCages } from '../engine/cageBuilder'
+import { steelScheduleDrawings, timberScheduleDrawings } from './frameSchedules'
 
 export type SheetGroup =
   | 'General notes'
   | 'Plans' | 'Column details' | 'Footing details'
   | 'Slab opening details' | 'Wall standard details'
   | 'Frame elevations'
+  | 'Steel schedules' | 'Timber schedules'
 
 export interface PlanSheet {
   /** Stable identity — also the SVG download file stem. */
@@ -75,6 +77,8 @@ const REF: Record<SheetGroup, string> = {
   'Frame elevations': 'S-04',
   'Slab opening details': 'S-08',
   'Wall standard details': 'S-09',
+  'Steel schedules': 'S-07',
+  'Timber schedules': 'S-07',
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -166,6 +170,12 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
       drawing,
     })
   })
+
+  // Steel and timber members are built from schedules, not bar details.
+  for (const s of steelScheduleDrawings(design))
+    out.push({ key: s.key, group: 'Steel schedules', title: s.title, warnings: [], drawing: s.drawing })
+  for (const s of timberScheduleDrawings(model, design))
+    out.push({ key: s.key, group: 'Timber schedules', title: s.title, warnings: [], drawing: s.drawing })
 
   footingDetailBundles(model, design, soil, cages).forEach((b, i) => {
     out.push({
