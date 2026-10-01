@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shapeByName, AISC_SHAPES } from './aiscSections'
+import { shapeByName, shapesOf, AISC_SHAPES } from './aiscSections'
 import {
   deriveWSection, beamFlexure, beamFlexureScope, beamShear,
   columnAxial, weakAxisFlexure, combinedLoading,
@@ -64,10 +64,20 @@ describe('beamFlexure §F3 — flange local buckling', () => {
   // the compact §F2 strength regardless. A noncompact flange therefore came out
   // at full Mp — a false pass. §F3 takes the lesser of LTB and FLB.
 
-  // W150x22 is the one shape in the library whose flange is noncompact at both
+  // W150x22.5 is the one shape in the library whose flange is noncompact at both
   // grades: λf = bf/2tf = 152/(2×6.6) = 11.515.
-  const W150x22 = shapeByName('W150x22')!
+  const W150x22 = shapeByName('W150x22.5')!
   const p22 = deriveWSection(W150x22)
+
+  it('at Fy = 345 the §F3 set is exactly the shapes the Manual tabulates bf/2tf > λpf for', () => {
+    // λpf = 0.38·√(E/Fy) = 9.149. AISC Shapes Database v15 bf/2tf above it,
+    // among library shapes: W6X8.5 10.1, W6X15 11.5, W8X10 9.61, W8X31 9.19,
+    // W10X12 9.43, W10X33 9.15, W12X65 9.92, W14X90 10.2, W14X99 9.34,
+    // W21X48 9.47. The geometry the catalogue carried before v15 found only three.
+    const f3 = shapesOf('W').filter((s) => beamFlexureScope(s, deriveWSection(s), 345).clause !== 'F2').map((s) => s.name)
+    expect(f3.sort()).toEqual(['W150x13', 'W150x22.5', 'W200x15', 'W200x46.1', 'W250x17.9', 'W250x49.1',
+      'W310x97', 'W360x134', 'W360x147', 'W530x72'].sort())
+  })
 
   it('classifies W150x22 as a noncompact flange on a compact web → §F3', () => {
     const sc = beamFlexureScope(W150x22, p22, 248)
@@ -83,19 +93,20 @@ describe('beamFlexure §F3 — flange local buckling', () => {
 
   it('reduces Mn by §F3-1 rather than handing back Mp — hand calc, Fy = 345', () => {
     // Hand calc (mm, MPa, kN·m):
-    //   Zx = bf·tf(d−tf) + tw·hw²/4 = 152·6.6·145.4 + 5.8·138.8²/4 = 173 800 mm³
-    //   Sx = Ix/(d/2) = 156 633 mm³
-    //   Mp = 345 × 173 800 / 1e6 = 59.961 kN·m
+    //   W150x22.5 (AISC v15): d 152, bf 152, tf 6.6, tw 5.84
+    //   Zx = bf·tf(d−tf) + tw·hw²/4 = 152·6.6·145.4 + 5.84·138.8²/4 = 173 993 mm³
+    //   Sx = Ix/(d/2) = 156 751 mm³
+    //   Mp = 345 × 173 993 / 1e6 = 60.028 kN·m
     //   λpf = 9.149, λrf = 24.077, λf = 11.515
     //   Mn = Mp − (Mp − 0.7·Fy·Sx)·(λf−λpf)/(λrf−λpf)
-    //      = 59.961 − (59.961 − 37.827)·(2.366/14.928) = 56.453 kN·m
+    //      = 60.028 − (60.028 − 37.855)·(2.366/14.928) = 56.514 kN·m
     const r = beamFlexure(W150x22, p22, 345, 0)   // Lb = 0 ⇒ LTB gives Mp
-    expect(r.Mp).toBeCloseTo(59.961, 2)
+    expect(r.Mp).toBeCloseTo(60.028, 2)
     expect(r.MnLTB).toBeCloseTo(r.Mp, 9)
-    expect(r.MnFLB).toBeCloseTo(56.453, 2)
-    expect(r.Mn).toBeCloseTo(56.453, 2)
+    expect(r.MnFLB).toBeCloseTo(56.514, 2)
+    expect(r.Mn).toBeCloseTo(56.514, 2)
     expect(r.governing).toBe('FLB')
-    expect(r.phiMn).toBeCloseTo(0.9 * 56.453, 2)
+    expect(r.phiMn).toBeCloseTo(0.9 * 56.514, 2)
     // …and this is the regression: the old code returned the full Mp here.
     expect(r.Mn).toBeLessThan(r.Mp)
   })
@@ -103,7 +114,7 @@ describe('beamFlexure §F3 — flange local buckling', () => {
   it('at Fy = 248 the same shape is still noncompact, and still reduced', () => {
     const r = beamFlexure(W150x22, p22, 248, 0)
     expect(r.clause).toBe('F3')
-    expect(r.MnFLB).toBeCloseTo(42.448, 2)
+    expect(r.MnFLB).toBeCloseTo(42.495, 2)
     expect(r.Mn / r.Mp).toBeCloseTo(0.9848, 3)
   })
 
@@ -242,7 +253,7 @@ describe('weakAxisFlexure §F6', () => {
   it('a noncompact flange takes the §F6-2 reduction', () => {
     // Same AUD-001 failure class about the weak axis: §F6.1 alone would return
     // the full plastic strength for a flange that buckles first.
-    const W150x22 = shapeByName('W150x22')!
+    const W150x22 = shapeByName('W150x22.5')!
     const p22 = deriveWSection(W150x22)
     const r = weakAxisFlexure(W150x22, p22, 345)
     expect(r.flangeClass).toBe('noncompact')

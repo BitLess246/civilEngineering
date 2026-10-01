@@ -117,8 +117,8 @@ describe('pipeline — steel and timber columns stand on RC pedestals', () => {
       const ped = d.pedestals!.find((p) => p.node === b.node)!.design
       expect(b.anchors).toBeDefined()
       const a = b.anchors!
-      // W310x79: d = 306 — rod centre 153 + max(40, 1.75·25) = 196.75 off the web line
-      expect(b.design.rodX).toBeCloseTo(306 / 2 + 43.75, 6)
+      // W310x79: d = 307 — rod centre 153.5 + max(40, 1.75·25) = 197.25 off the web line
+      expect(b.design.rodX).toBeCloseTo(307 / 2 + 43.75, 6)
       expect(ped.side / 2 - b.design.rodX).toBeGreaterThanOrEqual(6 * a.da)
       expect(a.check.edgeOK && a.check.spacingOK).toBe(true)
       expect(a.hef).toBeLessThanOrEqual(ped.height * 1000 - 100)

@@ -360,9 +360,9 @@ describe('modelToFrame3D — Timoshenko shear areas (opt-in)', () => {
     const model = baseModel()
     model.sections = [{ ...section, material: 'steel' as const, shape: 'W150x13' }]
     const m = modelToFrame3D(model, { shearDeformation: true }).members.find((x) => x.id === 'm')!
-    // W150x13: d = 150, tw = 5.0, bf = 100, tf = 7.1 (mm)
-    expect(m.Asy).toBeCloseTo(150 * 5.0, 6)
-    expect(m.Asz).toBeCloseTo((5 / 6) * 2 * 100 * 7.1, 6)
+    // W150x13 (AISC v15): d = 148, tw = 4.32, bf = 100, tf = 4.95 (mm)
+    expect(m.Asy).toBeCloseTo(148 * 4.32, 6)
+    expect(m.Asz).toBeCloseTo((5 / 6) * 2 * 100 * 4.95, 6)
   })
 
   it('shear-deformable solve is softer than Euler and keeps ΣR = ΣP', () => {

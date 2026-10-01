@@ -187,10 +187,10 @@ const steelMp = (() => {
 })()
 
 // ── 3b. Noncompact-flange steel beam — §F3-1 flange local buckling ───────────
-// W150x22 is the one library shape whose flange is noncompact at both grades
+// W150x22.5 is the one library shape whose flange is noncompact at both grades
 // (λf = 152/(2×6.6) = 11.52). Lb = 0 removes LTB so §F3-1 is what is measured.
 const steelF3 = (() => {
-  const shape = shapeByName('W150x22')!, Fy = 345, E = 200_000
+  const shape = shapeByName('W150x22.5')!, Fy = 345, E = 200_000
   const p = deriveWSection(shape)
   const flex = beamFlexure(shape, p, Fy, 0, 1.0)
   const lf = shape.bf! / (2 * shape.tf!)
