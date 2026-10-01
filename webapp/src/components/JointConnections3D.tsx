@@ -18,6 +18,8 @@ import * as THREE from 'three'
 import { shapeByName } from '../engine/aiscSections'
 import type { SteelJoint, BeamBeamJoint, BeamConnection } from '../engine/steelConnections'
 import type { StructuralModel } from '../engine/model'
+import { levelDrop } from './modelSpace/sceneTokens'
+import { connectionLevels, type ConnectionLevels } from '../lib/connectionLevels'
 
 const PLATE = '#334155'   // dark slate plates (tabs, continuity)
 const BOLT = '#d4a017'    // gold bolts / weld beads
@@ -48,24 +50,25 @@ function Bolt({ p, axis, dia, len }: { p: THREE.Vector3; axis: THREE.Vector3; di
 /** One beam's connection hardware at a joint. `faceOff` = distance from the
  *  joint node to the plate WELD line along the beam axis (m) — the support
  *  flange face (d/2), or the support web plane (tw/2) for web connections. */
-function Connection({ conn, node, beamDir, faceOff, beamTw, extPlateLen }: {
+function Connection({ conn, node, beamDir, faceOff, lv, extPlateLen }: {
   conn: BeamConnection
   node: THREE.Vector3
   beamDir: THREE.Vector3          // unit, node → beam span
   faceOff: number
-  /** supported beam's web thickness, m (actual shape value). */
-  beamTw?: number
+  /** The supported beam's levels and section (lib/connectionLevels). */
+  lv: ConnectionLevels
   /** moment-web-plate only: extension-plate run web → past the flange tips, m. */
   extPlateLen?: number
 }) {
   const parts = useMemo(() => {
     const ex = beamDir.clone()                                   // along the beam
     const ez = new THREE.Vector3().crossVectors(ex, new THREE.Vector3(0, 1, 0)).normalize() // lateral
-    const F = node.clone().add(ex.clone().multiplyScalar(faceOff))   // supporting face @ beam CL
+    // supporting face, at the beam's WEB CENTRE — the beam hangs below its node
+    const F = node.clone().add(ex.clone().multiplyScalar(faceOff)).setY(lv.yc)
 
     const tab = conn.tab
     const t = tab.t * MM, w = tab.wMm * MM, h = tab.hMm * MM
-    const twb = beamTw ?? 0.008    // beam web thickness for plate offset / bolt lengths, m
+    const twb = lv.tw              // beam web thickness for plate offset / bolt lengths, m
     const plateCtr = F.clone()
       .add(ex.clone().multiplyScalar(w / 2))
       .add(ez.clone().multiplyScalar(twb / 2 + t / 2))
@@ -79,7 +82,7 @@ function Connection({ conn, node, beamDir, faceOff, beamTw, extPlateLen }: {
     }))
 
     return { ex, ez, F, plate: { ctr: plateCtr, t, w, h }, bolts }
-  }, [conn, node, beamDir, faceOff, beamTw])
+  }, [conn, node, beamDir, faceOff, lv])
 
   const { ex, ez, F, plate, bolts } = parts
   // orient a unit box so local X→ex, Y→up, Z→ez (right-handed by construction)
@@ -105,10 +108,10 @@ function Connection({ conn, node, beamDir, faceOff, beamTw, extPlateLen }: {
       ))}
       {/* strong-axis moment connection: flange CJP weld beads at the column face */}
       {conn.connType === 'moment-flange-weld' && conn.flange && (() => {
-        const dB = plate.h + 0.16   // ≈ beam depth proxy from tab height (tab ≈ web depth)
-        return [1, -1].map((s) => (
-          <mesh key={s} position={F.clone().add(new THREE.Vector3(0, (s * dB) / 2, 0)).add(ex.clone().multiplyScalar(0.012))} quaternion={boxQuat}>
-            <boxGeometry args={[0.025, 0.02, Math.max(0.12, plate.w * 0.9)]} />
+        // the CJP bead fills the flange end against the support face, full bf
+        return [lv.yTopFlange, lv.yBotFlange].map((y) => (
+          <mesh key={y} position={F.clone().setY(y).add(ex.clone().multiplyScalar(0.006))} quaternion={boxQuat}>
+            <boxGeometry args={[0.012, lv.tf + 0.006, lv.bf]} />
             <meshStandardMaterial color={BOLT} metalness={0.5} roughness={0.4} />
           </mesh>
         ))
@@ -117,11 +120,11 @@ function Connection({ conn, node, beamDir, faceOff, beamTw, extPlateLen }: {
           column web at both beam-flange levels, running out past the flange tips */}
       {conn.connType === 'moment-web-plate' && conn.flange?.webPlate && extPlateLen && (() => {
         const wp = conn.flange.webPlate
-        const dB = plate.h + 0.16
         const tP = wp.tMm * MM, wP = wp.wMm * MM
-        return [1, -1].map((s) => (
-          <mesh key={`wp${s}`}
-            position={F.clone().add(new THREE.Vector3(0, (s * dB) / 2, 0)).add(ex.clone().multiplyScalar(extPlateLen / 2))}
+        // in line with the beam flanges they take the force from
+        return [lv.yTopFlange, lv.yBotFlange].map((y) => (
+          <mesh key={`wp${y}`}
+            position={F.clone().setY(y).add(ex.clone().multiplyScalar(extPlateLen / 2))}
             quaternion={boxQuat}>
             <boxGeometry args={[extPlateLen, tP, wP]} />
             <meshStandardMaterial color={PLATE} metalness={0.3} roughness={0.55} />
@@ -142,6 +145,17 @@ export function JointConnections3D({ joints, beamJoints = [], model, nodePos }: 
   const memMap = useMemo(() => new Map(model.members.map((m) => [m.id, m])), [model])
   const secMap = useMemo(() => new Map(model.sections.map((s) => [s.id, s])), [model])
 
+  /** The supported beam's levels at this node — the same drop it is drawn with. */
+  const levelsOf = (nodeId: string, c: BeamConnection): ConnectionLevels | null => {
+    const P = nodePos.get(nodeId), mem = memMap.get(c.beamId)
+    if (!P || !mem) return null
+    const Q = nodePos.get(mem.i === nodeId ? mem.j : mem.i)
+    const sec = secMap.get(mem.section)
+    const shape = sec?.shape ? shapeByName(sec.shape) : undefined
+    if (!Q) return null
+    return connectionLevels(P.y, shape, levelDrop(mem.role, (shape?.d ?? 300) * MM, P, Q))
+  }
+
   const renderConn = (nodeId: string, c: BeamConnection, faceOff: number, extPlateLen?: number) => {
     const P = nodePos.get(nodeId)
     const mem = memMap.get(c.beamId)
@@ -153,8 +167,9 @@ export function JointConnections3D({ joints, beamJoints = [], model, nodePos }: 
     if (dir.lengthSq() < 1e-9) return null
     const sec = secMap.get(mem.section)
     if (sec?.material !== 'steel') return null
-    const beamTw = sec.shape ? (shapeByName(sec.shape)?.tw ?? 8) * MM : undefined
-    return <Connection key={c.beamId} conn={c} node={P} beamDir={dir.normalize()} faceOff={faceOff} beamTw={beamTw} extPlateLen={extPlateLen} />
+    const lv = levelsOf(nodeId, c)
+    if (!lv) return null
+    return <Connection key={c.beamId} conn={c} node={P} beamDir={dir.normalize()} faceOff={faceOff} lv={lv} extPlateLen={extPlateLen} />
   }
 
   return (
@@ -176,11 +191,11 @@ export function JointConnections3D({ joints, beamJoints = [], model, nodePos }: 
         // continuity plates once per joint when a STRONG-axis moment connection
         // lands here (weak-axis conns bring their own extension plates)
         const momentConns = j.connections.filter((c) => c.connType === 'moment-flange-weld')
-        const contPlates = momentConns.length > 0 ? (() => {
-          const c0 = momentConns[0]
-          const dB = c0.tab.hMm * MM + 0.16
-          return [1, -1].map((s) => (
-            <mesh key={`cp${s}`} position={P.clone().add(new THREE.Vector3(0, (s * (dB - 0.02)) / 2, 0))}>
+        // continuity plates line up with the flanges of the beam they stiffen
+        const lv0 = momentConns.length > 0 ? levelsOf(j.nodeId, momentConns[0]!) : null
+        const contPlates = lv0 ? (() => {
+          return [lv0.yTopFlange, lv0.yBotFlange].map((y) => (
+            <mesh key={`cp${y}`} position={P.clone().setY(y)}>
               <boxGeometry args={[Math.max(0.05, col.d - 2 * col.tf), 0.016, col.bf - 0.004]} />
               <meshStandardMaterial color={PLATE} metalness={0.3} roughness={0.55} />
             </mesh>
