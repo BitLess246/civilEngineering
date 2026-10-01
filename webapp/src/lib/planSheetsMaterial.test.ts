@@ -50,8 +50,12 @@ describe('the sheet set for a steel frame', () => {
       expect(text).toMatch(/W310x79 STEEL COLUMN/)
       expect(text).toMatch(/BASE PL \d+×\d+×\d+ mm/)
       expect(text).toMatch(/4-⌀25 ANCHOR RODS/)
-      expect(text).toMatch(/12-20mmØ VERT\. BARS/)        // the pedestal's bars, not a W-shape's
-      expect(text).toMatch(/CONCRETE BREAKOUT .* NOT CHECKED/)
+      expect(text).toMatch(/\d+-20mmØ VERT\. BARS/)       // the pedestal's bars, not a W-shape's
+      expect(text).toMatch(/HEADED \(NUT \+ WASHER\)/)
+      // the tie pitch reads, anchor-bolt sets included (§410.7.6.1.6: two in the top 125)
+      expect(text).toMatch(/\d+@\d+(, \d+@\d+)* mm O\.C\./)
+      expect(text).toMatch(/ANCHORS: ACI 318-14 CH\. 17 — \d+%/)   // checked now, and says what governs
+      expect(text).not.toMatch(/NOT CHECKED/)
     }
     const fp = set.find((s) => s.key === 'foundation-plan')!
     expect(fp.warnings).toEqual([])

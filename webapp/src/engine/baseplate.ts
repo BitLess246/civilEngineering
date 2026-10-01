@@ -10,16 +10,24 @@
 //  · Cantilevers:  m = (N − 0.95 d)/2,  n = (B − 0.8 bf)/2,
 //    n' = √(d·bf)/4;  ℓ = max(m, n, λn'),  λ ≈ 1 (conservative).
 //  · Thickness (DG1):  tp = ℓ·√(2 fp /(0.9 Fy)),  fp = Pu/(B·N).
-//  · Anchor rods: minimum 4; in net uplift Tu, required area
-//    Ab,req = Tu /(n_rods·φt·0.75·Fu_rod),  φt = 0.75.
+//  · Anchor rods: minimum 4, OUTSIDE the flanges — rod centre a nut-and-wrench
+//    clearance max(40, 1.75·da) off each flange face, max(50, 2·da) in from
+//    the plate edge — so N ≥ d + 2·(clearance + edge). Inside the flanges a
+//    W310's rods sat 8 mm off the flange, where no nut fits. In net uplift
+//    Tu, required area Ab,req = Tu /(n_rods·φt·0.75·Fu_rod), φt = 0.75; the
+//    concrete side of the anchorage is `anchorDesign` (ACI 318-14 Ch. 17).
 // Units: forces kN, moments kN·m, geometry mm, stress MPa.
 // ─────────────────────────────────────────────────────────────────────────
 
 export type AnchorGrade = 'A307' | 'F1554-36' | 'F1554-55' | 'A325M'
 
 /** Nominal tensile strength Fu of common anchor-rod grades (MPa). */
-const ANCHOR_FU: Record<AnchorGrade, number> = {
+export const ANCHOR_FU: Record<AnchorGrade, number> = {
   A307: 414, 'F1554-36': 400, 'F1554-55': 517, A325M: 830,
+}
+/** …and yield, MPa (A307 has none specified — its F1554-36 equivalent). */
+export const ANCHOR_FY: Record<AnchorGrade, number> = {
+  A307: 248, 'F1554-36': 248, 'F1554-55': 380, A325M: 660,
 }
 
 export interface BasePlateInput {
@@ -56,7 +64,13 @@ export interface BasePlateResult {
   rodAbReq: number        // required tensile area per rod, mm²
   rodAbProv: number       // provided area per rod, mm²
   anchorOK: boolean
+  /** Rod positions from the plate centre, mm: ±rodX along N, ±rodY along B. */
+  rodX: number; rodY: number
 }
+
+/** Rod centre clearance off a flange face, and rod centre to plate edge, mm. */
+export const rodFlangeClearance = (da: number) => Math.max(40, 1.75 * da)
+export const rodEdge = (da: number) => Math.max(50, 2 * da)
 
 const PHI_C = 0.65   // §J8 bearing
 const PHI_B = 0.90   // plate flexure
@@ -75,9 +89,12 @@ export function designBasePlate(i: BasePlateInput): BasePlateResult {
   // DG1 plan sizing: keep the two cantilevers roughly balanced
   const delta = (0.95 * i.d - 0.8 * i.bf) / 2
   // start from a square-ish plate that respects the column footprint
-  const Nstart = Math.max(Math.sqrt(A1req) + delta, 0.95 * i.d + 40, i.d + 50)
+  const dia = i.rodDia ?? 25
+  const Nrods = i.d + 2 * (rodFlangeClearance(dia) + rodEdge(dia))   // rods outside the flanges
+  const Nstart = Math.max(Math.sqrt(A1req) + delta, 0.95 * i.d + 40, i.d + 50, Nrods)
   let N = Math.ceil(Nstart / 10) * 10
-  let B = Math.max(A1req / N, 0.8 * i.bf + 40, i.bf + 50)
+  // …and wide enough for the rods across it to stand 4·da apart (ACI §17.7.1)
+  let B = Math.max(A1req / N, 0.8 * i.bf + 40, i.bf + 50, 4 * dia + 2 * rodEdge(dia))
   B = Math.ceil(B / 10) * 10
   // grow to satisfy bearing if the rounded plate is short
   while (N * B < A1req && N < 4000) { N += 10; B = Math.ceil(Math.max(B, A1req / N) / 10) * 10 }
@@ -100,7 +117,6 @@ export function designBasePlate(i: BasePlateInput): BasePlateResult {
   const Tu = Math.max(i.Tu ?? 0, 0)
   const nRods = i.nRods ?? 4
   const Fu = ANCHOR_FU[i.rodGrade ?? 'A307']
-  const dia = i.rodDia ?? 25
   const rodAbProv = (Math.PI / 4) * dia * dia
   // φRn per rod = φt · 0.75 Fu · Ab  (0.75 = effective-area factor, §J3.6)
   const rodCapPerRod = (PHI_T * 0.75 * Fu * rodAbProv) / 1000   // kN
@@ -112,6 +128,8 @@ export function designBasePlate(i: BasePlateInput): BasePlateResult {
     N, B, A1, fp, bearingUtil, bearingOK: bearingUtil <= 1 + 1e-9,
     m, n, nPrime, ell, tReq,
     Tu, rodAbReq, rodAbProv, anchorOK,
+    rodX: Math.min(i.d / 2 + rodFlangeClearance(dia), N / 2 - rodEdge(dia)),
+    rodY: B / 2 - rodEdge(dia),
   }
 }
 

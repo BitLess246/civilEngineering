@@ -94,7 +94,9 @@ describe('pipeline — steel and timber columns stand on RC pedestals', () => {
     for (const p of d.pedestals!) {
       const f = d.footings.find((x) => x.node === p.node)!
       expect(p.design.height).toBeCloseTo(soil.H - f.design.Dc / 1000, 9)
-      expect(p.design.side).toBe(600)
+      // the column rule gives 306 + 250 → 600, but the rods stand outside the
+      // flanges at ±197 and need 6·da = 150 to the faces: 2·(197 + 150) → 700
+      expect(p.design.side).toBe(700)
       expect(p.ok).toBe(true)
     }
   })
@@ -108,6 +110,23 @@ describe('pipeline — steel and timber columns stand on RC pedestals', () => {
   it('bears every base plate on its pedestal: √(A2/A1) > 1', () => {
     expect(d.basePlates).toHaveLength(6)
     for (const b of d.basePlates) expect(b.design.sqrtRatio).toBeGreaterThan(1)
+  })
+
+  it('anchors every base plate in the pedestal by ACI 318-14 Ch. 17: rods outside the flanges, 6·da to the faces, every case checked', () => {
+    for (const b of d.basePlates) {
+      const ped = d.pedestals!.find((p) => p.node === b.node)!.design
+      expect(b.anchors).toBeDefined()
+      const a = b.anchors!
+      // W310x79: d = 306 — rod centre 153 + max(40, 1.75·25) = 196.75 off the web line
+      expect(b.design.rodX).toBeCloseTo(306 / 2 + 43.75, 6)
+      expect(ped.side / 2 - b.design.rodX).toBeGreaterThanOrEqual(6 * a.da)
+      expect(a.check.edgeOK && a.check.spacingOK).toBe(true)
+      expect(a.hef).toBeLessThanOrEqual(ped.height * 1000 - 100)
+      // four edges inside 1.5·hef — the §17.4.2.3 h′ef is what the concrete saw
+      expect(a.check.hefUsed).toBeLessThanOrEqual(a.hef)
+      expect(a.check.ok).toBe(true)
+      expect(b.ok).toBe(true)
+    }
   })
 
   it('the footing carries the pedestal’s weight', () => {
@@ -156,11 +175,12 @@ describe('pipeline — steel and timber columns stand on RC pedestals', () => {
     expect(rows).toHaveLength(6)
     for (const r of rows) {
       const p = d.pedestals!.find((x) => x.node === r.id)!.design
-      expect(r.concreteM3).toBeCloseTo(0.36 * p.height, 9)
-      expect(r.formworkM2).toBeCloseTo(4 * 0.6 * p.height, 9)
-      // 12-⌀20 × (h − 40 cover) alone is 2.47 kg/m × 12 × 1.285 ≈ 38 kg; ties on top
-      expect(r.steelKg).toBeGreaterThan(12 * 2.466 * (p.height - 0.04))
-      expect(r.steelKg).toBeLessThan(12 * 2.466 * p.height * 2)
+      const s = p.side / 1000
+      expect(r.concreteM3).toBeCloseTo(s * s * p.height, 9)
+      expect(r.formworkM2).toBeCloseTo(4 * s * p.height, 9)
+      // n-⌀20 × (h − 40 cover) alone is 2.47 kg/m each; ties on top
+      expect(r.steelKg).toBeGreaterThan(p.bars * 2.466 * (p.height - 0.04))
+      expect(r.steelKg).toBeLessThan(p.bars * 2.466 * p.height * 2)
     }
     const conc = t.boq.find((b) => b.item === 'Pedestal — concrete')!
     expect(conc.qty).toBeCloseTo(rows.reduce((a, r) => a + r.concreteM3, 0), 9)

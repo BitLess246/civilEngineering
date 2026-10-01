@@ -82,10 +82,11 @@ export function steelScheduleDrawings(design: StructureDesign): { key: string; t
   }]
   if (design.basePlates.length) tables.push({
     heading: 'BASE-PLATE SCHEDULE',
-    columns: [{ head: 'NODE', w: 10 }, { head: 'COLUMN', w: 12 }, { head: 'PLATE N×B×t mm', w: 18 }, { head: 'Pu kN', w: 9, align: 'end' }, { head: 'Tu kN', w: 9, align: 'end' }, { head: 'BEARING', w: 10, align: 'end' }, { head: 'STATUS', w: 9 }],
-    rows: design.basePlates.map((b) => [b.node, b.shape, `${f0(b.design.N)}×${f0(b.design.B)}×${b.tAdopt}`, f1(b.Pu), b.Tu > 0 ? f1(b.Tu) : '—', pct(b.design.bearingUtil), status(b.ok)]),
+    columns: [{ head: 'NODE', w: 10 }, { head: 'COLUMN', w: 12 }, { head: 'PLATE N×B×t mm', w: 16 }, { head: 'Pu kN', w: 8, align: 'end' }, { head: 'Tu kN', w: 8, align: 'end' }, { head: 'BEARING', w: 9, align: 'end' }, { head: 'ANCHORS', w: 20 }, { head: 'ANCH.', w: 7, align: 'end' }, { head: 'STATUS', w: 9 }],
+    rows: design.basePlates.map((b) => [b.node, b.shape, `${f0(b.design.N)}×${f0(b.design.B)}×${b.tAdopt}`, f1(b.Pu), b.Tu > 0 ? f1(b.Tu) : '—', pct(b.design.bearingUtil),
+      b.anchors ? `${b.anchors.n}-⌀${b.anchors.da} hd, hef ${b.anchors.hef}` : '—', b.anchors ? pct(b.anchors.check.util) : '—', status(b.ok)]),
     failRows: design.basePlates.flatMap((b, i) => (b.ok ? [] : [i])),
-    note: 'AISC 360-16 §J8 / Design Guide 1. N along the column depth d, B along bf. Non-shrink grout under every plate.',
+    note: 'AISC 360-16 §J8 / Design Guide 1. N along the column depth d, B along bf. Non-shrink grout under every plate. Anchors: headed A307 rods outside the flanges, ACI 318-14 Ch. 17 (cracked, condition B).',
   })
   const ped = pedestalTable(design, 'steel')
   if (ped) tables.push(ped)

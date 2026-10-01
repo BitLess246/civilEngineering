@@ -119,7 +119,7 @@ export interface FootingBearing {
   /** Base plate N (sheet x) × B (sheet y) × t. */
   plate: { N: number; B: number; t: number }
   /** Anchor rods: count (4 at the plate corners), diameter, embedment. */
-  rods: { n: number; dia: number; embed: number }
+  rods: { n: number; dia: number; embed: number; x?: number; y?: number; head?: 'headed' | 'hooked' }
   /** Non-shrink grout bed under the plate. */
   grout: number
   /** Lines added under the bearing callouts — what was and was not checked. */
@@ -276,7 +276,10 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const rodAt = (b: FootingBearing): Pt[] => {
     const pn = b.plate.N / 1000, pb = b.plate.B / 1000
     const e = Math.max(50, 2 * b.rods.dia) / 1000
-    const xs = [-pn / 2 + e, pn / 2 - e], ys = [-pb / 2 + e, pb / 2 - e]
+    // where the design put them (outside the flanges), else the plate corners
+    const rx = b.rods.x != null ? b.rods.x / 1000 : pn / 2 - e
+    const ry = b.rods.y != null ? b.rods.y / 1000 : pb / 2 - e
+    const xs = [-rx, rx], ys = [-ry, ry]
     const all: Pt[] = xs.flatMap((x) => ys.map((y) => [x, y] as Pt))
     // 4 at the corners; 2 (a light post base) on the centreline across the plate
     return b.rods.n >= 4 ? all : [[xs[0]!, 0], [xs[1]!, 0]]
@@ -530,9 +533,17 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     // the pedestal, turned at the foot; a nut and washer on the plate
     const rd = b.rods.dia / 1000, emb = b.rods.embed / 1000
     const rodXs = [...new Set(rodAt(b).map(([x]) => x))]
+    const headed = (b.rods.head ?? 'hooked') === 'headed'
     for (const rx of rodXs) {
       const x = sx0 + rx, foot = colTop + emb, turn = Math.sign(rx) * Math.min(0.1, 4 * rd)
-      wire([[x, pTop - 2.5 * rd], [x, foot], [x - turn, foot]], INK, 1.4)
+      if (headed) {
+        // headed: a heavy hex nut on a plate washer, its top face the embedment
+        wire([[x, pTop - 2.5 * rd], [x, foot + rd]], INK, 1.4)
+        P.push({ kind: 'rect', x: x - 1.8 * rd, y: foot, w: 3.6 * rd, h: 0.35 * rd, stroke: INK, fill: INK, width: 0.5 })
+        P.push({ kind: 'rect', x: x - 0.8 * rd, y: foot + 0.35 * rd, w: 1.6 * rd, h: 0.8 * rd, stroke: INK, fill: INK, width: 0.5 })
+      } else {
+        wire([[x, pTop - 2.5 * rd], [x, foot], [x - turn, foot]], INK, 1.4)
+      }
       P.push({ kind: 'rect', x: x - 1.0 * rd, y: pTop - 1.2 * rd, w: 2.0 * rd, h: 1.0 * rd, stroke: INK, fill: INK, width: 0.5 })
     }
     // callouts, stacked up the right
@@ -541,7 +552,7 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     // lowest tap first, so the text rows climb in the order the leaders start
     // and no two leaders cross
     const rows: [number, number, string, string?][] = [
-      [rodX, colTop + emb * 0.6, `${b.rods.n}-⌀${b.rods.dia} ANCHOR RODS`, `${b.rods.embed} mm EMBED., HOOKED`],
+      [rodX, colTop + emb * 0.6, `${b.rods.n}-⌀${b.rods.dia} ANCHOR RODS`, `${b.rods.embed} mm EMBED., ${headed ? 'HEADED (NUT + WASHER)' : 'HOOKED'}`],
       ...(gr > 0 ? [[sx0 + pn / 2 - ts * 0.1, gTop + gr / 2, `${b.grout} mm NON-SHRINK GROUT`] as [number, number, string]] : []),
       [sx0 + pn / 2 - ts * 0.1, pTop + pt / 2, `${b.kind === 'steel' ? 'BASE PL' : 'POST BASE PL'} ${b.plate.N}×${b.plate.B}×${b.plate.t} mm`],
       [sx0 + d / 2, sTop + stubH * 0.4, b.kind === 'steel' ? `${b.column} STEEL COLUMN` : `${b.column} TIMBER POST`],
@@ -590,8 +601,20 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     // drawn column, and it fell between a hoop and the cross tie stacked on it
     // — so that set contributed one bar 5 mm off centre and the schedule read
     // 6@295 for ties the cage places at 300. Only full sets are measured.
-    const full = Math.max(...groups.map((g) => g.length))
-    return groups.filter((g) => g.length === full)
+    //
+    // A SET'S SIZE is what the cage stacks per level, so it is read off the
+    // cage: the commonest cluster size. Sets closer together than their own
+    // thickness — the two anchor-bolt tie sets 50 mm apart at a pedestal's top
+    // (§410.7.6.1.6), each five bars deep on a 16-bar pedestal — run into one
+    // cluster, which is then split back into sets of that size.
+    const count = new Map<number, number>()
+    for (const g of groups) count.set(g.length, (count.get(g.length) ?? 0) + 1)
+    const k = [...count].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] ?? 1
+    const sets = groups.flatMap((g) =>
+      g.length > k && g.length % k === 0
+        ? Array.from({ length: g.length / k }, (_, j) => g.slice(j * k, (j + 1) * k))
+        : [g])
+    return sets.filter((g) => g.length === k)
       .map((g) => g.reduce((a, b) => a + b, 0) / g.length)
   }
   const drawnPitch = cg

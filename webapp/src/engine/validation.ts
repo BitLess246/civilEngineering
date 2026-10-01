@@ -13,6 +13,7 @@ import { velocityPressure, windKz } from './wind'
 import { requiredArea } from './bearing'
 import { beamFlexure, beamShear, deriveWSection } from './steelDesign'
 import { shapeByName } from './aiscSections'
+import { checkAnchorGroup } from './anchorDesign'
 import { designAxialColumn } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
 import { felleniusFS, type Slice } from './slopeStability'
@@ -755,6 +756,30 @@ const woodCL = (() => {
   return { manual: a - Math.sqrt(a * a - r / 0.95), software: beamStabilityFactor(100, 300, 4000, Emin, FbStar).CL }
 })()
 
+// ACI 318-14 Ch. 17 — four ⌀25 headed rods at 260 × 210 in a 600 × 600
+// pedestal (edges 170 / 195), hef 300, f′c 28, cracked, condition B. The
+// manual side rebuilds both breakout strengths from the clauses by hand:
+//   §17.4.2.3 four edges inside 1.5·hef → h′ef = max(195/1.5, 260/3) = 130
+//   ANc = 600·600, ANco = 9·130², Nb = 10·√28·130^1.5, ψed = 0.7 + 0.3·170/195
+//   φNcbg = 0.70 · ANc/ANco · ψed · Nb
+//   shear toward the 170 edge: AVc = (195 + 210 + 195)·1.5·170, AVco = 4.5·170²,
+//   Vb = min(0.6(200/25)^0.2·√25·√28·170^1.5, 3.7·√28·170^1.5), ψed = 0.7 + 0.3·195/255
+const anchorCase = {
+  nx: 2, ny: 2, sx: 260, sy: 210, edges: [170, 170, 195, 195] as [number, number, number, number],
+  hef: 300, da: 25, futa: 400, fya: 248, fc: 28, Nua: 50, Vua: 20,
+}
+const anchorBreakoutN = (() => {
+  const h = Math.max(195 / 1.5, 260 / 3)
+  const manual = (0.7 * ((600 * 600) / (9 * h * h)) * (0.7 + (0.3 * 170) / (1.5 * h)) * 10 * Math.sqrt(28) * h ** 1.5) / 1000
+  return { manual, software: checkAnchorGroup(anchorCase).tension.breakout.phiN }
+})()
+const anchorBreakoutV = (() => {
+  const ca1 = 170
+  const Vb = Math.min(0.6 * (200 / 25) ** 0.2 * 5 * Math.sqrt(28) * ca1 ** 1.5, 3.7 * Math.sqrt(28) * ca1 ** 1.5)
+  const manual = (0.7 * (((195 + 210 + 195) * 1.5 * ca1) / (4.5 * ca1 * ca1)) * (0.7 + (0.3 * 195) / (1.5 * ca1)) * Vb) / 1000
+  return { manual, software: checkAnchorGroup(anchorCase).shear.breakout.phiN }
+})()
+
 const woodSlabJoist = (() => {
   // DFL-No.2 joist 50 × 200 mm @ 400 mm o.c., 3.0 m simple span; 25 mm plank deck.
   // INDEPENDENT hand assembly of the joist line load and f_b — the manual side
@@ -1149,6 +1174,16 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'wood-slab-joist', category: 'Timber', title: 'Wood-slab joist bending stress',
     reference: 'NDS 2018 §3.3 / NSCP §6 (ASD)', formula: 'f_b = M/S,  M = wL²/8 (simple span)',
     manual: woodSlabJoist.manual, software: woodSlabJoist.software, unit: 'MPa', tol: 1e-9,
+  },
+  {
+    id: 'anchor-breakout-n', category: 'Connections', title: 'Anchor group concrete breakout in tension (pedestal)',
+    reference: 'ACI 318-14 §17.4.2 (h′ef §17.4.2.3)', formula: 'φNcbg = φ·ANc/ANco·ψed,N·Nb,  Nb = 10λ√f′c·h′ef^1.5',
+    manual: anchorBreakoutN.manual, software: anchorBreakoutN.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'anchor-breakout-v', category: 'Connections', title: 'Anchor group concrete breakout in shear (pedestal)',
+    reference: 'ACI 318-14 §17.5.2', formula: 'φVcbg = φ·AVc/AVco·ψed,V·Vb,  Vb = min(0.6(le/da)^0.2√da, 3.7)·λ√f′c·ca1^1.5',
+    manual: anchorBreakoutV.manual, software: anchorBreakoutV.software, unit: 'kN', tol: 1e-9,
   },
   {
     id: 'plumb-velocity', category: 'Plumbing', title: 'Supply pipe velocity (continuity)',

@@ -6389,6 +6389,7 @@ export default function ModelSpace() {
                     <th className="py-1 pr-2 text-right font-semibold">Tu (kN)</th>
                     <th className="py-1 pr-2 font-semibold">Plate B×N×t (mm)</th>
                     <th className="py-1 pr-2 text-right font-semibold">Bearing</th>
+                    <th className="py-1 pr-2 font-semibold">Anchors (ACI 318-14 Ch. 17)</th>
                     <th className="py-1 font-semibold">Status</th>
                   </tr>
                 </thead>
@@ -6401,6 +6402,11 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2 text-right">{p.Tu > 0 ? f1(p.Tu) : '—'}</td>
                       <td className="py-1 pr-2">{f1(p.design.B)} × {f1(p.design.N)} × {p.tAdopt}</td>
                       <td className="py-1 pr-2 text-right">{(p.design.bearingUtil * 100).toFixed(0)}%</td>
+                      <td className="py-1 pr-2">
+                        {p.anchors
+                          ? <>{p.anchors.n}-⌀{p.anchors.da} headed, hef {p.anchors.hef} · {(p.anchors.check.util * 100).toFixed(0)}% <span className="text-muted">({p.anchors.check.governs})</span></>
+                          : '—'}
+                      </td>
                       <td className="py-1">{p.ok ? '✓ OK' : '✗ check'}</td>
                     </tr>
                   ))}
@@ -6410,6 +6416,10 @@ export default function ModelSpace() {
                 Bearing §J8: φc·0.85f′c·√(A2/A1), φc = 0.65. Plate thickness from cantilever bending
                 t = ℓ√(2fp/(0.9Fy)); ℓ = max(m, n, n′). Uplift sizes anchor rods (φt·0.75·Fu).
                 Adopted t rounded to plate stock. On an RC pedestal, A2 is the pedestal top.
+                Anchors: headed rods outside the flanges, checked per load case for steel, breakout, pullout,
+                side-face blowout, steel shear, shear breakout, pryout and the §17.6 interaction — cracked
+                concrete, condition B, h′ef per §17.4.2.3 where a pedestal's edges are close, and 0.75 on
+                the concrete tension modes under seismic load (§17.2.3.4.4).
               </p>
             </div>
           )}
@@ -6450,7 +6460,7 @@ export default function ModelSpace() {
               </table>
               <p className="mt-1 text-[11px] text-muted">
                 The column base sits on an RC pedestal from the top of the footing to grade (the frame is analysed with
-                the base fixed there). Side = column + 250 mm (steel) / + 300 mm (timber, so the post base's rods clear the face by 6·da); Mu at the pedestal base =
+                the base fixed there). Side = column + 250 mm (steel) / + 300 mm (timber, so the post base's rods clear the face by 6·da), or wider where a steel plate's rods outside the flanges need 6·da to the faces; Mu at the pedestal base =
                 column-base moment + base shear × height, each axis; biaxial by the linear load contour at the factored
                 axial load (own weight at 1.2); ρ from 1% (§410.6.1.1), ties ≤ min(16db, 48dt, b) (§425.7.2.1). Net uplift
                 is carried by the bars alone.

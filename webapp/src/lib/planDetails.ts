@@ -191,14 +191,17 @@ function footingBearing(
     const shape = colSec.shape ? shapeByName(colSec.shape) : undefined
     if (!bp) return undefined
     const hw = pedestalBearing('steel', colD, colB, ped.design.height,
-      { N: Math.round(bp.design.N), B: Math.round(bp.design.B), t: bp.tAdopt })
+      { N: Math.round(bp.design.N), B: Math.round(bp.design.B), t: bp.tAdopt },
+      bp.anchors ? { da: bp.anchors.da, hef: bp.anchors.hef, x: bp.design.rodX, y: bp.design.rodY } : undefined)
+    const ac = bp.anchors?.check
     return {
       kind: 'steel', mark, column: bp.shape,
       colD: shape?.d ?? colD, colB: shape?.bf ?? colB, tf: shape?.tf,
       ...hw,
       notes: [
-        'PLATE BEARING & ROD TENSION CHECKED (AISC 360 §J8, §J3)',
-        'CONCRETE BREAKOUT / PULLOUT (ACI 318 CH. 17) NOT CHECKED',
+        'PLATE: AISC 360 §J8 BEARING, DG1 THICKNESS',
+        ac ? `ANCHORS: ACI 318-14 CH. 17 — ${Math.round(ac.util * 100)}% (${ac.governs.toUpperCase()})`
+          : 'ANCHORS: ACI 318-14 CH. 17 NOT CHECKED (NO REACTION)',
       ],
     }
   }
