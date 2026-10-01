@@ -14,6 +14,12 @@ import type { ColumnStackDetailInput, ColumnStackSegment } from '../engine/colum
 import { elevationPlane, projectPoint, type RebarCage, type Vec3, type ViewPlane } from '../engine/rebarModel'
 import { stationZones } from '../engine/beamSection'
 
+/** Reinforced concrete — the only material these sheets detail. Bars, ties,
+ *  laps and dowels mean nothing on a rolled shape or a timber post, and a
+ *  W310 drawn as "4-⌀20, TIES ⌀10" is a drawing that must not reach site. */
+export const isRcSection = (s: { material?: string } | undefined): boolean =>
+  !s?.material || s.material === 'concrete'
+
 export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: number; H?: number }
 
 
@@ -79,6 +85,11 @@ export function footingDetailBundles(
     const mark = `WF-${seen.size}`
     const mem = colAt(r.node)
     const sec: RectSection | undefined = mem ? secById.get(mem.section) : undefined
+    // The sheet draws the column as an RC stub with its bars lapping onto
+    // dowels. Under a steel or timber column that is not what is built, so no
+    // sheet rather than a wrong one (the mark is still consumed, so WF-n stays
+    // the foundation plan's WF-n).
+    if (mem && !isRcSection(sec)) continue
     // THE SHEET'S AXES, NOT THE SECTION'S NAMES. `FootingDetailInput.colB` is
     // the column's width along the sheet's x and `colH` its depth along the
     // sheet's y; a `RectSection` names them the other way round, because a
@@ -191,7 +202,7 @@ export function columnStackBundles(
   const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
   const secById = new Map(model.sections.map((s) => [s.id, s]))
   const rowById = new Map(design.columns.map((c) => [c.id, c]))
-  const cols = model.members.filter((m) => m.role === 'column')
+  const cols = model.members.filter((m) => m.role === 'column' && isRcSection(secById.get(m.section)))
   const lower = (m: (typeof cols)[number]) =>
     (nodeById.get(m.i)!.y <= nodeById.get(m.j)!.y ? m.i : m.j)
   const upper = (m: (typeof cols)[number]) =>
@@ -477,7 +488,7 @@ export function frameElevationBundles(
       const n = pos(id)!
       return g.axis === 'x' ? n.x : n.z
     }
-    const members = model.members.filter((m) => onLine(m.i) && onLine(m.j))
+    const members = model.members.filter((m) => onLine(m.i) && onLine(m.j) && isRcSection(sec(m)))
     const cols = members.filter((m) => m.role === 'column')
 
     for (const y of levels) {
