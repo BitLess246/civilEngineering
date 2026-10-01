@@ -18,6 +18,7 @@
 // The two that remain pure geometry — the W-shape section and the §424.2
 // serviceability read-out — are still just numbers.
 // ─────────────────────────────────────────────────────────────────────────
+import { buildSteelSectionDetail } from '../../engine/steelSection'
 import { useMemo, type ReactNode } from 'react'
 import { planToSvg, type Drawing } from '../../engine/planRenderer'
 import type { ColumnStackBundle, FrameElevationBundle } from '../../lib/planDetails'
@@ -185,51 +186,12 @@ export function ColumnElevationFigure({ bundle, storey, label, width = 320 }: {
   return <SheetFigure drawing={drawing} width={width} />
 }
 
-/** W-shape cross-section: top flange + web + bottom flange, scaled to fit a
- *  fixed viewbox so every dimension is labelled. d/bf/tf/tw all in mm. A rolled
- *  section has no cage, so this one really is a drawing from numbers. */
-export function WShapeSection({ shape, d, bf, tf, tw }: { shape: string; d: number; bf: number; tf: number; tw: number }): ReactNode {
-  const VW = 200, VH = 200
-  const pad = 28          // room for labels
-  const scale = Math.min((VW - pad * 2) / bf, (VH - pad * 2) / d)
-  const sw = bf * scale   // scaled width
-  const sh = d * scale    // scaled height
-  const stf = tf * scale  // flange thickness
-  const stw = tw * scale  // web thickness
-  const x0 = (VW - sw) / 2, y0 = (VH - sh) / 2
-  const webX = (VW - stw) / 2
-  const textStyle = { fontSize: 9, fontFamily: 'Arial, sans-serif', fill: '#334155' }
-  return (
-    <svg viewBox={`0 0 ${VW} ${VH}`} xmlns="http://www.w3.org/2000/svg" role="img"
-      aria-label={`Steel section ${shape}`}
-      style={{ width: 200, height: 200 }}>
-      <title>{`Steel section ${shape}`}</title>
-      {/* label */}
-      <text x={VW / 2} y={10} textAnchor="middle" fontSize={10} fontWeight={700} fill="#0f4c92" fontFamily="Arial, sans-serif">{shape}</text>
-      {/* top flange */}
-      <rect x={x0} y={y0} width={sw} height={stf} fill="#bfdbfe" stroke="#0f4c92" strokeWidth={0.8} />
-      {/* web */}
-      <rect x={webX} y={y0 + stf} width={stw} height={sh - 2 * stf} fill="#dbeafe" stroke="#0f4c92" strokeWidth={0.8} />
-      {/* bottom flange */}
-      <rect x={x0} y={y0 + sh - stf} width={sw} height={stf} fill="#bfdbfe" stroke="#0f4c92" strokeWidth={0.8} />
-      {/* bf dim arrow */}
-      <line x1={x0} y1={VH - 10} x2={x0 + sw} y2={VH - 10} stroke="#64748b" strokeWidth={0.8} markerStart="url(#arr)" markerEnd="url(#arr)" />
-      <text x={VW / 2} y={VH - 2} textAnchor="middle" {...textStyle}>bf={Math.round(bf)} mm</text>
-      {/* d dim arrow */}
-      <line x1={VW - 10} y1={y0} x2={VW - 10} y2={y0 + sh} stroke="#64748b" strokeWidth={0.8} />
-      <text x={VW - 2} y={(y0 + y0 + sh) / 2} textAnchor="middle" {...textStyle} transform={`rotate(-90,${VW - 2},${(y0 + y0 + sh) / 2})`}>d={Math.round(d)} mm</text>
-      {/* tf label */}
-      <text x={x0 - 2} y={y0 + stf / 2 + 3} textAnchor="end" {...textStyle}>tf={tf.toFixed(1)} mm</text>
-      {/* tw label */}
-      <text x={webX - 2} y={(VH) / 2 + 3} textAnchor="end" {...textStyle}>tw={tw.toFixed(1)} mm</text>
-      {/* arrow marker def */}
-      <defs>
-        <marker id="arr" markerWidth={4} markerHeight={4} refX={2} refY={2} orient="auto">
-          <path d="M4,0 L0,2 L4,4" fill="none" stroke="#64748b" strokeWidth={0.8} />
-        </marker>
-      </defs>
-    </svg>
-  )
+/** A rolled steel section — the SAME drawing the S-10 section sheet prints
+ *  (`engine/steelSection`), so the schedule row and the sheet set show one
+ *  shape. Replaces the hand-drawn W-shape SVG that used to sit here. */
+export function SteelShapeFigure({ shape, width = 260 }: { shape: string; width?: number }): ReactNode {
+  const drawing = useMemo(() => buildSteelSectionDetail(shape), [shape])
+  return drawing ? <SheetFigure drawing={drawing} width={width} /> : null
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import { shapeByName } from '../engine/aiscSections'
 import { buildScheduleSheet, type ScheduleTable } from '../engine/scheduleSheet'
 import type { Drawing } from '../engine/planRenderer'
 import { pedestalMarks } from './planDetails'
+import { connectionMarks, markAt } from './steelMarks'
 import { SAWN_MAX_LENGTH } from '../engine/timberStock'
 
 const STEEL_DENSITY = 7850   // kg/m³
@@ -60,8 +61,12 @@ function pedestalTable(design: StructureDesign, material: 'steel' | 'wood'): Sch
   }
 }
 
-/** The steel member, base-plate and connection schedules. Empty for a frame with no steel. */
-export function steelScheduleDrawings(design: StructureDesign): { key: string; title: string; drawing: Drawing }[] {
+/** The steel member, base-plate and connection schedules. Empty for a frame
+ *  with no steel. Given the model, it adds the per-member beam and column
+ *  schedules a fabricator reads — end reactions, the connection MARK at each
+ *  end (`steelMarks`), camber — and the connection-type schedule those marks
+ *  point at. */
+export function steelScheduleDrawings(design: StructureDesign, model?: StructuralModel): { key: string; title: string; drawing: Drawing }[] {
   if (!design.steelBeams.length && !design.steelColumns.length) return []
   const members = [
     ...design.steelColumns.map((c) => ({ shape: c.shape, role: 'column', L: c.L, util: c.ratio, ok: c.ok })),
@@ -91,20 +96,60 @@ export function steelScheduleDrawings(design: StructureDesign): { key: string; t
   })
   const ped = pedestalTable(design, 'steel')
   if (ped) tables.push(ped)
+  const marks = connectionMarks(design)
   const conns = [
     ...design.joints.flatMap((j) => j.connections.map((c) => ({ node: j.nodeId, c, bb: false }))),
     ...design.beamJoints.flatMap((j) => j.connections.map((c) => ({ node: j.nodeId, c, bb: true }))),
   ]
   const connTable: ScheduleTable | null = conns.length ? {
     heading: 'STEEL CONNECTION SCHEDULE',
-    columns: [{ head: 'NODE', w: 9 }, { head: 'BEAM', w: 10 }, { head: 'TYPE', w: 22 }, { head: 'BOLTS', w: 14 }, { head: 'PLATE t×h', w: 11 }, { head: 'WELD mm', w: 18 }, { head: 'Vu kN', w: 8, align: 'end' }, { head: 'Mu kN·m', w: 9, align: 'end' }, { head: 'STATUS', w: 9 }],
-    rows: conns.map(({ node, c, bb }) => [node, c.beamId, connType(c, bb), `${c.bolts.n}×M${c.bolts.dia} A325`, `${c.tab.t}×${f0(c.tab.hMm)}`, weldOf(c), f1(c.Vu), c.pinned ? '—' : f1(c.Mu), status(c.ok)]),
+    columns: [{ head: 'NODE', w: 9 }, { head: 'BEAM', w: 10 }, { head: 'MARK', w: 6 }, { head: 'TYPE', w: 22 }, { head: 'BOLTS', w: 14 }, { head: 'PLATE t×h', w: 11 }, { head: 'WELD mm', w: 18 }, { head: 'Vu kN', w: 8, align: 'end' }, { head: 'Mu kN·m', w: 9, align: 'end' }, { head: 'STATUS', w: 9 }],
+    rows: conns.map(({ node, c, bb }) => [node, c.beamId, markAt(marks, c.beamId, node), connType(c, bb), `${c.bolts.n}×M${c.bolts.dia} A325`, `${c.tab.t}×${f0(c.tab.hMm)}`, weldOf(c), f1(c.Vu), c.pinned ? '—' : f1(c.Mu), status(c.ok)]),
     failRows: conns.flatMap((x, i) => (x.c.ok ? [] : [i])),
     note: 'Each end is built as analysed: a moment connection unless the end is Simple (a pin, released in the analysis). Plates Fy 248 MPa; bolts single shear.',
   } : null
 
+  const memberTables: ScheduleTable[] = []
+  if (model) {
+    const memById = new Map(model.members.map((m) => [m.id, m]))
+    const beams = design.steelBeams.filter((b) => memById.has(b.id))
+    if (beams.length) memberTables.push({
+      heading: 'STEEL BEAM SCHEDULE',
+      columns: [{ head: 'MARK', w: 9 }, { head: 'SHAPE', w: 11 }, { head: 'L m', w: 6, align: 'end' }, { head: 'Ri kN', w: 7, align: 'end' }, { head: 'Rj kN', w: 7, align: 'end' }, { head: 'CONN i', w: 7 }, { head: 'CONN j', w: 7 }, { head: 'CAMBER', w: 8, align: 'end' }, { head: 'UTIL', w: 6, align: 'end' }],
+      rows: beams.map((b) => {
+        const m = memById.get(b.id)!
+        return [b.id, b.shape, f2(b.L), f1(b.Ri), f1(b.Rj), markAt(marks, b.id, m.i), markAt(marks, b.id, m.j),
+          b.camber > 0 ? `${b.camber} mm` : 'NONE', pct(Math.max(b.utilM, b.utilV))]
+      }),
+      failRows: beams.flatMap((b, i) => (b.ok ? [] : [i])),
+      note: 'Ri/Rj: envelope factored end reactions. Camber 0.8·ΔD from the D-only moment diagram over E·Ix, none below 20 mm (AISC 303 §6.4.4). CONN: the end detail mark (connection schedule).',
+    })
+    const cols = design.steelColumns.filter((c) => memById.has(c.id))
+    const plateAt = new Set(design.basePlates.map((b) => b.node))
+    if (cols.length) memberTables.push({
+      heading: 'STEEL COLUMN SCHEDULE',
+      columns: [{ head: 'MARK', w: 9 }, { head: 'SHAPE', w: 11 }, { head: 'L m', w: 6, align: 'end' }, { head: 'Pu kN', w: 8, align: 'end' }, { head: 'BASE', w: 16 }, { head: 'UTIL', w: 6, align: 'end' }],
+      rows: cols.map((c) => {
+        const m = memById.get(c.id)!
+        const base = [m.i, m.j].find((n) => plateAt.has(n))
+        return [c.id, c.shape, f2(c.L), f1(c.Pu), base ? `BASE PLATE @ ${base}` : 'SPLICE / CONT.', pct(c.ratio)]
+      }),
+      failRows: cols.flatMap((c, i) => (c.ok ? [] : [i])),
+      note: 'No column splice is placed by the design: a column runs node to node, and a splice is a detail to be added where a run exceeds stock length.',
+    })
+  }
+  if (marks.types.length) memberTables.push({
+    heading: 'CONNECTION TYPES',
+    columns: [{ head: 'MARK', w: 6 }, { head: 'TYPE', w: 22 }, { head: 'BOLTS', w: 13 }, { head: 'PLATE t×h', w: 10 }, { head: 'WELD mm', w: 16 }, { head: 'ENDS', w: 6, align: 'end' }, { head: 'Vu kN', w: 7, align: 'end' }, { head: 'Mu kN·m', w: 8, align: 'end' }, { head: 'STATUS', w: 8 }],
+    rows: marks.types.map((t) => [t.mark, connType(t.sample, t.kind === 'fin-plate'), `${t.sample.bolts.n}×M${t.sample.bolts.dia} A325`,
+      `${t.sample.tab.t}×${f0(t.sample.tab.hMm)}`, weldOf(t.sample), `${t.ends.length}`, f1(t.Vu), t.Mu > 0 ? f1(t.Mu) : '—', status(t.ok)]),
+    failRows: marks.types.flatMap((t, i) => (t.ok ? [] : [i])),
+    note: 'One typical detail per mark; every beam end is scheduled to one (STEEL BEAM SCHEDULE, CONN i / CONN j). Vu, Mu: the worst end the type serves.',
+  })
+
   const out = [{ key: 'steel-schedules', title: 'Steel member, base-plate and pedestal schedules', drawing: buildScheduleSheet(tables, { title: 'STEEL MEMBER, BASE-PLATE & PEDESTAL SCHEDULES', sheetRef: 'S-07' }) }]
   if (connTable) out.push({ key: 'steel-connection-schedule', title: 'Steel connection schedule', drawing: buildScheduleSheet([connTable], { title: 'STEEL CONNECTION SCHEDULE', detailNo: '2', sheetRef: 'S-07' }) })
+  if (memberTables.length) out.push({ key: 'steel-member-marks', title: 'Steel beam, column and connection-type schedules', drawing: buildScheduleSheet(memberTables, { title: 'STEEL BEAM, COLUMN & CONNECTION SCHEDULES', detailNo: '3', sheetRef: 'S-07' }) })
   return out
 }
 

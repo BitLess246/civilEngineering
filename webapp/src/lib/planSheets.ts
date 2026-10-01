@@ -36,6 +36,7 @@ import {
 } from './planDetails'
 import { buildFrameElevation } from '../engine/frameElevation'
 import { buildStructureCages } from '../engine/cageBuilder'
+import { buildSteelSectionDetail } from '../engine/steelSection'
 import { steelScheduleDrawings, timberScheduleDrawings } from './frameSchedules'
 
 export type SheetGroup =
@@ -43,7 +44,7 @@ export type SheetGroup =
   | 'Plans' | 'Column details' | 'Footing details'
   | 'Slab opening details' | 'Wall standard details'
   | 'Frame elevations'
-  | 'Steel schedules' | 'Timber schedules'
+  | 'Steel schedules' | 'Steel sections' | 'Timber schedules'
 
 export interface PlanSheet {
   /** Stable identity — also the SVG download file stem. */
@@ -78,6 +79,7 @@ const REF: Record<SheetGroup, string> = {
   'Slab opening details': 'S-08',
   'Wall standard details': 'S-09',
   'Steel schedules': 'S-07',
+  'Steel sections': 'S-10',
   'Timber schedules': 'S-07',
 }
 
@@ -179,8 +181,15 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
   })
 
   // Steel and timber members are built from schedules, not bar details.
-  for (const s of steelScheduleDrawings(design))
+  for (const s of steelScheduleDrawings(design, model))
     out.push({ key: s.key, group: 'Steel schedules', title: s.title, warnings: [], drawing: s.drawing })
+  // One section sheet per shape the frame uses — a rolled shape IS its type,
+  // so the shape name is the mark the schedules already print.
+  const shapesUsed = [...new Set([...design.steelBeams, ...design.steelColumns].map((r) => r.shape))].sort()
+  shapesUsed.forEach((name, i) => {
+    const d = buildSteelSectionDetail(name, { detailNo: String(i + 1), sheetRef: ref('Steel sections') })
+    if (d) out.push({ key: `steel-section-${slug(name)}`, group: 'Steel sections', title: name, subtitle: `${d.shape.family} · A ${Math.round(d.shape.A)} mm²`, warnings: [], drawing: d })
+  })
   for (const s of timberScheduleDrawings(model, design))
     out.push({ key: s.key, group: 'Timber schedules', title: s.title, warnings: [], drawing: s.drawing })
 

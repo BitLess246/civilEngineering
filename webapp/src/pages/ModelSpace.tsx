@@ -128,7 +128,7 @@ import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/mod
 import { ActionBtn, DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
 import {
-  BeamCageSection, BeamElevationFigure, BeamServiceability, ColumnCageSection, ColumnElevationFigure, WShapeSection,
+  BeamCageSection, BeamElevationFigure, BeamServiceability, ColumnCageSection, ColumnElevationFigure, SteelShapeFigure,
 } from '../components/modelSpace/figures'
 import { ExportReportDialog, type ExportOptions } from '../components/ExportReportDialog'
 import { appendixAvailability, type AppendixInput } from '../lib/analysisAppendix'
@@ -6194,7 +6194,7 @@ export default function ModelSpace() {
                           <div className="flex flex-wrap gap-6">
                             {/* W-shape cross-section drawing */}
                             <div className="shrink-0">
-                              <WShapeSection shape={b.shape} d={b.d} bf={b.bf} tf={b.tf} tw={b.tw} />
+                              <SteelShapeFigure shape={b.shape} />
                             </div>
                             {/* Section properties */}
                             <div className="min-w-[160px]">
@@ -6332,7 +6332,7 @@ export default function ModelSpace() {
                               {(() => {
                                 const sh = shapeByName(c.shape)
                                 if (sh && sh.family !== 'W' && sh.family !== 'WT') return <SectionShape sec={effectiveSection(sh, false)} />
-                                return <WShapeSection shape={c.shape} d={c.d} bf={c.bf} tf={c.tf} tw={c.tw} />
+                                return <SteelShapeFigure shape={c.shape} />
                               })()}
                             </div>
                             {/* Section properties */}
