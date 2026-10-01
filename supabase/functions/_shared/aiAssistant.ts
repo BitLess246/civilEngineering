@@ -25,20 +25,29 @@ export const UPSTREAM_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/
  * with `model` before any upstream call is made, so a paid model id can never
  * ride this key.
  *
- * Order is capability-descending (the "knowledge needed" half of rotation);
- * availability is handled by falling through on retryable failures. Every id
- * below was verified 0/0 pricing with `tools` in `supported_parameters` on
- * /api/v1/models — extend ONLY the same way, plus a test row. The trailing
- * entry is the previous verified worker and stays as the last resort.
+ * Every id below was verified 0/0 pricing with `tools` in
+ * `supported_parameters` on /api/v1/models — extend ONLY the same way, plus a
+ * test row — AND answered a code question correctly through the live function.
+ *
+ * Order is MEASURED, not assumed (Oct 2026, through the deployed function):
+ * the first two answer correctly in ~16 s and ~26 s; Lightning answers but
+ * times out about half the time; Qwen and Gemma are capable but were
+ * rate-limited (429) on every probe, so they sit behind the ones that answer.
+ * The rotation is hedged (`callWithRotation`), so order decides who STARTS
+ * first, not who is waited on.
+ *
+ * Removed, and why:
+ *   inclusionai/ling-3.0-flash-fin:free — gone from OpenRouter (404).
+ *   liquid/lfm-2.5-2.6b:free — a 2.6 B model that answered "minimum cover for
+ *     a cast-in-place beam" with 4 in (102 mm) under a clause that does not say
+ *     so. A confidently wrong code value is worse than no answer.
  */
 export const FREE_CHAT_MODELS = [
+  'stealth/space-bunny-alpha',
   'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'nvidia/nemotron-3.5-lightning:free',
   'qwen/qwen3.8-27b:free',
   'google/gemma-4-31b-it:free',
-  'nvidia/nemotron-3.5-lightning:free',
-  'inclusionai/ling-3.0-flash-fin:free',
-  'liquid/lfm-2.5-2.6b:free',
-  'stealth/space-bunny-alpha',
 ] as const
 
 export type FreeChatModel = (typeof FREE_CHAT_MODELS)[number]
@@ -56,13 +65,11 @@ export const isFreeModel = (m: unknown): m is FreeModel =>
  * capability routing by measurement, not by guessing strengths.
  */
 const MODEL_CONTEXT_TOKENS: Readonly<Record<FreeModel, number>> = {
+  'stealth/space-bunny-alpha': 1000000,
   'nvidia/nemotron-3-ultra-550b-a55b:free': 1000000,
+  'nvidia/nemotron-3.5-lightning:free': 1000000,
   'qwen/qwen3.8-27b:free': 262144,
   'google/gemma-4-31b-it:free': 262144,
-  'nvidia/nemotron-3.5-lightning:free': 1000000,
-  'inclusionai/ling-3.0-flash-fin:free': 262144,
-  'liquid/lfm-2.5-2.6b:free': 65536,
-  'stealth/space-bunny-alpha': 1000000,
 }
 
 /** Rough chars-per-token headroom: skip a model the estimate cannot fit. */
@@ -174,7 +181,8 @@ export function buildAssistantSystemPrompt(
   return [
     'You are the calculation helper inside Zeta, a structural-engineering web app (NSCP 2015 / ACI 318-14 / AISC 360-16) operated by CIVENGG WEBSITE APPLICATION SERVICE.',
     '',
-    'SCOPE — the hard rule. You answer ONLY questions about: (a) the app calculators listed below, their inputs, and how to use them; (b) the meaning of their answers, solutions and results; (c) the design-code clauses behind them. Any question outside that — general chat, homework unrelated to these tools, coding, current events, anything else — gets EXACTLY this reply and nothing more:',
+    'SCOPE. You answer questions about: (a) the app calculators listed below, their inputs, and how to use them; (b) the meaning of their answers, solutions and results; (c) structural, geotechnical and construction engineering as the design codes treat it — NSCP 2015, ACI 318-14, AISC 360-16, NDS — including requirements, clauses, limits, typical values and how a design is done, whether or not a calculator is involved.',
+    'IN SCOPE, answer them: "What is the minimum cover for a beam?", "How do I design a footing?", "What does phi mean in ACI?", "Why is my column failing?", "What is the drift limit in NSCP?". When a question is about engineering or the codes, ANSWER it — refusing a genuine engineering question is a failure. Only a question with nothing to do with engineering, the codes or this app — weather, general chat, coding, current events, other subjects — gets EXACTLY this reply and nothing more:',
     `"${OFF_TOPIC_REFUSAL}"`,
     '',
     'CALCULATORS — the complete set. Never name, link or describe any other tool or page; if no listed calculator fits, say so and suggest the closest one:',
@@ -356,56 +364,133 @@ export interface UpstreamCall {
   body: string
 }
 
+/** One upstream attempt, for the function's logs — model, outcome, time. Never content. */
+export interface AttemptLog { model: FreeModel; withTools: boolean; status: number | 'transport' | 'aborted' | 'timeout'; ms: number }
+
+export interface RotationOptions {
+  /** Start the next model alongside a pending one after this long, ms. */
+  hedgeMs?: number
+  /** Most attempts in flight at once. */
+  maxParallel?: number
+  /** Give up on the whole rotation after this long, ms. */
+  deadlineMs?: number
+  log?: (a: AttemptLog) => void
+  now?: () => number
+}
+
+/** Free endpoints answer in 15–30 s when they answer at all (measured Oct 2026). */
+export const HEDGE_MS = 6000
+export const MAX_PARALLEL = 3
+export const ROTATION_DEADLINE_MS = 55_000
+
+type AttemptOutcome =
+  | { kind: 'ok'; json: unknown }
+  | { kind: 'next'; status: number | null }
+  | { kind: 'fatal'; status: number }
+
 /**
- * Walk the rotation list until one model answers.
+ * Walk the rotation list until one model answers — HEDGED, not serial.
  *
- * Per model, in order: skip it when the request cannot fit its context
- * window; POST with tools; on 400 retry ONCE without tools (an entry can
- * list tool support the serving endpoint does not honour); on 404 (rotated
- * away), 408, 429, 5xx or a transport failure, move to the next model.
- * Fail FAST on 401 (bad key), 402 (no credit) and 403 (forbidden) — those
- * describe the account, not the model, so no other entry would pass either.
- * Same for any other 4xx: the request is ours and retrying it elsewhere
- * burns quota for nothing.
+ * Free endpoints are slow and flaky: measured on the live function, the
+ * capable models take 15–30 s and any of them can time out or 429. Walked
+ * one after another with a 30 s timeout each, a bad minute stacked two or
+ * three of those and the user waited 50 s+ (or got nothing). So: start the
+ * first model; if it has not answered within `hedgeMs`, start the next ALONGSIDE
+ * it (up to `maxParallel` in flight); the first good answer wins and every
+ * other attempt is aborted. A model that fails retryably hands over at once,
+ * without waiting for the hedge timer.
+ *
+ * Per model the policy is unchanged: skip it when the request cannot fit its
+ * context window; POST with tools; on 400 retry ONCE without tools (an entry
+ * can list tool support the serving endpoint does not honour); on 404
+ * (rotated away), 408, 429, 5xx or a transport failure, move on. Fail FAST on
+ * 401 (bad key), 402 (no credit) and 403 (forbidden) — those describe the
+ * account, not the model — and on any other 4xx, which is our request.
  *
  * `fetchImpl` is injected so the whole policy is unit-testable; the function
  * passes the real fetch.
  */
-export async function callWithRotation(
+export function callWithRotation(
   models: readonly FreeModel[],
   chars: number,
   buildCall: (model: FreeModel, withTools: boolean) => UpstreamCall,
   fetchImpl: UpstreamFetch,
   timeoutMs: number,
+  opts: RotationOptions = {},
 ): Promise<RotationResult> {
+  const hedgeMs = opts.hedgeMs ?? HEDGE_MS
+  const maxParallel = Math.max(1, opts.maxParallel ?? MAX_PARALLEL)
+  const deadlineMs = opts.deadlineMs ?? ROTATION_DEADLINE_MS
+  const now = opts.now ?? (() => Date.now())
+  const queue = models.filter((m) => fitsContext(m, chars))
+  const controllers: AbortController[] = []
   let lastStatus: number | null = null
-  for (const model of models) {
-    if (!fitsContext(model, chars)) continue
+
+  const attempt = async (model: FreeModel, ctl: AbortController): Promise<AttemptOutcome> => {
     for (const withTools of [true, false]) {
+      const t0 = now()
       let res: UpstreamResponse
       try {
         const call = buildCall(model, withTools)
         res = await fetchImpl(call.url, {
           method: call.method, headers: call.headers, body: call.body,
-          signal: AbortSignal.timeout(timeoutMs),
+          signal: AbortSignal.any([ctl.signal, AbortSignal.timeout(timeoutMs)]),
         })
-      } catch {
-        lastStatus = null
-        break // transport failure: next model, tools are not the suspect
+      } catch (e) {
+        const status = ctl.signal.aborted ? 'aborted' : (e as Error)?.name === 'TimeoutError' ? 'timeout' : 'transport'
+        opts.log?.({ model, withTools, status, ms: now() - t0 })
+        return { kind: 'next', status: null } // tools are not the suspect
       }
+      opts.log?.({ model, withTools, status: res.status, ms: now() - t0 })
       if (res.ok) {
         try {
-          return { ok: true, model, json: await res.json() }
+          return { kind: 'ok', json: await res.json() }
         } catch {
-          lastStatus = null
-          break // unparseable body: next model
+          return { kind: 'next', status: null } // unparseable body
         }
       }
-      lastStatus = res.status
       if (res.status === 400 && withTools) continue // downgrade: same model, no tools
-      if (res.status === 404 || res.status === 408 || res.status === 429 || res.status >= 500) break
-      return { ok: false, status: res.status } // 401/402/403/other 4xx: fail fast
+      if (res.status === 404 || res.status === 408 || res.status === 429 || res.status >= 500) {
+        return { kind: 'next', status: res.status }
+      }
+      return { kind: 'fatal', status: res.status } // 401/402/403/other 4xx
     }
+    return { kind: 'next', status: 400 }
   }
-  return { ok: false, status: lastStatus }
+
+  return new Promise<RotationResult>((resolve) => {
+    let next = 0, inFlight = 0, done = false
+    let hedge: ReturnType<typeof setTimeout> | undefined
+    const finish = (r: RotationResult) => {
+      if (done) return
+      done = true
+      clearTimeout(hedge); clearTimeout(deadline)
+      for (const c of controllers) c.abort()
+      resolve(r)
+    }
+    const deadline = setTimeout(() => finish({ ok: false, status: lastStatus ?? 408 }), deadlineMs)
+    const armHedge = () => {
+      clearTimeout(hedge)
+      if (next < queue.length) hedge = setTimeout(() => { launch(); armHedge() }, hedgeMs)
+    }
+    const launch = () => {
+      if (done || next >= queue.length || inFlight >= maxParallel) return
+      const model = queue[next++]!
+      const ctl = new AbortController()
+      controllers.push(ctl)
+      inFlight++
+      void attempt(model, ctl).then((o) => {
+        inFlight--
+        if (done) return
+        if (o.kind === 'ok') return finish({ ok: true, model, json: o.json })
+        if (o.kind === 'fatal') return finish({ ok: false, status: o.status })
+        if (o.status !== null) lastStatus = o.status
+        // hand over at once, and restart the hedge clock for the newcomer
+        if (next < queue.length) { launch(); armHedge() }
+        else if (inFlight === 0) finish({ ok: false, status: lastStatus })
+      })
+    }
+    if (!queue.length) return finish({ ok: false, status: null })
+    launch(); armHedge()
+  })
 }
