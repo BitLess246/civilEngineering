@@ -589,11 +589,12 @@ export function estimateTakeoff(
     const bp = design.basePlates.find((b) => b.node === p.node)
     if (p.material === 'steel' && !bp) continue
     const hw = pedestalBearing(p.material, sec.h, sec.b, p.design.height,
-      bp ? { N: Math.round(bp.design.N), B: Math.round(bp.design.B), t: bp.tAdopt } : undefined)
+      bp ? { N: Math.round(bp.design.N), B: Math.round(bp.design.B), t: bp.tAdopt } : undefined,
+      bp?.anchors ? { da: bp.anchors.da, hef: bp.anchors.hef, x: bp.design.rodX, y: bp.design.rodY } : undefined)
     const { N, B, t } = hw.plate
     const plate = `${p.material === 'steel' ? 'Base plate' : 'Post base (nominal)'} PL ${N}×${B}×${t}`
     plateBoq.set(plate, (plateBoq.get(plate) ?? 0) + 1)
-    const rod = `Anchor rod ⌀${hw.rods.dia} × ${(anchorRodLength(hw) / 1000).toFixed(2)} m, hooked, w/ nut & washer`
+    const rod = `Anchor rod ⌀${hw.rods.dia} × ${(anchorRodLength(hw) / 1000).toFixed(2)} m, ${hw.rods.head ?? 'hooked'}, w/ nuts & washer`
     rodBoq.set(rod, (rodBoq.get(rod) ?? 0) + hw.rods.n)
   }
   for (const [item, qty] of plateBoq) boq.push({ item, unit: 'pcs', qty })

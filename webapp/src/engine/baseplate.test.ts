@@ -72,3 +72,16 @@ describe('adoptPlateThickness', () => {
     expect(adoptPlateThickness(21)).toBe(22)
   })
 })
+
+describe('base plate — the rods can be installed', () => {
+  // W200x26.6: d 207, bf 133 — a light column whose bearing plate would be tiny
+  const r = designBasePlate({ Pu: 100, d: 207, bf: 133, fc: 28, rodDia: 25 })
+  it('stands the rods outside the flanges: d/2 + max(40, 1.75·da), max(50, 2·da) in from the edge', () => {
+    expect(r.rodX).toBeCloseTo(207 / 2 + 43.75, 9)
+    expect(r.N).toBeGreaterThanOrEqual(207 + 2 * (43.75 + 50))
+    expect(r.N / 2 - r.rodX).toBeGreaterThanOrEqual(50 - 1e-9)
+  })
+  it('is wide enough for the rods across it to be 4·da apart (ACI §17.7.1)', () => {
+    expect(2 * r.rodY).toBeGreaterThanOrEqual(4 * 25 - 1e-9)
+  })
+})

@@ -33,6 +33,7 @@ import { placeStair, stairFrameLoads, type StairUsability } from './stairPlaceme
 import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { momentRatioLimits } from './beamMomentRatios'
+import { checkAnchorGroup, type AnchorGroupResult } from './anchorDesign'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
 import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, columnAxial, combinedLoading, weakAxisFlexure } from './steelDesign'
 import type { PlateClass, FlexureClause } from './steelDesign'
@@ -42,7 +43,7 @@ import { nextTimberSize, lighterTimberSize, toStockSize } from './timberStock'
 import { designPedestal, pedestalSide, type PedestalResult } from './pedestal'
 import { designWoodSlab, woodSlabTimberSizes, type WoodSlabResult, type WoodSlabInput } from './woodSlab'
 import type { TimberSizeQty } from './takeoff'
-import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
+import { designBasePlate, adoptPlateThickness, ANCHOR_FU, ANCHOR_FY, type BasePlateResult } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
 import { optimizeFootingRebar, optimizeSlabRebar, applySlabMats } from './matRebarOptimize'
 import { optimizeBeamMember } from './beamRebarOptimize'
@@ -407,8 +408,14 @@ export interface BasePlateScheduleRow {
   Pu: number; Tu: number
   design: BasePlateResult
   tAdopt: number                   // adopted plate thickness, mm
+  /** The anchor rods as designed in the concrete (ACI 318-14 Ch. 17): count,
+   *  diameter and embedment, mm, and the governing check over every case. */
+  anchors?: { n: number; da: number; hef: number; check: AnchorGroupResult }
   ok: boolean
 }
+
+/** Base-plate anchor rod diameter, mm — 1″ (⌀25) A307, four per plate. */
+export const BASE_ROD_DIA = 25
 
 // ── Timber schedule rows (NDS §3 / NSCP §6, LRFD via Appendix N) ─────────────
 export interface WoodBeamScheduleRow {
@@ -1680,8 +1687,20 @@ function designFromRuns(
       const r = run.result.reactions.find((x) => x.node === ru.node)
       return r ? [{ Pu: r.F[1], Mx: r.M[0], Mz: r.M[2], Vx: r.F[0], Vz: r.F[2] }] : []
     })
+    // A steel column's rods stand outside its flanges (`baseplate`); the
+    // pedestal has to give them 6·da to its faces (ACI §17.7.2, torqued), so
+    // the plate is sized here once, at A2 = A1, just to place them.
+    let minSide = 0
+    if (p.material === 'steel') {
+      const shape = fs.shape ? shapeByName(fs.shape) : undefined
+      const pl = designBasePlate({
+        Pu: Math.max(0, ...cases.map((c) => c.Pu)), d: shape?.d ?? p.d, bf: shape?.bf ?? p.b,
+        fc: fs.fc, Fy: fs.steelFy ?? 248, rodDia: BASE_ROD_DIA,
+      })
+      minSide = Math.ceil((2 * (Math.max(pl.rodX, pl.rodY) + 6 * BASE_ROD_DIA)) / 50) * 50
+    }
     const design = designPedestal({
-      column: p.material, colD: p.d, colB: p.b, height, cases,
+      column: p.material, colD: p.d, colB: p.b, height, cases, minSide,
       fc: fs.fc, fy: fs.fy, barDia: Math.min(fs.barDia, 20), tieDia: fs.tieDia, cover: fs.cover, gammaC: soil.gammaConc,
     })
     pedestals.push({ node: ru.node, column: p.column.id, material: p.material, design, ok: design.ok })
@@ -1714,12 +1733,43 @@ function designFromRuns(
     // √(A2/A1) ≤ 2): size the plate once at A2 = A1, then re-check it on the
     // pedestal it actually sits on.
     const ped = pedestalAt.get(ru.node)
-    const first = designBasePlate(plateIn)
+    const first = designBasePlate({ ...plateIn, rodDia: BASE_ROD_DIA })
     const design = ped
-      ? designBasePlate({ ...plateIn, a2OverA1: Math.min(4, ped.side ** 2 / (first.N * first.B)) })
+      ? designBasePlate({ ...plateIn, rodDia: BASE_ROD_DIA, a2OverA1: Math.min(4, ped.side ** 2 / (first.N * first.B)) })
       : first
     const tAdopt = adoptPlateThickness(design.tReq)
-    basePlates.push({ node: ru.node, shape: shape.name, Pu, Tu, design, tAdopt, ok: design.bearingOK && design.anchorOK })
+    // ── the rods in the concrete, ACI 318-14 Ch. 17 — every case's own
+    //    tension and shear together, the seismic ones at 75 % (§17.2.3.4.4);
+    //    the shallowest embedment that passes, in 25 mm steps ──
+    const pad = footings.find((f) => f.node === ru.node)
+    const half = ped ? ped.side / 2 : pad ? (pad.design.B * 1000) / 2 : Infinity
+    const hMax = ped ? ped.height * 1000 - 100 : pad ? pad.design.Dc - 100 : 600
+    const loads = runs.flatMap((run) => {
+      const r = run.result.reactions.find((x) => x.node === ru.node)
+      return r ? [{ N: Math.max(0, -r.F[1]), V: Math.hypot(r.F[0], r.F[2]), seismic: /\d\.?\d*E\b/.test(run.name) }] : []
+    })
+    const anchorsAt = (hef: number) => {
+      let worst: AnchorGroupResult | null = null
+      for (const ld of loads) {
+        const a = checkAnchorGroup({
+          nx: 2, ny: 2, sx: 2 * design.rodX, sy: 2 * design.rodY,
+          edges: [half - design.rodX, half - design.rodX, half - design.rodY, half - design.rodY],
+          hef, da: BASE_ROD_DIA, futa: ANCHOR_FU.A307, fya: ANCHOR_FY.A307, fc: fs.fc,
+          ha: ped ? ped.height * 1000 : undefined, edgeReinf: ped ? 'bars' : 'none',
+          Nua: ld.N, Vua: ld.V, seismic: ld.seismic,
+        })
+        if (!worst || a.util > worst.util) worst = a
+      }
+      return worst
+    }
+    let hef = Math.min(200, Math.max(100, hMax)), anchors = anchorsAt(hef)
+    // deeper only helps a strength mode — spacing and edge distance are geometry
+    while (anchors && anchors.util > 1 && hef + 25 <= hMax) { hef += 25; anchors = anchorsAt(hef) }
+    basePlates.push({
+      node: ru.node, shape: shape.name, Pu, Tu, design, tAdopt,
+      ...(anchors ? { anchors: { n: 4, da: BASE_ROD_DIA, hef, check: anchors } } : {}),
+      ok: design.bearingOK && design.anchorOK && (anchors?.ok ?? true),
+    })
   }
 
   // ── Concrete & steel totals ──

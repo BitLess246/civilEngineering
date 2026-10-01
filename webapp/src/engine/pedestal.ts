@@ -43,6 +43,8 @@ export interface PedestalInput {
   tieDia?: number   // default 10
   cover?: number    // default 40
   gammaC?: number   // kN/m³, default 24
+  /** A floor on the side, mm — the anchor rods' edge distance (ACI §17.7). */
+  minSide?: number
 }
 
 export interface PedestalResult {
@@ -82,7 +84,7 @@ function phiMnAt(i: InteractionInput, Pu: number): { phiMn: number; phiPnMax: nu
 }
 
 export function designPedestal(i: PedestalInput): PedestalResult {
-  const side = pedestalSide(i.column, i.colD, i.colB)
+  const side = Math.max(pedestalSide(i.column, i.colD, i.colB), i.minSide ?? 0)
   const barDia = i.barDia ?? 16, tieDia = i.tieDia ?? 10, cover = i.cover ?? 40
   const gammaC = i.gammaC ?? 24
   const weight = gammaC * (side / 1000) ** 2 * i.height
@@ -133,7 +135,9 @@ export const anchorEmbed = (dia: number, pedestalHeight: number): number =>
 /** What sits on a pedestal: plate N (along d) × B × t, rods, grout bed — mm. */
 export interface PedestalBearing {
   plate: { N: number; B: number; t: number }
-  rods: { n: number; dia: number; embed: number }
+  /** Rod count, diameter and embedment; where they stand (±x along N, ±y
+   *  along B — absent: the plate's corners); headed (nut + washer) or hooked. */
+  rods: { n: number; dia: number; embed: number; x?: number; y?: number; head?: 'headed' | 'hooked' }
   grout: number
 }
 
@@ -149,10 +153,15 @@ export interface PedestalBearing {
 export function pedestalBearing(
   column: 'steel' | 'wood', colD: number, colB: number, height: number,
   plate?: { N: number; B: number; t: number },
+  anchors?: { da: number; hef: number; x: number; y: number },
 ): PedestalBearing {
   if (column === 'steel') {
     const p = plate ?? { N: colD + 100, B: colB + 100, t: 20 }
-    return { plate: p, rods: { n: 4, dia: 25, embed: anchorEmbed(25, height) }, grout: 25 }
+    // the DESIGNED rods (ACI 318-14 Ch. 17 in the pipeline): headed, at their
+    // embedment and their places outside the flanges
+    return anchors
+      ? { plate: p, rods: { n: 4, dia: anchors.da, embed: anchors.hef, x: anchors.x, y: anchors.y, head: 'headed' }, grout: 25 }
+      : { plate: p, rods: { n: 4, dia: 25, embed: anchorEmbed(25, height), head: 'headed' }, grout: 25 }
   }
   return {
     plate: { N: colD + 200, B: colB + 40, t: 10 },
@@ -162,6 +171,8 @@ export function pedestalBearing(
 }
 
 /** One anchor rod's cut length, mm: through grout and plate, a nut-and-washer
- *  projection of 3·da above, the embedment below, and the 90° foot (4·da). */
+ *  projection of 3·da above, the embedment below, and the anchorage at the
+ *  foot — a nut's thickness (1·da) past a headed rod's bearing face, or a
+ *  90° foot of 4·da on a hooked one. */
 export const anchorRodLength = (b: PedestalBearing): number =>
-  b.rods.embed + b.grout + b.plate.t + 3 * b.rods.dia + 4 * b.rods.dia
+  b.rods.embed + b.grout + b.plate.t + 3 * b.rods.dia + ((b.rods.head ?? 'hooked') === 'headed' ? 1 : 4) * b.rods.dia
