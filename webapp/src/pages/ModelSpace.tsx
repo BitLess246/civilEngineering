@@ -135,6 +135,8 @@ import { ExportReportDialog, type ExportOptions } from '../components/ExportRepo
 import { appendixAvailability, type AppendixInput } from '../lib/analysisAppendix'
 import { buildDesignSnapshot } from '../engine/designSnapshot'
 import { buildSha } from '../lib/buildInfo'
+import { usePublishPageSnapshot } from '../lib/ai/pageContext'
+import { modelPageSnapshot } from '../lib/ai/modelContext'
 
 /** How the biaxial utilisation in the column schedule was arrived at. The
  *  column shows one number and it comes from Mux AND Muy, so the row says
@@ -492,6 +494,12 @@ export default function ModelSpace() {
   const [design, setDesign] = useState<StructureDesign | null>(() => readSessionDesign())
   // typical-detail marks, so a connection's drawing names the sheet it is on
   const connMarks = useMemo(() => (design ? connectionMarks(design) : null), [design])
+  // What the assistant sees of this page: the 3D canvas has no text to read,
+  // so the frame, its loads and its design results are summarised instead.
+  const aiSnapshot = useMemo(() => modelPageSnapshot(model, analysis
+    ? { combos: analysis.perCombo.length, governing: analysis.perCombo[analysis.govIdx]?.combo.name ?? null }
+    : null, design, selected), [model, analysis, design, selected])
+  usePublishPageSnapshot('/model', aiSnapshot)
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
   const [report] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full' | 'sol-only' | 'draw-only'>('')  // consolidated report template (interactive on screen; PDF carries everything)

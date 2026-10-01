@@ -213,7 +213,7 @@ export function LetterheadCard({ lh, onChange, action }: {
   // Four fields on ONE row from `sm` up — the two-row grid was the whole of the
   // card's height, and none of these values is long enough to need half a card.
   return (
-    <section className="rail-card no-print rounded-lg border border-hairline bg-sheet px-4 py-3">
+    <section data-ai-ignore className="rail-card no-print rounded-lg border border-hairline bg-sheet px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-[12.5px] font-bold text-ink">Report letterhead</h2>
         {action ?? <span className="font-mono text-[10px] text-faint">prints on the calc sheet</span>}

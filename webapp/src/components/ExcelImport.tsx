@@ -38,7 +38,7 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
   }
 
   return (
-    <div className="no-print mt-4 rounded-xl border border-hairline bg-sheet-2 p-3">
+    <div data-ai-ignore className="no-print mt-4 rounded-xl border border-hairline bg-sheet-2 p-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="text-[0.92rem] font-bold text-ink">Import from Excel</span>
 

@@ -160,8 +160,9 @@ export const OFF_TOPIC_REFUSAL =
  * or `developer` message in the request is dropped by validation — so prompt
  * injection from the client side cannot widen the scope.
  *
- * `pageContext` is the live snapshot of the calculator the user has open
- * (client-formatted, length-capped, validated below). It is DATA, quoted as
+ * `pageContext` is the open page as the browser read it — the page's own
+ * snapshot and/or its on-screen fields and text (client-formatted,
+ * length-capped, validated below). It is DATA, quoted as
  * the current page — what grounds "why did THIS come out like that?".
  */
 export function buildAssistantSystemPrompt(
@@ -172,10 +173,10 @@ export function buildAssistantSystemPrompt(
   const page = pageContext
     ? [
         '',
-        'CURRENT PAGE — the calculator the user has open RIGHT NOW, with its live inputs and results:',
+        'CURRENT PAGE — what the user has open RIGHT NOW: the page\'s own summary of its live inputs and results when it has one, and the fields and text visible on screen. In Model Space it summarises the 3D frame, its loads, and the analysis and design results, including failing members and the selected member:',
         pageContext,
         '',
-        'Answer "why", "this" and "my result" questions from THESE numbers, citing the clause behind each check. Never invent values: anything not shown here is unknown until the user gives it or opens the page that computes it.',
+        'The user is looking at this page, so "this", "my", "here" and unnamed questions are about it. Answer from THESE numbers, citing the clause behind each check. Never invent values: anything not shown here is unknown until the user gives it or opens the page that computes it. Never claim you cannot see the page — you are given it above.',
       ].join('\n')
     : ''
   return [
@@ -232,7 +233,7 @@ export interface AssistantChatMessage {
 export const MAX_MESSAGES = 20
 export const MAX_MESSAGE_CHARS = 4000
 /** Cap on the page snapshot: it is context, and the client caps first. */
-export const MAX_PAGE_CHARS = 3000
+export const MAX_PAGE_CHARS = 12_000
 
 export type RequestError = 'body' | 'model' | 'messages'
 
