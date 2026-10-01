@@ -397,6 +397,9 @@ export interface SteelColumnScheduleRow {
    *  Both are reported because §H1-1 sums them and a schedule that shows only
    *  one cannot be checked by hand. */
   Pu: number; Mu: number; Muy: number
+  /** Largest net TENSION over every combination, kN (0 if the column is in
+   *  compression throughout) — what decides a splice's type (bearing or not). */
+  Tu?: number
   phiPn: number; phiMn: number; phiMny: number
   /** Effective-length factors actually used, and on which assumption. A
    *  capacity that depends on a bracing assumption has to show it. */
@@ -1544,15 +1547,16 @@ function designFromRuns(
       }
     } else if (role === 'column') {
       if (isSteel) {
-        let best: SteelColumnScheduleRow | null = null, bestRatio = -1, gov = ''
+        let best: SteelColumnScheduleRow | null = null, bestRatio = -1, gov = '', Tu = 0
         for (const run of runs) {
           const mr = memberOf(run, m.id); if (!mr) continue
+          Tu = Math.max(Tu, ...mr.N)                     // N > 0 is tension
           const row = designSteelColumnRow(mr, sec, kByMember.get(m.id), opts.bracedFrame)
           if (!row) continue
           if (row.ratio > bestRatio) { bestRatio = row.ratio; best = row; gov = run.name }
         }
         if (best) {
-          steelColumns.push({ ...best, gov })
+          steelColumns.push({ ...best, Tu, gov })
           // §E3 axial still ran, but §H1-1 has no moment term without a §F
           // strength — that is not a completed check.
           if (best.flexureNote) unchecked.push({
