@@ -600,6 +600,65 @@ export function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, yTop = 0, angle = 0, o
 
 /** Wall panel between the beam nodes (tA,tB) and the nodes below (bA,bB).
  *  Shear walls show the equivalent X-strut; gravity walls are a plain panel. */
+/**
+ * What stands on a pedestal, in place: the grout bed, the base plate, the
+ * anchor rods (down into the pedestal to their embedment, and a nut's
+ * projection above the plate) and, under a timber post, the side straps.
+ * Metres, centred on the column's base node; N runs along the column depth
+ * (global X for the default column orientation), B across it.
+ */
+export function BaseHardware3D({ p, plate, grout, rods, straps, postD, rotDeg = 0, style = 'solid' }: {
+  p: THREE.Vector3
+  plate: { N: number; B: number; t: number }
+  grout: number
+  rods: { at: [number, number][]; da: number; hef: number }
+  straps?: { t: number; w: number; h: number }
+  postD?: number
+  rotDeg?: number
+  style?: SurfaceStyle
+}) {
+  const steel = '#334155'
+  const yPlate = p.y + grout + plate.t / 2
+  const top = p.y + grout + plate.t
+  return (
+    <group position={[p.x, 0, p.z]} rotation={[0, (-rotDeg * Math.PI) / 180, 0]}>
+      {grout > 0 && (
+        <mesh position={[0, p.y + grout / 2, 0]}>
+          <boxGeometry args={[plate.N, grout, plate.B]} />
+          <meshStandardMaterial key={surfaceKey(style)} color="#94a3b8" {...surfaceMaterial(style)} />
+        </mesh>
+      )}
+      <mesh position={[0, yPlate, 0]}>
+        <boxGeometry args={[plate.N, plate.t, plate.B]} />
+        <meshStandardMaterial key={surfaceKey(style)} color={steel} metalness={0.4} roughness={0.5} {...surfaceMaterial(style)} />
+        <WireEdges style={style} color="#0f172a" />
+      </mesh>
+      {rods.at.map(([x, z], k) => {
+        const lo = p.y - rods.hef, hi = top + 3 * rods.da
+        return (
+          <group key={k}>
+            <mesh position={[x, (lo + hi) / 2, z]}>
+              <cylinderGeometry args={[rods.da / 2, rods.da / 2, hi - lo, 10]} />
+              <meshStandardMaterial color="#1e293b" metalness={0.5} roughness={0.4} />
+            </mesh>
+            {/* the nut on the plate */}
+            <mesh position={[x, top + rods.da / 2, z]}>
+              <cylinderGeometry args={[rods.da * 0.85, rods.da * 0.85, rods.da, 6]} />
+              <meshStandardMaterial color="#0f172a" metalness={0.5} roughness={0.4} />
+            </mesh>
+          </group>
+        )
+      })}
+      {straps && postD !== undefined && [-1, 1].map((sgn) => (
+        <mesh key={sgn} position={[sgn * (postD / 2 + straps.t / 2), top + straps.h / 2, 0]}>
+          <boxGeometry args={[straps.t, straps.h, straps.w]} />
+          <meshStandardMaterial key={surfaceKey(style)} color={steel} metalness={0.4} roughness={0.5} {...surfaceMaterial(style)} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
 export function Wall3D({ tA, tB, bA, bB, shear }: { tA: THREE.Vector3; tB: THREE.Vector3; bA: THREE.Vector3; bB: THREE.Vector3; shear: boolean }) {
   const { fill, x1, x2 } = useMemo(() => {
     const pos = [bA, bB, tB, bA, tB, tA].flatMap((p) => [p.x, p.y, p.z])

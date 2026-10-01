@@ -123,7 +123,7 @@ import { f0, f1, f2 } from '../lib/format'
 import { usePlanGate } from '../lib/auth/usePlan'
 import { UpgradeNotice } from '../components/UpgradeNotice'
 import type { SolverKind } from '../lib/featureGate'
-import { Footing3D, GridBubbles3D, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
+import { BaseHardware3D, Footing3D, GridBubbles3D, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
 import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/modelSpace/sceneTokens'
 import { ActionBtn, DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
@@ -2305,6 +2305,28 @@ export default function ModelSpace() {
                       dc={f.dc} yTop={f.yTop} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label}
                       style={surface} />
                   ))}
+                  {/* the plate / post base on each pedestal, its rods and straps */}
+                  {design.basePlates.map((bp) => {
+                    const p = nodePos.get(bp.node)
+                    if (!p || !bp.anchors) return null
+                    const x = bp.design.rodX / 1000, z = bp.design.rodY / 1000
+                    const col = model.members.find((m) => m.role === 'column' && (m.i === bp.node || m.j === bp.node))
+                    return <BaseHardware3D key={`bp-${bp.node}`} p={p} style={surface}
+                      rotDeg={(col?.axisRotation ?? 90) - 90}
+                      plate={{ N: bp.design.N / 1000, B: bp.design.B / 1000, t: bp.tAdopt / 1000 }} grout={0.025}
+                      rods={{ at: [[-x, -z], [-x, z], [x, -z], [x, z]], da: bp.anchors.da / 1000, hef: bp.anchors.hef / 1000 }} />
+                  })}
+                  {(design.postBases ?? []).map((pb) => {
+                    const p = nodePos.get(pb.node)
+                    if (!p) return null
+                    const d = pb.design, x = d.rods.x / 1000
+                    const sec = model.sections.find((s) => s.id === model.members.find((m) => m.id === pb.column)?.section)
+                    return <BaseHardware3D key={`pb-${pb.node}`} p={p} style={surface}
+                      plate={{ N: d.plate.N / 1000, B: d.plate.B / 1000, t: d.plate.t / 1000 }} grout={0}
+                      rods={{ at: [[-x, 0], [x, 0]], da: d.rods.da / 1000, hef: d.rods.hef / 1000 }}
+                      straps={{ t: d.straps.t / 1000, w: d.straps.w / 1000, h: d.straps.h / 1000 }}
+                      postD={(sec?.h ?? 150) / 1000} />
+                  })}
                   {/* the RC pedestals under steel / timber columns: pad top to grade */}
                   {(design.pedestals ?? []).map((pd) => {
                     const p = nodePos.get(pd.node)
