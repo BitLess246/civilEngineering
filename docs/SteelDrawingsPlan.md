@@ -126,8 +126,10 @@ connection sheet must name the same connection or the set is unbuildable.
 above finished floor, and the splice detail differs for bearing vs full
 penetration). Settle it before this phase dimensions one.
 
-### S4 — Connection details in the sheet set, and a connection schedule
+### S4 — Connection details in the sheet set, and a connection schedule ✔
 *Layers 7 + 9.*
+
+**Shipped.** `steelConnectionDetail.ts` is the pure drawing. It shows the ELEVATION, with the plate, the bolts at their designed positions, h/a/pitch, cope and welds, and the END SECTION, with bolts as shank, head and nut and the single shear plane. `ConnectionDetail2D` now renders that same drawing. The sheet set gains **Steel connections (S-11)**, one sheet per S2 mark: MF, MP, SC or FP. A girder is drawn CUT as an I with its top flush with the beam. The old component drew it as a thin band.
 
 - Lift `ConnectionDetail2D`'s geometry into a pure `steelConnectionDetail.ts`
   emitting `PlanPrimitive`s, and have the React component render THAT. One

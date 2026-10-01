@@ -29,6 +29,12 @@ export interface ConnectionType {
   ends: string[]
   Vu: number; Mu: number
   ok: boolean
+  /** What the sample frames into, and the beam that frames — what the typical
+   *  detail is drawn with (`engine/steelConnectionDetail`). */
+  hostShape: string
+  hostKind: 'column' | 'girder'
+  faceType: 'flange' | 'web'
+  beamShape?: string
 }
 
 export interface ConnectionMarks {
@@ -60,18 +66,22 @@ export function connectionMarks(design: StructureDesign): ConnectionMarks {
   const bySig = new Map<string, ConnectionType>()
   const counts = new Map<string, number>()
   const byEnd = new Map<string, string>()
+  const beamShape = new Map(design.steelBeams.map((b) => [b.id, b.shape]))
   const all = [
-    ...design.joints.flatMap((j) => j.connections.map((c) => ({ node: j.nodeId, c, bb: false }))),
-    ...design.beamJoints.flatMap((j) => j.connections.map((c) => ({ node: j.nodeId, c, bb: true }))),
+    ...design.joints.flatMap((j) => j.connections.map((c) => ({ node: j.nodeId, c, bb: false, host: j.columnShape }))),
+    ...design.beamJoints.flatMap((j) => j.connections.map((c) => ({ node: j.nodeId, c, bb: true, host: j.girderShape }))),
   ]
-  for (const { node, c, bb } of all) {
+  for (const { node, c, bb, host } of all) {
     const sig = signature(c, bb)
     let t = bySig.get(sig)
     if (!t) {
       const pre = prefix(c, bb)
       const n = (counts.get(pre) ?? 0) + 1
       counts.set(pre, n)
-      t = { mark: `${pre}${n}`, kind: kindOf(c, bb), sample: c, ends: [], Vu: 0, Mu: 0, ok: true }
+      t = {
+        mark: `${pre}${n}`, kind: kindOf(c, bb), sample: c, ends: [], Vu: 0, Mu: 0, ok: true,
+        hostShape: host, hostKind: bb ? 'girder' : 'column', faceType: bb ? 'web' : c.faceType, beamShape: beamShape.get(c.beamId),
+      }
       bySig.set(sig, t)
     }
     t.ends.push(endKey(c.beamId, node))

@@ -73,6 +73,7 @@ import { LetterheadCard, type LetterheadState } from '../components/calc'
 import { initialLetterhead } from '../lib/letterhead'
 import { JointConnections3D } from '../components/JointConnections3D'
 import { ConnectionDetail2D } from '../components/ConnectionDetail2D'
+import { connectionMarks, markAt } from '../lib/steelMarks'
 import { connectionRowSolution } from '../lib/connectionSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { ConstructionSchedule } from '../components/ConstructionSchedule'
@@ -489,6 +490,8 @@ export default function ModelSpace() {
   // schedules, plans and 3D design overlays blank. applyModel still clears the
   // key on every geometry edit, so a stale design can never attach here.
   const [design, setDesign] = useState<StructureDesign | null>(() => readSessionDesign())
+  // typical-detail marks, so a connection's drawing names the sheet it is on
+  const connMarks = useMemo(() => (design ? connectionMarks(design) : null), [design])
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
   const [report] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full' | 'sol-only' | 'draw-only'>('')  // consolidated report template (interactive on screen; PDF carries everything)
@@ -6656,8 +6659,9 @@ export default function ModelSpace() {
                       open && (
                         <tr key={`${key}:detail`}>
                           <td colSpan={12} className="bg-sheet-2/60 px-2 pb-2">
-                            <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-                              <ConnectionDetail2D conn={c} hostShape={j.columnShape} hostKind="column" faceType={c.faceType} beamShape={beamShapeName} />
+                            <div className="grid w-full grid-cols-1 gap-3">
+                              {/* two views side by side: the detail takes the row, the solution follows */}
+                              <ConnectionDetail2D conn={c} hostShape={j.columnShape} hostKind="column" faceType={c.faceType} beamShape={beamShapeName} mark={connMarks ? markAt(connMarks, c.beamId, j.nodeId) : undefined} />
                               {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'column', shape: j.columnShape, faceType: c.faceType })} title={`Connection ${j.nodeId} · ${c.beamId} — worked solution`} />}
                             </div>
                           </td>
@@ -6709,8 +6713,9 @@ export default function ModelSpace() {
                       open && (
                         <tr key={`${key}:detail`}>
                           <td colSpan={12} className="bg-sheet-2/60 px-2 pb-2">
-                            <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-                              <ConnectionDetail2D conn={c} hostShape={bj.girderShape} hostKind="girder" faceType="web" beamShape={beamShapeName} />
+                            <div className="grid w-full grid-cols-1 gap-3">
+                              {/* two views side by side: the detail takes the row, the solution follows */}
+                              <ConnectionDetail2D conn={c} hostShape={bj.girderShape} hostKind="girder" faceType="web" beamShape={beamShapeName} mark={connMarks ? markAt(connMarks, c.beamId, bj.nodeId) : undefined} />
                               {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'girder', shape: bj.girderShape })} title={`Connection ${bj.nodeId} · ${c.beamId} — worked solution`} />}
                             </div>
                           </td>
