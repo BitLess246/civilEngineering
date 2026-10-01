@@ -68,6 +68,10 @@ describe('system prompt scope', () => {
     expect(withPage).toContain('CURRENT PAGE')
     expect(withPage).toContain('Inputs: Mu=180')
     expect(withPage).toMatch(/never invent values/i)
+    // the page is given, so "this"/"my" questions are about it — never "I can't see your screen"
+    expect(withPage).toMatch(/"this", "my", "here" and unnamed questions are about it/)
+    expect(withPage).toMatch(/Never claim you cannot see the page/)
+    expect(withPage).toMatch(/Model Space/)
   })
 })
 

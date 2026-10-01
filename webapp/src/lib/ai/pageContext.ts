@@ -25,8 +25,13 @@ export interface PageSnapshot {
   notes: string[]
 }
 
-/** Cap on the formatted snapshot: context, not a dump. The server caps again. */
-export const MAX_SNAPSHOT_CHARS = 2500
+/** Cap on the formatted snapshot: context, not a dump. */
+export const MAX_SNAPSHOT_CHARS = 4000
+/** Cap on everything sent about the page — snapshot plus what is on screen.
+ *  The server caps again at the same figure (`MAX_PAGE_CHARS`). */
+export const MAX_PAGE_CONTEXT_CHARS = 12_000
+/** Below this much room left, the on-screen reading is not worth sending. */
+const MIN_DOM_CHARS = 300
 
 type Listener = () => void
 
@@ -87,4 +92,22 @@ export function formatPageSnapshot(s: PageSnapshot): string {
   if (s.notes.length > 0) lines.push(`Notes: ${s.notes.join('; ')}`)
   const text = lines.join('\n')
   return text.length > MAX_SNAPSHOT_CHARS ? `${text.slice(0, MAX_SNAPSHOT_CHARS)}…` : text
+}
+
+/**
+ * Everything the request carries about the open page: the page's own
+ * snapshot (exact numbers, named the way the page names them) first, then
+ * the on-screen reading in whatever room is left — so a page with no
+ * snapshot is still seen, and one with a snapshot loses nothing to the cap.
+ */
+export function composePageContext(snapshot: string | null, onScreen: ((maxChars: number) => string) | null): string | null {
+  const parts: string[] = []
+  if (snapshot) parts.push(snapshot.slice(0, MAX_PAGE_CONTEXT_CHARS))
+  const room = MAX_PAGE_CONTEXT_CHARS - (snapshot ? snapshot.length + 2 : 0)
+  if (onScreen && room >= MIN_DOM_CHARS) {
+    const dom = onScreen(room)
+    if (dom) parts.push(snapshot ? `On screen:\n${dom}` : dom)
+  }
+  const text = parts.join('\n\n')
+  return text ? text.slice(0, MAX_PAGE_CONTEXT_CHARS) : null
 }

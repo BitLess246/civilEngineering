@@ -15,8 +15,23 @@ import {
   type AssistantChatMessage, type AssistantAction,
 } from '../../lib/ai/assistantClient'
 import { savePendingCalculatorInputs } from '../../lib/ai/pendingAction'
-import { formatPageSnapshot, usePageSnapshot } from '../../lib/ai/pageContext'
+import { formatPageSnapshot, usePageSnapshot, composePageContext } from '../../lib/ai/pageContext'
+import { readDomContext, formatDomContext } from '../../lib/ai/domContext'
 import { getClient } from '../../lib/auth/authClient'
+
+/** Pages the assistant may read off the screen: the calculators, never a
+ *  profile, billing or sign-in page. */
+const TOOL_ROUTES = new Set(ALL_TOOLS.map((t) => t.to))
+
+/** The open page as the request carries it — read at SEND time, so the
+ *  numbers are the ones on screen when the question was asked. */
+function pageContextFor(pathname: string, snapshot: ReturnType<typeof usePageSnapshot>): string | null {
+  const root = TOOL_ROUTES.has(pathname) ? document.getElementById('content') : null
+  return composePageContext(
+    snapshot ? formatPageSnapshot(snapshot) : null,
+    root ? (max) => formatDomContext(readDomContext(root), max) : null,
+  )
+}
 
 interface ChatMessage extends AssistantChatMessage {
   actions?: AssistantAction[]
@@ -46,6 +61,7 @@ export function AiAssistantWidget() {
   // The open page's live snapshot, if it opted in — attached to every
   // request so "why did THIS come out like that?" answers from these numbers.
   const pageSnapshot = usePageSnapshot(pathname)
+  const seeing = pageSnapshot?.tool ?? ALL_TOOLS.find((t) => t.to === pathname)?.name ?? null
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
@@ -82,13 +98,15 @@ export function AiAssistantWidget() {
     // maps a null token to 'not-configured', so pass a shim client through and
     // let the one mapping speak for both cases.
     // No model is sent: the server rotates its free allowlist and the widget
-    // never names one. `page` carries the open calculator's live snapshot.
+    // never names one. `page` carries the open page: its own snapshot if it
+    // publishes one, and what is on screen.
+    const page = pageContextFor(pathname, pageSnapshot)
     const result = await chatWithAssistant(
       client ?? { functions: { invoke: async () => ({ data: null, error: { context: { status: 503 } } }) } },
       client ? await assistantToken() : null,
       {
         messages: history.slice(-20),
-        ...(pageSnapshot ? { page: formatPageSnapshot(pageSnapshot) } : {}),
+        ...(page ? { page } : {}),
       },
     )
     setBusy(false)
@@ -128,7 +146,7 @@ export function AiAssistantWidget() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold text-ink">Calculation helper</p>
               <p className="truncate text-[11px] text-faint">
-                {pageSnapshot ? `Seeing: ${pageSnapshot.tool}` : 'Answers only about this app\u2019s tools'}
+                {seeing ? `Seeing: ${seeing}` : 'Answers only about this app\u2019s tools'}
               </p>
             </div>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close helper"

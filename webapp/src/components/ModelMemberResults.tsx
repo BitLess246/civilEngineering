@@ -102,19 +102,19 @@ export function ModelMemberResults({ kind, onLoad }: {
 
   if (!project) {
     return (
-      <Card title={`From your saved project — ${TITLES[kind]}`} grid={false}>
+      <div data-ai-ignore className="contents"><Card title={`From your saved project — ${TITLES[kind]}`} grid={false}>
         <p className="text-[12.5px] leading-relaxed text-faint">
           No saved project yet. Model your structure in{' '}
           <Link to="/model" className="font-semibold text-brand hover:underline">3D Model Space</Link>, run the
           design, and save it — this calculator will then offer every {TITLES[kind].toLowerCase()} of that project
           in the dropdown below, ready to load into the fields.
         </p>
-      </Card>
+      </Card></div>
     )
   }
 
   return (
-    <Card title={`From your saved project — ${TITLES[kind]}`} grid={false}>
+    <div data-ai-ignore className="contents"><Card title={`From your saved project — ${TITLES[kind]}`} grid={false}>
       {projects.length > 1 && (
         <div className="mb-2 flex items-center gap-2">
           <label className="text-[12px] text-muted" htmlFor={`mmr-project-${kind}`}>Project</label>
@@ -179,6 +179,6 @@ export function ModelMemberResults({ kind, onLoad }: {
           )}
         </div>
       )}
-    </Card>
+    </Card></div>
   )
 }

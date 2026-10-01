@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
-  publishPageSnapshot, readPageSnapshot, formatPageSnapshot,
-  MAX_SNAPSHOT_CHARS, type PageSnapshot,
+  publishPageSnapshot, readPageSnapshot, formatPageSnapshot, composePageContext,
+  MAX_SNAPSHOT_CHARS, MAX_PAGE_CONTEXT_CHARS, type PageSnapshot,
 } from './pageContext'
+import { MAX_PAGE_CHARS } from '../../../../supabase/functions/_shared/aiAssistant'
 
 const snap = (route: string): PageSnapshot => ({
   route,
@@ -48,5 +49,33 @@ describe('formatPageSnapshot', () => {
     const text = formatPageSnapshot(big)
     expect(text.length).toBeLessThanOrEqual(MAX_SNAPSHOT_CHARS + 1)
     expect(text.endsWith('…')).toBe(true)
+  })
+})
+
+describe('composePageContext', () => {
+  it('a page with no snapshot is still seen — the on-screen reading is sent alone', () => {
+    expect(composePageContext(null, () => 'Page: Isolated Footing')).toBe('Page: Isolated Footing')
+    expect(composePageContext(null, null)).toBeNull()
+    expect(composePageContext(null, () => '')).toBeNull()
+  })
+
+  it('the snapshot leads, the screen gets the room that is left, and the whole fits the cap', () => {
+    let room = 0
+    const text = composePageContext('S'.repeat(1000), (max) => { room = max; return 'D'.repeat(max) })!
+    expect(text.startsWith('S'.repeat(1000))).toBe(true)
+    expect(text).toContain('On screen:')
+    expect(room).toBe(MAX_PAGE_CONTEXT_CHARS - 1002)
+    expect(text.length).toBeLessThanOrEqual(MAX_PAGE_CONTEXT_CHARS)
+  })
+
+  it('a snapshot that fills the budget is never cut for the screen reading', () => {
+    const snapText = 'S'.repeat(MAX_PAGE_CONTEXT_CHARS - 100)
+    let called = false
+    expect(composePageContext(snapText, () => { called = true; return 'D' })).toBe(snapText)
+    expect(called).toBe(false)
+  })
+
+  it('the browser cap is the server cap, so nothing the client sends is silently cut', () => {
+    expect(MAX_PAGE_CONTEXT_CHARS).toBe(MAX_PAGE_CHARS)
   })
 })
