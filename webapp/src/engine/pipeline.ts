@@ -34,6 +34,7 @@ import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { momentRatioLimits } from './beamMomentRatios'
 import { checkAnchorGroup, type AnchorGroupResult } from './anchorDesign'
+import { designPostBase, type PostBaseResult } from './postBase'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
 import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, columnAxial, combinedLoading, weakAxisFlexure } from './steelDesign'
 import type { PlateClass, FlexureClause } from './steelDesign'
@@ -414,6 +415,14 @@ export interface BasePlateScheduleRow {
   ok: boolean
 }
 
+/** A timber column's post base on its pedestal (engine/postBase). */
+export interface PostBaseScheduleRow {
+  node: string; column: string
+  Pu: number; Tu: number; Vu: number    // envelope, kN
+  design: PostBaseResult
+  ok: boolean
+}
+
 /** Base-plate anchor rod diameter, mm — 1″ (⌀25) A307, four per plate. */
 export const BASE_ROD_DIA = 25
 
@@ -473,6 +482,8 @@ export interface StructureDesign {
   basePlates: BasePlateScheduleRow[]
   /** RC pedestals under steel / timber columns — absent on older designs. */
   pedestals?: PedestalScheduleRow[]
+  /** The designed post base under every timber column on a pedestal. */
+  postBases?: PostBaseScheduleRow[]
   joints: SteelJoint[]               // beam-to-column connections (steel frames only)
   /** Beam-to-beam fin plates: beams framing into a girder web (steel only). */
   beamJoints: BeamBeamJoint[]
@@ -512,6 +523,7 @@ export function designOK(d: StructureDesign): boolean {
     && d.steelBeams.every((b) => b.ok) && d.steelColumns.every((c) => c.ok)
     && d.woodBeams.every((b) => b.ok) && d.woodColumns.every((c) => c.ok)
     && d.basePlates.every((p) => p.ok) && (d.pedestals ?? []).every((p) => p.ok)
+    && (d.postBases ?? []).every((p) => p.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
     && d.slabs.every((s) => s.ok) && d.woodSlabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
     && d.stairs.every((s) => s.ok)
@@ -1578,10 +1590,36 @@ function designFromRuns(
     const shape = fs.material === 'steel' && fs.shape ? shapeByName(fs.shape) : undefined
     return { column: col, material: fs.material, d: shape?.d ?? fs.h, b: shape?.bf ?? fs.b }
   }
-  const pedestalWeight = (node: string): number => {
+  /**
+   * The pedestal's side at a base node, mm — the column rule, or wider where
+   * a steel plate's rods outside the flanges need 6·da to the faces (ACI
+   * §17.7.2; the plate is sized once at A2 = A1, just to place them). ONE
+   * function, because three things need it before the pedestal is designed:
+   * its weight on the pad, the width the pad is designed around (the pad's
+   * "column" IS the pedestal — punching is round its perimeter), and the
+   * pedestal design itself.
+   */
+  const pedestalSideAt = (node: string): number => {
     const p = pedestalOf(node)
-    return p ? soil.gammaConc * (pedestalSide(p.material, p.d, p.b) / 1000) ** 2 * soil.H : 0
+    if (!p) return 0
+    let minSide = 0
+    if (p.material === 'steel') {
+      const fs = secOf(p.column.id)
+      let Pu = 0
+      for (const run of runs) Pu = Math.max(Pu, reactAt(run.result, node))
+      const pl = designBasePlate({ Pu, d: p.d, bf: p.b, fc: fs.fc, Fy: fs.steelFy ?? 248, rodDia: BASE_ROD_DIA })
+      minSide = Math.ceil((2 * (Math.max(pl.rodX, pl.rodY) + 6 * BASE_ROD_DIA)) / 50) * 50
+    }
+    return Math.max(pedestalSide(p.material, p.d, p.b), minSide)
   }
+  const pedestalWeight = (node: string): number => {
+    const side = pedestalSideAt(node)
+    return side ? soil.gammaConc * (side / 1000) ** 2 * soil.H : 0
+  }
+  /** The width a pad is designed around: the pedestal where there is one,
+   *  else the RC column's narrower side. */
+  const padColumnWidth = (node: string, fs: RectSection): number =>
+    pedestalSideAt(node) || Math.min(fs.b, fs.h)
 
   /** One isolated pad, designed. */
   const designIsolated = (node: string): FootingScheduleRow | null => {
@@ -1600,7 +1638,10 @@ function designFromRuns(
     // width the footing cantilevers from — its bar size is not the footing's
     // business, and passing it was what produced 2⌀32 mats.
     const fin = {
-      serviceLoad: P, ultimateLoad: Pu, columnWidth: Math.min(fs.b, fs.h),
+      serviceLoad: P, ultimateLoad: Pu, columnWidth: padColumnWidth(node, fs),
+      // a pad stands at least 150 mm proud of a pedestal all round — B equal
+      // to the pedestal is a block, not a footing
+      ...(pedestalOf(node) ? { minB: (padColumnWidth(node, fs) + 300) / 1000 } : {}),
       fc: fs.fc, fy: fs.fy, qAllow: soil.qAllow,
       gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc, H: soil.H,
       barDia: fs.barDia, cover: 75,
@@ -1653,7 +1694,7 @@ function designFromRuns(
       dl1: (dAt.get(nodeA) ?? 0) + pedestalWeight(nodeA), ll1: lAt.get(nodeA) ?? 0,
       dl2: (dAt.get(nodeB) ?? 0) + pedestalWeight(nodeB), ll2: lAt.get(nodeB) ?? 0,
       design: designCombinedFooting({
-        col1Width: Math.min(fsA.b, fsA.h), col2Width: Math.min(fsB.b, fsB.h), spacing,
+        col1Width: padColumnWidth(nodeA, fsA), col2Width: padColumnWidth(nodeB, fsB), spacing,
         dl1: (dAt.get(nodeA) ?? 0) + pedestalWeight(nodeA), ll1: lAt.get(nodeA) ?? 0,
         dl2: (dAt.get(nodeB) ?? 0) + pedestalWeight(nodeB), ll2: lAt.get(nodeB) ?? 0,
         leftRestrict: false, rightRestrict: false, leftOverhang: 0, rightOverhang: 0,
@@ -1687,18 +1728,9 @@ function designFromRuns(
       const r = run.result.reactions.find((x) => x.node === ru.node)
       return r ? [{ Pu: r.F[1], Mx: r.M[0], Mz: r.M[2], Vx: r.F[0], Vz: r.F[2] }] : []
     })
-    // A steel column's rods stand outside its flanges (`baseplate`); the
-    // pedestal has to give them 6·da to its faces (ACI §17.7.2, torqued), so
-    // the plate is sized here once, at A2 = A1, just to place them.
-    let minSide = 0
-    if (p.material === 'steel') {
-      const shape = fs.shape ? shapeByName(fs.shape) : undefined
-      const pl = designBasePlate({
-        Pu: Math.max(0, ...cases.map((c) => c.Pu)), d: shape?.d ?? p.d, bf: shape?.bf ?? p.b,
-        fc: fs.fc, Fy: fs.steelFy ?? 248, rodDia: BASE_ROD_DIA,
-      })
-      minSide = Math.ceil((2 * (Math.max(pl.rodX, pl.rodY) + 6 * BASE_ROD_DIA)) / 50) * 50
-    }
+    // the side the pads were designed around (`pedestalSideAt`): the column
+    // rule, or the steel rods' 6·da edge distance
+    const minSide = pedestalSideAt(ru.node)
     const design = designPedestal({
       column: p.material, colD: p.d, colB: p.b, height, cases, minSide,
       fc: fs.fc, fy: fs.fy, barDia: Math.min(fs.barDia, 20), tieDia: fs.tieDia, cover: fs.cover, gammaC: soil.gammaConc,
@@ -1706,6 +1738,33 @@ function designFromRuns(
     pedestals.push({ node: ru.node, column: p.column.id, material: p.material, design, ok: design.ok })
   }
   const pedestalAt = new Map(pedestals.map((x) => [x.node, x.design]))
+
+  // ── Timber post bases (NDS §12 bolts through steel straps, ACI Ch. 17
+  //    rods) — every case's compression, uplift and shear, enveloped; the
+  //    uplift/shear case decides λ and the seismic 0.75 ──
+  const postBases: PostBaseScheduleRow[] = []
+  for (const pd of pedestals) {
+    if (pd.material !== 'wood') continue
+    const fs = secOf(pd.column)
+    const ref = woodRefOf(fs)
+    if (!ref) continue
+    let Pu = 0, Tu = 0, Vu = 0, seismic = false
+    for (const run of runs) {
+      const r = run.result.reactions.find((x) => x.node === pd.node)
+      if (!r) continue
+      const isE = /\d\.?\d*E\b/.test(run.name)
+      Pu = Math.max(Pu, r.F[1])
+      const t = -r.F[1], v = Math.hypot(r.F[0], r.F[2])
+      if (t > Tu) { Tu = t; seismic ||= isE }
+      if (v > Vu) { Vu = v; seismic ||= isE }
+    }
+    const design = designPostBase({
+      b: fs.b, d: fs.h, ref, kind: fs.woodKind ?? 'sawn', wet: fs.woodWet,
+      Pu, Tu, Vu, seismic,
+      pedestalSide: pd.design.side, pedestalHeight: pd.design.height * 1000, fc: fs.fc,
+    })
+    postBases.push({ node: pd.node, column: pd.column, Pu, Tu, Vu, design, ok: design.ok })
+  }
 
   // ── Base plates (steel columns landing on a base support) ──
   const basePlates: BasePlateScheduleRow[] = []
@@ -1949,7 +2008,7 @@ function designFromRuns(
     govName: runs[govIdx].name,
     system: opts.seismicSystem ?? 'gravity',
     cases: runs.map((r) => r.name),
-    beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates, pedestals,
+    beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates, pedestals, postBases,
     joints: [] as SteelJoint[],
     beamJoints: [] as BeamBeamJoint[],
     slabs, woodSlabs, walls, stairs, footings, combined,
@@ -2621,7 +2680,7 @@ function stopReasonFor(d: StructureDesign, why: string): string {
     [d.beams.filter((x) => !x.ok).length + d.columns.filter((x) => !x.ok).length
       + d.steelBeams.filter((x) => !x.ok).length + d.steelColumns.filter((x) => !x.ok).length, 'member'],
     [d.footings.filter((x) => !x.ok).length + d.combined.filter((x) => !x.ok).length, 'footing'],
-    [d.basePlates.filter((x) => !x.ok).length, 'base plate'],
+    [d.basePlates.filter((x) => !x.ok).length + (d.postBases ?? []).filter((x) => !x.ok).length, 'base plate'],
     [d.slabs.filter((x) => !x.ok).length, 'slab'],
     [d.walls.filter((x) => !x.ok).length, 'shear wall'],
     [d.joints.filter((x) => !x.ok).length + d.beamJoints.filter((x) => !x.ok).length, 'steel joint'],
@@ -2636,6 +2695,7 @@ const countFails = (d: StructureDesign): number =>
   d.beams.filter((x) => !x.ok).length + d.columns.filter((x) => !x.ok).length
   + d.steelBeams.filter((x) => !x.ok).length + d.steelColumns.filter((x) => !x.ok).length
   + d.basePlates.filter((x) => !x.ok).length + (d.pedestals ?? []).filter((x) => !x.ok).length
+  + (d.postBases ?? []).filter((x) => !x.ok).length
   + d.footings.filter((x) => !x.ok).length + d.combined.filter((x) => !x.ok).length
   + d.slabs.filter((x) => !x.ok).length + d.walls.filter((x) => !x.ok).length
   + d.joints.filter((x) => !x.ok).length + d.beamJoints.filter((x) => !x.ok).length

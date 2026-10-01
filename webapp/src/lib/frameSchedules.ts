@@ -140,5 +140,15 @@ export function timberScheduleDrawings(model: StructuralModel, design: Structure
   })
   const ped = pedestalTable(design, 'wood')
   if (ped) tables.push(ped)
+  const posts = design.postBases ?? []
+  if (posts.length) tables.push({
+    heading: 'POST-BASE SCHEDULE',
+    columns: [{ head: 'NODE', w: 9 }, { head: 'POST', w: 8 }, { head: 'PLATE N×B×t', w: 13 }, { head: 'STRAPS', w: 11 }, { head: 'BOLTS', w: 9 }, { head: 'RODS', w: 15 }, { head: 'UTIL', w: 7, align: 'end' }, { head: 'STATUS', w: 8 }],
+    rows: posts.map((p) => [p.node, p.column, `${p.design.plate.N}×${p.design.plate.B}×${p.design.plate.t}`,
+      `2-PL ${p.design.straps.t}×${p.design.straps.h}`, `${p.design.bolts.n}-⌀${p.design.bolts.D}`,
+      `${p.design.rods.n}-⌀${p.design.rods.da} hd, hef ${p.design.rods.hef}`, pct(p.design.util), status(p.ok)]),
+    failRows: posts.flatMap((p, i) => (p.ok ? [] : [i])),
+    note: 'A36 plate and straps, A307 through-bolts (NDS §12.3.1, double shear, 7D end / 4D spacing), headed A307 rods (ACI 318-14 Ch. 17).',
+  })
   return tables.length ? [{ key: 'timber-schedules', title: 'Timber member and deck schedules', drawing: buildScheduleSheet(tables, { title: 'TIMBER MEMBER AND DECK SCHEDULES', sheetRef: 'S-07' }) }] : []
 }

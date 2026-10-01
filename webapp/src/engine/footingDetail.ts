@@ -124,6 +124,9 @@ export interface FootingBearing {
   grout: number
   /** Lines added under the bearing callouts — what was and was not checked. */
   notes?: string[]
+  /** A timber post base's side straps (t × h) and the bolts through the post. */
+  straps?: { t: number; h: number }
+  bolts?: { n: number; D: number; end: number; spacing: number }
 }
 
 /** The cages a footing sheet can draw from, and where they sit. */
@@ -517,10 +520,20 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
           { c: 'L', x, y: pTop - stubH * 0.05 },
         ] })
       }
-      // the post base's side straps
-      const st = 0.008, sh = Math.min(0.25, stubH * 0.6)
+      // the post base's side straps, and the bolts through the post
+      const st = (b.straps?.t ?? 8) / 1000, sh = b.straps ? b.straps.h / 1000 : Math.min(0.25, stubH * 0.6)
       for (const sgn of [-1, 1])
         P.push({ kind: 'rect', x: sx0 + sgn * (d / 2) + (sgn < 0 ? -st : 0), y: pTop - sh, w: st, h: sh, stroke: INK, fill: INK, width: 0.6 })
+      if (b.bolts) {
+        const bd = b.bolts.D / 1000
+        for (let k = 0; k < b.bolts.n; k++) {
+          const y = pTop - (b.bolts.end + k * b.bolts.spacing) / 1000
+          // a through-bolt seen side-on, head to nut across the post
+          P.push({ kind: 'line', x1: sx0 - d / 2 - st - bd, y1: y, x2: sx0 + d / 2 + st + bd, y2: y, stroke: INK, width: 1.4 })
+          for (const sgn of [-1, 1])
+            P.push({ kind: 'rect', x: sx0 + sgn * (d / 2 + st) + (sgn < 0 ? -bd : 0), y: y - bd * 0.8, w: bd, h: bd * 1.6, stroke: INK, fill: INK, width: 0.5 })
+        }
+      }
     }
     // break line across the top of the stub
     const zz = ts * 0.25
@@ -555,6 +568,9 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
       [rodX, colTop + emb * 0.6, `${b.rods.n}-⌀${b.rods.dia} ANCHOR RODS`, `${b.rods.embed} mm EMBED., ${headed ? 'HEADED (NUT + WASHER)' : 'HOOKED'}`],
       ...(gr > 0 ? [[sx0 + pn / 2 - ts * 0.1, gTop + gr / 2, `${b.grout} mm NON-SHRINK GROUT`] as [number, number, string]] : []),
       [sx0 + pn / 2 - ts * 0.1, pTop + pt / 2, `${b.kind === 'steel' ? 'BASE PL' : 'POST BASE PL'} ${b.plate.N}×${b.plate.B}×${b.plate.t} mm`],
+      ...(b.bolts && b.straps
+        ? [[sx0 + d / 2 + (b.straps.t / 1000), pTop - (b.bolts.end / 1000), `${b.bolts.n}-⌀${b.bolts.D} A307 THRU-BOLTS`, `2-PL ${b.straps.t}×${b.straps.h} STRAPS`] as [number, number, string, string]]
+        : []),
       [sx0 + d / 2, sTop + stubH * 0.4, b.kind === 'steel' ? `${b.column} STEEL COLUMN` : `${b.column} TIMBER POST`],
     ]
     rows.forEach(([ex, ey, t1, t2], k) => {

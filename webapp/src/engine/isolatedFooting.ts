@@ -13,6 +13,8 @@ export interface SquareFootingInput {
   ultimateLoad: number;
   /** Column width c (x-dimension for a rectangular column), mm. */
   columnWidth: number;
+  /** A floor on the side B, m — e.g. a pedestal plus its projection. */
+  minB?: number;
   /** Column y-dimension, mm — defaults to columnWidth (square). */
   columnWidthY?: number;
   /** f′c, MPa. */
@@ -208,7 +210,7 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
     // Single pass from an assumed D_c = 250 mm (no re-iteration of q_net/B).
     Dc = 0.25;
     qNet = qNetAt(Dc);
-    B = squareSize(i.serviceLoad / qNet, 0.05);
+    B = Math.max(squareSize(i.serviceLoad / qNet, 0.05), i.minB ?? 0);
     qu = i.ultimateLoad / (B * B);
     dPunch = reqPunch(qu);
     dBeam = reqBeam(qu, B);
@@ -217,7 +219,7 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
     // Iteration — D_c feeds back into q_net, so solve to a fixed point.
     for (let k = 0; k < 8; k++) {
       qNet = qNetAt(Dc);
-      B = squareSize(i.serviceLoad / qNet, 0.05);
+      B = Math.max(squareSize(i.serviceLoad / qNet, 0.05), i.minB ?? 0);
       qu = i.ultimateLoad / (B * B);
       dPunch = reqPunch(qu);
       dBeam = reqBeam(qu, B);

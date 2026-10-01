@@ -207,11 +207,22 @@ function footingBearing(
   }
   const w = design.woodColumns.find((c) => c.id === ped.column)
   const d = w?.d ?? colD, b = w?.b ?? colB
-  return {
+  const pb = design.postBases?.find((x) => x.node === ped.node)?.design
+  if (!pb) return {
     kind: 'wood', mark, column: `${b}×${d}`,
     colD: d, colB: b,
     ...pedestalBearing('wood', d, b, ped.design.height),
     notes: ['POST BASE IS NOMINAL — NOT DESIGNED;', 'SIZE TO NDS §12 / SUPPLIER BEFORE ISSUE'],
+  }
+  return {
+    kind: 'wood', mark, column: `${b}×${d}`,
+    colD: d, colB: b,
+    ...pedestalBearing('wood', d, b, ped.design.height, pb.plate, { da: pb.rods.da, hef: pb.rods.hef, x: pb.rods.x, y: 0 }),
+    straps: { t: pb.straps.t, h: pb.straps.h }, bolts: pb.bolts,
+    notes: [
+      `POST BASE: NDS §12.3 BOLTS, AISC §J4 STRAPS, ACI 318-14 CH. 17 RODS`,
+      `${Math.round(pb.util * 100)}% — ${pb.governs.toUpperCase()}`,
+    ],
   }
 }
 

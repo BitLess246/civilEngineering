@@ -14,6 +14,7 @@ import { requiredArea } from './bearing'
 import { beamFlexure, beamShear, deriveWSection } from './steelDesign'
 import { shapeByName } from './aiscSections'
 import { checkAnchorGroup } from './anchorDesign'
+import { boltZDoubleSteel } from './postBase'
 import { designAxialColumn } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
 import { felleniusFS, type Slice } from './slopeStability'
@@ -764,6 +765,19 @@ const woodCL = (() => {
 //   φNcbg = 0.70 · ANc/ANco · ψed · Nb
 //   shear toward the 170 edge: AVc = (195 + 210 + 195)·1.5·170, AVco = 4.5·170²,
 //   Vb = min(0.6(200/25)^0.2·√25·√28·170^1.5, 3.7·√28·170^1.5), ψed = 0.7 + 0.3·195/255
+// NDS §12.3.1, double shear, steel side plates — ½″ bolt, 3½″ DFL (G 0.50),
+// ¼″ A36 plates, ∥ grain. The manual side works the four yield modes in the
+// code's own imperial units and converts the least: mode IIIs, 1 651 lbf.
+const boltZIIIs = (() => {
+  const D = 0.5, lm = 3.5, ls = 0.25, Fem = 11200 * 0.5, Fes = 87000, Fyb = 45000
+  const Re = Fem / Fes
+  const k3 = -1 + Math.sqrt((2 * (1 + Re)) / Re + (2 * Fyb * (2 + Re) * D * D) / (3 * Fem * ls * ls))
+  const modes = [(D * lm * Fem) / 4, (2 * D * ls * Fes) / 4, (2 * k3 * D * ls * Fem) / ((2 + Re) * 3.2),
+    ((2 * D * D) / 3.2) * Math.sqrt((2 * Fem * Fyb) / (3 * (1 + Re)))]
+  const manual = (Math.min(...modes) * 4.44822) / 1000
+  return { manual, software: boltZDoubleSteel(12.7, 88.9, 6.35, 0.5, 0).Z / 1000 }
+})()
+
 const anchorCase = {
   nx: 2, ny: 2, sx: 260, sy: 210, edges: [170, 170, 195, 195] as [number, number, number, number],
   hef: 300, da: 25, futa: 400, fya: 248, fc: 28, Nua: 50, Vua: 20,
@@ -1174,6 +1188,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'wood-slab-joist', category: 'Timber', title: 'Wood-slab joist bending stress',
     reference: 'NDS 2018 §3.3 / NSCP §6 (ASD)', formula: 'f_b = M/S,  M = wL²/8 (simple span)',
     manual: woodSlabJoist.manual, software: woodSlabJoist.software, unit: 'MPa', tol: 1e-9,
+  },
+  {
+    id: 'nds-bolt-z-double-steel', category: 'Timber', title: 'Bolt yield limit — double shear, steel side plates',
+    reference: 'NDS 2018 §12.3.1, Table 12.3.1A', formula: 'Z = min(Im, Is, IIIs, IV) — IIIs: 2k₃·D·ℓs·Fem/((2+Re)·Rd)',
+    manual: boltZIIIs.manual, software: boltZIIIs.software, unit: 'kN', tol: 5e-3,
   },
   {
     id: 'anchor-breakout-n', category: 'Connections', title: 'Anchor group concrete breakout in tension (pedestal)',

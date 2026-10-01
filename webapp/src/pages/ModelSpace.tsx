@@ -6468,6 +6468,47 @@ export default function ModelSpace() {
             </div>
           )}
 
+          {/* Timber post-base schedule — NDS §12 / ACI 318-14 Ch. 17 */}
+          {(design.postBases ?? []).length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Timber post-base schedule — NDS §12 / ACI 318-14 Ch. 17<SchedChip items={design.postBases ?? []} ok={(pb) => pb.ok} /></h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
+                    <th className="py-1 pr-2 font-semibold">Node</th>
+                    <th className="py-1 pr-2 font-semibold">Post</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Pu / Tu / Vu (kN)</th>
+                    <th className="py-1 pr-2 font-semibold">Plate N×B×t</th>
+                    <th className="py-1 pr-2 font-semibold">Straps · bolts</th>
+                    <th className="py-1 pr-2 font-semibold">Rods</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Util</th>
+                    <th className="py-1 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(design.postBases ?? []).map((pb) => (
+                    <tr key={pb.node} className={`sched-row border-t border-hairline-2 ${pb.ok ? '' : 'bg-fail-tint text-fail'}`}>
+                      <td className="py-1 pr-2 font-medium">{pb.node}</td>
+                      <td className="py-1 pr-2">{pb.column}</td>
+                      <td className="py-1 pr-2 text-right">{f1(pb.Pu)} / {pb.Tu > 0 ? f1(pb.Tu) : '—'} / {f1(pb.Vu)}</td>
+                      <td className="py-1 pr-2">{pb.design.plate.N}×{pb.design.plate.B}×{pb.design.plate.t}</td>
+                      <td className="py-1 pr-2">2-PL {pb.design.straps.t}×{pb.design.straps.h} · {pb.design.bolts.n}-⌀{pb.design.bolts.D}</td>
+                      <td className="py-1 pr-2">{pb.design.rods.n}-⌀{pb.design.rods.da} headed, hef {pb.design.rods.hef}</td>
+                      <td className="py-1 pr-2 text-right">{(pb.design.util * 100).toFixed(0)}% <span className="text-muted">({pb.design.governs})</span></td>
+                      <td className="py-1">{pb.ok ? '✓ OK' : '✗ check'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-muted">
+                A36 plate with two side straps through-bolted to the post (A307), anchored by two headed rods outboard
+                of the post. Post end bearing NDS §3.10.1; bolts by the §12.3.1 yield-limit equations in double shear on
+                steel side plates — uplift parallel and base shear perpendicular to grain, Z′ = Z·KF·φz·λ (·0.7 wet),
+                7D end and 4D spacing; straps AISC §J4.1; plate DG1 bearing and the rod pull; rods ACI 318-14 Ch. 17.
+              </p>
+            </div>
+          )}
+
           {/* Timber deck slab schedule — NDS §3 / NSCP §6 */}
           {design.woodSlabs.length > 0 && report !== 'draw-only' && (
             <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">

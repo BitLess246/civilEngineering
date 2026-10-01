@@ -587,13 +587,23 @@ export function estimateTakeoff(
     const sec = col ? secOf(col.id) : undefined
     if (!sec) continue
     const bp = design.basePlates.find((b) => b.node === p.node)
+    const post = design.postBases?.find((b) => b.node === p.node)?.design
     if (p.material === 'steel' && !bp) continue
-    const hw = pedestalBearing(p.material, sec.h, sec.b, p.design.height,
-      bp ? { N: Math.round(bp.design.N), B: Math.round(bp.design.B), t: bp.tAdopt } : undefined,
-      bp?.anchors ? { da: bp.anchors.da, hef: bp.anchors.hef, x: bp.design.rodX, y: bp.design.rodY } : undefined)
+    const hw = post
+      ? pedestalBearing('wood', sec.h, sec.b, p.design.height, post.plate, { da: post.rods.da, hef: post.rods.hef, x: post.rods.x, y: 0 })
+      : pedestalBearing(p.material, sec.h, sec.b, p.design.height,
+        bp ? { N: Math.round(bp.design.N), B: Math.round(bp.design.B), t: bp.tAdopt } : undefined,
+        bp?.anchors ? { da: bp.anchors.da, hef: bp.anchors.hef, x: bp.design.rodX, y: bp.design.rodY } : undefined)
     const { N, B, t } = hw.plate
-    const plate = `${p.material === 'steel' ? 'Base plate' : 'Post base (nominal)'} PL ${N}×${B}×${t}`
+    const plate = `${p.material === 'steel' ? 'Base plate' : post ? 'Post base' : 'Post base (nominal)'} PL ${N}×${B}×${t}`
     plateBoq.set(plate, (plateBoq.get(plate) ?? 0) + 1)
+    if (post) {
+      // two side straps and the through-bolts of a designed post base
+      const strap = `Post-base strap PL ${post.straps.t}×${post.straps.w}×${post.straps.h}`
+      plateBoq.set(strap, (plateBoq.get(strap) ?? 0) + 2)
+      const bolt = `Bolt ⌀${post.bolts.D} A307 × ${Math.ceil((sec.h + 2 * post.straps.t + 3 * post.bolts.D) / 10) * 10} mm, w/ nut & 2 washers`
+      plateBoq.set(bolt, (plateBoq.get(bolt) ?? 0) + post.bolts.n)
+    }
     const rod = `Anchor rod ⌀${hw.rods.dia} × ${(anchorRodLength(hw) / 1000).toFixed(2)} m, ${hw.rods.head ?? 'hooked'}, w/ nuts & washer`
     rodBoq.set(rod, (rodBoq.get(rod) ?? 0) + hw.rods.n)
   }
