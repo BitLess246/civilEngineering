@@ -36,6 +36,10 @@ export const STEEL_CONTEXT = '#64748b'
  *  behind it. Declared here because three sheets draw cut concrete and had
  *  each decided for themselves whether it was filled at all. */
 export const SHEET_CONCRETE = '#eef3f8'
+/** Structural steel shown in elevation or cut on a connection sheet — the
+ *  members the plate and bolts attach to. A cool grey a step lighter than
+ *  `STEEL_CONTEXT`, so the plate (ink) and the bolts (the accent) lead. */
+export const SHEET_STEELWORK = '#dde3ea'
 /** A zone the sheet wants to name — a confinement band, a panel. */
 export const SHEET_ZONE = '#0f766e'
 /** Something the design flagged. */

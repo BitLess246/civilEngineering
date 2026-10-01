@@ -37,6 +37,8 @@ import {
 import { buildFrameElevation } from '../engine/frameElevation'
 import { buildStructureCages } from '../engine/cageBuilder'
 import { buildSteelSectionDetail } from '../engine/steelSection'
+import { buildConnectionDetail } from '../engine/steelConnectionDetail'
+import { connectionMarks } from './steelMarks'
 import { steelScheduleDrawings, timberScheduleDrawings } from './frameSchedules'
 
 export type SheetGroup =
@@ -44,7 +46,7 @@ export type SheetGroup =
   | 'Plans' | 'Column details' | 'Footing details'
   | 'Slab opening details' | 'Wall standard details'
   | 'Frame elevations'
-  | 'Steel schedules' | 'Steel sections' | 'Timber schedules'
+  | 'Steel schedules' | 'Steel sections' | 'Steel connections' | 'Timber schedules'
 
 export interface PlanSheet {
   /** Stable identity — also the SVG download file stem. */
@@ -80,6 +82,7 @@ const REF: Record<SheetGroup, string> = {
   'Wall standard details': 'S-09',
   'Steel schedules': 'S-07',
   'Steel sections': 'S-10',
+  'Steel connections': 'S-11',
   'Timber schedules': 'S-07',
 }
 
@@ -189,6 +192,15 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
   shapesUsed.forEach((name, i) => {
     const d = buildSteelSectionDetail(name, { detailNo: String(i + 1), sheetRef: ref('Steel sections') })
     if (d) out.push({ key: `steel-section-${slug(name)}`, group: 'Steel sections', title: name, subtitle: `${d.shape.family} · A ${Math.round(d.shape.A)} mm²`, warnings: [], drawing: d })
+  })
+  // One sheet per typical connection detail — the marks every beam end is
+  // scheduled to (STEEL BEAM SCHEDULE, CONN i / CONN j) point here.
+  connectionMarks(design).types.forEach((t, i) => {
+    const d = buildConnectionDetail({ conn: t.sample, hostShape: t.hostShape, hostKind: t.hostKind, faceType: t.faceType, beamShape: t.beamShape,
+      mark: t.mark, Vu: t.Vu, Mu: t.Mu, ends: t.ends.length }, { detailNo: String(i + 1), sheetRef: ref('Steel connections') })
+    out.push({ key: `steel-connection-${slug(t.mark)}`, group: 'Steel connections', title: d.title,
+      subtitle: `${t.ends.length} end${t.ends.length === 1 ? '' : 's'} · ${t.sample.bolts.n}-M${t.sample.bolts.dia} · PL ${t.sample.tab.t}`,
+      warnings: t.ok ? [] : [`${t.mark}: at least one end this detail serves fails its connection check`], drawing: d })
   })
   for (const s of timberScheduleDrawings(model, design))
     out.push({ key: s.key, group: 'Timber schedules', title: s.title, warnings: [], drawing: s.drawing })
