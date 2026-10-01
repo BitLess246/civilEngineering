@@ -6382,7 +6382,51 @@ export default function ModelSpace() {
               <p className="mt-1 text-[11px] text-muted">
                 Bearing §J8: φc·0.85f′c·√(A2/A1), φc = 0.65. Plate thickness from cantilever bending
                 t = ℓ√(2fp/(0.9Fy)); ℓ = max(m, n, n′). Uplift sizes anchor rods (φt·0.75·Fu).
-                Adopted t rounded to plate stock.
+                Adopted t rounded to plate stock. On an RC pedestal, A2 is the pedestal top.
+              </p>
+            </div>
+          )}
+
+          {/* RC pedestal schedule — under steel / timber columns */}
+          {(design.pedestals ?? []).length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">RC pedestal schedule — NSCP §410 / ACI 318-14<SchedChip items={design.pedestals ?? []} ok={(pd) => pd.ok} /></h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
+                    <th className="py-1 pr-2 font-semibold">Node</th>
+                    <th className="py-1 pr-2 font-semibold">Under</th>
+                    <th className="py-1 pr-2 font-semibold">Size b×b×h</th>
+                    <th className="py-1 pr-2 font-semibold">Bars</th>
+                    <th className="py-1 pr-2 font-semibold">Ties</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mu base (kN·m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Util</th>
+                    <th className="py-1 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(design.pedestals ?? []).map((pd) => (
+                    <tr key={pd.node} className={`sched-row border-t border-hairline-2 ${pd.ok ? '' : 'bg-fail-tint text-fail'}`}>
+                      <td className="py-1 pr-2 font-medium">{pd.node}</td>
+                      <td className="py-1 pr-2">{pd.column} ({pd.material === 'steel' ? 'steel' : 'timber'})</td>
+                      <td className="py-1 pr-2">{pd.design.side}×{pd.design.side}×{Math.round(pd.design.height * 1000)}</td>
+                      <td className="py-1 pr-2">{pd.design.bars}-⌀{pd.design.barDia} <span className="text-muted">(ρ {(pd.design.rho * 100).toFixed(2)}%)</span></td>
+                      <td className="py-1 pr-2">⌀{pd.design.tieDia} @ {pd.design.tieSpacing}</td>
+                      <td className="py-1 pr-2 text-right">{pd.design.Tu > 0 ? `−${f1(pd.design.Tu)}` : f1(pd.design.Pu)}</td>
+                      <td className="py-1 pr-2 text-right">{f1(pd.design.Mux)} / {f1(pd.design.Muz)}</td>
+                      <td className="py-1 pr-2 text-right">{(pd.design.util * 100).toFixed(0)}%</td>
+                      <td className="py-1">{pd.ok ? '✓ OK' : '✗ check'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-muted">
+                The column base sits on an RC pedestal from the top of the footing to grade (the frame is analysed with
+                the base fixed there). Side = column + 250 mm (steel) / + 200 mm (timber); Mu at the pedestal base =
+                column-base moment + base shear × height, each axis; biaxial by the linear load contour at the factored
+                axial load (own weight at 1.2); ρ from 1% (§410.6.1.1), ties ≤ min(16db, 48dt, b) (§425.7.2.1). Net uplift
+                is carried by the bars alone.
               </p>
             </div>
           )}

@@ -38,6 +38,7 @@ import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, columnAxial, 
 import type { PlateClass, FlexureClause } from './steelDesign'
 import { columnKFactors, type ColumnK } from './effectiveLength'
 import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef, woodAdjusted } from './woodDesign'
+import { designPedestal, pedestalSide, type PedestalResult } from './pedestal'
 import { designWoodSlab, woodSlabTimberSizes, type WoodSlabResult, type WoodSlabInput } from './woodSlab'
 import type { TimberSizeQty } from './takeoff'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
@@ -234,6 +235,15 @@ export interface FootingScheduleRow {
   pedestal: number
   ok: boolean
   gov?: string
+}
+/** The RC pedestal under a steel or timber column (engine/pedestal): from the
+ *  top of its footing up to grade, where the base plate / post base sits. */
+export interface PedestalScheduleRow {
+  node: string
+  column: string            // the steel/timber column member standing on it
+  material: 'steel' | 'wood'
+  design: PedestalResult
+  ok: boolean
 }
 export interface CombinedScheduleRow {
   nodes: [string, string]
@@ -453,6 +463,8 @@ export interface StructureDesign {
   woodBeams: WoodBeamScheduleRow[]
   woodColumns: WoodColumnScheduleRow[]
   basePlates: BasePlateScheduleRow[]
+  /** RC pedestals under steel / timber columns — absent on older designs. */
+  pedestals?: PedestalScheduleRow[]
   joints: SteelJoint[]               // beam-to-column connections (steel frames only)
   /** Beam-to-beam fin plates: beams framing into a girder web (steel only). */
   beamJoints: BeamBeamJoint[]
@@ -491,7 +503,7 @@ export function designOK(d: StructureDesign): boolean {
   return d.beams.every((b) => b.ok) && d.prestressed.every((p) => p.ok) && d.columns.every((c) => c.ok)
     && d.steelBeams.every((b) => b.ok) && d.steelColumns.every((c) => c.ok)
     && d.woodBeams.every((b) => b.ok) && d.woodColumns.every((c) => c.ok)
-    && d.basePlates.every((p) => p.ok)
+    && d.basePlates.every((p) => p.ok) && (d.pedestals ?? []).every((p) => p.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
     && d.slabs.every((s) => s.ok) && d.woodSlabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
     && d.stairs.every((s) => s.ok)
@@ -1545,6 +1557,24 @@ function designFromRuns(
   onProgress?.({ phase: 'Designing footings & slabs' })
   const nodeXYZ = new Map(model.nodes.map((n) => [n.id, n]))
 
+  // A steel or timber column stands on an RC PEDESTAL from the top of its
+  // footing to grade (engine/pedestal), not on the pad: the frame is analysed
+  // with that column's base fixed at grade, and its base node is NOT lowered
+  // to the pad (pedestalDrops). The pedestal's weight is not in the analysis,
+  // so the footing carries it explicitly — at the full founding depth H, the
+  // upper bound of its height, since the pad thickness is what is being found.
+  const pedestalOf = (node: string): { column: Member; material: 'steel' | 'wood'; d: number; b: number } | null => {
+    const col = colAtNode(node)
+    const fs = col ? secOf(col.id) : undefined
+    if (!col || !fs || (fs.material !== 'steel' && fs.material !== 'wood')) return null
+    const shape = fs.material === 'steel' && fs.shape ? shapeByName(fs.shape) : undefined
+    return { column: col, material: fs.material, d: shape?.d ?? fs.h, b: shape?.bf ?? fs.b }
+  }
+  const pedestalWeight = (node: string): number => {
+    const p = pedestalOf(node)
+    return p ? soil.gammaConc * (pedestalSide(p.material, p.d, p.b) / 1000) ** 2 * soil.H : 0
+  }
+
   /** One isolated pad, designed. */
   const designIsolated = (node: string): FootingScheduleRow | null => {
     let Pu = 0, gov = ''
@@ -1553,7 +1583,9 @@ function designFromRuns(
       if (p > Pu) { Pu = p; gov = run.name }
     }
     if (Pu < 1e-6) return null
-    const P = Math.max(serviceAt(node), Pu / 1.4)
+    const Wped = pedestalWeight(node)
+    Pu += 1.4 * Wped
+    const P = Math.max(serviceAt(node), (Pu - 1.4 * Wped) / 1.4) + Wped
     const fs = footSec(node)
     // The mat picks its own diameter and spacing. `fs` is the COLUMN section
     // and only supplies the concrete grade, the steel grade and the column
@@ -1610,12 +1642,12 @@ function designFromRuns(
     const fsA = footSec(nodeA), fsB = footSec(nodeB)
     const row: CombinedScheduleRow = {
       nodes: [nodeA, nodeB], spacing,
-      dl1: dAt.get(nodeA) ?? 0, ll1: lAt.get(nodeA) ?? 0,
-      dl2: dAt.get(nodeB) ?? 0, ll2: lAt.get(nodeB) ?? 0,
+      dl1: (dAt.get(nodeA) ?? 0) + pedestalWeight(nodeA), ll1: lAt.get(nodeA) ?? 0,
+      dl2: (dAt.get(nodeB) ?? 0) + pedestalWeight(nodeB), ll2: lAt.get(nodeB) ?? 0,
       design: designCombinedFooting({
         col1Width: Math.min(fsA.b, fsA.h), col2Width: Math.min(fsB.b, fsB.h), spacing,
-        dl1: dAt.get(nodeA) ?? 0, ll1: lAt.get(nodeA) ?? 0,
-        dl2: dAt.get(nodeB) ?? 0, ll2: lAt.get(nodeB) ?? 0,
+        dl1: (dAt.get(nodeA) ?? 0) + pedestalWeight(nodeA), ll1: lAt.get(nodeA) ?? 0,
+        dl2: (dAt.get(nodeB) ?? 0) + pedestalWeight(nodeB), ll2: lAt.get(nodeB) ?? 0,
         leftRestrict: false, rightRestrict: false, leftOverhang: 0, rightOverhang: 0,
         fc: fsA.fc, fy: fsA.fy, qAllow: soil.qAllow,
         gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc, surcharge: 0,
@@ -1631,6 +1663,29 @@ function designFromRuns(
   }
 
   const footings: FootingScheduleRow[] = isolated.filter((r) => !paired.has(r.node))
+
+  // ── RC pedestals (steel / timber columns) — sized and checked for every
+  //    case's base forces, as tall as the pad below it leaves (H − Dc) ──
+  const padTopDepth = new Map<string, number>()
+  for (const f of footings) padTopDepth.set(f.node, f.pedestal)
+  for (const c of combined) for (const n of c.nodes) padTopDepth.set(n, c.pedestal)
+  const pedestals: PedestalScheduleRow[] = []
+  for (const ru of runs[govIdx].result.reactions) {
+    const p = pedestalOf(ru.node)
+    const height = padTopDepth.get(ru.node)
+    if (!p || height === undefined || height < 1e-6) continue
+    const fs = secOf(p.column.id)
+    const cases = runs.flatMap((run) => {
+      const r = run.result.reactions.find((x) => x.node === ru.node)
+      return r ? [{ Pu: r.F[1], Mx: r.M[0], Mz: r.M[2], Vx: r.F[0], Vz: r.F[2] }] : []
+    })
+    const design = designPedestal({
+      column: p.material, colD: p.d, colB: p.b, height, cases,
+      fc: fs.fc, fy: fs.fy, barDia: Math.min(fs.barDia, 20), tieDia: fs.tieDia, cover: fs.cover, gammaC: soil.gammaConc,
+    })
+    pedestals.push({ node: ru.node, column: p.column.id, material: p.material, design, ok: design.ok })
+  }
+  const pedestalAt = new Map(pedestals.map((x) => [x.node, x.design]))
 
   // ── Base plates (steel columns landing on a base support) ──
   const basePlates: BasePlateScheduleRow[] = []
@@ -1650,10 +1705,18 @@ function designFromRuns(
       if (-Fy > Tu) Tu = -Fy
     }
     if (Pu < 1e-6 && Tu < 1e-6) continue
-    const design = designBasePlate({
+    const plateIn = {
       Pu, Tu, d: shape.d ?? Math.max(fs.b, fs.h), bf: shape.bf ?? Math.min(fs.b, fs.h),
       fc: fs.fc, Fy: fs.steelFy ?? 248,
-    })
+    }
+    // On a pedestal the bearing area A2 is the pedestal's top (§J8,
+    // √(A2/A1) ≤ 2): size the plate once at A2 = A1, then re-check it on the
+    // pedestal it actually sits on.
+    const ped = pedestalAt.get(ru.node)
+    const first = designBasePlate(plateIn)
+    const design = ped
+      ? designBasePlate({ ...plateIn, a2OverA1: Math.min(4, ped.side ** 2 / (first.N * first.B)) })
+      : first
     const tAdopt = adoptPlateThickness(design.tReq)
     basePlates.push({ node: ru.node, shape: shape.name, Pu, Tu, design, tAdopt, ok: design.bearingOK && design.anchorOK })
   }
@@ -1835,7 +1898,7 @@ function designFromRuns(
     govName: runs[govIdx].name,
     system: opts.seismicSystem ?? 'gravity',
     cases: runs.map((r) => r.name),
-    beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates,
+    beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates, pedestals,
     joints: [] as SteelJoint[],
     beamJoints: [] as BeamBeamJoint[],
     slabs, woodSlabs, walls, stairs, footings, combined,
@@ -1881,10 +1944,13 @@ function designFromRuns(
  *  design's own footings — node id → pedestal, m. Absent = no drop. */
 export function pedestalDrops(design: StructureDesign): Map<string, number> {
   const drop = new Map<string, number>()
-  for (const f of design.footings) if (f.pedestal > 1e-6) drop.set(f.node, f.pedestal)
+  // A steel / timber column stands on its RC pedestal at grade: its base is
+  // not lowered to the pad (the pedestal fills that height).
+  const onPedestal = new Set((design.pedestals ?? []).map((p) => p.node))
+  for (const f of design.footings) if (f.pedestal > 1e-6 && !onPedestal.has(f.node)) drop.set(f.node, f.pedestal)
   for (const cf of design.combined) {
     const ped = Math.max(0, cf.pedestal)
-    if (ped > 1e-6) for (const n of cf.nodes) drop.set(n, ped)
+    if (ped > 1e-6) for (const n of cf.nodes) if (!onPedestal.has(n)) drop.set(n, ped)
   }
   return drop
 }
@@ -2528,7 +2594,7 @@ function stopReasonFor(d: StructureDesign, why: string): string {
 const countFails = (d: StructureDesign): number =>
   d.beams.filter((x) => !x.ok).length + d.columns.filter((x) => !x.ok).length
   + d.steelBeams.filter((x) => !x.ok).length + d.steelColumns.filter((x) => !x.ok).length
-  + d.basePlates.filter((x) => !x.ok).length
+  + d.basePlates.filter((x) => !x.ok).length + (d.pedestals ?? []).filter((x) => !x.ok).length
   + d.footings.filter((x) => !x.ok).length + d.combined.filter((x) => !x.ok).length
   + d.slabs.filter((x) => !x.ok).length + d.walls.filter((x) => !x.ok).length
   + d.joints.filter((x) => !x.ok).length + d.beamJoints.filter((x) => !x.ok).length
