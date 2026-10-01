@@ -275,3 +275,35 @@ describe('optimizer — a timber frame ends on sizes that can be bought', () => 
     expect(r.design.woodColumns.every((c) => c.ok)).toBe(true)
   })
 })
+
+describe('stock length — a 7 m timber bay', () => {
+  const long = (): StructuralModel => {
+    const m = generateGridModel({
+      baysX: [7], baysZ: [4], storeyH: [3],
+      column: woodSec('C', 200, 200), girder: woodSec('G', 150, 300), beam: woodSec('B', 100, 250),
+      slabThickness: 150,
+    })
+    m.plates = m.plates.map((p) => ({ ...p, deck: { ...DECK } }))
+    m.loads = buildGravityLoads(m, TIMBER_FLOOR_SDL, 1.9)
+    return m
+  }
+
+  it('flags every sawn member longer than 6.1 m, whatever its stresses, and passes the shorter ones', () => {
+    const d = designStructure(long(), soil)!
+    const rows = [...d.woodBeams, ...d.woodColumns]
+    for (const r of rows) {
+      expect(r.stockLengthOK).toBe(r.L <= 6.1)
+      if (!r.stockLengthOK) expect(r.ok).toBe(false)
+    }
+    expect(rows.some((r) => !r.stockLengthOK)).toBe(true)
+  })
+
+  it('the optimizer makes the long members glulam and the frame passes', () => {
+    const r = optimizeStructure(long(), soil, {}, 20)!
+    expect(r.converged).toBe(true)
+    for (const b of r.design.woodBeams) {
+      if (b.L > 6.1) expect(b.kind).toBe('glulam')
+      expect(b.ok).toBe(true)
+    }
+  })
+})

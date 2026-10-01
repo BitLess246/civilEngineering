@@ -14,6 +14,7 @@ import { shapeByName } from '../engine/aiscSections'
 import { buildScheduleSheet, type ScheduleTable } from '../engine/scheduleSheet'
 import type { Drawing } from '../engine/planRenderer'
 import { pedestalMarks } from './planDetails'
+import { SAWN_MAX_LENGTH } from '../engine/timberStock'
 
 const STEEL_DENSITY = 7850   // kg/m³
 const f0 = (v: number) => v.toFixed(0), f1 = (v: number) => v.toFixed(1), f2 = (v: number) => v.toFixed(2)
@@ -124,7 +125,7 @@ export function timberScheduleDrawings(model: StructuralModel, design: Structure
     columns: [{ head: 'SIZE b×d mm', w: 12 }, { head: 'SPECIES', w: 10 }, { head: 'KIND', w: 8 }, { head: 'ROLE', w: 9 }, { head: 'PCS', w: 6, align: 'end' }, { head: 'LENGTH m', w: 10, align: 'end' }, { head: 'VOL m³', w: 9, align: 'end' }, { head: 'MAX UTIL', w: 10, align: 'end' }],
     rows: memberRows.map((r) => r.row),
     failRows: memberRows.flatMap((r, i) => (r.ok ? [] : [i])),
-    note: 'Actual dimensions, not nominal. NDS §3 / NSCP 2015 Chapter 6, LRFD (Appendix N). Connections are not designed on this set.',
+    note: `Actual dimensions, not nominal. NDS §3 / NSCP 2015 Chapter 6, LRFD (Appendix N). A sawn piece longer than ${SAWN_MAX_LENGTH} m (stock length) reads CHECK — glulam or a designed splice. Beam-to-post connections are not designed on this set.`,
   })
   const plateById = new Map(model.plates.map((p) => [p.id, p]))
   if (design.woodSlabs.length) tables.push({

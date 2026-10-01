@@ -26,6 +26,18 @@ export const SAWN_STOCK: readonly (readonly [number, number])[] = [
   [300, 300],
 ]
 
+/**
+ * The longest sawn piece a yard stocks, m — 20 ft. A sawn member longer than
+ * this has to be spliced (a connection nobody designed) or made glulam, which
+ * is laminated to any length; the design flags it and the optimizer starts it
+ * on glulam.
+ */
+export const SAWN_MAX_LENGTH = 6.1
+
+/** Does a member of this kind and length, m, come in one stocked piece? */
+export const withinStockLength = (kind: string | undefined, L: number): boolean =>
+  kind === 'glulam' || L <= SAWN_MAX_LENGTH + 1e-9
+
 /** Glulam: standard widths (3⅛" … 10¾") and the 38 mm (1½") lamination. */
 export const GLULAM_WIDTHS: readonly number[] = [80, 130, 175, 220, 275]
 export const GLULAM_LAM = 38
@@ -76,6 +88,13 @@ function cheapestSawn(role: string, cur: [number, number], util: number, bigger:
     .filter(([b, d]) => fitsRole(role, b, d) && (bigger ? b * d > cur[0] * cur[1] : true) && carries(role, cur, [b, d], util))
     .sort((p, q) => p[0] * p[1] - q[0] * q[1] || q[1] - p[1])
   return fit[0] ? [fit[0][0], fit[0][1]] : null
+}
+
+/** The same member as glulam carrying at least what it does now — for a
+ *  sawn member too long to buy in one piece. */
+export function toGlulam(s: RectSection, role: string): RectSection {
+  if (s.material !== 'wood' || s.woodKind === 'glulam') return s
+  return nextTimberSize({ ...s, woodKind: 'glulam' }, 1 + 1e-6, role)
 }
 
 /**

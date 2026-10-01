@@ -40,7 +40,7 @@ import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, columnAxial, 
 import type { PlateClass, FlexureClause } from './steelDesign'
 import { columnKFactors, type ColumnK } from './effectiveLength'
 import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef, woodAdjusted } from './woodDesign'
-import { nextTimberSize, lighterTimberSize, toStockSize } from './timberStock'
+import { nextTimberSize, lighterTimberSize, toStockSize, toGlulam, withinStockLength } from './timberStock'
 import { designPedestal, pedestalSide, type PedestalResult } from './pedestal'
 import { designWoodSlab, woodSlabTimberSizes, type WoodSlabResult, type WoodSlabInput } from './woodSlab'
 import type { TimberSizeQty } from './takeoff'
@@ -434,6 +434,8 @@ export interface WoodBeamScheduleRow {
   fb: number; FbPrime: number; CL: number   // MPa
   fv: number; FvPrime: number      // MPa
   utilM: number; utilV: number
+  /** A sawn piece no longer than the 6.1 m a yard stocks (glulam: always). */
+  stockLengthOK: boolean
   ok: boolean
   gov?: string
   // worked-solution intermediates
@@ -446,6 +448,8 @@ export interface WoodColumnScheduleRow {
   Pu: number; Mu: number           // kN, kN·m
   fc: number; FcPrime: number; CP: number; slenderness: number   // MPa
   ratio: number                    // governing (axial or §3.9.2 interaction)
+  /** A sawn piece no longer than the 6.1 m a yard stocks (glulam: always). */
+  stockLengthOK: boolean
   ok: boolean
   gov?: string
   // worked-solution intermediates
@@ -810,7 +814,8 @@ function designWoodBeamRow(
   return {
     id: mr.id, role, L: mr.L, species: sec.woodSpecies ?? '', kind, b: sec.b, d: sec.h,
     Mu: mr.Mmax, Vu: mr.Vmax, fb: r.fb, FbPrime: r.FbPrime, CL: r.CL,
-    fv: r.fv, FvPrime: r.FvPrime, utilM: r.bendingRatio, utilV: r.shearRatio, ok: r.ok,
+    fv: r.fv, FvPrime: r.FvPrime, utilM: r.bendingRatio, utilV: r.shearRatio,
+    stockLengthOK: withinStockLength(kind, mr.L), ok: r.ok && withinStockLength(kind, mr.L),
     S: r.S, A: r.A, RB: r.RB, Emin: adj.Emin, FbStar: adj.FbStar,
   }
 }
@@ -830,7 +835,7 @@ function designWoodColumnRow(mr: F3MemberResult, sec: RectSection, lambda: numbe
   return {
     id: mr.id, L: mr.L, species: sec.woodSpecies ?? '', kind, b: sec.b, d: sec.h,
     Pu, Mu: mr.Mmax, fc: r.fc, FcPrime: r.FcPrime, CP: r.CP, slenderness: r.slenderness,
-    ratio: r.ratio, ok: r.ok,
+    ratio: r.ratio, stockLengthOK: withinStockLength(kind, mr.L), ok: r.ok && withinStockLength(kind, mr.L),
     A: r.A, FcE: r.FcE, Emin: adj.Emin, FcStar: adj.FcStar,
   }
 }
@@ -2919,10 +2924,26 @@ export const RC_LIMITS = {
 } as const
 
 /** Every timber section on a size a yard stocks (`toStockSize`) — the
- *  optimizer's starting point, so a typed-in 300×400 does not survive it. */
+ *  optimizer's starting point, so a typed-in 300×400 does not survive it —
+ *  and glulam where any member on it is longer than a sawn piece comes. */
 function stockTimber(m: StructuralModel, secRole: Map<string, string>): StructuralModel {
   if (!m.sections.some((s) => s.material === 'wood')) return m
-  return { ...m, sections: m.sections.map((s) => toStockSize(s, secRole.get(s.id) ?? '')) }
+  const at = new Map(m.nodes.map((n) => [n.id, n]))
+  const longest = new Map<string, number>()
+  for (const mem of m.members) {
+    const a = at.get(mem.i), b = at.get(mem.j)
+    if (!a || !b) continue
+    const L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
+    longest.set(mem.section, Math.max(longest.get(mem.section) ?? 0, L))
+  }
+  return {
+    ...m,
+    sections: m.sections.map((s) => {
+      const role = secRole.get(s.id) ?? ''
+      const sized = toStockSize(s, role)
+      return withinStockLength(sized.woodKind, longest.get(s.id) ?? 0) ? sized : toGlulam(sized, role)
+    }),
+  }
 }
 
 /**
