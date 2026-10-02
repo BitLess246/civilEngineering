@@ -146,8 +146,8 @@ describe('every mark in the app reads at the size it ships at', () => {
   }
 
   it('found them all', () => {
-    // 12 ribbon tabs + 4 actions + 11 sidebar groups.
-    expect(Object.keys(ALL).length).toBe(27)
+    // 12 ribbon tabs + 4 actions + 14 sidebar groups.
+    expect(Object.keys(ALL).length).toBe(30)
   })
 
   it('keeps parallel strokes far enough apart to stay two strokes', () => {

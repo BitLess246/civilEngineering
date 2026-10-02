@@ -7,6 +7,7 @@ import { MODEL_TOOLS } from './docsContentModel'
 import { ANALYSIS_TOOLS } from './docsContentAnalysis'
 import { DESIGN_TOOLS } from './docsContentDesign'
 import { SITE_TOOLS } from './docsContentSite'
+import { FIELD_TOOLS } from './docsContentField'
 
 export const DOC_TOOLS: DocTool[] = [
   ...SHELL_TOOLS,
@@ -14,6 +15,7 @@ export const DOC_TOOLS: DocTool[] = [
   ...ANALYSIS_TOOLS,
   ...DESIGN_TOOLS,
   ...SITE_TOOLS,
+  ...FIELD_TOOLS,
 ]
 
 /**

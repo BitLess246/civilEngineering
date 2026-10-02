@@ -43,6 +43,11 @@ const ColumnDesign = lazy(() => import('./pages/ColumnDesign'))
 const FrameAnalysis = lazy(() => import('./pages/FrameAnalysis'))
 const LoadPath = lazy(() => import('./pages/LoadPath'))
 const InfluenceLines = lazy(() => import('./pages/InfluenceLines'))
+const Surveying = lazy(() => import('./pages/Surveying'))
+const TrafficVolume = lazy(() => import('./pages/TrafficVolume'))
+const SignalTiming = lazy(() => import('./pages/SignalTiming'))
+const TrafficQueue = lazy(() => import('./pages/TrafficQueue'))
+const RationalMethod = lazy(() => import('./pages/RationalMethod'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const Validation = lazy(() => import('./pages/Validation'))
 const Terms = lazy(() => import('./pages/legal/Terms'))
@@ -220,6 +225,11 @@ export default function App() {
         <Route path="/frame" element={<RequireAuth><FrameAnalysis /></RequireAuth>} />
         <Route path="/load-path" element={<LoadPath />} />
         <Route path="/influence-lines" element={<InfluenceLines />} />
+        <Route path="/surveying" element={<Surveying />} />
+        <Route path="/traffic-volume" element={<TrafficVolume />} />
+        <Route path="/signal-timing" element={<SignalTiming />} />
+        <Route path="/traffic-queue" element={<TrafficQueue />} />
+        <Route path="/rational-method" element={<RationalMethod />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected
             without the lazy chunk being fetched at all. Inside, the import
             starts before the gate has an answer. */}

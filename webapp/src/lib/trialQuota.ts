@@ -45,6 +45,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/soil-nail', '/micropile', '/rock-anchor', '/shotcrete-facing',
   // standalone analysis helpers
   '/load-combinations', '/load-path', '/influence-lines', '/plumbing',
+  // surveying, transportation and water resources — the easy calculators wave
+  '/surveying', '/traffic-volume', '/signal-timing', '/traffic-queue', '/rational-method',
 ]
 
 /**
