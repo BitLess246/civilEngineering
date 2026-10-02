@@ -48,6 +48,10 @@ const TrafficVolume = lazy(() => import('./pages/TrafficVolume'))
 const SignalTiming = lazy(() => import('./pages/SignalTiming'))
 const TrafficQueue = lazy(() => import('./pages/TrafficQueue'))
 const RationalMethod = lazy(() => import('./pages/RationalMethod'))
+const OpenChannel = lazy(() => import('./pages/OpenChannel'))
+const PipeFlow = lazy(() => import('./pages/PipeFlow'))
+const MixDesign = lazy(() => import('./pages/MixDesign'))
+const SectionProperties = lazy(() => import('./pages/SectionProperties'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const Validation = lazy(() => import('./pages/Validation'))
 const Terms = lazy(() => import('./pages/legal/Terms'))
@@ -230,6 +234,10 @@ export default function App() {
         <Route path="/signal-timing" element={<SignalTiming />} />
         <Route path="/traffic-queue" element={<TrafficQueue />} />
         <Route path="/rational-method" element={<RationalMethod />} />
+        <Route path="/open-channel" element={<OpenChannel />} />
+        <Route path="/pipe-flow" element={<PipeFlow />} />
+        <Route path="/concrete-mix" element={<MixDesign />} />
+        <Route path="/section-properties" element={<SectionProperties />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected
             without the lazy chunk being fetched at all. Inside, the import
             starts before the gate has an answer. */}
