@@ -186,6 +186,21 @@ export const GROUP_ICONS: Record<string, GroupIcon> = {
       'M3.4 17.8C5.2 16.4 6.9 16.4 8.7 17.8C10.5 19.2 12.2 19.2 14 17.8C15.8 16.4 17.5 16.4 19.3 17.8',
     ],
   },
+  Bridge: {
+    // A through-truss bridge elevation: deck, top chord, end posts and two
+    // diagonals — the elevation every bridge plan sheet starts from.
+    depicts: 'through-truss bridge elevation',
+    paths: [
+      'M3.2 18.4H20.8',
+      'M4.2 18.4V4.2',
+      'M19.8 18.4V4.2',
+      'M4.2 4.2H19.8',
+      'M4.2 18.4L9.6 4.2',
+      'M14.4 4.2L19.8 18.4',
+      'M9.6 4.2L12 18.4',
+      'M14.4 4.2L12 18.4',
+    ],
+  },
   Planning: {
     // Gantt bars against a time axis — a programme, not a calendar.
     depicts: 'Gantt bars against a time axis',

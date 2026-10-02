@@ -311,4 +311,123 @@ export const FIELD_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'geometric-design',
+    name: 'Geometric Design',
+    route: '/geometric-design',
+    group: 'Transportation',
+    summary: 'Highway alignment classics in one shell: stopping sight distance, parabolic vertical curves with crest/sag sight-distance checks, and the superelevation balance with minimum radius.',
+    basis: 'AASHTO Green Book forms: SSD = 0.278Vt + V²/254(f±G); crest L = AS²/658 (1.08 m eye, 0.60 m object); sag headlight L = AS²/(120+3.5S); comfort L ≥ AV²/395; e + f = V²/127R.',
+    sections: [
+      {
+        id: 'geometric-ssd',
+        title: 'Stopping sight distance',
+        controls: [
+          { kind: 'field', name: 'Speed / time / friction', what: 'Design speed in km/h, the 2.5 s AASHTO reaction time, and the braking friction (0.35 design default).' },
+          { kind: 'field', name: 'Grade G', what: 'Positive on an upgrade (shorter), negative on a downgrade (longer) — it enters the braking constant as f ± G.' },
+          { kind: 'output', name: 'SSD', what: 'Reaction and braking pieces reported separately with the composition drawn to scale.' },
+        ],
+      },
+      {
+        id: 'geometric-curve',
+        title: 'Vertical curves',
+        controls: [
+          { kind: 'field', name: 'g₁, g₂, L', what: 'Entry and exit grades in percent and the curve length; the mode follows the grades — g₁ ≥ g₂ is a crest, otherwise a sag.' },
+          { kind: 'field', name: 'PVI station / elevation', what: 'The curve hangs half its length either side of the PVI; BVC and EVC elevations come off the tangent grades.' },
+          { kind: 'field', name: 'Sight distance S', what: 'Checked against the AASHTO height criteria — eye 1.08 m over object 0.60 m on a crest, headlight 0.60 m at 1° on a sag; the S ≤ L and S > L branches are resolved automatically.' },
+          { kind: 'output', name: 'Curve geometry', what: 'A, K, r, the PVI external offset e = A·L/800, and the high/low point station and elevation, with the profile drawn.' },
+        ],
+      },
+      {
+        id: 'geometric-super',
+        title: 'Superelevation',
+        controls: [
+          { kind: 'field', name: 'V, R, eMax, fMax', what: 'Design speed, radius and the two design limits (commonly 8 % banking, 0.15 friction).' },
+          { kind: 'output', name: 'e, f, Rmin, D', what: 'The demand V²/127R split friction-first then capped at eMax, the minimum radius from the two limits together, and the arc degree of curve — a radius below Rmin is flagged.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'weir-flow',
+    name: 'Weir Flow',
+    route: '/weir-flow',
+    group: 'Water resources',
+    summary: 'Discharge over the standard measurement weirs — Francis rectangular suppressed or end-contracted, Cipolletti trapezoid, V-notch, and broad-crested — in either direction: Q from the head, or the head for a target Q.',
+    basis: 'Francis Q = 1.84·L·H^1.5 with the 0.1·nH contraction correction and the ha velocity-of-approach form; Cipolletti 1.86·L·H^1.5; V-notch (8/15)Cd√(2g)tan(θ/2)H^2.5 with Cone\u2019s 90° cross-check; broad-crested critical-flow 1.705·Cb·b·H^1.5.',
+    sections: [
+      {
+        id: 'weir-shapes',
+        title: 'Weir types',
+        controls: [
+          { kind: 'choice', name: 'Weir type', what: 'Suppressed rectangular (no end contractions), contracted (0–2 ends), Cipolletti, V-notch with adjustable angle and Cd, or broad-crested with a loss coefficient.' },
+          { kind: 'field', name: 'Head or target Q', what: 'Head above the crest when solving Q; a target discharge when solving H — the inverse runs as a bracketed bisection on the monotone rating curve.' },
+          { kind: 'field', name: 'Approach head ha', what: 'Optional Va²/2g for the rectangular weirs: H becomes H + ha with the ha^1.5 term removed (the full Francis form).' },
+        ],
+      },
+      {
+        id: 'weir-output',
+        title: 'Results',
+        controls: [
+          { kind: 'output', name: 'Q and effective length', what: 'Discharge in m³/s and L/s, the wetted crest length after any contraction correction, and the section drawn with the head dimensioned.' },
+          { kind: 'output', name: 'Cross-checks', what: 'Cone\u2019s empirical 90° V-notch rating beside the general formula, and contraction corrections printed explicitly in the worked solution.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'pile-capacity',
+    name: 'Pile Capacity',
+    route: '/pile-capacity',
+    group: 'Foundations & geotechnical',
+    summary: 'Static capacity of a single driven pile through layered soil: α-method adhesion in clay, K·σ′·tanδ friction in sand, 9·cu end bearing in clay and Meyerhof q′·Nq capped at 0.5·pa·Nq·tanφ in sand.',
+    basis: 'Das/Tomlinson textbook forms — α interpolating 1.0 (cu ≤ 25 kPa) to 0.5 (cu ≥ 70 kPa); K = 1−sinφ and δ = φ−5° defaults; Nq = e^{π·tanφ}·tan²(45+φ/2); submerged unit weights below the water table.',
+    sections: [
+      {
+        id: 'pile-section',
+        title: 'Pile and profile',
+        controls: [
+          { kind: 'choice', name: 'Section', what: 'Circular or square concrete, or a steel pipe with wall thickness (gross plugged area for end bearing).' },
+          { kind: 'field', name: 'Layers', what: 'Any number of clay/sand layers with thickness, cu or φ, and bulk/saturated unit weights; the tip bears in the last layer reached.' },
+          { kind: 'field', name: 'Water table / FS', what: 'Effective stresses switch to submerged weight below the water table; FS divides the ultimate capacity (default 3).' },
+        ],
+      },
+      {
+        id: 'pile-output',
+        title: 'Capacity',
+        controls: [
+          { kind: 'output', name: 'Qs per layer', what: 'Shaft friction per layer with α, K, δ, β and the mid-depth σ′ printed — the profile drawing bars each layer\u2019s share.' },
+          { kind: 'output', name: 'Qp, Qult, Qall', what: 'End bearing with the Meyerhof cap flagged when it governs, the ultimate sum, and the allowable value; per-axle detail feeds the worked solution.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'bridge-loading',
+    name: 'Bridge Loading',
+    route: '/bridge-loading',
+    group: 'Analysis & modelling',
+    summary: 'AASHTO HL-93 on a simple span: the design truck (rear axle spacing swept) and tandem walk exact influence lines, the 9.3 kN/m lane load rides along, IM = 33 % applies to the vehicle, and the lever rule brings everything to one girder.',
+    basis: 'AASHTO LRFD 3.6.1.2/3.6.1.1.2 load model and multiple presence; lever-rule transverse distribution (sanctioned for exterior girders and shear) with a manual DF override for the 4.6.2.2 equations; influence lines from the engine behind /influence-lines.',
+    sections: [
+      {
+        id: 'bridge-span',
+        title: 'Span and deck',
+        controls: [
+          { kind: 'field', name: 'Span L', what: 'Simple-span length; the moment envelope, shear envelope and support reaction are all swept.' },
+          { kind: 'choice', name: 'Girder / spacing / overhang', what: 'Interior girder (wheel on the beam line, partner 1.8 m into the span) or exterior girder (measured wheel positions on the strip with its overhang d to the edge).' },
+          { kind: 'field', name: 'IM / DF override', what: 'Dynamic load allowance on the vehicle only (33 % default); a DF override rescales every combined number for the specification-equation value.' },
+        ],
+      },
+      {
+        id: 'bridge-output',
+        title: 'Envelope and governing case',
+        controls: [
+          { kind: 'output', name: 'Moment envelope', what: 'Combined per-girder moment along the span with the governing truck or tandem parked at its worst position, drawn to scale.' },
+          { kind: 'output', name: 'Shear and reaction', what: 'Peak shear (positive or negative, section reported) and the support reaction split into vehicle (with IM) and lane parts.' },
+          { kind: 'output', name: 'Section influence line', what: 'The governing section\u2019s IL with each parked axle and its ordinate — Σ P·IL reproduces the vehicle effect by hand.' },
+        ],
+      },
+    ],
+  },
 ]

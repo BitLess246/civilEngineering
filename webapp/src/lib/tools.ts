@@ -35,6 +35,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/load-path',     name: 'Slab Load Path',     sub: 'Two-way tributary',         group: 'Analysis & Modelling' },
       { to: '/influence-lines', name: 'Influence Lines',  sub: 'Truss & beam · moving load', group: 'Analysis & Modelling' },
       { to: '/section-properties', name: 'Section Properties', sub: 'A · I · S · r · built-up', group: 'Analysis & Modelling' },
+      { to: '/bridge-loading', name: 'Bridge Loading', sub: 'HL-93 · lever rule · envelope', group: 'Bridge' },
       { to: '/steel/beam',    name: 'Steel Beam',         sub: 'AISC §F2–F3 / §G2.1',          group: 'Steel & Connections' },
       { to: '/steel/column',  name: 'Steel Column',       sub: 'AISC §E3 / §H1-1',          group: 'Steel & Connections' },
       { to: '/bolted-connection', name: 'Bolted Connection', sub: 'Eccentric bolt group',   group: 'Steel & Connections' },
@@ -52,6 +53,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/slope',            name: 'Slope Stability',  sub: 'Slices · Bishop/Fellenius/Janbu', group: 'Geotechnical' },
       { to: '/settlement',       name: 'Settlement',       sub: 'Boussinesq · Terzaghi · Schmertmann', group: 'Geotechnical' },
       { to: '/lateral-pile',     name: 'Lateral Pile',     sub: 'Broms · p-y (Matlock/API)', group: 'Geotechnical' },
+      { to: '/pile-capacity',    name: 'Pile Capacity',    sub: 'α method · Meyerhof · layers', group: 'Geotechnical' },
       { to: '/soils',            name: 'Soil Investigation', sub: 'Boreholes · SPT · USCS',  group: 'Geotechnical' },
       { to: '/seismic-wizard',   name: 'Seismic Wizard',   sub: 'NSCP 208 Ca/Cv/I/R',       group: 'Seismic & Loads' },
       { to: '/load-combinations', name: 'Load Combinations', sub: 'NSCP 2015 §203.3 LRFD',  group: 'Seismic & Loads' },
@@ -71,6 +73,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/traffic-volume', name: 'Traffic Volume', sub: 'PHF · DHV · AADT growth', group: 'Traffic' },
       { to: '/signal-timing', name: 'Signal Timing', sub: 'Webster cycle · splits · LOS', group: 'Traffic' },
       { to: '/traffic-queue', name: 'Traffic Queues', sub: 'D/D/1 · M/M/1 · delay', group: 'Traffic' },
+      { to: '/geometric-design', name: 'Geometric Design', sub: 'SSD · vertical curves · superelevation', group: 'Highway Design' },
     ],
   },
   {
@@ -79,6 +82,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/rational-method', name: 'Rational Method', sub: 'Q = CiA · Tc · IDF', group: 'Hydrology' },
       { to: '/open-channel', name: 'Open Channel Flow', sub: 'Manning · critical · jump', group: 'Hydraulics' },
       { to: '/pipe-flow', name: 'Pipe Flow', sub: 'Hazen–Williams · Darcy', group: 'Hydraulics' },
+      { to: '/weir-flow', name: 'Weir Flow', sub: 'Francis · Cipolletti · V-notch', group: 'Hydraulics' },
     ],
   },
   {
