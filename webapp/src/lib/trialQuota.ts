@@ -47,6 +47,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/load-combinations', '/load-path', '/influence-lines', '/plumbing',
   // surveying, transportation and water resources — the easy calculators wave
   '/surveying', '/traffic-volume', '/signal-timing', '/traffic-queue', '/rational-method',
+  // wave two: hydraulics, mix design, section properties
+  '/open-channel', '/pipe-flow', '/concrete-mix', '/section-properties',
 ]
 
 /**

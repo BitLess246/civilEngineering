@@ -25,6 +25,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/lintel',        name: 'Lintel Beam',        sub: 'opening · masonry arching',  group: 'Concrete' },
       { to: '/water-tank',    name: 'Water Tank',         sub: 'Circular · IS 3370/ACI 350', group: 'Concrete' },
       { to: '/torsion',       name: 'Torsion Design',     sub: 'RC torsion · ACI 318-14',   group: 'Concrete' },
+      { to: '/concrete-mix',  name: 'Concrete Mix Design', sub: 'ACI 211 · absolute volume', group: 'Concrete' },
       { to: '/dev-length',    name: 'Dev & Splice',       sub: 'ACI 318-14 §25.4–25.5',     group: 'Concrete' },
       { to: '/punching-shear', name: 'Punching Shear',    sub: 'Two-way §22.6 · ACI 318',   group: 'Concrete' },
       { to: '/model',         name: '3D Model Space',     sub: 'BIM-lite viewer',           group: 'Analysis & Modelling' },
@@ -33,6 +34,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/truss',         name: 'Truss Space',        sub: 'Plane truss solver',        group: 'Analysis & Modelling' },
       { to: '/load-path',     name: 'Slab Load Path',     sub: 'Two-way tributary',         group: 'Analysis & Modelling' },
       { to: '/influence-lines', name: 'Influence Lines',  sub: 'Truss & beam · moving load', group: 'Analysis & Modelling' },
+      { to: '/section-properties', name: 'Section Properties', sub: 'A · I · S · r · built-up', group: 'Analysis & Modelling' },
       { to: '/steel/beam',    name: 'Steel Beam',         sub: 'AISC §F2–F3 / §G2.1',          group: 'Steel & Connections' },
       { to: '/steel/column',  name: 'Steel Column',       sub: 'AISC §E3 / §H1-1',          group: 'Steel & Connections' },
       { to: '/bolted-connection', name: 'Bolted Connection', sub: 'Eccentric bolt group',   group: 'Steel & Connections' },
@@ -75,6 +77,8 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     label: 'Water Resources',
     tools: [
       { to: '/rational-method', name: 'Rational Method', sub: 'Q = CiA · Tc · IDF', group: 'Hydrology' },
+      { to: '/open-channel', name: 'Open Channel Flow', sub: 'Manning · critical · jump', group: 'Hydraulics' },
+      { to: '/pipe-flow', name: 'Pipe Flow', sub: 'Hazen–Williams · Darcy', group: 'Hydraulics' },
     ],
   },
   {
