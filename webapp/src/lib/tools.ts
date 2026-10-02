@@ -58,6 +58,26 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     ],
   },
   {
+    label: 'Surveying',
+    tools: [
+      { to: '/surveying', name: 'Surveying Toolbox', sub: 'Leveling · traverse · curves · earthwork', group: 'Field & route surveying' },
+    ],
+  },
+  {
+    label: 'Transportation',
+    tools: [
+      { to: '/traffic-volume', name: 'Traffic Volume', sub: 'PHF · DHV · AADT growth', group: 'Traffic' },
+      { to: '/signal-timing', name: 'Signal Timing', sub: 'Webster cycle · splits · LOS', group: 'Traffic' },
+      { to: '/traffic-queue', name: 'Traffic Queues', sub: 'D/D/1 · M/M/1 · delay', group: 'Traffic' },
+    ],
+  },
+  {
+    label: 'Water Resources',
+    tools: [
+      { to: '/rational-method', name: 'Rational Method', sub: 'Q = CiA · Tc · IDF', group: 'Hydrology' },
+    ],
+  },
+  {
     label: 'Project Planning',
     tools: [
       { to: '/schedule',        name: 'Project Schedule', sub: 'CPM · PERT · progress' },
@@ -103,12 +123,23 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = (() => {
   const planning = TOOL_CATEGORIES.find((c) => c.label === 'Project Planning')!
   const takeoff = TOOL_CATEGORIES.find((c) => c.label === 'Quantity Take-Off')!
   const reference = TOOL_CATEGORIES.find((c) => c.label === 'Reference')!
+  const surveying = TOOL_CATEGORIES.find((c) => c.label === 'Surveying')!
+  const transportation = TOOL_CATEGORIES.find((c) => c.label === 'Transportation')!
+  const water = TOOL_CATEGORIES.find((c) => c.label === 'Water Resources')!
   const short: Record<string, string> = {
     'Analysis & Modelling': 'Analysis',
     'Steel & Connections': 'Steel',
   }
   const groups = toolGroups(structural).map(({ group, tools }) => ({ label: short[group] ?? group, tools }))
-  return [...groups, { label: 'Planning', tools: planning.tools }, { label: 'Estimates', tools: takeoff.tools }, { label: 'Reference', tools: reference.tools }]
+  return [
+    ...groups,
+    { label: 'Surveying', tools: surveying.tools },
+    { label: 'Transportation', tools: transportation.tools },
+    { label: 'Water', tools: water.tools },
+    { label: 'Planning', tools: planning.tools },
+    { label: 'Estimates', tools: takeoff.tools },
+    { label: 'Reference', tools: reference.tools },
+  ]
 })()
 
 /** Every tool with its sidebar group label — drives the ⌘K palette and the

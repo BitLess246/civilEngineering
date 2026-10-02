@@ -150,6 +150,42 @@ export const GROUP_ICONS: Record<string, GroupIcon> = {
       'M15.6 21.5H21.4',
     ],
   },
+  Surveying: {
+    // A leveling tripod: head, three legs — the instrument every field
+    // subject in this group starts from.
+    depicts: 'leveling tripod',
+    paths: [
+      'M12 8.6L4.8 21',
+      'M12 8.6L19.2 21',
+      'M12 8.6V21',
+      'M8 5.4H16',
+      'M12 5.4V8.6',
+    ],
+    dots: [{ cx: 12, cy: 8.6, r: 1 }],
+  },
+  Transportation: {
+    // A road in perspective with its lane dashes — the plan-view reading of
+    // the highway world.
+    depicts: 'road in perspective with lane dashes',
+    paths: [
+      'M8.6 3.5L4.4 20.5',
+      'M15.4 3.5L19.6 20.5',
+      'M12 5V8',
+      'M12 11V14',
+      'M12 17V20',
+    ],
+  },
+  Water: {
+    // Rain lines onto a water surface — hydrology and drainage in one mark.
+    depicts: 'rain onto a water surface',
+    paths: [
+      'M6.2 4.6V8',
+      'M12 3.4V8',
+      'M17.8 4.6V8',
+      'M3.4 13.2C5.2 11.8 6.9 11.8 8.7 13.2C10.5 14.6 12.2 14.6 14 13.2C15.8 11.8 17.5 11.8 19.3 13.2',
+      'M3.4 17.8C5.2 16.4 6.9 16.4 8.7 17.8C10.5 19.2 12.2 19.2 14 17.8C15.8 16.4 17.5 16.4 19.3 17.8',
+    ],
+  },
   Planning: {
     // Gantt bars against a time axis — a programme, not a calendar.
     depicts: 'Gantt bars against a time axis',
