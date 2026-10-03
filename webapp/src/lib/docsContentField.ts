@@ -537,4 +537,110 @@ export const FIELD_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'gvf-profiles',
+    name: 'GVF Profiles',
+    route: '/gvf-profiles',
+    group: 'Water resources',
+    summary: 'Gradually-varied-flow water-surface profiles: normal and critical depths, the Chow classification (M1–M3, S1–S3, C, H2/H3, A2/A3), and an RK4 march of the GVF equation from the control, drawn over the reach with the yn/yc reference lines.',
+    basis: 'GVF ODE dy/dx = (S0 − Sf)/(1 − Fr²) with Manning friction Sf = (Qn/AR^⅔)²; slope class from yn vs yc, zone from the control depth; supercritical controls march downstream, subcritical upstream; termination at the uniform-flow asymptote or critical depth (jump ahead). A standard-step energy march (E + hf balance) cross-checks the integration.',
+    sections: [
+      {
+        id: 'gvf-input',
+        title: 'Channel, flow, control',
+        controls: [
+          { kind: 'choice', name: 'Section', what: 'Rectangular, trapezoidal, triangular or circular — the same geometry engine as the open-channel modes.' },
+          { kind: 'field', name: 'Q, n, S0, L', what: 'Discharge, Manning n, bed slope (zero or adverse allowed) and reach length.' },
+          { kind: 'field', name: 'Control depth & end', what: 'The boundary depth with its end of the reach; auto follows the Froude rule (subcritical → downstream, supercritical → upstream).' },
+        ],
+      },
+      {
+        id: 'gvf-output',
+        title: 'Classification and profile',
+        controls: [
+          { kind: 'output', name: 'Chow label', what: 'Slope class, zone and the M1…A3 label with yn, yc and the control Froude number.' },
+          { kind: 'output', name: 'Water surface', what: 'The integrated profile over the reach with the uniform-flow and critical-depth lines, the control marked and the terminus reported (asymptote, jump ahead, or reach end).' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'muskingum',
+    name: 'Muskingum Routing',
+    route: '/muskingum',
+    group: 'Water resources',
+    summary: 'Route a flood wave through a river reach with the Muskingum method: K, X and Δt give three weighting coefficients that translate and attenuate the inflow hydrograph, with the stability window 2KX ≤ Δt ≤ 2K(1−X) enforced and the volume balance shown.',
+    basis: 'S = K[X·I + (1−X)·O]; continuity discretised to O2 = C0·I2 + C1·I1 + C2·O1 with C0 = (0.5Δt − KX)/D, C1 = (0.5Δt + KX)/D, C2 = (K(1−X) − 0.5Δt)/D, D = K(1−X) + 0.5Δt, C0+C1+C2 = 1; steady start O0 = I0; coefficients below zero are refused.',
+    sections: [
+      {
+        id: 'muskingum-input',
+        title: 'Reach and hydrograph',
+        controls: [
+          { kind: 'field', name: 'K, X, Δt', what: 'Storage time constant (h), weighting factor 0–0.5 and routing interval — the page prints the live stability window.' },
+          { kind: 'field', name: 'Inflow ordinates', what: 'Any number of m³/s ordinates at a uniform Δt; editable row by row.' },
+        ],
+      },
+      {
+        id: 'muskingum-output',
+        title: 'Coefficients and peaks',
+        controls: [
+          { kind: 'output', name: 'C0 · C1 · C2', what: 'The three weights with the stability window for the given K, X, Δt.' },
+          { kind: 'output', name: 'Peak & lag', what: 'Peak inflow vs routed peak outflow, the attenuation percent, the lag of the peak, and the volume identity trap(I) − trap(O) = ΔS drawn as paired hydrographs.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'detention',
+    name: 'Detention Pond',
+    route: '/detention',
+    group: 'Water resources',
+    summary: 'Level-pool (storage-indication) routing of a triangular storm through a detention pond: trapezoidal stage–storage, an orifice and optional weir for stage–discharge, routed peak stage and outflow, attenuation and lag, and the end-to-end mass balance.',
+    basis: 'Storage indication F = 2S/Δt + O stepped by F2 = (I1+I2) + (F1 − 2O1); trapezoidal prism S(h) = WLh + z(W+L)h² + 4/3·z²h³; orifice Cd·a·√(2gh) plus Francis weir C·Lw·hw^1.5; the strictly increasing F(h) curve is inverted by bisection each step; overtopping flagged when the peak stage passes the usable depth.',
+    sections: [
+      {
+        id: 'detention-input',
+        title: 'Basin, outlets, storm',
+        controls: [
+          { kind: 'field', name: 'Basin', what: 'Bottom width and length, side slope z, usable depth — the prism volume at any stage follows.' },
+          { kind: 'field', name: 'Outlets', what: 'Orifice area, Cd and invert height, plus an optional rectangular weir (length, crest, Francis C).' },
+          { kind: 'field', name: 'Storm & Δt', what: 'Triangular inflow (peak, time to peak, base time) sampled at the routing interval — the TR-55 shape from the SCS Runoff tool.' },
+        ],
+      },
+      {
+        id: 'detention-output',
+        title: 'Routing result',
+        controls: [
+          { kind: 'output', name: 'Peaks & stage', what: 'Peak inflow vs outflow with attenuation and lag, the maximum stage against the usable depth (freeboard or overtopping), and the storage at the peak.' },
+          { kind: 'output', name: 'Mass balance', what: 'Inflow volume = outflow volume + residual storage, with the error percent — plus paired hydrograph and stage drawings.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'do-sag',
+    name: 'DO Sag Curve',
+    route: '/do-sag',
+    group: 'Water resources',
+    summary: 'The Streeter–Phelps oxygen sag downstream of an outfall: flow-weighted mixing of BOD and DO, temperature-corrected deoxygenation and reaeration rates, the closed-form deficit curve, and the critical time and minimum DO drawn against saturation.',
+    basis: 'D(t) = kd·L0/(kr−kd)·(e^(−kd·t) − e^(−kr·t)) + D0·e^(−kr·t); mixing L0 and D0 flow-weighted at the outfall; k(T) = k20·θ^(T−20) with θ = 1.047 / 1.024; tc = ln[kr/kd·(1 − D0(kr−kd)/(kd·L0))]/(kr−kd); Dc = (kd·L0/kr)·e^(−kd·tc); DOsat from the Benson–Krause (USGS) polynomial; optional UNESCO-IHP reaeration estimate kr = 2.148·v^0.878/H^−1.48.',
+    sections: [
+      {
+        id: 'dosag-input',
+        title: 'River, effluent, kinetics',
+        controls: [
+          { kind: 'field', name: 'River & effluent', what: 'Flows with ultimate BOD and DO for both streams — the mix at the outfall is flow-weighted.' },
+          { kind: 'field', name: 'T, kd20, kr20, u', what: 'Water temperature with the two 20 °C rates (θ-corrected), and the velocity that turns travel time into distance.' },
+        ],
+      },
+      {
+        id: 'dosag-output',
+        title: 'Sag and critical point',
+        controls: [
+          { kind: 'output', name: 'Mix and rates', what: 'L0, DOmix, D0 and the corrected kd, kr with DOsat at the given temperature.' },
+          { kind: 'output', name: 'tc · DOcrit', what: 'Critical time and distance, the critical deficit and minimum DO against the 2 mg/L stress line — an anoxic sag is flagged, and a river with no interior minimum says so.' },
+        ],
+      },
+    ],
+  },
 ]
