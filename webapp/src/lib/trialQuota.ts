@@ -51,6 +51,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/open-channel', '/pipe-flow', '/concrete-mix', '/section-properties',
   // wave three: highway geometry, weirs, piles, bridges
   '/geometric-design', '/weir-flow', '/pile-capacity', '/bridge-loading',
+  // wave four: culverts, pavement, SCS runoff, bridge rating
+  '/culvert', '/pavement', '/runoff', '/bridge-rating',
 ]
 
 /**
