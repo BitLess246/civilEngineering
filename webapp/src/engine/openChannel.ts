@@ -99,20 +99,24 @@ export function momentum(shape: ChannelShape, y: number, Q: number): number {
 /** Depth of the wetted area's centroid below the surface (m). */
 export function centroidDepth(shape: ChannelShape, y: number): number {
   if (shape.kind === 'rect') return y / 2
-  if (shape.kind === 'tri') return (2 / 3) * y
+  // Apex-at-invert triangle: width at depth t below the surface is 2z(y−t),
+  // so ȳ = ∫t·2z(y−t)/A = y/3 (agrees with the trap branch as b → 0).
+  if (shape.kind === 'tri') return y / 3
   if (shape.kind === 'trap') {
     const { b, z } = shape
     const T = b + 2 * z * y
     // trapezoid centroid measured from its top edge: y·(T + 2b)/(3(T + b))
     return y * (T + 2 * b) / (3 * (T + b))
   }
-  // circle — first moment about the surface, Simpson on t·T(t)
+  // circle — first moment about the surface = y − (moment about the invert)/A.
+  // Simpson integrates m(t) = t·T(t) from the invert; the y − flip converts it
+  // to depth below the surface (half-full gives the classic 4r/3π).
   const m = (t: number) => t * geomAt(shape, t).T
   const N = 200
   const h = y / N
   let s = m(0) + m(y)
   for (let i = 1; i < N; i++) s += (i % 2 === 0 ? 2 : 4) * m(i * h)
-  return (h / 3) * s / geomAt(shape, y).A
+  return y - ((h / 3) * s) / geomAt(shape, y).A
 }
 
 // ── solvers ───────────────────────────────────────────────────────────────

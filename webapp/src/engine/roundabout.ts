@@ -17,19 +17,22 @@
 //
 // CONTROL DELAY & LOS — the HCM applies the unsignalized (two-way-stop)
 // delay procedure to roundabouts:
-//   d = 3600/c + 900·T·[(x−1) + √((x−1)² + 8·k·B·x/(c·T))]/x
+//   d = 3600/c + 900·T·[(x−1) + √((x−1)² + 8·k·x/(c·T))]
 //   T = analysis period (h, default 0.25), k = incremental-delay factor
-//   (1.0), B = platoon-arrivals factor (1.0). LOS thresholds on d (s/veh):
-//   A ≤ 10, B ≤ 20, C ≤ 35, D ≤ 55, E ≤ 80, F above (and F whenever x > 1).
+//   (1.0). LOS thresholds on d (s/veh) are the HCM UNSIGNALIZED table:
+//   A ≤ 10, B ≤ 15, C ≤ 25, D ≤ 35, E ≤ 50, F above (and F whenever x > 1).
 // ─────────────────────────────────────────────────────────────────────────
 
 /** Base intercept of the HCM 2010 entry-capacity model (veh/h). */
 export const CAP_INTERCEPT = 1130
 
-/** HCM 2010 lane coefficients β in c = 1130·e^(−β×10⁻³·vc). */
+/** HCM 2010 lane coefficients β in c = 1130·e^(−β×10⁻³·vc).
+ *  Single-lane β = 1.00 exactly per HCM 2010 (the 1.02 value belongs to the
+ *  HCM6 recalibration family, whose intercept moved to ≈1380 — mixing the
+ *  two editions understates capacity). */
 export type LaneKind = 'single' | 'right' | 'left'
 export const LANE_BETA: Record<LaneKind, number> = {
-  single: 1.02,
+  single: 1.0,
   right: 0.70,
   left: 0.75,
 }
@@ -42,27 +45,31 @@ export function laneCapacity(vc: number, kind: LaneKind, beta?: number): number 
 }
 
 /**
- * Circulating flow assembled from the HCM conflict diagram (Exhibit 21-2):
- * an entry is crossed by the circulating stream made of the prior leg's
- * entry, the upstream circulating from further around, and the upstream
- * right-turn... In practice the three conflicting movements are the other
- * three entries' flows that pass in front of this entry. The page's helper
- * takes the four entries (legs 1–4 clockwise) and returns each entry's vc:
+ * Screening circulating flow from four leg totals (legs 1–4 clockwise):
  *   vc(i) = v(i−1) + v(i−2) + v(i−3)  — every other entry crosses leg i.
+ *
+ * This is a CONSERVATIVE SCREENING BOUND, not the HCM conflict diagram
+ * (Exhibit 21-2): the true vc derives from turning-movement volumes
+ * (U/L/T/R per leg), and right turns exit before the next entrance, so the
+ * leg-sum overstates vc and understates entry capacity by roughly a third.
+ * For a design answer, supply each entry's vc directly to analyzeEntry from
+ * counted turning movements.
  */
 export function circulatingFromLegs(legs: number[]): number[] {
   if (legs.length !== 4) throw new Error('Enter the four leg volumes.')
   return legs.map((_, i) => legs[(i + 1) % 4] + legs[(i + 2) % 4] + legs[(i + 3) % 4])
 }
 
-/** Level-of-service letter from control delay (s/veh) and the v/c state. */
+/** Level-of-service letter from control delay (s/veh) and the v/c state —
+ *  the HCM UNSIGNALIZED table (roundabouts take it, not the signalized one):
+ *  A 0–10, B 10–15, C 15–25, D 25–35, E 35–50, F above (and F whenever x > 1). */
 export function losFromDelay(d: number, xc: number): 'A' | 'B' | 'C' | 'D' | 'E' | 'F' {
   if (xc > 1) return 'F'
   if (d <= 10) return 'A'
-  if (d <= 20) return 'B'
-  if (d <= 35) return 'C'
-  if (d <= 55) return 'D'
-  if (d <= 80) return 'E'
+  if (d <= 15) return 'B'
+  if (d <= 25) return 'C'
+  if (d <= 35) return 'D'
+  if (d <= 50) return 'E'
   return 'F'
 }
 
@@ -152,5 +159,5 @@ export function controlDelay(xc: number, cap: number, T = 0.25, k = 1.0, B = 1.0
   const base = 3600 / cap
   if (xc <= 0) return base
   const root = Math.sqrt(Math.max(0, Math.pow(xc - 1, 2) + (8 * k * B * xc) / (cap * T)))
-  return base + (900 * T * (xc - 1 + root)) / xc
+  return base + 900 * T * (xc - 1 + root)
 }

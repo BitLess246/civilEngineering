@@ -75,11 +75,11 @@ const AE_AIR: Record<MaxAgg, { moderate: number; severe: number }> = {
   9.5: { moderate: 6.0, severe: 7.5 },
   12.5: { moderate: 5.5, severe: 7.0 },
   19: { moderate: 5.0, severe: 6.0 },
-  25: { moderate: 4.5, severe: 5.0 },
-  37.5: { moderate: 4.5, severe: 4.5 },
-  50: { moderate: 4.0, severe: 4.0 },
-  75: { moderate: 3.5, severe: 3.5 },
-  150: { moderate: 3.0, severe: 3.0 },
+  25: { moderate: 4.5, severe: 6.0 },
+  37.5: { moderate: 4.5, severe: 5.5 },
+  50: { moderate: 4.0, severe: 5.0 },
+  75: { moderate: 3.5, severe: 4.5 },
+  150: { moderate: 3.0, severe: 4.0 },
 }
 
 /** Table 6.3.6 — volume of dry-rodded coarse aggregate per unit volume of

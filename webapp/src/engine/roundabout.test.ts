@@ -7,9 +7,9 @@ describe('HCM 2010 entry capacity', () => {
   })
 
   it('matches the hand evaluations at vc = 500', () => {
-    expect(laneCapacity(500, 'single')).toBeCloseTo(678.56, 1)   // 1130·e^(−0.51)
+    expect(laneCapacity(500, 'single')).toBeCloseTo(685.38, 1)   // HCM 2010: 1130·e^(−0.50)
     expect(laneCapacity(500, 'right')).toBeCloseTo(796.30, 1)    // 1130·e^(−0.35)
-    expect(laneCapacity(500, 'left')).toBeCloseTo(776.64, 1)     // 1130·e^(−0.375)
+    expect(laneCapacity(500, 'left')).toBeCloseTo(776.64, 1)    // 1130·e^(−0.375)
   })
 
   it('falls as the circulating stream grows', () => {
@@ -17,20 +17,20 @@ describe('HCM 2010 entry capacity', () => {
   })
 })
 
-describe('the conflict-diagram helper', () => {
-  it('assembles each entry from the other three legs', () => {
+describe('the screening circulating-flow helper', () => {
+  it('bounds each entry by the other three legs (conservative screening, not Exhibit 21-2)', () => {
     expect(circulatingFromLegs([100, 200, 300, 400])).toEqual([900, 800, 700, 600])
   })
 })
 
 describe('the single-lane entry analysis', () => {
-  // ve = 600, vc = 400, PHF 1: cap = 1130·e^(−0.408) = 751.41, x = 0.7985,
-  // delay = 4.791 + 225·(−0.2015 + 0.27314)/0.7985 = 24.98 → LOS C.
+  // ve = 600, vc = 400, PHF 1, HCM 2010 β = 1.00: cap = 1130·e^(−0.40) = 757.46,
+  // x = 0.7921, delay = 4.753 + 225·(−0.2079 + 0.2769) = 20.28 → LOS C (unsignalized bands).
   const r = analyzeEntry({ ve: 600, vc: 400, lanes: 1 })
   it('capacity, v/c and delay match the hand run', () => {
-    expect(r.capacity).toBeCloseTo(751.41, 1)
-    expect(r.xc).toBeCloseTo(0.7985, 3)
-    expect(r.delay).toBeCloseTo(24.98, 1)
+    expect(r.capacity).toBeCloseTo(757.46, 1)
+    expect(r.xc).toBeCloseTo(0.7921, 3)
+    expect(r.delay).toBeCloseTo(20.28, 1)
     expect(r.los).toBe('C')
   })
   it('the PHF divides the demand into the period', () => {
@@ -59,9 +59,9 @@ describe('the two-lane entry analysis', () => {
 })
 
 describe('control delay and LOS', () => {
-  it('settles to twice the free-flow base as x → 0', () => {
-    // limit: 3600/c + 3600/c = 7200/c
-    expect(controlDelay(0.0001, 900)).toBeCloseTo(8.0, 1)
+  it('settles to the free-flow base as x → 0', () => {
+    // limit: 3600/c (the 900·T·(xc−1+root) term vanishes)
+    expect(controlDelay(0.0001, 900)).toBeCloseTo(4.0, 1)
   })
   it('stays finite just below capacity and grows past it', () => {
     const d1 = controlDelay(0.98, 900)
@@ -69,13 +69,13 @@ describe('control delay and LOS', () => {
     expect(d1).toBeGreaterThan(0)
     expect(d2).toBeGreaterThan(d1)
   })
-  it('maps the HCM thresholds', () => {
+  it('maps the HCM unsignalized thresholds', () => {
     expect(losFromDelay(10, 0.5)).toBe('A')
     expect(losFromDelay(10.1, 0.5)).toBe('B')
-    expect(losFromDelay(20.1, 0.5)).toBe('C')
-    expect(losFromDelay(35.1, 0.5)).toBe('D')
-    expect(losFromDelay(55.1, 0.5)).toBe('E')
-    expect(losFromDelay(80.1, 0.5)).toBe('F')
+    expect(losFromDelay(15.1, 0.5)).toBe('C')
+    expect(losFromDelay(25.1, 0.5)).toBe('D')
+    expect(losFromDelay(35.1, 0.5)).toBe('E')
+    expect(losFromDelay(50.1, 0.5)).toBe('F')
     expect(losFromDelay(5, 1.5)).toBe('F')
   })
 })

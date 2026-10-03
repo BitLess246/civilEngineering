@@ -179,13 +179,16 @@ export function tShape(d: number, bf: number, tf: number, tw: number): SectionRe
   ])
 }
 
-/** Channel, flanges pointing left: depth d, flange width bf, flange tf, web tw (web on the right). */
+/** Channel, flanges pointing left: depth d, flange width bf, flange tf, web tw (web on the right).
+ *  Flanges start at x = 0 with width bf − tw so the web/flange corners are
+ *  counted once — same convention as the angle below. */
 export function channelShape(d: number, bf: number, tf: number, tw: number): SectionResult {
   if (!(d > 2 * tf)) throw new Error('Channel: depth must exceed twice the flange thickness.')
+  if (!(bf >= tw)) throw new Error('Channel: flange width must be at least the web thickness.')
   return rectComposite([
     { x: bf - tw, y: 0, w: tw, h: d, name: 'web' },
-    { x: 0, y: d - tf, w: bf, h: tf, name: 'top flange' },
-    { x: 0, y: 0, w: bf, h: tf, name: 'bottom flange' },
+    { x: 0, y: d - tf, w: bf - tw, h: tf, name: 'top flange' },
+    { x: 0, y: 0, w: bf - tw, h: tf, name: 'bottom flange' },
   ])
 }
 

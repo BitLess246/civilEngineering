@@ -5,7 +5,7 @@
 //   log10(W18) = ZR·S0 + 7.35·log10(D+1) − 0.06
 //     + log10[ΔPSI / (4.5 − 1.5)] / [1 + 1.624×10⁷/(D+1)^8.46]
 //     + (4.22 − 0.32·pt)·log10[ sc'·Cd·(D^0.75 − 1.132)
-//         / (215.63·J·(D^0.75 − 18.42/(E/c)^0.25)) ]
+//         / (215.63·J·(D^0.75 − 18.42/(E/k)^0.25)) ]
 //
 //   D      slab thickness, inches (solved by bisection on the monotone RHS)
 //   ZR     standard normal deviate of the reliability
@@ -17,9 +17,12 @@
 //   J      load-transfer coefficient (3.2 JPCP without tied shoulders,
 //          2.8 with tied PCC shoulders; lower = better load transfer)
 //   E      concrete elastic modulus, psi (≈ 4–5×10⁶)
-//   c      strength ratio flexural/compressive (0.25 by the Guide)
+//   k      modulus of subgrade reaction, pci (the Guide's native unit —
+//          subgrade support, NOT a strength ratio; typical 75–220 pci).
+//          There is deliberately no default: a silent fixed subgrade would
+//          size every slab for soil that was never entered.
 //
-// Inputs are SI (mm, MPa) and converted to the Guide's US units internally.
+// Inputs are SI (mm, MPa, MN/m³) and converted to the Guide's US units internally.
 // ─────────────────────────────────────────────────────────────────────────
 
 /** MPa → psi. */
@@ -27,8 +30,8 @@ export const PSI_PER_MPA = 145.038
 /** mm → inches. */
 export const IN_PER_MM = 1 / 25.4
 
-/** Strength ratio c in the E/c term of the Guide equation. */
-export const C_STRENGTH = 0.25
+/** MN/m³ per pci: 1 pci = 6894.76 Pa / 0.0254 m = 0.271447 MN/m³. */
+export const MNPM3_PER_PCI = 0.271447
 
 /**
  * Log of the rigid design equation RHS as a function of the slab thickness
@@ -37,11 +40,11 @@ export const C_STRENGTH = 0.25
  */
 export function logW18Rigid(D: number, p: {
   ZR: number; S0: number; dPSI: number; pt: number
-  scPsi: number; Cd: number; J: number; Epsi: number
+  scPsi: number; Cd: number; J: number; Epsi: number; kPci: number
 }): number {
   const slabStress =
     (p.scPsi * p.Cd * (Math.pow(D, 0.75) - 1.132)) /
-    (215.63 * p.J * (Math.pow(D, 0.75) - 18.42 / Math.pow(p.Epsi / C_STRENGTH, 0.25)))
+    (215.63 * p.J * (Math.pow(D, 0.75) - 18.42 / Math.pow(p.Epsi / p.kPci, 0.25)))
   return (
     p.ZR * p.S0 +
     7.35 * Math.log10(D + 1) -
@@ -70,6 +73,9 @@ export interface RigidInput {
   J?: number
   /** Concrete elastic modulus E, MPa (default 27 580 ≈ 4×10⁶ psi). */
   E_MPa: number
+  /** Modulus of subgrade reaction k, MN/m³ (required — e.g. ≈54 for 200 pci).
+   *  Typical compacted subgrades run 20–60 MN/m³ (≈75–220 pci). */
+  k_MNpm3: number
 }
 
 export interface RigidResult {
@@ -82,6 +88,7 @@ export interface RigidResult {
   pt: number
   scPsi: number
   Epsi: number
+  kPci: number       // subgrade modulus in the Guide's native pci
   logW18: number     // the RHS at the solution — should equal log10(W18)
 }
 
@@ -102,10 +109,12 @@ export function requiredD(inp: RigidInput): RigidResult {
   if (!(J > 0)) throw new Error('Load-transfer coefficient must be positive.')
   const scPsi = inp.sc_MPa * PSI_PER_MPA
   const Epsi = inp.E_MPa * PSI_PER_MPA
+  if (!(inp.k_MNpm3 > 0)) throw new Error('Subgrade modulus k must be positive (MN/m³).')
+  const kPci = inp.k_MNpm3 / MNPM3_PER_PCI
   const dPSI = pi - ptv
   const ZR = zrFromReliability(R)
   const target = Math.log10(inp.W18)
-  const eq = { ZR, S0, dPSI, pt: ptv, scPsi, Cd, J, Epsi }
+  const eq = { ZR, S0, dPSI, pt: ptv, scPsi, Cd, J, Epsi, kPci }
   const f = (D: number) => logW18Rigid(D, eq)
   // Bracket: below ~4 in the slab-stress bracket can go negative (log of a
   // negative number is NaN); 30 inches covers every printed design case.
@@ -118,7 +127,7 @@ export function requiredD(inp: RigidInput): RigidResult {
     else hi = mid
   }
   const D_in = (lo + hi) / 2
-  return { D: D_in * 25.4, D_in, ZR, S0, dPSI, pi, pt: ptv, scPsi, Epsi, logW18: f(D_in) }
+  return { D: D_in * 25.4, D_in, ZR, S0, dPSI, pi, pt: ptv, scPsi, Epsi, kPci, logW18: f(D_in) }
 }
 
 /** Standard normal quantile (Acklam inverse-CFD, ~1e-9). */
@@ -142,7 +151,9 @@ export function zrFromReliability(R: number): number {
     q = Math.sqrt(-2 * Math.log(1 - p))
     x = -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
   }
-  return -Math.abs(x)
+  // Plain quantile: R < 50 gives a positive ZR (over-design only if misread —
+  // never silently flip the sign).
+  return x
 }
 
 /** The Guide's printed ZR ladder for the worked solution. */

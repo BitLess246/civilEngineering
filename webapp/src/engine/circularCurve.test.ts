@@ -6,7 +6,8 @@ const near = (a: number, b: number, tol = 1e-9) => expect(Math.abs(a - b)).toBeL
 // Hand values for R = 400 m, Δ = 30°, PI = 3+000:
 //   T = 400·tan15° = 107.17968   L = 400·π/6 = 209.43951
 //   LC = 800·sin15° = 207.05524  M = 400(1−cos15°) = 13.62967
-//   E = 400(sec15°−1) = 14.11024  D20 = (20/L)·30 = 2.86479°
+//   E = 400(sec15°−1) = 14.11047  D20 = (20/L)·30 = 2.86479°
+//   D100ft = (30.48/L)·30 = 4.36594° (100 ft = 30.48 m of arc; ≡ 5729.578/R_ft)
 //   PC = 2892.82032 · PT = 3102.25982
 const CURVE = { R: 400, deltaDeg: 30, piStation: 3000, interval: 20 }
 
@@ -21,9 +22,10 @@ describe('solveCurve — classical elements', () => {
     near(el.M, 13.62967, 1e-4)
     near(el.E, 14.11047, 1e-4)
   })
-  it('degree of curve: 20 m arc → 2.86479°, 100 ft arc → 46.989°', () => {
+  it('degree of curve: 20 m arc → 2.86479°, 100 ft arc → 4.36594°', () => {
     near(el.D20, 2.86479, 1e-4)
-    near(el.D100ft, (328.0839895 / 209.43951) * 30, 1e-4)
+    near(el.D100ft, (30.48 / 209.43951) * 30, 1e-4)
+    near(el.D100ft, 4.36594, 1e-4)
   })
   it('stations: PC = PI − T, PT = PC + L', () => {
     near(el.pc, 2892.82032, 1e-4)

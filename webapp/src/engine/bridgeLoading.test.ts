@@ -111,14 +111,14 @@ describe('lever rule', () => {
 
   it('exterior, one lane: measured wheel positions with the cantilever lever', () => {
     // S = 2.4, d = 1.6: lane wheels from the edge at 1.5 and 3.3 →
-    // x = −0.1 (overhang: r = 1 − 0.1/2.4) and x = 1.7 (r = 0.7/2.4)
+    // x = −0.1 (overhang: ΣM about B gives r = (S−x)/S = 1 + 0.1/2.4) and x = 1.7 (r = 0.7/2.4)
     const r = leverRule({ S: 2.4, d: 1.6, girder: 'exterior', lanes: 1 })
     expect(r.wheels[0].x).toBeCloseTo(-0.1, 9)
-    expect(r.wheels[0].r).toBeCloseTo(1 - 0.1 / 2.4, 9)
+    expect(r.wheels[0].r).toBeCloseTo(1 + 0.1 / 2.4, 9)
     expect(r.wheels[1].x).toBeCloseTo(1.7, 9)
     expect(r.wheels[1].r).toBeCloseTo(0.7 / 2.4, 9)
-    expect(r.g).toBeCloseTo((0.9583333 + 0.2916667) / 2, 6)
-    expect(r.g * r.m).toBeCloseTo(0.75, 6)
+    expect(r.g).toBeCloseTo((1.0416667 + 0.2916667) / 2, 6)
+    expect(r.g * r.m).toBeCloseTo(0.8, 6)
   })
 
   it('exterior, two lanes: the second lane lands past the first interior girder → 0 shares', () => {
@@ -127,7 +127,7 @@ describe('lever rule', () => {
     expect(r.wheels[3].r).toBe(0)
     // so two lanes give exactly what one lane gives before the presence factor
     expect(r.g).toBeCloseTo(leverRule({ S: 2.4, d: 1.6, girder: 'exterior', lanes: 1 }).g, 9)
-    expect(r.g * r.m).toBeCloseTo(0.625, 9)
+    expect(r.g * r.m).toBeCloseTo(0.6666667, 6)
   })
 })
 

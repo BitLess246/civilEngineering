@@ -17,7 +17,7 @@ import { INK, MUTED, f2, f3 } from '../lib/influenceStyle'
 
 const SAMPLE = {
   W18: 5_000_000, reliability: 90, S0: 0.35, pt: 2.5,
-  sc_MPa: 4.5, Cd: 1, J: 3.2, E_MPa: 27580,
+  sc_MPa: 4.5, Cd: 1, J: 3.2, E_MPa: 27580, k_MNpm3: 54.3,
 }
 
 export default function RigidPavement() {
@@ -29,10 +29,11 @@ export default function RigidPavement() {
   const [Cd, setCd] = useState(SAMPLE.Cd)
   const [J, setJ] = useState(SAMPLE.J)
   const [E, setE] = useState(SAMPLE.E_MPa)
+  const [k, setK] = useState(SAMPLE.k_MNpm3)
 
   let r: RigidResult | null = null
   let err: string | null = null
-  try { r = requiredD({ W18, reliability, S0, pi: 4.5, pt, sc_MPa: sc, Cd, J, E_MPa: E }) }
+  try { r = requiredD({ W18, reliability, S0, pi: 4.5, pt, sc_MPa: sc, Cd, J, E_MPa: E, k_MNpm3: k }) }
   catch (e) { err = e instanceof Error ? e.message : 'Check the inputs' }
 
   const steps: SolutionStep[] = r ? [
@@ -44,16 +45,17 @@ export default function RigidPavement() {
       ],
     },
     {
-      title: 'Material and drainage inputs (US units as printed)',
+      title: 'Material, subgrade and drainage inputs (US units as printed)',
       lines: [
-        { tex: `s_c' = ${f2(r.scPsi)}\\ \\text{psi} \\quad C_d = ${f2(Cd)} \\quad J = ${f2(J)} \\quad E = ${(r.Epsi / 1e6).toFixed(1)}\\times 10^6\\ \\text{psi},\\; c = 0.25` },
-        { text: 'The Guide converts flexural strength with the c = 0.25 strength ratio inside the E/c term; J falls as load transfer improves (2.8 tied PCC shoulder … 3.2 untied).' },
+        { tex: `s_c' = ${f2(r.scPsi)}\\ \\text{psi} \\quad C_d = ${f2(Cd)} \\quad J = ${f2(J)} \\quad E = ${(r.Epsi / 1e6).toFixed(1)}\\times 10^6\\ \\text{psi}` },
+        { tex: `k = ${f2(k)}\\ \\text{MN/m}^3 \\div 0.271447 = ${f2(r.kPci)}\\ \\text{pci}` },
+        { text: 'k is the modulus of subgrade reaction in the Guide\'s own pci — subgrade support, read from a plate test or a CBR correlation (compacted subgrades run about 75–220 pci). There is no default: a slab must never be sized for soil that was never entered. J falls as load transfer improves (2.8 tied PCC shoulder … 3.2 untied).' },
       ],
     },
     {
       title: 'Solve the rigid equation for D (bisection on a monotone RHS)',
       lines: [
-        { tex: '\\log_{10} W_{18} = Z_R S_0 + 7.35\\log_{10}(D+1) - 0.06 + \\frac{\\log_{10}\\frac{\\Delta PSI}{4.5-1.5}}{1 + \\frac{1.624\\times 10^7}{(D+1)^{8.46}}} + (4.22 - 0.32\\,p_t)\\log_{10}\\!\\left[\\frac{s_c\' C_d (D^{0.75}-1.132)}{215.63\\, J (D^{0.75} - \\frac{18.42}{(E/c)^{0.25}})}\\right]' },
+        { tex: '\\log_{10} W_{18} = Z_R S_0 + 7.35\\log_{10}(D+1) - 0.06 + \\frac{\\log_{10}\\frac{\\Delta PSI}{4.5-1.5}}{1 + \\frac{1.624\\times 10^7}{(D+1)^{8.46}}} + (4.22 - 0.32\\,p_t)\\log_{10}\\!\\left[\\frac{s_c\' C_d (D^{0.75}-1.132)}{215.63\\, J (D^{0.75} - \\frac{18.42}{(E/k)^{0.25}})}\\right]' },
         { tex: `D = ${f2(r.D_in)}\\ \\text{in} = ${f2(r.D)}\\ \\text{mm} \\qquad \\text{check: log}_{10}W_{18} = ${f3(r.logW18)} = \\log_{10}(${(W18 / 1e6).toFixed(2)}\\times 10^6)` },
         { text: 'Round UP to the next 10 mm for the construction surface — the equation is a minimum, and dowel/edge detailing follows the same Guide.' },
       ],
@@ -75,7 +77,7 @@ export default function RigidPavement() {
           <Card title="Traffic & reliability">
             <div className="sm:col-span-2 lg:col-span-3">
               <button type="button"
-                onClick={() => { setW18(SAMPLE.W18); setReliability(SAMPLE.reliability); setS0(SAMPLE.S0); setPt(SAMPLE.pt); setSc(SAMPLE.sc_MPa); setCd(SAMPLE.Cd); setJ(SAMPLE.J); setE(SAMPLE.E_MPa) }}
+                onClick={() => { setW18(SAMPLE.W18); setReliability(SAMPLE.reliability); setS0(SAMPLE.S0); setPt(SAMPLE.pt); setSc(SAMPLE.sc_MPa); setCd(SAMPLE.Cd); setJ(SAMPLE.J); setE(SAMPLE.E_MPa); setK(SAMPLE.k_MNpm3) }}
                 className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
                 Load the sample — 5 M ESALs · 90 % · J 3.2
               </button>
@@ -89,6 +91,7 @@ export default function RigidPavement() {
           <Card title="Concrete & load transfer">
             <Num label="Modulus of rupture sc'" unit="MPa" value={sc} onChange={setSc} min={2} max={8} step="0.1" />
             <Num label="Elastic modulus E" unit="MPa" value={E} onChange={setE} min={15000} max={50000} step="500" />
+            <Num label="Subgrade modulus k" unit="MN/m³" value={k} onChange={setK} min={5} max={150} step="1" />
             <Num label="Drainage coefficient Cd" unit="—" value={Cd} onChange={setCd} min={0.7} max={1.25} step="0.05" />
             <Pick label="Load-transfer coefficient J" value={String(J)} onChange={(v) => setJ(Number(v))}
               options={J_OPTIONS.map((o) => [String(o.j), o.label])} />
