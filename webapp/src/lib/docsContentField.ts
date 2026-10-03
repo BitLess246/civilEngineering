@@ -643,4 +643,164 @@ export const FIELD_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'rigid-pavement',
+    name: 'Rigid Pavement',
+    route: '/rigid-pavement',
+    group: 'Transportation',
+    summary: 'The AASHTO 1993 rigid design equation solved for the PCC slab thickness: design ESALs and reliability, modulus of rupture, load-transfer coefficient J and the drainage coefficient, with the bisection on the Guide\'s monotone RHS.',
+    basis: 'log10 W18 = ZR·S0 + 7.35·log10(D+1) − 0.06 + log10[ΔPSI/3]/[1 + 1.624×10⁷/(D+1)^8.46] + (4.22 − 0.32·pt)·log10[sc′·Cd·(D^0.75 − 1.132)/(215.63·J·(D^0.75 − 18.42/(E/c)^0.25))]; p0 = 4.5 rigid; c = 0.25 strength ratio; US-unit core with SI inputs converted.',
+    sections: [
+      {
+        id: 'rigid-input',
+        title: 'Traffic, concrete, load transfer',
+        controls: [
+          { kind: 'field', name: 'W18 & reliability', what: 'Design ESALs (from /esal or /pavement) with the reliability and overall standard deviation S0 (rigid 0.30–0.50).' },
+          { kind: 'field', name: 'sc′, E, Cd', what: 'Modulus of rupture (third-point), elastic modulus, and the drainage coefficient around 1.0.' },
+          { kind: 'choice', name: 'J', what: 'Load-transfer coefficient ladder: 2.8 tied PCC shoulder … 3.2 untied — better transfer buys thinner slab.' },
+        ],
+      },
+      {
+        id: 'rigid-output',
+        title: 'Slab thickness',
+        controls: [
+          { kind: 'output', name: 'D', what: 'Required slab thickness in mm and the Guide\'s inches, with the ZR/ΔPSI derivation and an equation round-trip check.' },
+          { kind: 'output', name: 'Section drawing', what: 'The dowelled slab on granular base, to scale against the computed thickness.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'roundabout',
+    name: 'Roundabout Capacity',
+    route: '/roundabout',
+    group: 'Transportation',
+    summary: 'One roundabout entry under the HCM 2010 model: circulating flow assembled from the four leg volumes, per-lane entry capacity from the exponential conflict formula, v/c, control delay and level of service.',
+    basis: 'c = 1130·e^(−β×10⁻³·vc) with β = 1.02 single-lane, 0.70/0.75 two-lane right/left; delay by the HCM unsignalized procedure d = 3600/c + 900T[(x−1)+√((x−1)² + 8kBx/(cT))]/x; LOS thresholds A ≤ 10 … E ≤ 80 s/veh; conflict pattern per HCM Exhibit 21-2.',
+    sections: [
+      {
+        id: 'roundabout-input',
+        title: 'Entry and circulating flow',
+        controls: [
+          { kind: 'field', name: 've, PHF', what: 'Entry demand and peak-hour factor — flows are restated to the peak-15 rate.' },
+          { kind: 'field', name: 'Leg volumes', what: 'The four entries assembled into the circulating stream the analysed entry faces, or a direct vc when the study gives it.' },
+          { kind: 'choice', name: 'Lanes', what: 'Single-lane or two-lane entry (55/45 right-left split).' },
+        ],
+      },
+      {
+        id: 'roundabout-output',
+        title: 'Capacity and LOS',
+        controls: [
+          { kind: 'output', name: 'c, v/c, reserve', what: 'Per-lane and entry capacity, the v/c ratio and the spare capacity before saturation.' },
+          { kind: 'output', name: 'Delay · LOS', what: 'Control delay against the HCM letter grades, with the conflict diagram drawn for the entry.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'esal',
+    name: 'Axle Load ESALs',
+    route: '/esal',
+    group: 'Transportation',
+    summary: 'A weighed axle-load census converted to design ESALs by the generalized fourth-power law: per-axle LEFs against the 80 kN standard, group loads shared across tandem/tridem axles, and the traffic side grown across the design period.',
+    basis: 'LEF = (P/80)^4 with an editable exponent (3–5 spans the literature); groups cost n·(P_group/n/80)^4; W18 = 365·G·Σ ADT·LEF·D·L with G = ((1+r)^n − 1)/r.',
+    sections: [
+      {
+        id: 'esal-input',
+        title: 'Axle census and traffic',
+        controls: [
+          { kind: 'field', name: 'Axle rows', what: 'Name, axle kind (single/tandem/tridem), group load in kN and vehicles per day — the loadometer sheet.' },
+          { kind: 'field', name: 'n, D, L', what: 'Load exponent, directional split and design-lane factor; annual growth and design period for the W18 accumulation.' },
+        ],
+      },
+      {
+        id: 'esal-output',
+        title: 'LEFs and W18',
+        controls: [
+          { kind: 'output', name: 'Per-row LEF', what: 'Each row\'s equivalency factor and daily ESALs, summed into the design W18.' },
+          { kind: 'output', name: 'Load–ESAL curve', what: 'The fourth-power wall with the fleet plotted on it — the 120 kN single at 5.06 ESALs is the classic example.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'storm-sewer',
+    name: 'Storm Sewer',
+    route: '/storm-sewer',
+    group: 'Water resources',
+    summary: 'A linear storm-sewer ladder sized end to end: Rational Method flows with travel-time accumulation down the network, Manning full-flow capacity against the commercial diameter ladder, part-full velocity for self-cleansing, and the tc chain carried inlet to outfall.',
+    basis: 'Q = Ccomp·i(tc)·ΣA/360 with i = a/(tc + b)^c; tc = max(inlet time, upstream tc + L/V); Manning Qf = (1/n)(πD²/4)(D/4)^(2/3)√S; sizing picks the smallest standard DN covering Q at a part-full (normal-depth) velocity ≥ Vmin.',
+    sections: [
+      {
+        id: 'sewer-input',
+        title: 'IDF, policy, runs',
+        controls: [
+          { kind: 'field', name: 'IDF a·b·c', what: 'The intensity law for the service area, entered once and shared by every run.' },
+          { kind: 'field', name: 'Vmin · Vwarn', what: 'Self-cleansing floor and the erosion-check velocity.' },
+          { kind: 'field', name: 'Run rows', what: 'Length, grade, Manning n and the attached inlet (area, C, inlet time) for each line, head-first.' },
+        ],
+      },
+      {
+        id: 'sewer-output',
+        title: 'Sizes and the tc chain',
+        controls: [
+          { kind: 'output', name: 'Per-run Q · DN · V', what: 'Design flow, the standard diameter chosen, capacity utilization and travel time fed downstream.' },
+          { kind: 'output', name: 'Profile & warnings', what: 'Longitudinal profile of sizes and grades, with velocity and capacity warnings flagged per run.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'water-demand',
+    name: 'Water Demand',
+    route: '/water-demand',
+    group: 'Water resources',
+    summary: 'The municipal water-supply chain: population forecast on the design horizon (arithmetic, geometric, incremental or decreasing-rate), average/max-day/peak-hour demands at the service-level per-capita rate, Kuichling fire flow, and the storage reservoir breakdown.',
+    basis: 'Pn by the four textbook growth laws; ADD = q·P with MDD = 1.30·ADD and PHD = 2.50·ADD (editable factors, LWUA-style practice); Kuichling Qf = 3182√P (L/min, P in thousands); storage = operating (25 % MDD) + fire reserve + emergency.',
+    sections: [
+      {
+        id: 'demand-input',
+        title: 'Forecast and demand levels',
+        controls: [
+          { kind: 'choice', name: 'Method', what: 'The growth law that fits the census pair; geometric takes a rate, the others take the census increment.' },
+          { kind: 'field', name: 'q · factors', what: 'Per-capita demand (100–150 LPCD ladder) with the max-day and peak-hour peaking factors.' },
+        ],
+      },
+      {
+        id: 'demand-output',
+        title: 'Demands and storage',
+        controls: [
+          { kind: 'output', name: 'ADD · MDD · PHD', what: 'The three design demands in m³/day and L/s — transmission sizes off MDD, distribution and pumping off PHD.' },
+          { kind: 'output', name: 'Fire · storage', what: 'Kuichling fire flow for the chosen duration and the operating/fire/emergency storage stack, sanity-banded against days of MDD.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'pump-station',
+    name: 'Pump Station',
+    route: '/pump-station',
+    group: 'Water resources',
+    summary: 'One pumping circuit end to end: the system curve the pipework demands against the pump curve the impeller gives, their bisection crossing as the duty point, the power chain down to the motor, and the NPSH margin that keeps the impeller off cavitation.',
+    basis: 'H_sys = H_static + hf (Hazen–Williams both legs) + ΣK·V²/2g; H_pump = H0 − (H0 − Hd)(Q/Qd)²; duty at H_pump = H_sys; NPSHa = (Patm − Pv)/γ + z_suction − hf,suction against 1.3×NPSHr; powers ρgQH → shaft (ηp) → motor (ηm); affinity laws Q ∝ N, H ∝ N², P ∝ N³.',
+    sections: [
+      {
+        id: 'pump-input',
+        title: 'Pipework, pump, suction',
+        controls: [
+          { kind: 'field', name: 'System', what: 'Static lift and delivery head; suction and discharge legs with length, diameter, C and fitting K-units.' },
+          { kind: 'field', name: 'Pump curve', what: 'Shutoff head and the rated point pin the falling parabola; efficiencies for the power chain.' },
+          { kind: 'field', name: 'NPSH', what: 'Vapour-pressure head, suction arrangement (flooded or lift) and the datasheet NPSHr.' },
+        ],
+      },
+      {
+        id: 'pump-output',
+        title: 'Duty, power, margin',
+        controls: [
+          { kind: 'output', name: 'Q* · H*', what: 'The operating point where the curves cross, with the water/shaft/motor power chain and kWh per m³.' },
+          { kind: 'output', name: 'NPSH verdict', what: 'Available vs 1.3×required at the suction, and the curves drawing with the duty point marked.' },
+        ],
+      },
+    ],
+  },
 ]
