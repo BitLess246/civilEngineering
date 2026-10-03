@@ -104,6 +104,14 @@ describe('M1 march physics', () => {
     }
   })
 
+  it('standard-step marches an M2 rising limb instead of stubbing at one station', () => {
+    // M2 control y = 0.8 marching with dx = 1: depth must RISE toward yn —
+    // the old falling-side-only bracket returned [0.8] and stopped.
+    const ss = standardStep(rect, Q, n, S0, 0.8, 1, 200)
+    expect(ss.length).toBeGreaterThan(10)
+    for (let i = 1; i < ss.length; i++) expect(ss[i]).toBeGreaterThan(ss[i - 1])
+  })
+
   it('long reach converges on the uniform-flow asymptote', () => {
     const r = gvfProfile({ shape: rect, Q, n, S0, L: 4000, yControl: 1.5, controlAt: 'downstream', dx: 2 })
     expect(r.terminus).toBe('uniform-flow asymptote')

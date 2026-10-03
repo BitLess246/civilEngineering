@@ -63,6 +63,17 @@ describe('websterTiming — cycle override and saturation', () => {
     const res = websterTiming({ ...TWO, cycleOverride: 9 })
     expect(res.phases.some((p) => p.x >= 1)).toBe(true)
     expect(res.los).toBe('F')
+    expect(res.oversaturated).toBe(true)
+    // A saturated phase has no finite delay, so the average is undefined —
+    // never a finite number diluted with zeros.
+    expect(Number.isNaN(res.avgDelay)).toBe(true)
+  })
+  it('a sub-optimum but undersaturated override is mistimed, not oversaturated', () => {
+    // C0 = 27.2 s; forcing 25 s keeps every X < 1 (X = 0.375·25/17 ≈ 0.55).
+    const res = websterTiming({ ...TWO, cycleOverride: 25 })
+    expect(res.phases.every((p) => p.x < 1)).toBe(true)
+    expect(res.oversaturated).toBe(false)
+    expect(Number.isFinite(res.avgDelay)).toBe(true)
   })
 })
 

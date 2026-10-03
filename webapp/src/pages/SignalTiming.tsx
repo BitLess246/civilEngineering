@@ -80,7 +80,7 @@ export default function SignalTiming() {
       title: 'Delay and level of service',
       lines: [
         { tex: `d = \\frac{C(1-\\lambda)^2}{2(1-\\lambda X)} + \\frac{X^2}{2q(1-X)} - 0.65\\left(\\frac{C}{q^2}\\right)^{1/3}X^{2+5\\lambda}` },
-        { text: 'Webster\u2019s uniform + overflow + empirical terms, per phase; the intersection delay is the flow-weighted average.' },
+        { text: 'Webster\u2019s uniform + overflow + empirical terms, per phase; the intersection delay is the flow-weighted average. A saturated phase (X ≥ 1) has no finite delay, so the average is undefined — lengthen the cycle or add capacity instead of reading a number.' },
         { tex: `d_{\\text{avg}} = ${f3(res.avgDelay)}\\text{ s/veh} \\;\\Rightarrow\\; \\text{LOS } ${res.los}` },
         { text: 'HCM signalized bands: A ≤ 10 · B ≤ 20 · C ≤ 35 · D ≤ 55 · E ≤ 80 s/veh; F beyond, or whenever a phase sits at X ≥ 1.' },
       ],

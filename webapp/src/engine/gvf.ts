@@ -155,19 +155,19 @@ export function standardStep(
     const sub = y > yc
     // unknown station energy: E_u + S0·dx − dx·(Sf_u + Sf_k)/2 = E_k
     const balance = (yu: number) => E(yu) + S0 * dx - dx * (Sf(yu) + Sfk) / 2 - Ek
-    // g(yu) is monotone on each branch; bracket on the known side of critical
-    let lo: number, hi: number
-    if (sub) {
-      lo = Math.max(yc * (1 + 1e-9), y * 0.02)
-      hi = y
-    } else {
-      lo = y
-      hi = Math.min(yc * (1 - 1e-9), y * 50)
-    }
-    // the root must sit strictly inside; if the balance cannot be met before
-    // critical depth, the profile wants to cross — stop the march
-    if (balance(lo) * balance(hi) > 0) break
-    y = bisect(balance, lo, hi)
+    // g(yu) is monotone on each branch; bracket on the known side of critical.
+    // Depth falls toward the control on M1/S1 but RISES away from it on
+    // M2/S2 (and mirrors), so when the falling-side bracket holds no root the
+    // march tries the rising side before giving up — otherwise an M2 march
+    // returns a silent 1-element stub.
+    const brackets: [number, number][] = sub
+      ? [[Math.max(yc * (1 + 1e-9), y * 0.02), y], [y, y * 50]]
+      : [[y * 0.02, y], [y, Math.min(yc * (1 - 1e-9), y * 50)]]
+    const hit = brackets.find(([lo, hi]) => lo < hi && balance(lo) * balance(hi) <= 0)
+    // no bracket: the balance cannot be met before critical depth — the
+    // profile wants to cross, so stop the march
+    if (!hit) break
+    y = bisect(balance, hit[0], hit[1])
     if (y < 1e-4) break
     depths.push(y)
   }
