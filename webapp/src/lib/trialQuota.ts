@@ -53,6 +53,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/geometric-design', '/weir-flow', '/pile-capacity', '/bridge-loading',
   // wave four: culverts, pavement, SCS runoff, bridge rating
   '/culvert', '/pavement', '/runoff', '/bridge-rating',
+  // wave five: GVF profiles, Muskingum routing, detention ponds, DO sag
+  '/gvf-profiles', '/muskingum', '/detention', '/do-sag',
 ]
 
 /**

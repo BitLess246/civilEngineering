@@ -86,7 +86,11 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/pipe-flow', name: 'Pipe Flow', sub: 'Hazen–Williams · Darcy', group: 'Hydraulics' },
       { to: '/weir-flow', name: 'Weir Flow', sub: 'Francis · Cipolletti · V-notch', group: 'Hydraulics' },
       { to: '/culvert', name: 'Culvert Hydraulics', sub: 'HDS-5 · inlet & outlet control', group: 'Hydraulics' },
+      { to: '/gvf-profiles', name: 'GVF Profiles', sub: 'Chow M/S/C/H/A · water surface', group: 'Hydraulics' },
       { to: '/runoff', name: 'SCS Runoff', sub: 'CN · Tc · TR-55 UH peak', group: 'Hydrology' },
+      { to: '/muskingum', name: 'Muskingum Routing', sub: 'K·X · flood wave · lag', group: 'Hydrology' },
+      { to: '/detention', name: 'Detention Pond', sub: 'storage indication · stage', group: 'Hydrology' },
+      { to: '/do-sag', name: 'DO Sag Curve', sub: 'Streeter–Phelps · critical DO', group: 'Water Quality' },
     ],
   },
   {

@@ -60,6 +60,10 @@ const Culvert = lazy(() => import('./pages/Culvert'))
 const Pavement = lazy(() => import('./pages/Pavement'))
 const Runoff = lazy(() => import('./pages/Runoff'))
 const BridgeRating = lazy(() => import('./pages/BridgeRating'))
+const Gvf = lazy(() => import('./pages/Gvf'))
+const Muskingum = lazy(() => import('./pages/Muskingum'))
+const Detention = lazy(() => import('./pages/Detention'))
+const DoSag = lazy(() => import('./pages/DoSag'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const Validation = lazy(() => import('./pages/Validation'))
 const Terms = lazy(() => import('./pages/legal/Terms'))
@@ -254,6 +258,10 @@ export default function App() {
         <Route path="/pavement" element={<Pavement />} />
         <Route path="/runoff" element={<Runoff />} />
         <Route path="/bridge-rating" element={<BridgeRating />} />
+        <Route path="/gvf-profiles" element={<Gvf />} />
+        <Route path="/muskingum" element={<Muskingum />} />
+        <Route path="/detention" element={<Detention />} />
+        <Route path="/do-sag" element={<DoSag />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected
             without the lazy chunk being fetched at all. Inside, the import
             starts before the gate has an answer. */}
