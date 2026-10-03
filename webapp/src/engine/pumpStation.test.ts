@@ -61,7 +61,21 @@ describe('the operating point', () => {
   it('chains the power arithmetic', () => {
     expect(op.Pshaft).toBeCloseTo(op.Pwater / 0.7, 6)
     expect(op.Pmotor).toBeCloseTo(op.Pwater / 0.63, 6)
-    expect(op.kwhPerM3).toBeCloseTo(op.Pshaft / (op.Q * 1000), 6)
+    // P/Q is kJ/m³; 1 kWh = 3600 kJ (e.g. 10 kW at 0.1 m³/s → 0.0278 kWh/m³).
+    expect(op.kwhPerM3).toBeCloseTo(op.Pshaft / (op.Q * 3600), 6)
+  })
+  it('prices each side’s fittings at its own diameter', () => {
+    // Wide suction bell (D = 0.4, K = 2) vs DN 300 discharge: the suction
+    // fittings must ride on the suction velocity (V = 0.3979 m/s at Q = 0.05),
+    // not the discharge one (0.7074 m/s) — a single-Dref reading overstates
+    // the suction hm by 2·(0.7074² − 0.3979²)/19.62 = 0.0349 m.
+    const wide: Parameters<typeof systemHead>[0] = {
+      ...SYS, suction: { L: 50, D: 0.4, C: 120, K: 2 },
+    }
+    const expectHm = minorLoss(0.05, 0.4, 2) + minorLoss(0.05, 0.3, 5)
+    const expectHf = hwFriction(50, 0.05, 120, 0.4) + hwFriction(300, 0.05, 120, 0.3)
+    expect(systemHead(wide, 0.05)).toBeCloseTo(20 + expectHf + expectHm, 9)
+    expect(systemHead(wide, 0.05)).toBeLessThan(systemHead(SYS, 0.05))
   })
 
   it('refuses a pump that cannot lift the static head', () => {

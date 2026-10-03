@@ -22,12 +22,16 @@ describe('the diameter picker', () => {
     const p = pickDiameter(0.05, 0.013, 0.005, 0.75)
     expect(p.dn).toBe(300)
     expect(p.Qfull).toBeCloseTo(0.068378, 4)
+    expect(p.meetsVelocity).toBe(true)
   })
-  it('steps up when the cleansing velocity binds first', () => {
-    // DN 300 carries 0.005 m³/s but only at V = 0.0707 m/s → the next size up
-    // still fails the velocity cap, so the picker climbs until it clears.
+  it('refuses to bless a giant pipe when the grade cannot cleanse', () => {
+    // DN 300 carries 0.005 m³/s but part-full V falls as D grows, so no size
+    // clears 0.75 m/s at this slope: the picker holds the smallest sufficient
+    // DN 300 and says so, instead of returning a 3 m pipe as "self-cleansing".
     const p = pickDiameter(0.005, 0.013, 0.005, 0.75)
-    expect(p.dn).toBeGreaterThan(300)
+    expect(p.dn).toBe(300)
+    expect(p.meetsVelocity).toBe(false)
+    expect(p.Vpart).toBeLessThan(0.75)
   })
 })
 

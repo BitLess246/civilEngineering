@@ -74,11 +74,13 @@ export function forecastPopulation(p: ForecastInput): ForecastResult {
     }
     case 'incremental':
     case 'decreasing': {
-      a = p.a ?? (p.P1 != null ? (p.P0 - p.P1) / censusYears : 0)
+      // a and b are PER-DECADE rates (the arrival form the page labels and
+      // the textbook prints): the horizon runs in decades, fractional allowed.
+      a = p.a ?? (p.P1 != null ? ((p.P0 - p.P1) / censusYears) * 10 : 0)
       b = p.b ?? 0
-      const n = p.years
-      const quad = (n * (n + 1) / 2) * b
-      Pn = p.P0 + n * a + (p.method === 'incremental' ? quad : -quad)
+      const nDec = p.years / 10
+      const quad = (nDec * (nDec + 1) / 2) * b
+      Pn = p.P0 + nDec * a + (p.method === 'incremental' ? quad : -quad)
       if (Pn < p.P0 && p.method === 'incremental') throw new Error('Negative increment b drove the forecast below the present population.')
       perYear = (Pn - p.P0) / p.years
       break

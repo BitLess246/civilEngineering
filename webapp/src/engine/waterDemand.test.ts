@@ -16,15 +16,15 @@ describe('population forecasting', () => {
     expect(r.Pn).toBeCloseTo(148594.7, 1)
   })
 
-  it('incremental increase adds the quadratic term', () => {
-    // Pn = P0 + n·a + n(n+1)/2·b = 100k + 40k + 210·100
+  it('incremental increase adds the quadratic term (rates are per decade)', () => {
+    // 20 yr = 2 decades: Pn = 100k + 2·2000 + 2·3/2·100 = 104 300
     const r = forecastPopulation({ P0: 100000, a: 2000, b: 100, years: 20, method: 'incremental' })
-    expect(r.Pn).toBeCloseTo(161000, 4)
+    expect(r.Pn).toBeCloseTo(104300, 4)
   })
 
   it('decreasing rate subtracts it', () => {
     const r = forecastPopulation({ P0: 100000, a: 2000, b: 100, years: 20, method: 'decreasing' })
-    expect(r.Pn).toBeCloseTo(119000, 4)
+    expect(r.Pn).toBeCloseTo(103700, 4)
   })
 
   it('validates its inputs', () => {
