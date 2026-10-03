@@ -49,6 +49,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/surveying', '/traffic-volume', '/signal-timing', '/traffic-queue', '/rational-method',
   // wave two: hydraulics, mix design, section properties
   '/open-channel', '/pipe-flow', '/concrete-mix', '/section-properties',
+  // wave three: highway geometry, weirs, piles, bridges
+  '/geometric-design', '/weir-flow', '/pile-capacity', '/bridge-loading',
 ]
 
 /**
