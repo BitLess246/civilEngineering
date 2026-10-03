@@ -170,6 +170,12 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/docs', name: 'Documentation', sub: 'User guide', group: 'Reference' },
   { route: '/validation', name: 'Validation', sub: 'Engine vs hand calc', group: 'Reference' },
   { route: '/pricing', name: 'Plans', sub: 'Pricing · PHP', group: 'Reference' },
+  { route: '/rigid-pavement', name: 'Rigid Pavement', sub: 'AASHTO 93 · D-slab · J', group: 'Transportation' },
+  { route: '/roundabout', name: 'Roundabout Capacity', sub: 'HCM 2010 · entry · LOS', group: 'Transportation' },
+  { route: '/esal', name: 'Axle Load ESALs', sub: 'Fourth-power · LEF · W18', group: 'Transportation' },
+  { route: '/storm-sewer', name: 'Storm Sewer', sub: 'Rational · Manning · tc chain', group: 'Water' },
+  { route: '/water-demand', name: 'Water Demand', sub: 'Forecast · peaking · storage', group: 'Water' },
+  { route: '/pump-station', name: 'Pump Station', sub: 'System × pump · NPSH · power', group: 'Water' },
 ]
 
 /** The refusal the model is instructed to give off-topic questions, verbatim. */

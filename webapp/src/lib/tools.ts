@@ -74,8 +74,11 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/traffic-volume', name: 'Traffic Volume', sub: 'PHF · DHV · AADT growth', group: 'Traffic' },
       { to: '/signal-timing', name: 'Signal Timing', sub: 'Webster cycle · splits · LOS', group: 'Traffic' },
       { to: '/traffic-queue', name: 'Traffic Queues', sub: 'D/D/1 · M/M/1 · delay', group: 'Traffic' },
+      { to: '/roundabout', name: 'Roundabout Capacity', sub: 'HCM 2010 · entry · LOS', group: 'Intersections' },
       { to: '/geometric-design', name: 'Geometric Design', sub: 'SSD · vertical curves · superelevation', group: 'Highway Design' },
       { to: '/pavement', name: 'Flexible Pavement', sub: 'AASHTO 93 · ESALs · SN', group: 'Highway Design' },
+      { to: '/rigid-pavement', name: 'Rigid Pavement', sub: 'AASHTO 93 · D-slab · J', group: 'Highway Design' },
+      { to: '/esal', name: 'Axle Load ESALs', sub: 'Fourth-power · LEF · W18', group: 'Highway Design' },
     ],
   },
   {
@@ -91,6 +94,9 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/muskingum', name: 'Muskingum Routing', sub: 'K·X · flood wave · lag', group: 'Hydrology' },
       { to: '/detention', name: 'Detention Pond', sub: 'storage indication · stage', group: 'Hydrology' },
       { to: '/do-sag', name: 'DO Sag Curve', sub: 'Streeter–Phelps · critical DO', group: 'Water Quality' },
+      { to: '/storm-sewer', name: 'Storm Sewer', sub: 'Rational · Manning · tc chain', group: 'Drainage' },
+      { to: '/water-demand', name: 'Water Demand', sub: 'Forecast · peaking · storage', group: 'Water Supply' },
+      { to: '/pump-station', name: 'Pump Station', sub: 'System × pump · NPSH · power', group: 'Water Supply' },
     ],
   },
   {

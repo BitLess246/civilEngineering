@@ -64,6 +64,12 @@ const Gvf = lazy(() => import('./pages/Gvf'))
 const Muskingum = lazy(() => import('./pages/Muskingum'))
 const Detention = lazy(() => import('./pages/Detention'))
 const DoSag = lazy(() => import('./pages/DoSag'))
+const RigidPavement = lazy(() => import('./pages/RigidPavement'))
+const Roundabout = lazy(() => import('./pages/Roundabout'))
+const AxleLoads = lazy(() => import('./pages/AxleLoads'))
+const StormSewer = lazy(() => import('./pages/StormSewer'))
+const PumpStation = lazy(() => import('./pages/PumpStation'))
+const WaterDemand = lazy(() => import('./pages/WaterDemand'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const Validation = lazy(() => import('./pages/Validation'))
 const Terms = lazy(() => import('./pages/legal/Terms'))
@@ -262,6 +268,13 @@ export default function App() {
         <Route path="/muskingum" element={<Muskingum />} />
         <Route path="/detention" element={<Detention />} />
         <Route path="/do-sag" element={<DoSag />} />
+        {/* wave six: the rest of the Task-13 roadmap — rigid pavement, roundabouts, ESALs, storm sewers, pumping, water demand */}
+        <Route path="/rigid-pavement" element={<RigidPavement />} />
+        <Route path="/roundabout" element={<Roundabout />} />
+        <Route path="/esal" element={<AxleLoads />} />
+        <Route path="/storm-sewer" element={<StormSewer />} />
+        <Route path="/pump-station" element={<PumpStation />} />
+        <Route path="/water-demand" element={<WaterDemand />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected
             without the lazy chunk being fetched at all. Inside, the import
             starts before the gate has an answer. */}
