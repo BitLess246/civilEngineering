@@ -430,4 +430,111 @@ export const FIELD_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'culvert',
+    name: 'Culvert Hydraulics',
+    route: '/culvert',
+    group: 'Water resources',
+    summary: 'FHWA HDS-5 headwater check for circular and box culverts: inlet control in its unsubmerged, transition and submerged nomograph forms against outlet control over the tailwater, the governing HW/D and the outlet velocity, plus a standard-size sweep for the minimum diameter.',
+    basis: 'HDS-5 (Normann) Appendix A constants K/M/c/Y per entrance type with the −0.5·S slope term (+0.7·S mitered); transition interpolated linearly in Q between form 1 at HW/D = 1.0 and form 2 at 1.2; full-barrel outlet control H = [1+Ke+2g·n²L/R^1.333]·V²/2g with ho = max(TW, (dc+D)/2).',
+    sections: [
+      {
+        id: 'culvert-input',
+        title: 'Culvert and site',
+        controls: [
+          { kind: 'choice', name: 'Entrance type', what: 'Concrete square edge or groove end (headwall or projecting), CMP headwall / mitered / projecting, or a concrete box with flared wingwalls — each carries its own K, M, c, Y, Ke and n.' },
+          { kind: 'field', name: 'Q, L, S, TW', what: 'Design discharge per barrel (split across identical barrels), barrel length, slope and the tailwater depth above the outlet invert.' },
+          { kind: 'choice', name: 'Task', what: 'Check the headwater of a given size, or sweep the standard diameters for the smallest barrel whose governing headwater stays under the allowable depth.' },
+        ],
+      },
+      {
+        id: 'culvert-output',
+        title: 'Results',
+        controls: [
+          { kind: 'output', name: 'HW inlet / outlet', what: 'Both control headwaters with the form that produced each, the total outlet head split into friction and entrance/velocity parts, and ho with dc.' },
+          { kind: 'output', name: 'Governing HW and velocity', what: 'The deeper of the two controls as HW and HW/D, and the outlet velocity on the HDS-5 velocity depth (normal depth under inlet control, dc/TW/crown under outlet control) — scour notes when it runs hot.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'pavement',
+    name: 'Flexible Pavement',
+    route: '/pavement',
+    group: 'Transportation',
+    summary: 'The AASHTO 1993 flexible workflow end to end: forecast design-lane ESALs from AADT, trucks and growth; solve the required structural number from the design equation; and close the layer equation a1·D1 + a2·D2·m2 + a3·D3·m3 with the section drawn to scale.',
+    basis: 'AASHTO Guide for Design of Pavement Structures (1993): log W18 = ZR·S0 + 9.36·log(SN+1) − 0.20 + log(ΔPSI/2.7)/(0.40 + 1094/(SN+1)^5.19) + 2.32·log MR − 8.07 (MR in psi); ZR the exact inverse normal deviate, S0 = 0.45 typical; growth G = ((1+r)^n − 1)/r; layer coefficients per mm from the printed per-inch charts.',
+    sections: [
+      {
+        id: 'pavement-traffic',
+        title: 'Traffic and performance',
+        controls: [
+          { kind: 'field', name: 'AADT · T · TF · D · L', what: 'Two-way AADT, truck percentage, truck factor (ESALs per truck), directional split and design-lane factor — or enter W18 directly when a traffic study exists.' },
+          { kind: 'field', name: 'Growth and period', what: 'Uniform annual growth rate over the design period gives the growth factor G; zero growth just multiplies by the years.' },
+          { kind: 'field', name: 'R, S0, pt, MR', what: 'Reliability (ZR from the exact normal quantile), overall standard deviation, terminal serviceability against p0 = 4.2, and the subgrade resilient modulus in MPa.' },
+        ],
+      },
+      {
+        id: 'pavement-output',
+        title: 'SN and layers',
+        controls: [
+          { kind: 'output', name: 'SN required', what: 'The structural number solved from the design equation by bisection — the RHS is strictly increasing in SN.' },
+          { kind: 'output', name: 'Layer check', what: 'a1·D1 + a2·D2·m2 + a3·D3·m3 with editable coefficients (per mm), thicknesses and drainage factors; the section drawing labels each layer\u2019s contribution and flags any shortfall.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'runoff',
+    name: 'SCS Runoff',
+    route: '/runoff',
+    group: 'Water resources',
+    summary: 'The NRCS curve-number chain for a design storm: composite CN from the land covers, retention S and initial abstraction Ia, runoff depth and volume, the TR-55 lag-method time of concentration, and the triangular unit-hydrograph peak.',
+    basis: 'SCS-CN: S = 25400/CN − 254 mm, Ia = 0.2·S, Q = (P−Ia)²/(P−Ia+S); TR-55 lag T = L^0.8·(S+25.4)^0.7/(7069·√Y) with Tc = Tlag/0.6; triangular UH Tp = Δt/2 + 0.6·Tc and Qp = 0.208·A·Q/Tp — the SI twin of the 484 equation; volume V = 10·Q·A(ha).',
+    sections: [
+      {
+        id: 'runoff-input',
+        title: 'Catchment',
+        controls: [
+          { kind: 'field', name: 'Covers', what: 'Any number of named land covers with hectares and a curve number 30–100; the composite CN is the area-weighted mean.' },
+          { kind: 'field', name: 'P, L, Y, Δt', what: 'Design storm depth, hydraulic (longest flow) length, average watershed slope, and the computation interval for the UH.' },
+        ],
+      },
+      {
+        id: 'runoff-output',
+        title: 'Depth, timing, peak',
+        controls: [
+          { kind: 'output', name: 'Q and volume', what: 'Runoff depth from the CN loss model, the volumetric coefficient Q/P, and the volume in m³ — zero runoff is reported (with the reason) when P never exceeds Ia.' },
+          { kind: 'output', name: 'Tc and Qp', what: 'Lag time, time of concentration, time to peak, the peak discharge and the 2.67·Tp base time, with the triangular hydrograph drawn.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'bridge-rating',
+    name: 'Bridge Rating',
+    route: '/bridge-rating',
+    group: 'Analysis & modelling',
+    summary: 'AASHTO MBE design-load rating of a simple span: the HL-93 live load from the /bridge-loading machinery is rated against nominal flexural and shear resistances at inventory (γLL = 1.75) and operating (γLL = 1.35), in flexure and shear, with the envelope drawn against capacity.',
+    basis: 'MBE 6A.4.2.1-1 RF = (φRn − γDC·DC − γDW·DW)/(γLL(1+IM)·LL) with γDC = 1.25, γDW = 1.50, φ = 1.0 (RC flexure and shear); permanent-load effects wL²/8 and wL/2; static live load from the HL-93 walk (÷(1+IM)) or user-supplied FE effects; a DF override rescales the lever-rule live load.',
+    sections: [
+      {
+        id: 'rating-input',
+        title: 'Span, loads, resistances',
+        controls: [
+          { kind: 'field', name: 'L and deck', what: 'Simple-span length with the lever-rule deck case (girder row, spacing, overhang) — or a distribution-factor override that rescales the live load directly.' },
+          { kind: 'field', name: 'DC / DW / Mn / Vn', what: 'Per-girder structural and wearing-surface dead loads, and the nominal flexural and shear resistances at the critical sections.' },
+          { kind: 'choice', name: 'Live load', what: 'The HL-93 span walk (same engine as /bridge-loading), or static per-girder effects pasted from an FE model; IM applies in both paths.' },
+        ],
+      },
+      {
+        id: 'rating-output',
+        title: 'Rating factors',
+        controls: [
+          { kind: 'output', name: 'RF table', what: 'Inventory and operating RF for flexure and shear with the governing effect, a pass/restricted/operating-only verdict, and RF bars against the 1.0 line.' },
+          { kind: 'output', name: 'Envelope vs capacity', what: 'The HL-93 per-girder moment envelope against φMn with the governing section marked; the worked solution prints every load factor.' },
+        ],
+      },
+    ],
+  },
 ]

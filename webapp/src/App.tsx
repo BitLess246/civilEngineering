@@ -56,6 +56,10 @@ const GeometricDesign = lazy(() => import('./pages/GeometricDesign'))
 const WeirFlow = lazy(() => import('./pages/WeirFlow'))
 const PileCapacity = lazy(() => import('./pages/PileCapacity'))
 const BridgeLoading = lazy(() => import('./pages/BridgeLoading'))
+const Culvert = lazy(() => import('./pages/Culvert'))
+const Pavement = lazy(() => import('./pages/Pavement'))
+const Runoff = lazy(() => import('./pages/Runoff'))
+const BridgeRating = lazy(() => import('./pages/BridgeRating'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const Validation = lazy(() => import('./pages/Validation'))
 const Terms = lazy(() => import('./pages/legal/Terms'))
@@ -246,6 +250,10 @@ export default function App() {
         <Route path="/weir-flow" element={<WeirFlow />} />
         <Route path="/pile-capacity" element={<PileCapacity />} />
         <Route path="/bridge-loading" element={<BridgeLoading />} />
+        <Route path="/culvert" element={<Culvert />} />
+        <Route path="/pavement" element={<Pavement />} />
+        <Route path="/runoff" element={<Runoff />} />
+        <Route path="/bridge-rating" element={<BridgeRating />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected
             without the lazy chunk being fetched at all. Inside, the import
             starts before the gate has an answer. */}
