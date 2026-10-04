@@ -61,6 +61,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/eng-economy',
   // fluid statics: hydrostatics
   '/hydrostatics',
+  // mechanics: dynamics
+  '/dynamics',
 ]
 
 /**

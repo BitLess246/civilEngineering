@@ -178,6 +178,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/pump-station', name: 'Pump Station', sub: 'System × pump · NPSH · power', group: 'Water' },
   { route: '/eng-economy', name: 'Engineering Economy', sub: 'Time value · NPV/IRR · depreciation', group: 'Mathematics' },
   { route: '/hydrostatics', name: 'Hydrostatics', sub: 'Plane force · gates · buoyancy · vessels', group: 'Mathematics' },
+  { route: '/dynamics', name: 'Dynamics', sub: 'Kinematics · kinetics · work-energy · impulse', group: 'Mathematics' },
 ]
 
 /** The refusal the model is instructed to give off-topic questions, verbatim. */

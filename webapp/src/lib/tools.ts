@@ -104,6 +104,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     tools: [
       { to: '/eng-economy', name: 'Engineering Economy', sub: 'Time value · NPV/IRR · depreciation', group: 'Time Value of Money' },
       { to: '/hydrostatics', name: 'Hydrostatics', sub: 'Plane force · gates · buoyancy · vessels', group: 'Fluid Statics' },
+      { to: '/dynamics', name: 'Dynamics', sub: 'Kinematics · kinetics · work-energy · impulse', group: 'Mechanics' },
     ],
   },
   {

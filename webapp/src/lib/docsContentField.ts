@@ -873,4 +873,62 @@ export const FIELD_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'dynamics',
+    name: 'Dynamics',
+    route: '/dynamics',
+    group: 'Mathematics',
+    summary: 'Kinematics and kinetics of particles: rectilinear and curvilinear motion, projectile trajectory, Newton\'s second law, work-energy theorem, and impulse-momentum principle — every step worked with the entered numbers.',
+    basis: 'v = u + at, s = ut + ½at², v² = u² + 2as; projectile y = y₀ + x·tanθ − gx²/(2u²cos²θ); aₙ = v²/ρ; F = ma; W = ΔKE = ½m(v₂²−v₁²); I = Δp = m(v₂−v₁).',
+    sections: [
+      {
+        id: 'dynamics-rectilinear',
+        title: 'Rectilinear motion',
+        controls: [
+          { kind: 'field', name: 'Knowns', what: 'Any two of final velocity, time, or displacement (initial velocity and acceleration are always given); the solver returns all five variables.' },
+          { kind: 'output', name: 'Complete state', what: 'v, t, s with the formula used, the substitution, and a plain-language line.' },
+        ],
+      },
+      {
+        id: 'dynamics-projectile',
+        title: 'Projectile motion',
+        controls: [
+          { kind: 'field', name: 'Launch', what: 'Initial speed, angle, optional height and gravity; range, max height, time of flight, and impact conditions.' },
+          { kind: 'output', name: 'Trajectory', what: 'Range, max height, time of flight, impact speed and angle, plus the trajectory equation y = Ax² + Bx + C.' },
+        ],
+      },
+      {
+        id: 'dynamics-curvilinear',
+        title: 'Curvilinear motion',
+        controls: [
+          { kind: 'field', name: 'Path geometry', what: 'Speed, radius of curvature, and optional tangential acceleration.' },
+          { kind: 'output', name: 'Acceleration', what: 'Normal aₙ = v²/ρ, tangential aₜ, total a, and the angle from the tangent.' },
+        ],
+      },
+      {
+        id: 'dynamics-kinetics',
+        title: 'Kinetics (F = ma)',
+        controls: [
+          { kind: 'field', name: 'Mass and forces', what: 'Mass and up to three force components; initial velocity and time interval.' },
+          { kind: 'output', name: 'Acceleration · velocity · displacement', what: 'Full 3D kinematic state at the end of the interval, with the F = ma derivation.' },
+        ],
+      },
+      {
+        id: 'dynamics-workenergy',
+        title: 'Work–Energy',
+        controls: [
+          { kind: 'field', name: 'Energies', what: 'Mass, initial velocity, and either final velocity or net work; optional non-conservative work and ΔPE.' },
+          { kind: 'output', name: 'ΔKE and W_net', what: 'Change in kinetic energy, net work, and the result variable, all with substitutions shown.' },
+        ],
+      },
+      {
+        id: 'dynamics-impulse',
+        title: 'Impulse–Momentum',
+        controls: [
+          { kind: 'field', name: 'Impulse or final velocity', what: 'Mass, initial velocity, and either impulse (or F_avg and t) or final velocity.' },
+          { kind: 'output', name: 'Δp and I', what: 'Change in momentum, impulse, and the result variable with the substitution.' },
+        ],
+      },
+    ],
+  },
 ]

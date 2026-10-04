@@ -72,6 +72,7 @@ const PumpStation = lazy(() => import('./pages/PumpStation'))
 const WaterDemand = lazy(() => import('./pages/WaterDemand'))
 const EngEconomy = lazy(() => import('./pages/EngEconomy'))
 const Hydrostatics = lazy(() => import('./pages/Hydrostatics'))
+const Dynamics = lazy(() => import('./pages/Dynamics'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const Validation = lazy(() => import('./pages/Validation'))
 const Terms = lazy(() => import('./pages/legal/Terms'))
@@ -281,6 +282,8 @@ export default function App() {
         <Route path="/eng-economy" element={<EngEconomy />} />
         {/* fluid statics: hydrostatic force, gates, buoyancy, vessels */}
         <Route path="/hydrostatics" element={<Hydrostatics />} />
+        {/* mechanics: kinematics, kinetics, work-energy, impulse-momentum */}
+        <Route path="/dynamics" element={<Dynamics />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected
             without the lazy chunk being fetched at all. Inside, the import
             starts before the gate has an answer. */}
