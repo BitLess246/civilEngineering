@@ -64,7 +64,7 @@ export function LevelingMode() {
         title: 'Misclosure and its distribution',
         lines: [
           { tex: `\\varepsilon = \\text{measured} - \\text{known} = ${f3(res.measured!)} - ${f3(input.endElev!)} = ${f3(res.misclosure)}\\text{ m}` },
-          { tex: `c_{\\text{per setup}} = -\\varepsilon / n = ${f3(res.perSetup!)}\\text{ m}` },
+          { tex: `c_{\\text{per setup}} = -\\varepsilon / n = -(${f3(res.misclosure)})/${res.setups} = ${f3(res.perSetup!)}\\text{ m}` },
           { text: `Each intermediate point takes one correction per setup elapsed: point k after k setups moves ${f3(res.perSetup!)}·k m. The starting benchmark never moves.` },
         ],
       } satisfies SolutionStep,
@@ -73,7 +73,7 @@ export function LevelingMode() {
         lines: [
           { text: 'Conventional geodetic limits scale with the square root of the path length K (km): first order 4√K, second 8√K, third 12√K, all in millimetres.' },
           ...(res.tolerance ? [
-            { tex: `4\\sqrt{K} = ${f2(res.tolerance.first)}\\text{ mm},\\quad 8\\sqrt{K} = ${f2(res.tolerance.second)}\\text{ mm},\\quad 12\\sqrt{K} = ${f2(res.tolerance.third)}\\text{ mm}` },
+            { tex: `4\\sqrt{K} = 4\\sqrt{${f2(input.distanceKm!)}} = ${f2(res.tolerance.first)}\\text{ mm},\\quad 8\\sqrt{K} = 8\\sqrt{${f2(input.distanceKm!)}} = ${f2(res.tolerance.second)}\\text{ mm},\\quad 12\\sqrt{K} = 12\\sqrt{${f2(input.distanceKm!)}} = ${f2(res.tolerance.third)}\\text{ mm}` },
             { text: `This loop closed ${f2(res.misclosureMm!)} mm over ${f2(input.distanceKm!)} km.` },
           ] : [{ text: 'Give the path length to rate the loop.' }]),
         ],

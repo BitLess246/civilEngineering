@@ -53,14 +53,14 @@ export default function TrafficQueue() {
       lines: [
         ...parsedPeriods.map((p) => ({ item: `λ = ${f3(p.rate)} veh/h for ${f2(p.minutes)} min — ${f3(p.rate * p.minutes / 60)} veh arrive` })),
         { text: `Service clears μ = ${f3(service)} veh/h = ${f3(service / 60)} veh/min. Every minute the arrival rate exceeds it, the line grows by the difference.` },
-        { tex: `Q_{\\max} = (\\lambda_1 - \\mu)\\,t_1 = ${f3(dd1.maxQueue)}\\text{ veh at } t = ${f2(dd1.maxQueueMinute)}\\text{ min}` },
+        { tex: `Q_{\\max} = (\\lambda_1 - \\mu)\\,t_1 = (${f3(parsedPeriods[0]?.rate ?? 0)} - ${f3(service)})\\times ${f2(parsedPeriods[0]?.minutes ?? 0)}\\!/\\!60 = ${f3(dd1.maxQueue)}\\text{ veh at } t = ${f2(dd1.maxQueueMinute)}\\text{ min}` },
       ],
     },
     {
       title: 'Dissipation',
       lines: dd1.dissipation !== null
         ? [
-            { text: `After the peak, arrivals fall but the departures keep leaving at μ, so the line drains at (μ − λ₂) vehicles per minute until the cumulative curves cross back.` },
+            { text: `After the peak, arrivals fall but the departures keep leaving at μ, so the line drains at (μ − λ₂) = (${f3(service)} − ${f3(parsedPeriods[parsedPeriods.length - 1]?.rate ?? 0)})/60 = ${f3((service - (parsedPeriods[parsedPeriods.length - 1]?.rate ?? 0)) / 60)} veh/min until the cumulative curves cross back.` },
             { tex: `t_{\\text{clear}} = ${f2(dd1.dissipation)}\\text{ min}` },
           ]
         : [{ text: 'The queue never clears inside the study period — stretch the last arrival period or raise μ to see the dissipation.' }],
@@ -68,7 +68,7 @@ export default function TrafficQueue() {
     {
       title: 'Delay — the area between the arrival and departure curves',
       lines: [
-        { tex: `D_{\\text{total}} = \\int_0^{t} Q(t)\\,dt = ${f3(dd1.totalDelay)}\\text{ veh}\\cdot\\text{min}` },
+        { tex: `D_{\\text{total}} = \\int_0^{t} Q(t)\\,dt = \\sum_{t=1}^{${dd1.ticks.length}} Q_t\\cdot 1 = ${f3(dd1.totalDelay)}\\text{ veh}\\cdot\\text{min}` },
         { tex: `d_{\\text{avg}} = \\frac{D_{\\text{total}}}{\\text{vehicles}} = \\frac{${f3(dd1.totalDelay)}}{${f3(dd1.vehiclesDelayed)}} = ${f3(dd1.avgDelay)}\\text{ min/veh}` },
         { text: 'The integral is exact on the one-minute grid because every rate is constant within its period — no interpolation, no approximation.' },
       ],
@@ -76,7 +76,7 @@ export default function TrafficQueue() {
     ...(mm1?.stable ? [{
       title: 'M/M/1 benchmark at the same λ and μ',
       lines: [
-        { tex: `\\rho = \\lambda/\\mu = ${f3(mm1.rho)},\\quad L_q = \\frac{\\rho^2}{1-\\rho} = ${f3(mm1.Lq)}\\text{ veh},\\quad W_q = \\frac{\\lambda}{\\mu(\\mu-\\lambda)} = ${f3(mm1.Wq)}\\text{ min}` },
+        { tex: `\\rho = \\lambda/\\mu = ${f3(mmLambda)}/${f3(mmMu)} = ${f3(mm1.rho)},\\quad L_q = \\frac{\\rho^2}{1-\\rho} = \\frac{${f3(mm1.rho)}^2}{1-${f3(mm1.rho)}} = ${f3(mm1.Lq)}\\text{ veh},\\quad W_q = \\frac{\\lambda}{\\mu(\\mu-\\lambda)} = \\frac{${f3(mmLambda)}}{${f3(mmMu)}\\times(${f3(mmMu)}-${f3(mmLambda)})}\\times 60 = ${f3(mm1.Wq)}\\text{ min}` },
         { text: 'Poisson arrivals with exponential service queue far longer than a perfectly metered line — the deterministic answer is the floor, not the expectation.' },
       ],
     } satisfies SolutionStep] : []),

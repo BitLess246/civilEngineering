@@ -69,9 +69,9 @@ export default function SignalTiming() {
     {
       title: 'Effective greens and saturation degrees',
       lines: [
-        { tex: `g_i = \\frac{y_i}{Y}\\,(C - L)` },
+        { tex: `g_i = \\frac{y_i}{Y}\\,(C - L) = \\frac{y_i}{${f3(res.Y)}}\\,(${f2(res.C)} - ${f2(res.L)})` },
         ...res.phases.map((p) => ({
-          item: `${p.name}: g = ${f3(p.g)} s (λ = ${f3(p.lambda)}) · X = ${f3(p.x)}${p.x >= 1 ? ' — OVERSATURATED' : ''}`,
+          item: `${p.name}: g = ${f3(p.y)}/${f3(res.Y)}×(${f2(res.C)}−${f2(res.L)}) = ${f3(p.g)} s (λ = ${f3(p.lambda)}) · X = ${f3(p.q)}/(${f3(p.s)}×${f3(p.lambda)}) = ${f3(p.x)}${p.x >= 1 ? ' — OVERSATURATED' : ''}`,
         })),
         { text: 'Greens are shared out in proportion to the flow ratios, after the lost time is taken off the cycle.' },
       ],
@@ -80,8 +80,11 @@ export default function SignalTiming() {
       title: 'Delay and level of service',
       lines: [
         { tex: `d = \\frac{C(1-\\lambda)^2}{2(1-\\lambda X)} + \\frac{X^2}{2q(1-X)} - 0.65\\left(\\frac{C}{q^2}\\right)^{1/3}X^{2+5\\lambda}` },
+        ...res.phases.map((p) => ({
+          item: `${p.name}: d = f(C = ${f2(res.C)}, λ = ${f3(p.lambda)}, X = ${f3(p.x)}, q = ${f2(p.q)}) = ${Number.isNaN(p.delay) ? '— (X ≥ 1, unbounded)' : `${f3(p.delay)} s/veh`}`,
+        })),
         { text: 'Webster\u2019s uniform + overflow + empirical terms, per phase; the intersection delay is the flow-weighted average. A saturated phase (X ≥ 1) has no finite delay, so the average is undefined — lengthen the cycle or add capacity instead of reading a number.' },
-        { tex: `d_{\\text{avg}} = ${f3(res.avgDelay)}\\text{ s/veh} \\;\\Rightarrow\\; \\text{LOS } ${res.los}` },
+        { tex: `d_{\\text{avg}} = \\frac{\\sum q_i d_i}{\\sum q_i} = \\frac{${res.phases.map((p) => `${f2(p.q)}\\times${Number.isNaN(p.delay) ? '—' : f3(p.delay)}`).join('+')}}{${f2(res.phases.reduce((s, p) => s + p.q, 0))}} = ${f3(res.avgDelay)}\\text{ s/veh} \\;\\Rightarrow\\; \\text{LOS } ${res.los}` },
         { text: 'HCM signalized bands: A ≤ 10 · B ≤ 20 · C ≤ 35 · D ≤ 55 · E ≤ 80 s/veh; F beyond, or whenever a phase sits at X ≥ 1.' },
       ],
     },

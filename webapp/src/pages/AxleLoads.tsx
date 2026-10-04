@@ -37,6 +37,9 @@ export default function AxleLoads() {
       title: 'The generalized fourth-power law',
       lines: [
         { tex: `\\text{LEF} = \\left(\\frac{P}{80\\ \\text{kN}}\\right)^{${f2(exponent)}}` },
+        ...r.rows.map((row) => ({
+          item: `${row.name}: ${AXLES_IN[row.kind]}·(${f2(row.loadK)}/${AXLES_IN[row.kind]}/80)^${f2(exponent)} = ${AXLES_IN[row.kind]}·(${f2(row.axleK)}/80)^${f2(exponent)} = ${f2(row.lef)} ESALs/veh`,
+        })),
         { text: 'The AASHO Road Test digested: pavement life consumed scales with roughly the fourth power of the load ratio to the standard 80 kN (18-kip) single axle. The exponent is editable — thin or heavily loaded pavements behave closer to 4.5, thick flexible sections closer to 3.5.' },
       ],
     },
@@ -51,8 +54,9 @@ export default function AxleLoads() {
       title: 'Daily ESALs → design W18',
       lines: [
         { tex: `W_{18} = 365 \\cdot G \\cdot \\sum_i \\text{ADT}_i \\cdot \\text{LEF}_i \\cdot D \\cdot L` },
-        { text: `Directional split ${f2(directional)} · design-lane factor ${f2(laneFactor)} · growth ${f2(growthPct)} %/yr over ${years} yr (G = ${f2(r.growthFactor)}). Daily ESALs today: ${f2(r.dailyEsal)}.` },
-        { tex: `W_{18} = ${f3(r.W18 / 1e6)}\\times 10^6 \\ \\text{ESALs}` },
+        { tex: `\\sum_i \\text{ADT}_i\\cdot\\text{LEF}_i\\cdot D\\cdot L = (${rows.map((row, i) => `${row.perDay}\\times${f2(r.rows[i]?.lef ?? 0)}`).join('+')})\\times ${f2(directional)}\\times ${f2(laneFactor)} = ${f2(r.dailyEsal)}\\ \\text{ESALs/day (design lane)}` },
+        { tex: `W_{18} = 365\\times ${f2(r.growthFactor)}\\times ${f2(r.dailyEsal)} = ${f3(r.W18 / 1e6)}\\times 10^6 \\ \\text{ESALs}` },
+        { text: `Directional split ${f2(directional)} · design-lane factor ${f2(laneFactor)} · growth ${f2(growthPct)} %/yr over ${years} yr (G = ${f2(r.growthFactor)}). Each row's daily ESALs already carry the D·L split — the census sum is the design lane directly.` },
         { text: 'Feed this W18 to /pavement (flexible SN) or /rigid-pavement (slab D) — the two design tools take it as their traffic input.' },
       ],
     },

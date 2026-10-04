@@ -82,6 +82,11 @@ export default function Pavement() {
     else { setA1(TYPICAL_A.asphalt); setA2(0.2 / 25.4); setA3(TYPICAL_A.subbase) }
   }
 
+  const dims = [
+    { a: a1, D: D1, m: 1 },
+    { a: a2, D: D2, m: m2 },
+    { a: a3, D: D3, m: m3 },
+  ]
   const steps: SolutionStep[] = sn.res && es.res && useTraffic === 'calc' ? [
     {
       title: 'Traffic → design ESALs',
@@ -91,8 +96,8 @@ export default function Pavement() {
         { text: `Daily trucks ${f3(es.res.dailyTrucks)} carry ${f2(truckFactor)} ESALs each on the design lane (${(directional * 100).toFixed(0)} % directional, ${(laneFactor * 100).toFixed(0)} % lane factor), grown at ${f2(growthPct)} %/yr for ${years} years. First year: ${f3(es.res.firstYear)} ESALs.` },
       ],
     },
-    ...snSteps(sn, reliability, S0, pt, layers),
-  ] : sn.res ? snSteps(sn, reliability, S0, pt, layers) : []
+    ...snSteps(sn, reliability, S0, pt, layers, W18, dims),
+  ] : sn.res ? snSteps(sn, reliability, S0, pt, layers, W18, dims) : []
 
   return (
     <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
@@ -202,7 +207,7 @@ export default function Pavement() {
 
 function snSteps(
   sn: SnOut, reliability: number, S0: number, pt: number,
-  layers: LayerOut,
+  layers: LayerOut, W18: number, dims: { a: number; D: number; m: number }[],
 ): SolutionStep[] {
   if (!sn.res) return []
   return [
@@ -210,6 +215,7 @@ function snSteps(
       title: 'The 1993 flexible design equation',
       lines: [
         { tex: '\\log_{10}W_{18} = Z_R S_0 + 9.36\\log_{10}(SN+1) - 0.20 + \\frac{\\log_{10}\\left(\\frac{\\Delta PSI}{4.2-1.5}\\right)}{0.40+\\frac{1094}{(SN+1)^{5.19}}} + 2.32\\log_{10}MR - 8.07' },
+        { tex: `\\log_{10}W_{18} = \\log_{10}(${f3(W18)}) = ${f3(sn.res.logW18)}` },
         { text: `ZR = ${f3(sn.res.ZR)} from R = ${f2(reliability)} %, S0 = ${f2(S0)} (flexible 0.40–0.50), ΔPSI = 4.2 − ${f2(pt)} = ${f2(sn.res.dPSI)}, MR = ${f3(sn.res.MRpsi)} psi. The RHS is strictly increasing in SN, so the required SN comes from a bracketed bisection on [0.3, 20].` },
         { tex: `SN_{req} = ${f2(sn.res.SN)}` },
       ],
@@ -218,7 +224,7 @@ function snSteps(
       title: 'Layer equation',
       lines: [
         { tex: 'SN = a_1D_1 + a_2D_2m_2 + a_3D_3m_3' },
-        ...(layers.rows ?? []).map((r) => ({ text: `${r.name}: contributes ${f3(r.contribution)} (drainage m = ${f2(r.m)})` })),
+        ...(layers.rows ?? []).map((r, k) => ({ text: `${r.name}: ${f3(dims[k]?.a ?? 0)}×${f2(dims[k]?.D ?? 0)}${(dims[k]?.m ?? 1) !== 1 ? `×${f2(dims[k]?.m ?? 1)}` : ''} = ${f3(r.contribution)} (drainage m = ${f2(r.m)})` })),
         { tex: `SN_{prov} = ${f2(layers.sn)} \\;\\ge\\; SN_{req} = ${f2(sn.res.SN)} \\;\\; ${layers.ok ? '\\checkmark' : '\\times'}` },
         ...(!layers.ok && Number.isFinite(layers.shortfall) ? [{ text: `Short by ${f3(layers.shortfall)} — thicken the base or subbase, or improve the drainage coefficients.` }] : []),
       ],
