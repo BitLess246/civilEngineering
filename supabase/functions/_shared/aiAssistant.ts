@@ -176,6 +176,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/storm-sewer', name: 'Storm Sewer', sub: 'Rational · Manning · tc chain', group: 'Water' },
   { route: '/water-demand', name: 'Water Demand', sub: 'Forecast · peaking · storage', group: 'Water' },
   { route: '/pump-station', name: 'Pump Station', sub: 'System × pump · NPSH · power', group: 'Water' },
+  { route: '/eng-economy', name: 'Engineering Economy', sub: 'Time value · NPV/IRR · depreciation', group: 'Mathematics' },
 ]
 
 /** The refusal the model is instructed to give off-topic questions, verbatim. */

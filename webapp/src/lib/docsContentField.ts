@@ -803,4 +803,39 @@ export const FIELD_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'eng-economy',
+    name: 'Engineering Economy',
+    route: '/eng-economy',
+    group: 'Mathematics',
+    summary: 'The board-exam money mathematics: time-value factors and gradients, NPV/IRR/payback on a cash-flow series, and depreciation with break-even — every line worked with the entered numbers.',
+    basis: 'Single-payment and uniform-series factors (P/F, F/P, P/A, A/P, F/A, A/F); arithmetic and geometric gradients; effective rate (1+r/m)^m−1; NPV, IRR by bisection, simple and discounted payback; SL/SYD/DB depreciation; break-even and capitalized cost.',
+    sections: [
+      {
+        id: 'economy-factors',
+        title: 'Rate, horizon and gradients',
+        controls: [
+          { kind: 'field', name: 'Rate i · periods n', what: 'The per-period interest rate and the horizon every factor below is evaluated at.' },
+          { kind: 'field', name: 'Gradients', what: 'Arithmetic gradient G (maintenance that worsens) and geometric first flow A1 growing at g percent.' },
+          { kind: 'output', name: 'Factors', what: 'P/F, A/P, F/A, P/A with the numbers substituted, plus the gradient present worths and the effective annual rate.' },
+        ],
+      },
+      {
+        id: 'economy-project',
+        title: 'Cash flows and verdict',
+        controls: [
+          { kind: 'field', name: 'Cash-flow series', what: 'Year-by-year amounts with the investment at t = 0; add or drop years freely.' },
+          { kind: 'output', name: 'NPV · IRR · payback', what: 'Net present value at the hurdle rate, the break-even rate, and simple plus discounted payback — accept iff IRR clears the hurdle.' },
+        ],
+      },
+      {
+        id: 'economy-depreciation',
+        title: 'Depreciation and break-even',
+        controls: [
+          { kind: 'choice', name: 'Method', what: 'Straight-line spreads evenly; sum-of-years-digits and declining-balance front-load the charge.' },
+          { kind: 'output', name: 'Schedule · BE · cap cost', what: 'Year-by-year charge and book value, the break-even volume, and the A/i perpetuity price.' },
+        ],
+      },
+    ],
+  },
 ]

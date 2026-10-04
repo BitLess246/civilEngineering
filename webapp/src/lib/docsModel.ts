@@ -55,6 +55,7 @@ export type DocGroup =
   | 'Surveying'
   | 'Transportation'
   | 'Water resources'
+  | 'Mathematics'
   | 'Estimates'
   | 'Planning & scheduling'
   | 'Reference'
@@ -68,6 +69,7 @@ export const DOC_GROUPS: DocGroup[] = [
   'Surveying',
   'Transportation',
   'Water resources',
+  'Mathematics',
   'Estimates',
   'Planning & scheduling',
   'Reference',

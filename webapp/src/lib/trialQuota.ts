@@ -57,6 +57,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/gvf-profiles', '/muskingum', '/detention', '/do-sag',
   // wave six: rigid pavement, roundabouts, ESALs, storm sewers, pumping, water demand
   '/rigid-pavement', '/roundabout', '/esal', '/storm-sewer', '/pump-station', '/water-demand',
+  // mathematics: engineering economy
+  '/eng-economy',
 ]
 
 /**
