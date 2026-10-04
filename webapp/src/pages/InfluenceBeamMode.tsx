@@ -269,6 +269,8 @@ export function BeamMode() {
   const steps: SolutionStep[] = (() => {
     const S = supports.length, H = hinges.length
     const st = solveUnitAt(model, unitXc)
+    const sumR = st.reactions.reduce((a, v) => a + v, 0)
+    const sumM0 = st.reactions.reduce((a, v, i) => a + v * supports[i].x, 0)
     const out: SolutionStep[] = [
       {
         title: 'Model and determinacy',
@@ -284,6 +286,9 @@ export function BeamMode() {
           { text: 'Every influence ordinate comes from the same solve: reactions and hinge shears for 1 kN down at the load position.' },
           ...supports.map((s, i) => ({ item: `R at x = ${f2(s.x)} m (${s.kind}): ${f3(st.reactions[i])} kN per kN` })),
           ...model.hinges.map((h, i) => ({ item: `Hinge shear H${i + 1} at x = ${f2(h)} m: ${f3(st.hingeShears[i])} kN per kN` })),
+          { tex: `\\sum F_y = ${st.reactions.map((r) => f3(r)).join(' + ')} - 1 = ${f3(sumR - 1)} \\approx 0` },
+          { tex: `\\sum M_0 = ${st.reactions.map((r, i) => `${f3(r)}\\times${f2(supports[i].x)}`).join(' + ')} - 1\\times${f2(unitXc)} = ${f3(sumM0 - unitXc)} \\approx 0` },
+          { text: 'The solved state balances the 1 kN load — the reactions sum to one and their moment about the origin matches the load position.' },
         ],
       },
       {
@@ -321,9 +326,13 @@ export function BeamMode() {
         title: `Governing lane-load placements at ${secName}`,
         lines: [
           { text: `Length under the live UDL for the worst negative moment at ${secName}: ${f2(governing.negLen)} m — the negative region${governing.negLen > 0 ? '' : 's'} of the M line, the only stretch where a downward patch reduces the moment.` },
+          { tex: `M_{UDL}^- = w\\sum A_{neg} = ${f2(wLive)}\\times${f3(governing.pM.regions.reduce((a, r) => a + r.area, 0))} = ${f2(governing.pM.udlEffect)}\\text{ kN·m}` },
           { text: `Length under the dead UDL: ${f2(length)} m — dead load acts on the entire beam, so it cannot be placed. Its net moment at ${secName} is ${signed(governing.deadM)} kN·m; the positive region of the line alone measures ${f2(governing.posLen)} m.` },
+          { tex: `M_{dead} = w_d\\sum A_{tot} = ${f2(wDead)}\\times${f3(wDead !== 0 ? governing.deadM / wDead : 0)} = ${f2(governing.deadM)}\\text{ kN·m}` },
           { text: `Worst negative moment at ${secName}: ${signed(governing.maxNegM)} kN·m = dead ${signed(governing.deadM)} + live ${signed(governing.pM.liveTotal)} (UDL ${signed(governing.pM.udlEffect)} over ${f2(governing.negLen)} m + the ${f2(pLive)} kN point load on the most negative ordinate: ${signed(governing.pM.pointEffect ?? NaN)}).` },
+          { tex: `M_{min} = M_{dead} + M_{live}^- = ${f2(governing.deadM)} + ${f2(governing.pM.liveTotal)} = ${f2(governing.maxNegM)}\\text{ kN·m}` },
           { text: `Worst positive shear at ${secName}: ${signed(governing.maxPosV)} kN = dead ${signed(governing.deadV)} + live ${signed(governing.pV.liveTotal)} (UDL ${signed(governing.pV.udlEffect)} over the positive regions + the point load on the most positive ordinate: ${signed(governing.pV.pointEffect ?? NaN)}).` },
+          { tex: `V_{max} = V_{dead} + V_{live}^+ = ${f2(governing.deadV)} + ${f2(governing.pV.liveTotal)} = ${f2(governing.maxPosV)}\\text{ kN}` },
         ],
       })
     }

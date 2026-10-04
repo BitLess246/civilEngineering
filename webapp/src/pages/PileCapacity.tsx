@@ -88,20 +88,21 @@ export default function PileCapacity() {
       title: `Shaft friction — ${sg.kind === 'clay' ? 'clay' : 'sand'} ${f3(sg.from)}–${f3(sg.to)} m`,
       lines: [
         { text: sg.detail },
-        { tex: `Q_{s} = p\\cdot f\\cdot \\Delta L = ${f3(sg.Q)}\\text{ kN}` },
+        { tex: `Q_{s} = p\\cdot f\\cdot \\Delta L = ${f3(res.perimeter)}\\times${f3(sg.f)}\\times${f3(sg.to - sg.from)} = ${f3(sg.Q)}\\text{ kN}` },
       ],
     })),
     {
       title: 'End bearing at the tip',
       lines: res.capped
         ? [
-            { tex: `q'\\,N_q > q_l = 0.5\\,p_a N_q\\tan\\varphi \\;\\Rightarrow\\; q_p = q_l = ${f3(res.qp)}\\text{ kPa}` },
+            { tex: `q' = ${f3(res.sigmaTip)}\\text{ kPa}, \\quad q_l = 0.5\\,p_a N_q\\tan\\varphi = ${f3(res.qp)}\\text{ kPa (cap governs)}` },
+            { tex: `Q_p = q_p A_p = ${f3(res.qp)}\\times${f3(res.area)} = ${f3(res.Qp)}\\text{ kN}` },
             { text: 'The Meyerhof critical-depth cap governs — q′·Nq cannot grow without bound.' },
           ]
         : [
             res.segments[res.segments.length - 1]?.kind === 'clay'
-              ? { tex: `q_p = 9\\,c_u = ${f3(res.qp)}\\text{ kPa} \\;\\Rightarrow\\; Q_p = q_p A_p = ${f3(res.Qp)}\\text{ kN}` }
-              : { tex: `q_p = q' N_q = ${f3(res.sigmaTip)}\\times N_q = ${f3(res.qp)}\\text{ kPa} \\;\\Rightarrow\\; Q_p = ${f3(res.Qp)}\\text{ kN}` },
+              ? { tex: `q_p = 9\\,c_u = 9\\times${f3(res.qp / 9)} = ${f3(res.qp)}\\text{ kPa} \\;\\Rightarrow\\; Q_p = q_p A_p = ${f3(res.qp)}\\times${f3(res.area)} = ${f3(res.Qp)}\\text{ kN}` }
+              : { tex: `q_p = q' N_q = ${f3(res.sigmaTip)}\\times${f3(res.sigmaTip > 1e-9 ? res.qp / res.sigmaTip : 0)} = ${f3(res.qp)}\\text{ kPa} \\;\\Rightarrow\\; Q_p = q_p A_p = ${f3(res.qp)}\\times${f3(res.area)} = ${f3(res.Qp)}\\text{ kN}` },
           ],
     },
     {

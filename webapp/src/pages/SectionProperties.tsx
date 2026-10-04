@@ -89,7 +89,8 @@ export default function SectionProperties() {
           item: `${r.name}: I = ${f2(r.Ix)} + A·dy² = ${f2(r.Ix)} + ${f2(r.A)}×(${f2(r.dy)})² = ${f2(r.Ix + r.transferX)} mm⁴`,
         })),
         { tex: `I_x = \\sum\\left( \\bar{I}_i + A_i d_i^2 \\right) = ${f2(res.Ix / 1e6)}\\times 10^6\\text{ mm}^4` },
-        { tex: `I_y = ${f2(res.Iy / 1e6)}\\times 10^6\\text{ mm}^4 \\;\\text{(same route with } dx = x_i - \\bar{x}\\text{)}` },
+        { tex: `I_y = \\sum\\left( \\bar{I}_i + A_i d_i^2 \\right) = ${f2(res.Iy / 1e6)}\\times 10^6\\text{ mm}^4` },
+        { text: 'Both axes take the same route — the only difference is the offset: dy = yi − ȳ feeds Ix, dx = xi − x̄ feeds Iy.' },
         { text: 'd is the distance from the row centroid to the composite centroid — the transfer term A·d² is where a built-up section earns its stiffness.' },
       ],
     },
@@ -97,7 +98,8 @@ export default function SectionProperties() {
       title: 'Moduli and radii of gyration',
       lines: [
         { tex: `S_x = \\frac{I_x}{c_{max}} = \\frac{${f2(res.Ix)}}{${f2(Math.max(res.cTop, res.cBot))}} = ${f2(res.Sx)}\\text{ mm}^3` },
-        { tex: `r_x = \\sqrt{\\frac{I_x}{A}} = ${f2(res.rx)}\\text{ mm}, \\qquad r_y = ${f2(res.ry)}\\text{ mm}` },
+        { tex: `r_x = \\sqrt{\\frac{I_x}{A}} = \\sqrt{\\frac{${f2(res.Ix)}}{${f2(res.A)}}} = ${f2(res.rx)}\\text{ mm}` },
+        { tex: `r_y = \\sqrt{\\frac{I_y}{A}} = \\sqrt{\\frac{${f2(res.Iy)}}{${f2(res.A)}}} = ${f2(res.ry)}\\text{ mm}` },
         { text: 'For the asymmetric sections (T, channel) the centroid is not mid-depth and the extreme fibre governs Sx — the c you divide by is the larger of top and bottom.' },
       ],
     },
@@ -106,18 +108,23 @@ export default function SectionProperties() {
       title: 'Closed-form section properties',
       lines: preset === 'rect'
         ? [
-            { tex: `A = bh = ${f2(b)}\\times${f2(h)}, \\quad I_x = \\frac{bh^3}{12} = ${f2(res.Ix)}, \\quad I_y = \\frac{hb^3}{12} = ${f2(res.Iy)}` },
-            { tex: `S_x = \\frac{bh^2}{6} = ${f2(res.Sx)}, \\quad r_x = \\frac{h}{\\sqrt{12}} = ${f2(res.rx)}` },
+            { tex: `A = bh = ${f2(b)}\\times${f2(h)} = ${f2(res.A)}\\text{ mm}^2` },
+            { tex: `I_x = \\frac{bh^3}{12} = \\frac{${f2(b)}\\times${f2(h)}^3}{12} = ${f2(res.Ix)}\\text{ mm}^4` },
+            { tex: `I_y = \\frac{hb^3}{12} = \\frac{${f2(h)}\\times${f2(b)}^3}{12} = ${f2(res.Iy)}\\text{ mm}^4` },
+            { tex: `S_x = \\frac{bh^2}{6} = \\frac{${f2(b)}\\times${f2(h)}^2}{6} = ${f2(res.Sx)}\\text{ mm}^3, \\quad r_x = \\frac{h}{\\sqrt{12}} = \\frac{${f2(h)}}{\\sqrt{12}} = ${f2(res.rx)}\\text{ mm}` },
             { text: 'The rectangle is the atom every built-up section decomposes into — the parallel-axis table below any composite is just these numbers moved.' },
           ]
         : preset === 'circle'
           ? [
-              { tex: `A = \\frac{\\pi d^2}{4}, \\quad I = \\frac{\\pi d^4}{64}, \\quad S = \\frac{\\pi d^3}{32}, \\quad r = \\frac{d}{4}` },
+              { tex: `A = \\frac{\\pi d^2}{4} = \\frac{\\pi\\times${f2(d)}^2}{4} = ${f2(res.A)}\\text{ mm}^2` },
+              { tex: `I = \\frac{\\pi d^4}{64} = \\frac{\\pi\\times${f2(d)}^4}{64} = ${f2(res.Ix)}\\text{ mm}^4` },
+              { tex: `S = \\frac{\\pi d^3}{32} = ${f2(res.Sx)}\\text{ mm}^3, \\quad r = \\frac{d}{4} = \\frac{${f2(d)}}{4} = ${f2(res.rx)}\\text{ mm}` },
               { text: `All four read straight off d = ${f2(d)} mm. A circle is its own principal frame — Ix = Iy and the radii of gyration are equal.` },
             ]
           : [
-              { tex: `A = \\frac{\\pi (D^2 - d^2)}{4}, \\quad I = \\frac{\\pi (D^4 - d^4)}{64}` },
-              { tex: `r = \\sqrt{I/A} = \\frac{\\sqrt{D^2 + d^2}}{4} = ${f2(res.rx)}\\text{ mm}` },
+              { tex: `A = \\frac{\\pi (D^2 - d^2)}{4} = \\frac{\\pi\\times(${f2(Dout)}^2 - ${f2(dt)}^2)}{4} = ${f2(res.A)}\\text{ mm}^2` },
+              { tex: `I = \\frac{\\pi (D^4 - d^4)}{64} = \\frac{\\pi\\times(${f2(Dout)}^4 - ${f2(dt)}^4)}{64} = ${f2(res.Ix)}\\text{ mm}^4` },
+              { tex: `r = \\sqrt{I/A} = \\frac{\\sqrt{D^2 + d^2}}{4} = \\frac{\\sqrt{${f2(Dout)}^2 + ${f2(dt)}^2}}{4} = ${f2(res.rx)}\\text{ mm}` },
               { text: `Hollow sections push area away from the axis: at D = ${f2(Dout)} with d = ${f2(dt)}, the tube keeps ${f2(100 * (1 - (dt / Dout) ** 2))}% of the solid area but ${f2(100 * (1 - (dt / Dout) ** 4))}% of its stiffness.` },
             ],
     },
