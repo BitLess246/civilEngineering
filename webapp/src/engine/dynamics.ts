@@ -1,6 +1,6 @@
 /**
  * Dynamics calculator — PRC CELE syllabus (Structural 35%).
- * Kinematics, kinetics, work-energy, impulse-momentum.
+ * Kinematics, kinetics, work-energy, impulse-momentum, friction, belt friction.
  * Units: SI (m, kg, s, N, J).
  */
 
@@ -327,4 +327,119 @@ export function curvilinear(input: CurvilinearInput): {
   const a = Math.hypot(at, an);
   const thetaDeg = (Math.atan2(an, at) * 180) / Math.PI;
   return { an, at, a, thetaDeg };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FRICTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface FrictionInput {
+  /** Mass (kg) */
+  m: number;
+  /** Coefficient of static friction */
+  mu_s: number;
+  /** Coefficient of kinetic friction */
+  mu_k: number;
+  /** Incline angle (degrees) — 0 for horizontal */
+  thetaDeg: number;
+  /** Applied force parallel to surface (N) — positive up the incline */
+  F_applied?: number;
+  /** Whether motion is impending/occurring */
+  motion?: "impending" | "sliding" | "static";
+}
+
+/**
+ * Friction on an inclined or horizontal plane.
+ * Returns friction force, normal force, net force, and acceleration.
+ */
+export function friction(input: FrictionInput): {
+  N: number;
+  F_friction_max: number;
+  F_friction: number;
+  F_net: number;
+  a: number;
+  motion: "static" | "sliding";
+} {
+  const { m, mu_s, mu_k, thetaDeg, F_applied = 0, motion = "static" } = input;
+  const theta = (thetaDeg * Math.PI) / 180;
+  const W = m * 9.81;
+  const N = W * Math.cos(theta);
+  const F_friction_max = mu_s * N;
+  const W_parallel = W * Math.sin(theta);
+
+  // Determine if motion occurs
+  const F_net_no_friction = F_applied - W_parallel;
+  const F_friction_needed = Math.abs(F_net_no_friction);
+
+  let F_friction: number;
+  let motionResult: "static" | "sliding";
+
+  if (motion === "sliding") {
+    F_friction = mu_k * N * Math.sign(F_net_no_friction) * -1;
+    motionResult = "sliding";
+  } else if (F_friction_needed <= F_friction_max) {
+    F_friction = -F_net_no_friction; // Static friction balances
+    motionResult = "static";
+  } else {
+    // Impending motion - use kinetic friction
+    F_friction = mu_k * N * Math.sign(F_net_no_friction) * -1;
+    motionResult = "sliding";
+  }
+
+  const F_net = F_applied - W_parallel + F_friction;
+  const a = F_net / m;
+
+  return { N, F_friction_max, F_friction, F_net, a, motion: motionResult };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BELT FRICTION (CAPSTAN EQUATION)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BeltFrictionInput {
+  /** Tension on tight side (N) */
+  T1?: number;
+  /** Tension on slack side (N) */
+  T2?: number;
+  /** Coefficient of friction between belt and pulley */
+  mu: number;
+  /** Angle of wrap (radians) */
+  beta: number;
+  /** Solve for: "T1" | "T2" | "mu" | "beta" */
+  solveFor: "T1" | "T2" | "mu" | "beta";
+}
+
+/**
+ * Belt friction / capstan equation: T1 = T2 * e^(μβ)
+ * V-belt: T1 = T2 * e^(μβ / sin(α/2)) where α = groove angle
+ */
+export function beltFriction(input: BeltFrictionInput): {
+  T1: number;
+  T2: number;
+  mu: number;
+  beta: number;
+  ratio: number;
+} {
+  const { T1, T2, mu, beta, solveFor } = input;
+  const ratio = Math.exp(mu * beta);
+
+  let T1Calc: number = T1 ?? 0, T2Calc: number = T2 ?? 0, muCalc = mu, betaCalc = beta;
+
+  if (solveFor === "T1") {
+    if (T2 === undefined) throw new Error("T2 required to solve for T1");
+    T1Calc = T2 * ratio;
+  } else if (solveFor === "T2") {
+    if (T1 === undefined) throw new Error("T1 required to solve for T2");
+    T2Calc = T1 / ratio;
+  } else if (solveFor === "mu") {
+    if (T1 === undefined || T2 === undefined) throw new Error("T1 and T2 required to solve for μ");
+    if (T1 <= 0 || T2 <= 0) throw new Error("Tensions must be positive");
+    muCalc = Math.log(T1 / T2) / beta;
+  } else if (solveFor === "beta") {
+    if (T1 === undefined || T2 === undefined) throw new Error("T1 and T2 required to solve for β");
+    if (T1 <= 0 || T2 <= 0) throw new Error("Tensions must be positive");
+    betaCalc = Math.log(T1 / T2) / mu;
+  }
+
+  return { T1: T1Calc, T2: T2Calc, mu: muCalc, beta: betaCalc, ratio };
 }
