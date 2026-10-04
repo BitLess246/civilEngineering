@@ -8,6 +8,8 @@ import {
   workEnergy,
   impulseMomentum,
   curvilinear,
+  friction,
+  beltFriction,
 } from "../engine/dynamics";
 
 // Local numeric input to avoid type issues with shared Num component
@@ -29,7 +31,7 @@ function NumInput({ label, unit, value, onChange, step, min, max }: {
   );
 }
 
-type Tab = "rectilinear" | "projectile" | "curvilinear" | "kinetics" | "workEnergy" | "impulseMomentum";
+type Tab = "rectilinear" | "projectile" | "curvilinear" | "kinetics" | "workEnergy" | "impulseMomentum" | "friction" | "beltFriction";
 
 const f3 = (n: number) => n.toFixed(3);
 const f2 = (n: number) => n.toFixed(2);
@@ -81,6 +83,21 @@ export default function Dynamics() {
   const [Favg, setFavg] = useState(NaN);
   const [tIM, setTIM] = useState(NaN);
 
+  // Friction
+  const [mFric, setMFric] = useState(10);
+  const [muS, setMuS] = useState(0.5);
+  const [muK, setMuK] = useState(0.3);
+  const [thetaFric, setThetaFric] = useState(30);
+  const [FApp, setFApp] = useState(50);
+  const [motionType, setMotionType] = useState<"static" | "impending" | "sliding">("static");
+
+  // Belt Friction
+  const [T1, setT1] = useState(NaN);
+  const [T2, setT2] = useState(200);
+  const [muBelt, setMuBelt] = useState(0.3);
+  const [beta, setBeta] = useState(Math.PI);
+  const [solveBelt, setSolveBelt] = useState<"T1" | "T2" | "mu" | "beta">("T1");
+
   // Compute functions
   const computeRectilinear = () => {
     const input: Parameters<typeof kinematicsRectilinear>[0] = { u, a };
@@ -123,6 +140,14 @@ export default function Dynamics() {
     return impulseMomentum(input);
   };
 
+  const computeFriction = () => {
+    return friction({ m: mFric, mu_s: muS, mu_k: muK, thetaDeg: thetaFric, F_applied: FApp, motion: motionType });
+  };
+
+  const computeBeltFriction = () => {
+    return beltFriction({ T1: Number.isFinite(T1) ? T1 : undefined, T2, mu: muBelt, beta, solveFor: solveBelt });
+  };
+
   const tabs: { id: Tab; label: string }[] = [
     { id: "rectilinear", label: "Rectilinear" },
     { id: "projectile", label: "Projectile" },
@@ -130,6 +155,8 @@ export default function Dynamics() {
     { id: "kinetics", label: "Kinetics" },
     { id: "workEnergy", label: "Work–Energy" },
     { id: "impulseMomentum", label: "Impulse–Momentum" },
+    { id: "friction", label: "Friction" },
+    { id: "beltFriction", label: "Belt Friction" },
   ];
 
   // Build worked solution steps per tab
@@ -682,6 +709,144 @@ export default function Dynamics() {
               } catch (e: unknown) {
                 return <div className="text-fail text-sm">{(e as Error).message}</div>;
               }
+            })()}
+          </div>
+        </div>
+      )}
+
+      {tab === "friction" && (
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-ink">Friction on Inclined Plane</h2>
+            <p className="text-sm text-muted">
+              Static and kinetic friction: F_max = μ_s·N, F_kinetic = μ_k·N. N = mg·cosθ.
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <NumInput label="Mass m" unit="kg" value={mFric} onChange={setMFric} step={0.1} min={0.1} max={10000} />
+              <NumInput label="μ_s (static)" unit="—" value={muS} onChange={setMuS} step={0.01} min={0} max={2} />
+              <NumInput label="μ_k (kinetic)" unit="—" value={muK} onChange={setMuK} step={0.01} min={0} max={2} />
+              <NumInput label="Incline θ" unit="°" value={thetaFric} onChange={setThetaFric} step={1} min={0} max={90} />
+              <NumInput label="Applied force F" unit="N" value={FApp} onChange={setFApp} step={1} min={-10000} max={10000} />
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Motion state</label>
+                <select value={motionType} onChange={(e) => setMotionType(e.target.value as typeof motionType)} className="flex overflow-hidden rounded-md border border-field-line bg-field focus-within:border-brand focus-within:shadow-[0_0_0_3px_rgba(15,76,146,.14)] min-w-0 flex-1 !rounded-none !border-0 !bg-transparent text-[13px] !shadow-none py-1.5 px-2">
+                  <option value="static">Static (check if moves)</option>
+                  <option value="impending">Impending motion</option>
+                  <option value="sliding">Sliding</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={() => computeFriction()}
+              className="px-6 py-2 bg-brand text-on-solid rounded hover:bg-brand-hover transition"
+            >
+              Compute
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-ink">Results</h2>
+            {(() => {
+              const r = computeFriction();
+              return (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="p-3 bg-sheet-2 rounded border border-hairline">
+                      <div className="text-sm text-muted">Normal force N</div>
+                      <div className="text-2xl font-bold text-ink">{f2(r.N)} N</div>
+                    </div>
+                    <div className="p-3 bg-sheet-2 rounded border border-hairline">
+                      <div className="text-sm text-muted">Max static friction</div>
+                      <div className="text-2xl font-bold text-ink">{f2(r.F_friction_max)} N</div>
+                    </div>
+                    <div className="p-3 bg-sheet-2 rounded border border-hairline">
+                      <div className="text-sm text-muted">Actual friction</div>
+                      <div className="text-2xl font-bold text-ink">{f2(r.F_friction)} N</div>
+                    </div>
+                    <div className="p-3 bg-sheet-2 rounded border border-hairline">
+                      <div className="text-sm text-muted">Net force</div>
+                      <div className="text-2xl font-bold text-ink">{f2(r.F_net)} N</div>
+                    </div>
+                    <div className="p-3 bg-sheet-2 rounded border border-hairline">
+                      <div className="text-sm text-muted">Acceleration</div>
+                      <div className="text-2xl font-bold text-ink">{f3(r.a)} m/s²</div>
+                    </div>
+                    <div className="p-3 bg-sheet-2 rounded border border-hairline">
+                      <div className="text-sm text-muted">Motion</div>
+                      <div className="text-2xl font-bold text-ink">{r.motion}</div>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {tab === "beltFriction" && (
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-ink">Belt Friction (Capstan Equation)</h2>
+            <p className="text-sm text-muted">
+              T₁ = T₂·e^(μβ) for flat belts. For V-belts: T₁ = T₂·e^(μβ/sin(α/2)).
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <NumInput label="T₁ (tight side)" unit="N" value={T1} onChange={setT1} step={1} min={0} max={100000} />
+              <NumInput label="T₂ (slack side)" unit="N" value={T2} onChange={setT2} step={1} min={0} max={100000} />
+              <NumInput label="μ (friction)" unit="—" value={muBelt} onChange={setMuBelt} step={0.01} min={0} max={2} />
+              <NumInput label="Wrap angle β" unit="rad" value={beta} onChange={setBeta} step={0.1} min={0} max={6.28} />
+              <div>
+                <label className="block text-sm font-medium text-muted mb-1">Solve for</label>
+                <select value={solveBelt} onChange={(e) => setSolveBelt(e.target.value as typeof solveBelt)} className="flex overflow-hidden rounded-md border border-field-line bg-field focus-within:border-brand focus-within:shadow-[0_0_0_3px_rgba(15,76,146,.14)] min-w-0 flex-1 !rounded-none !border-0 !bg-transparent text-[13px] !shadow-none py-1.5 px-2">
+                  <option value="T1">T₁ (tight side)</option>
+                  <option value="T2">T₂ (slack side)</option>
+                  <option value="mu">μ (friction)</option>
+                  <option value="beta">β (wrap angle)</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={() => computeBeltFriction()}
+              className="px-6 py-2 bg-brand text-on-solid rounded hover:bg-brand-hover transition"
+            >
+              Compute
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-ink">Results</h2>
+            {(() => {
+              const r = computeBeltFriction();
+              return (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="p-3 bg-sheet-2 rounded border border-hairline">
+                      <div className="text-sm text-muted">T₁ (tight side)</div>
+                      <div className="text-2xl font-bold text-ink">{f2(r.T1)} N</div>
+                    </div>
+                    <div className="p-3 bg-sheet-2 rounded border border-hairline">
+                      <div className="text-sm text-muted">T₂ (slack side)</div>
+                      <div className="text-2xl font-bold text-ink">{f2(r.T2)} N</div>
+                    </div>
+                    <div className="p-3 bg-sheet-2 rounded border border-hairline">
+                      <div className="text-sm text-muted">μ</div>
+                      <div className="text-2xl font-bold text-ink">{f3(r.mu)}</div>
+                    </div>
+                    <div className="p-3 bg-sheet-2 rounded border border-hairline">
+                      <div className="text-sm text-muted">β (wrap angle)</div>
+                      <div className="text-2xl font-bold text-ink">{f3(r.beta)} rad</div>
+                    </div>
+                    <div className="p-3 bg-sheet-2 rounded border border-hairline">
+                      <div className="text-sm text-muted">Ratio T₁/T₂</div>
+                      <div className="text-2xl font-bold text-ink">{f3(r.ratio)}</div>
+                    </div>
+                  </div>
+                </>
+              );
             })()}
           </div>
         </div>
