@@ -86,7 +86,15 @@ const storage = (): Storage | undefined => {
   } catch { return undefined }               // a browser set to block site data
 }
 
-let state: SectionState = parseSectionState(storage()?.getItem(SECTIONS_KEY) ?? null)
+// Read once, defensively: in some Node runtimes `localStorage` exists as a
+// name but without a working `getItem` (vitest hits exactly this), and
+// optional chaining only guards null — not a non-function property.
+let state: SectionState = (() => {
+  try {
+    const ls = storage()
+    return parseSectionState(typeof ls?.getItem === 'function' ? ls.getItem(SECTIONS_KEY) : null)
+  } catch { return {} }
+})()
 const listeners = new Set<() => void>()
 
 export function subscribeSections(fn: () => void): () => void {

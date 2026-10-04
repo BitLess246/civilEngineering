@@ -181,7 +181,7 @@ export function pileCapacity(p: PileInput): PileResult {
     }
     let segQ = 0
     let segSpan = 0
-    let fVal = 0
+    let fVal: number
     let detail = ''
     for (const pc of pieces) {
       const len = pc.b - pc.a
