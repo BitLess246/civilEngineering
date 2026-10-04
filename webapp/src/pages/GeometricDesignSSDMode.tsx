@@ -44,6 +44,7 @@ export function GeometricSSDMode() {
       title: 'Stopping sight distance',
       lines: [
         { tex: `SSD = d_r + d_b = ${f3(res.reaction)} + ${f3(res.braking)} = ${f3(res.total)}\\text{ m}` },
+        { text: `At ${f2(V)} km/h the driver needs ${f3(res.reaction)} m of sight just to react plus ${f3(res.braking)} m to brake — ${f3(res.total)} m of unobstructed road, the number every crest, sag and sight-line check is judged against.` },
       ],
     },
   ] : []

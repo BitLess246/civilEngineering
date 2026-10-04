@@ -48,6 +48,7 @@ export function TraverseMode() {
       title: 'Latitudes and departures of the raw chain',
       lines: [
         { text: 'With the azimuth measured clockwise from north, each course contributes lat = L·cos(az) (north+) and dep = L·sin(az) (east+).' },
+        { tex: `${res.rows[0].name}:\\ \\text{lat} = ${f3(res.rows[0].length)}\\cos(${f2(res.rows[0].azDeg)}^\\circ) = ${f3(res.rows[0].lat)}\\text{ m},\\quad \\text{dep} = ${f3(res.rows[0].length)}\\sin(${f2(res.rows[0].azDeg)}^\\circ) = ${f3(res.rows[0].dep)}\\text{ m}` },
         { tex: `\\Sigma \\text{lat} = ${f3(res.eLat)}\\text{ m},\\qquad \\Sigma \\text{dep} = ${f3(res.eDep)}\\text{ m}` },
         { text: 'A closed figure needs both sums to be zero, so these ARE the closure errors.' },
       ],
@@ -56,7 +57,7 @@ export function TraverseMode() {
       title: 'Linear misclosure and precision',
       lines: [
         { tex: `e = \\sqrt{e_{lat}^2 + e_{dep}^2} = \\sqrt{${f3(res.eLat)}^2 + ${f3(res.eDep)}^2} = ${f3(res.linear)}\\text{ m}` },
-        { tex: `P = ${f3(res.perimeter)}\\text{ m} \\;\\Rightarrow\\; \\text{precision} = 1\\text{ in } ${res.precisionN === 0 ? '\\infty' : Math.round(res.precisionN).toLocaleString()}` },
+        { tex: `P = ${res.rows.map((r) => f2(r.length)).join('+')} = ${f3(res.perimeter)}\\text{ m} \\;\\Rightarrow\\; \\text{precision} = 1\\text{ in } ${res.precisionN === 0 ? '\\infty' : Math.round(res.precisionN).toLocaleString()}` },
         { text: res.precisionN >= 5000 ? 'At 1-in-5000 or better this is ordinary practice for a transit/theodolite lot survey.' : 'Common practice wants ~1 in 5000 or better for property surveys — re-measure the weakest course if the spec requires it.' },
       ],
     },
@@ -66,9 +67,12 @@ export function TraverseMode() {
         ? [
             { text: 'The Bowditch rule assumes the angles and distances are about equally reliable: each course is corrected in proportion to its LENGTH.' },
             { tex: `C_{lat,i} = -e_{lat}\\cdot \\frac{L_i}{P},\\qquad C_{dep,i} = -e_{dep}\\cdot \\frac{L_i}{P}` },
+            { tex: `${res.rows[0].name}:\\ C_{lat} = -(${f3(res.eLat)})\\times\\frac{${f2(res.rows[0].length)}}{${f3(res.perimeter)}} = ${signed(res.rows[0].cLat)}\\text{ m},\\quad C_{dep} = -(${f3(res.eDep)})\\times\\frac{${f2(res.rows[0].length)}}{${f3(res.perimeter)}} = ${signed(res.rows[0].cDep)}\\text{ m}` },
             { text: `The adjusted chain sums to exactly zero on both axes, so the figure closes on the drawing.` },
           ]
         : [
+            { tex: `C_{lat,i} = -e_{lat}\\cdot\\frac{|lat_i|}{\\sum|lat|},\\qquad C_{dep,i} = -e_{dep}\\cdot\\frac{|dep_i|}{\\sum|dep|}` },
+            { tex: `${res.rows[0].name}:\\ C_{lat} = -(${f3(res.eLat)})\\times\\frac{${f3(Math.abs(res.rows[0].lat))}}{${f3(res.rows.reduce((s, r) => s + Math.abs(r.lat), 0))}} = ${signed(res.rows[0].cLat)}\\text{ m},\\quad C_{dep} = -(${f3(res.eDep)})\\times\\frac{${f3(Math.abs(res.rows[0].dep))}}{${f3(res.rows.reduce((s, r) => s + Math.abs(r.dep), 0))}} = ${signed(res.rows[0].cDep)}\\text{ m}` },
             { text: 'The transit rule assumes the angles were measured better than the distances: corrections are shared in proportion to each course\u2019s own |lat| and |dep|.' },
             { text: 'It is rarely used in practice (it depends on the traverse orientation) but it is the classic comparison the exam asks for.' },
           ],
@@ -77,6 +81,7 @@ export function TraverseMode() {
       title: 'Area by double-meridian distances',
       lines: [
         { tex: `DMD_1 = dep_1,\\qquad DMD_i = DMD_{i-1} + dep_{i-1} + dep_i` },
+        { tex: `${res.rows[0].name}:\\ DMD_1\\cdot lat_1 = ${f3(res.rows[0].dmd)}\\times ${f3(res.rows[0].adjLat)} = ${f3(res.rows[0].doubleArea)}\\text{ m}^2` },
         { tex: `A = \\left|\\sum DMD_i \\cdot lat_i\\right| / 2 = ${f3(res.areaM2)}\\text{ m}^2 = ${f3(res.areaHa)}\\text{ ha}` },
         { text: 'The DMD chain is algebraically identical to the shoelace formula over the adjusted coordinates — two routes to the same number.' },
       ],

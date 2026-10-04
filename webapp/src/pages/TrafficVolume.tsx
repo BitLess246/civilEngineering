@@ -38,7 +38,7 @@ export default function TrafficVolume() {
       title: 'Peak-hour factor and the design flow rate',
       lines: [
         { tex: `PHF = \\frac{V}{4\\times V_{15}} = \\frac{${f2(hourly)}}{4\\times ${f2(peak15)}} = ${f3(res.phf)}` },
-        { tex: `\\text{flow rate} = \\frac{V}{PHF} = ${f3(res.flowRate)}\\text{ veh/h}` },
+        { tex: `\\text{flow rate} = \\frac{V}{PHF} = \\frac{${f2(hourly)}}{${f3(res.phf)}} = ${f3(res.flowRate)}\\text{ veh/h}` },
         { text: 'PHF = 1.00 means the busiest 15 minutes ran at the hourly average all hour; smaller values mean a sharper spike. Dividing by PHF converts the counted hour into the rate the design must actually clear.' },
       ],
     },

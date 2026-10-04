@@ -58,7 +58,7 @@ export function GeometricCurveMode() {
       title: 'Curve parameters',
       lines: [
         { tex: `A = |g_2 - g_1| = |${f2(g2)} - ${f2(g1)}| = ${f3(A)}\\%, \\qquad K = \\frac{L}{A} = ${curve.K === Infinity ? '\\infty' : f3(curve.K)}\\,\\text{m/\\%}` },
-        { tex: `\\text{BVC} = ${f3(curve.BVCstation)}\\ (\\text{elev } ${f3(curve.BVCelev)}){,}\\quad \\text{EVC} = ${f3(curve.EVCstation)}\\ (\\text{elev } ${f3(curve.EVCelev)})` },
+        { tex: `\\text{BVC} = PVI - L/2 = ${f3(pviSt)} - ${f2(L)}/2 = ${f3(curve.BVCstation)}\\ (\\text{elev } ${f3(curve.BVCelev)}){,}\\quad \\text{EVC} = PVI + L/2 = ${f3(pviSt)} + ${f2(L)}/2 = ${f3(curve.EVCstation)}\\ (\\text{elev } ${f3(curve.EVCelev)})` },
       ],
     },
     {
@@ -66,23 +66,27 @@ export function GeometricCurveMode() {
       lines: [
         { tex: `y(x) = y_{BVC} + \\frac{g_1}{100}\\,x + \\frac{g_2 - g_1}{200\\,L}\\,x^2` },
         { tex: `\\text{PVI external offset } e = \\frac{A L}{800} = \\frac{${f3(A)}\\times ${f2(L)}}{800} = ${f3(curve.PVIoffset)}\\text{ m}` },
-        { text: `The curve sits ${f3(curve.PVIoffset)} m ${kind === 'crest' ? 'below' : 'above'} the tangent PVI; the grade rate is r = (g₂−g₁)/2L = ${f3(curve.r)} %/m.` },
+        { tex: `r = \\frac{g_2 - g_1}{2L} = \\frac{${f2(g2)} - (${f2(g1)})}{2\\times ${f2(L)}} = ${f3(curve.r)}\\,\\%/\\text{m}` },
+        { text: `The curve sits ${f3(curve.PVIoffset)} m ${kind === 'crest' ? 'below' : 'above'} the tangent PVI; the grade changes at r per metre of curve.` },
       ],
     },
     ...(curve.turnKind ? [{
       title: `${curve.turnKind === 'high' ? 'High' : 'Low'} point`,
       lines: [
-        { tex: `x = \\frac{-g_1 L}{g_2 - g_1} = ${f3(curve.turnX ?? 0)}\\text{ m from BVC} \\;\\Rightarrow\\; y = ${f3(curve.turnElev ?? 0)}\\text{ m at station } ${f3(curve.turnStation ?? 0)}` },
+        { tex: `x = \\frac{-g_1 L}{g_2 - g_1} = \\frac{-(${f2(g1)})\\times ${f2(L)}}{${f2(g2)} - (${f2(g1)})} = ${f3(curve.turnX ?? 0)}\\text{ m from BVC} \\;\\Rightarrow\\; y = ${f3(curve.turnElev ?? 0)}\\text{ m at station } ${f3(curve.turnStation ?? 0)}` },
       ],
     }] : []),
     ...(req ? [{
       title: `Sight-distance check — ${kind}, S = ${f2(S)} m`,
       lines: [
         kind === 'crest'
-          ? { tex: `L_{\\min} = \\frac{A S^2}{100(\\sqrt{2h_1}+\\sqrt{2h_2})^2} = \\frac{A S^2}{658} = ${f3(req.Lmin)}\\text{ m} \\;\\; (${req.regime.replace('≤', '\\le').replace('>', '>')})` }
-          : { tex: `L_{\\min} = \\frac{A S^2}{200h + 3.5S} = \\frac{A S^2}{120 + 3.5S} = ${f3(req.Lmin)}\\text{ m} \\;\\; (${req.regime.replace('≤', '\\le')})` },
+          ? { tex: `L_{\\min} = \\frac{A S^2}{100(\\sqrt{2h_1}+\\sqrt{2h_2})^2} = \\frac{${f3(A)}\\times ${f2(S)}^2}{658} = ${f3(req.Lmin)}\\text{ m} \\;\\; (${req.regime.replace('≤', '\\le').replace('>', '>')})` }
+          : { tex: `L_{\\min} = \\frac{A S^2}{200h + 3.5S} = \\frac{${f3(A)}\\times ${f2(S)}^2}{120 + 3.5\\times ${f2(S)}} = ${f3(req.Lmin)}\\text{ m} \\;\\; (${req.regime.replace('≤', '\\le')})` },
         { text: `Metric AASHTO heights: eye 1.08 m and object 0.60 m on a crest; headlight 0.60 m with a 1° upward beam on a sag. Provided L = ${f2(L)} m — ${adequate ? 'ADEQUATE' : 'SHORT, lengthen the curve or flatten the grades'}.` },
-        ...(comfort ? [{ text: `Comfort criterion for a sag at ${f2(designV)} km/h: L ≥ A·V²/395 = ${f3(comfort)} m — ${comfortOk ? 'satisfied' : 'NOT satisfied'}.` }] : []),
+        ...(comfort ? [
+          { tex: `L \\ge \\frac{A V^2}{395} = \\frac{${f3(A)}\\times ${f2(designV)}^2}{395} = ${f3(comfort)}\\text{ m}` },
+          { text: `Comfort criterion for a sag at ${f2(designV)} km/h — ${comfortOk ? 'satisfied' : 'NOT satisfied'}.` },
+        ] : []),
       ],
       pass: adequate && comfortOk,
     }] : []),

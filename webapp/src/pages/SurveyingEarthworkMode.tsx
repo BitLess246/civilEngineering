@@ -65,6 +65,7 @@ export function EarthworkMode() {
       title: 'Volumes by the average end-area method',
       lines: [
         { tex: `V = \\frac{A_1 + A_2}{2}\\cdot d` },
+        { tex: `V_{\\text{cut},1} = \\frac{${f2(res.rows[0].cutA1)} + ${f2(res.rows[0].cutA2)}}{2}\\times ${f2(res.rows[0].distance)} = ${f3(res.rows[0].cutVol)}\\text{ m}^3,\\quad V_{\\text{fill},1} = \\frac{${f2(res.rows[0].fillA1)} + ${f2(res.rows[0].fillA2)}}{2}\\times ${f2(res.rows[0].distance)} = ${f3(res.rows[0].fillVol)}\\text{ m}^3` },
         { text: 'Cut and fill are integrated separately between each pair of sections — the areas come from the cross-section sheets, the spacing d from the station column (or the fixed interval).', },
         { tex: `\\Sigma\\text{cut} = ${f3(res.totalCut)}\\text{ m}^3,\\qquad \\Sigma\\text{fill} = ${f3(res.totalFill)}\\text{ m}^3` },
         { text: `Balance = ${signed(res.balance)} m³: ${res.balance >= 0 ? 'surplus cut to waste' : 'borrow needed'}.` },
@@ -74,15 +75,17 @@ export function EarthworkMode() {
       title: 'Prismoidal check where a middle area was supplied',
       lines: [
         { tex: `V_{\\text{prism}} = \\frac{d}{6}\\left(A_1 + 4A_m + A_2\\right)` },
-        ...res.rows.filter((r) => r.cutCorrection !== null).map((r) => ({
-          item: `${f2(r.from)} → ${f2(r.to)} m: end-area ${f3(r.cutVol)} vs prismoidal ${f3(r.cutPrism!)} m³ — correction ${f3(r.cutCorrection!)} m³ (${f2((r.cutCorrection! / Math.max(r.cutVol, 1e-9)) * 100)} %)`,
-        })),
+        ...res.rows.map((r, k) => ({ r, k })).filter(({ r }) => r.cutCorrection !== null).map(({ r, k }) => {
+          const am = sections[k]?.midCut ?? sections[k + 1]?.midCut ?? 0
+          return { item: `${f2(r.from)} → ${f2(r.to)} m: (${f2(r.cutA1)} + 4×${f2(am)} + ${f2(r.cutA2)})/6×${f2(r.distance)} = ${f3(r.cutPrism!)} m³ — end-area ${f3(r.cutVol)} m³, correction ${f3(r.cutCorrection!)} m³` }
+        }),
         { text: 'The end-area value over-estimates on curved ground; the correction is the number the board problem asks for.' },
       ],
     } satisfies SolutionStep] : []),
     {
       title: 'Mass-haul reading',
       lines: [
+        { tex: `M_1 = 0 + (${signed(res.rows[0].cutVol)} - ${signed(res.rows[0].fillVol)}) = ${f3(res.rows[0].massOrdinate)}\\text{ m}^3${res.rows.length > 1 ? `,\\quad M_2 = ${f3(res.rows[0].massOrdinate)} + (${signed(res.rows[1].cutVol)} - ${signed(res.rows[1].fillVol)}) = ${f3(res.rows[1].massOrdinate)}\\text{ m}^3` : ''}` },
         { text: `Ordinates accumulate net (cut − fill): +${f3(res.maxOrdinate)} m³ at station ${f2(res.maxOrdinateStation)}${res.minOrdinate < -1e-9 ? `, lowest −${f3(-res.minOrdinate)} m³ at ${f2(res.minOrdinateStation)}` : ''}.` },
         { text: `The upper bound on haul is Σ|ordinate|·interval = ${f2(res.totalHaulUpper / 1000)} ×10³ m³·m — the balance point on the diagram is where borrow or waste is decided.` },
       ],

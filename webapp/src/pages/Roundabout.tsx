@@ -59,11 +59,11 @@ export default function Roundabout() {
     {
       title: 'v/c and control delay',
       lines: [
-        { tex: `x = \\frac{v_e}{c} = ${f3(r.xc)} \\qquad d = \\frac{3600}{c} + \\frac{900\\,T\\left[(x-1) + \\sqrt{(x-1)^2 + \\frac{8k B x}{cT}}\\right]}{x}` },
-        { tex: `d = ${f2(r.delay)}\\ \\text{s/veh} \\;\\Rightarrow\\; \\text{LOS } ${r.los}` },
+        { tex: `x = \\frac{v_e}{c} = \\frac{${f2(r.veAdj)}}{${f2(r.capacity)}} = ${f3(r.xc)} \\qquad d = \\frac{3600}{c} + 900\\,T\\left[(x-1) + \\sqrt{(x-1)^2 + \\frac{8k B x}{cT}}\\right]` },
+        { tex: `d = \\frac{3600}{${f2(r.capacity)}} + 900\\times 0.25\\left[(${f3(r.xc)}-1) + \\sqrt{(${f3(r.xc)}-1)^2 + \\frac{8\\times 1.0\\times 1.0\\times ${f3(r.xc)}}{${f2(r.capacity)}\\times 0.25}}\\right] = ${f2(r.delay)}\\ \\text{s/veh} \\;\\Rightarrow\\; \\text{LOS } ${r.los}` },
         { text: r.xc > 1
           ? 'Demand exceeds capacity — the entry is oversaturated. HCM flags LOS F and the queue must be cleared geometrically (add an entry lane or a bypass lane), not by timing.'
-          : 'T = 0.25 h (15-min analysis), k = 1.0, B = 1.0 per the HCM unsignalized delay procedure the Manual applies to roundabouts. Thresholds: A ≤ 10, B ≤ 20, C ≤ 35, D ≤ 55, E ≤ 80 s/veh.' },
+          : 'T = 0.25 h (15-min analysis), k = 1.0, B = 1.0 per the HCM unsignalized delay procedure the Manual applies to roundabouts. Unsignalized thresholds: A ≤ 10, B ≤ 15, C ≤ 25, D ≤ 35, E ≤ 50 s/veh (and F whenever x > 1).' },
       ],
     },
   ] : []

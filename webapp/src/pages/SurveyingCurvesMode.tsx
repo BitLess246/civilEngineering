@@ -23,6 +23,7 @@ export function CurvesMode() {
   })()
 
   const el = res?.el
+  const exStake = (res?.stakes[1] ?? res?.stakes[0])!
   const steps: SolutionStep[] = el ? [
     {
       title: 'The classical elements from R and Δ',
@@ -45,6 +46,7 @@ export function CurvesMode() {
       title: 'Deflection-angle staking',
       lines: [
         { tex: `\\delta_i = \\frac{c_i}{2R}\\text{ rad},\\qquad c_i = 2R\\sin\\!\\left(\\frac{\\text{arc}}{2R}\\right)` },
+        { tex: `\\text{STA }${f2(exStake.station)}:\\ c = 2\\times${f3(R)}\\sin\\!\\left(\\frac{${f3(exStake.arcFromPc)}}{2\\times${f3(R)}}\\right) = ${f3(exStake.chord)}\\text{ m},\\quad \\delta = \\frac{${f3(exStake.chord)}}{2\\times${f3(R)}} = ${f3(exStake.incDef)}^\\circ\\ (\\text{total }${f3(exStake.totDef)}^\\circ)` },
         { text: `Each chord from the PC deflects by its own incremental angle, and the deflections accumulate — the total at the PT is exactly Δ/2 = ${f3(delta / 2)}°, the field check on the table below.` },
       ],
     },
