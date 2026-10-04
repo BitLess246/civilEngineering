@@ -61,11 +61,23 @@ export default function Culvert() {
   const kindLabel = (r: CulvertResult) =>
     r.section.kind === 'circular' ? `⌀ ${f3((r.section as { D: number }).D)} m circular` : `${f3(B)} × ${f3(rise)} m box`
 
+  // Inlet-control ratio x = Q/(A·√D) replayed in US units (cfs, ft) —
+  // the HDS-5 constants are dimensionless only there.
+  const FT = 1 / 0.3048
+  const qBarrel = res ? res.Q / res.barrels : 0
+  const aFull = res
+    ? res.section.kind === 'circular'
+      ? Math.PI * res.section.D * res.section.D / 4
+      : res.section.B * res.section.D
+    : 0
+  const dSize = res ? res.section.D : 0
+
   const steps: SolutionStep[] = res ? [
     {
       title: 'Inlet control — HDS-5 forms 1 and 2',
       lines: [
         { tex: '\\frac{HW_i}{D} = \\frac{E_c}{D} + K\\left[\\frac{Q}{A\\sqrt{D}}\\right]^{M} + s\\cdot S \\quad\\quad \\frac{HW_i}{D} = c\\left[\\frac{Q}{A\\sqrt{D}}\\right]^{2} + Y + s\\cdot S' },
+        { tex: `x = \\frac{Q}{A\\sqrt{D}} = \\frac{${f3(qBarrel * FT ** 3)}}{${f3(aFull * FT ** 2)}\\times \\sqrt{${f3(dSize * FT)}}} = ${f2(res.inletHW.x)}\\;\\; (\\text{cfs, ft}^2\\text{, ft — one barrel})` },
         { text: `Constants for ${res.inlet.label}: K = ${res.inlet.K}, M = ${res.inlet.M}, c = ${res.inlet.c}, Y = ${res.inlet.Y}, slope coefficient s = ${res.inlet.slopeCoef}, entrance loss Ke = ${res.inlet.Ke}. The discharge ratio x = Q/(A·√D) is evaluated in US units (cfs, ft). Form 1 is the unsubmerged curve, form 2 the submerged one; between HW/D = 1.0 and 1.2 the nomograph interpolates linearly in Q between form 1 at the crown and form 2 at 1.2·D.` },
         { tex: `\\text{Result: } \\frac{HW_i}{D} = ${f3(res.inletHW.hw / res.section.D)} \\;\\Rightarrow\\; HW_i = ${f3(res.inletHW.hw)}\\ \\text{m} \\;\\; (${res.inletHW.form})` },
       ],
@@ -75,7 +87,8 @@ export default function Culvert() {
       lines: [
         { tex: 'H = \\left[1 + K_e + \\frac{2g\\,n^2 L}{R^{4/3}}\\right]\\frac{V^2}{2g} \\quad\\quad HW_o = h_o + H' },
         { text: `V = ${f3(res.outletHW.V)} m/s over the full barrel area, R = A/P of the full section, n = ${res.n}. The outlet depth ho is the greater of the tailwater TW = ${f3(TW)} m and (dc + D)/2 with dc = ${f3(res.outletHW.dc)} m — here ho = ${f3(res.outletHW.ho)} m.` },
-        { tex: `H = ${f3(res.outletHW.H)}\\ \\text{m} \\;(\\text{friction } ${f3(res.outletHW.hf)} + \\text{entrance \\& velocity } ${f3(res.outletHW.vh)}) \\;\\Rightarrow\\; HW_o = ${f3(res.outletHW.hw)}\\ \\text{m}` },
+        { tex: `\\frac{V^2}{2g} = \\frac{${f3(res.outletHW.V)}^2}{19.62} = ${f3((res.outletHW.V * res.outletHW.V) / 19.62)}\\ \\text{m}` },
+        { tex: `H = h_f + (1+K_e)\\frac{V^2}{2g} = ${f3(res.outletHW.hf)} + (1+${f2(res.inlet.Ke)})\\times ${f3((res.outletHW.V * res.outletHW.V) / 19.62)} = ${f3(res.outletHW.H)}\\ \\text{m} \\;\\Rightarrow\\; HW_o = ${f3(res.outletHW.hw)}\\ \\text{m}` },
       ],
     },
     {

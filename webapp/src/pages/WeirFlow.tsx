@@ -72,6 +72,22 @@ export default function WeirFlow() {
   const res = out.res
   const shownH = solve === 'qFromH' ? H : out.solvedH
 
+  // The selected weir equation with the live inputs substituted — the same
+  // forward check doubles as the inverse verification in hFromQ mode.
+  const Hused = solve === 'qFromH' ? H : out.solvedH
+  const tanHalf = Math.tan((angle / 2) * Math.PI / 180)
+  const subTex: string = shape === 'rectSuppressed' && ha > 0
+    ? `Q = 1.84\\,L\\,[(H+h_a)^{3/2} - h_a^{3/2}] = 1.84\\times ${f3(L)}\\times [(${f3(Hused)}+${f3(ha)})^{3/2} - ${f3(ha)}^{3/2}] = ${f3(res?.Q ?? 0)}\\ \\text{m}^3/\\text{s}`
+    : shape === 'rectSuppressed'
+      ? `Q = 1.84\\,L\\,H^{3/2} = 1.84\\times ${f3(L)}\\times ${f3(Hused)}^{3/2} = ${f3(res?.Q ?? 0)}\\ \\text{m}^3/\\text{s}`
+      : shape === 'rectContracted'
+        ? `L' = L - 0.1\\,nH = ${f3(L)} - 0.1\\times ${f2(n)}\\times ${f3(Hused)} = ${f3(res?.effectiveLength ?? 0)}\\text{ m}, \\; Q = 1.84\\,L'\\,H^{3/2} = ${f3(res?.Q ?? 0)}\\ \\text{m}^3/\\text{s}`
+        : shape === 'cipolletti'
+          ? `Q = 1.86\\,L\\,H^{3/2} = 1.86\\times ${f3(L)}\\times ${f3(Hused)}^{3/2} = ${f3(res?.Q ?? 0)}\\ \\text{m}^3/\\text{s}`
+          : shape === 'vnotch'
+            ? `Q = \\tfrac{8}{15}\\,C_d\\sqrt{2g}\\,\\tan\\tfrac{\\theta}{2}\\,H^{5/2} = \\tfrac{8}{15}\\times ${f3(Cd)}\\times \\sqrt{19.62}\\times ${f3(tanHalf)}\\times ${f3(Hused)}^{5/2} = ${f3(res?.Q ?? 0)}\\ \\text{m}^3/\\text{s}`
+            : `Q = 1.705\\,C_b\\,b\\,H^{3/2} = 1.705\\times ${f3(Cb)}\\times ${f3(L)}\\times ${f3(Hused)}^{3/2} = ${f3(res?.Q ?? 0)}\\ \\text{m}^3/\\text{s}`
+
   const steps: SolutionStep[] = res ? [
     {
       title: 'Governing formula',
@@ -84,15 +100,17 @@ export default function WeirFlow() {
       ? {
           title: 'Substitute the head',
           lines: [
-            { tex: `Q = ${f3(res.Q)}\\ \\text{m}^3/\\text{s} \\quad (H = ${f3(H)}\\ \\text{m})` },
+            { tex: subTex },
+            { text: `H = ${f3(H)} m above the crest${ha > 0 && shape !== 'vnotch' && shape !== 'broadCrested' && shape !== 'cipolletti' ? ` with approach head ha = ${f3(ha)} m` : ''} — the substituted equation above is the discharge.` },
             ...(res.effectiveLength < L - 1e-9 ? [{ text: `End contractions reduced the wetted crest to L′ = ${f3(res.effectiveLength)} m.` }] : []),
           ],
         }
       : {
           title: 'Invert for the head',
           lines: [
-            { tex: `Q(H)\\ \\text{is monotone in } H \\;\\Rightarrow\\; H = ${f3(out.solvedH)}\\ \\text{m by bisection, verified: } Q(${f3(out.solvedH)}) = ${f3(res.Q)}\\ \\text{m}^3/\\text{s}` },
-            { text: 'The inverse is a bracketed bisection to 1e-10 relative precision — the same answer a nomograph reads, without reading error.' },
+            { tex: `Q(H)\\ \\text{is monotone in } H \\;\\Rightarrow\\; H = ${f3(out.solvedH)}\\ \\text{m by bisection (target } Q = ${f3(Q)}\\text{ m}^3\\text{/s)}` },
+            { tex: `${subTex} \\quad\\checkmark` },
+            { text: 'The inverse is a bracketed bisection to 1e-10 relative precision — the forward substitution above replays the solved head through the weir equation and lands back on the target discharge.' },
           ],
         },
     ...res.notes.map((nt) => ({ title: 'Note', lines: [{ text: nt }] })),

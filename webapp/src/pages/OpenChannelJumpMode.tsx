@@ -36,11 +36,32 @@ export function JumpMode() {
     }
   })()
 
+  // Approach area/top-width from the live section inputs — the same
+  // formulas geomAt uses, so the Fr₁ substitution shows real numbers.
+  const geom12 = (y: number) => {
+    if (ch.kind === 'rect') return { A: ch.b * y, T: ch.b }
+    if (ch.kind === 'trap') return { A: (ch.b + ch.z * y) * y, T: ch.b + 2 * ch.z * y }
+    if (ch.kind === 'tri') return { A: ch.z * y * y, T: 2 * ch.z * y }
+    const th = 2 * Math.acos(Math.min(1, Math.max(-1, 1 - (2 * y) / ch.D)))
+    return { A: (ch.D * ch.D / 8) * (th - Math.sin(th)), T: ch.D * Math.sin(th / 2) }
+  }
+  const g1 = geom12(y1)
+  const g2 = 'j' in res ? geom12(res.j.y2) : null
+  const mom1 = (Q * Q) / (9.81 * g1.A)
+  const mom2 = 'j' in res ? res.j.M - mom1 : 0
+
   const steps: SolutionStep[] = 'j' in res ? [
     {
       title: 'Approach flow',
       lines: [
-        { tex: `Fr_1 = \\sqrt{\\frac{Q^2 T_1}{g A_1^3}} = ${f3(res.j.Fr1)} \\;\\Rightarrow\\; \\text{${res.j.cls}} jump` },
+        { tex: ch.kind === 'rect'
+          ? `A_1 = b\\,y_1 = ${f3(ch.b)}\\times ${f3(y1)} = ${f3(g1.A)}\\text{ m}^2, \\quad T_1 = b = ${f3(g1.T)}\\text{ m}`
+          : ch.kind === 'trap'
+            ? `A_1 = (b + z\\,y_1)\\,y_1 = ${f3(g1.A)}\\text{ m}^2, \\quad T_1 = b + 2z\\,y_1 = ${f3(ch.b)} + 2\\times ${f3(ch.z)}\\times ${f3(y1)} = ${f3(g1.T)}\\text{ m}`
+            : ch.kind === 'tri'
+              ? `A_1 = z\\,y_1^2 = ${f3(ch.z)}\\times ${f3(y1)}^2 = ${f3(g1.A)}\\text{ m}^2, \\quad T_1 = 2z\\,y_1 = ${f3(g1.T)}\\text{ m}`
+              : `A_1 = ${f3(g1.A)}\\text{ m}^2, \\quad T_1 = ${f3(g1.T)}\\text{ m} \\;\\; (D = ${f3(ch.D)}\\text{ m},\\; y_1 = ${f3(y1)}\\text{ m})` },
+        { tex: `Fr_1 = \\sqrt{\\frac{Q^2 T_1}{g A_1^3}} = \\sqrt{\\frac{${f3(Q)}^2\\times ${f3(g1.T)}}{9.81\\times ${f3(g1.A)}^3}} = ${f3(res.j.Fr1)} \\;\\Rightarrow\\; \\text{${res.j.cls}} jump` },
         { text: 'A jump forms only when the approach flow is supercritical (Fr₁ > 1): the fast shallow stream cannot stay on the curve and rises abruptly to its sequent partner.' },
       ],
     },
@@ -54,12 +75,15 @@ export function JumpMode() {
           ]
         : [
             { tex: `M = \\frac{Q^2}{gA} + A\\bar{y}:\\quad M(y_2) = M(y_1) = ${f3(res.j.M)}\\text{ m}^3` },
+            { tex: `M(y_1) = \\frac{${f3(Q)}^2}{9.81\\times ${f3(g1.A)}} + ${f3(g1.A)}\\times ${f3(g1.A > 0 ? mom2 / g1.A : 0)} = ${f3(mom1)} + ${f3(mom2)} = ${f3(res.j.M)}\\text{ m}^3` },
             { text: `The sequent depth is y₂ = ${f3(res.j.y2)} m, found by bisecting the momentum function on the subcritical branch above the critical depth. The rectangular closed form does not apply to this shape.` },
           ],
     },
     {
       title: 'Energy destroyed in the roller',
       lines: [
+        { tex: `E_1 = y_1 + \\frac{Q^2}{2gA_1^2} = ${f3(y1)} + \\frac{${f3(Q)}^2}{2\\times 9.81\\times ${f3(g1.A)}^2} = ${f3(res.j.E1)}\\text{ m}` },
+        { tex: `E_2 = y_2 + \\frac{Q^2}{2gA_2^2} = ${f3(res.j.y2)} + \\frac{${f3(Q)}^2}{2\\times 9.81\\times ${f3(g2?.A ?? 0)}^2} = ${f3(res.j.E2)}\\text{ m}` },
         { tex: `\\Delta E = E_1 - E_2 = \\left(${f3(res.j.E1)}\\right) - \\left(${f3(res.j.E2)}\\right) = ${f3(res.j.dE)}\\text{ m}` },
         { tex: `P = \\gamma\\, Q\\, \\Delta E = 9.81 \\times ${f3(Q)} \\times ${f3(res.j.dE)} = ${f2(res.j.powerKW)}\\text{ kW}` },
         { text: `A rectangular jump has the closed loss form ΔE = (y₂ − y₁)³/(4·y₁·y₂). The basin below the jump must take this as turbulence — stilling basins shorten the roller with baffle blocks and sills.` },

@@ -45,11 +45,14 @@ export function CriticalMode() {
     }
   })()
 
+  const probeGeom = 'yc' in res && res.point ? geomAt(ch, res.point.y) : null
+
   const steps: SolutionStep[] = 'yc' in res ? [
     {
       title: 'The critical condition',
       lines: [
         { tex: `\\frac{Q^2 T}{g A^3} = 1 \\;\\text{ at }\\; y = y_c` },
+        { tex: `\\frac{${f3(Q)}^2\\times ${f3(res.gc.T)}}{9.81\\times ${f3(res.gc.A)}^3} = 1 \\;\\; (y_c = ${f3(res.yc)}\\text{ m},\\; A_c = ${f3(res.gc.A)}\\text{ m}^2,\\; T_c = ${f3(res.gc.T)}\\text{ m})` },
         { text: 'Critical flow is where the specific energy E = y + Q²/(2gA²) is minimum for the given discharge — the condition every control section (weir crest, brink, sill) passes through.' },
       ],
     },
@@ -63,7 +66,7 @@ export function CriticalMode() {
     {
       title: 'Minimum specific energy',
       lines: [
-        { tex: `E_{min} = y_c + \\frac{Q^2}{2 g A_c^2} = ${f3(res.E_min)}\\text{ m}` },
+        { tex: `E_{min} = y_c + \\frac{Q^2}{2 g A_c^2} = ${f3(res.yc)} + \\frac{${f3(Q)}^2}{2\\times 9.81\\times ${f3(res.gc.A)}^2} = ${f3(res.E_min)}\\text{ m}` },
         { text: 'For a rectangular section this is exactly 1.5·yc — the velocity head is half the depth at critical flow.' },
       ],
     },
@@ -71,7 +74,8 @@ export function CriticalMode() {
       {
         title: `The given depth y = ${f3(res.point.y)} m on the curve`,
         lines: [
-          { tex: `E = ${f3(res.point.E)}\\text{ m}, \\qquad Fr = ${f3(res.point.Fr)}` },
+          { tex: `E = y + \\frac{Q^2}{2gA^2} = ${f3(res.point.y)} + \\frac{${f3(Q)}^2}{2\\times 9.81\\times ${f3(probeGeom?.A ?? 0)}^2} = ${f3(res.point.E)}\\text{ m}` },
+          { tex: `Fr = \\sqrt{\\frac{Q^2 T}{gA^3}} = \\sqrt{\\frac{${f3(Q)}^2\\times ${f3(probeGeom?.T ?? 0)}}{9.81\\times ${f3(probeGeom?.A ?? 0)}^3}} = ${f3(res.point.Fr)}` },
           { text: res.point.Fr < 1
             ? `Fr < 1: subcritical (upper limb of the curve), deeper than critical. This depth can coexist with an alternate depth at the same energy — read it off the lower limb.`
             : `Fr > 1: supercritical (lower limb), shallower than critical. Its alternate depth sits on the upper limb at the same E = ${f3(res.point.E)} m.` },

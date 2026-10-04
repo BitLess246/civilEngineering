@@ -49,14 +49,14 @@ export default function PipeFlow() {
     {
       title: 'Velocity from the discharge',
       lines: [
-        { tex: `A = \\frac{\\pi D^2}{4} = \\frac{\\pi\\times ${f3(Dm)}^2}{4} = ${f3(Math.PI * Dm * Dm / 4)}\\text{ m}^2, \\qquad V = \\frac{Q}{A} = ${f3(res.V)}\\text{ m/s}` },
+        { tex: `A = \\frac{\\pi D^2}{4} = \\frac{\\pi\\times ${f3(Dm)}^2}{4} = ${f3(Math.PI * Dm * Dm / 4)}\\text{ m}^2, \\qquad V = \\frac{Q}{A} = \\frac{${f3(Q)}}{${f3(Math.PI * Dm * Dm / 4)}} = ${f3(res.V)}\\text{ m/s}` },
       ],
     },
     {
       title: 'Hazen–Williams slope',
       lines: [
         { tex: `V = 0.8492\\, C\\, R^{0.63}\\, S^{0.54} \\;\\Rightarrow\\; S = \\left(\\frac{V}{0.8492\\, C\\, R^{0.63}}\\right)^{1/0.54}` },
-        { tex: `R = D/4 = ${f3(Dm / 4)}\\text{ m}, \\; C = ${f2(C)} \\;\\Rightarrow\\; S = ${f3(res.S)}\\text{ m/m}` },
+        { tex: `S = \\left(\\frac{${f3(res.V)}}{0.8492\\times ${f2(C)}\\times ${f3(Dm / 4)}^{0.63}}\\right)^{1/0.54} = ${f3(res.S)}\\text{ m/m}, \\quad R = D/4 = ${f3(Dm / 4)}\\text{ m}` },
         { text: 'S is the head lost per metre of pipe — the hydraulic gradient. The 0.8492 constant is SI, for water at ordinary temperatures in turbulent water-main flow.' },
       ],
     },
@@ -73,7 +73,7 @@ export default function PipeFlow() {
     {
       title: 'Velocity and Reynolds number',
       lines: [
-        { tex: `A = ${f3(Math.PI * Dm * Dm / 4)}\\text{ m}^2, \\qquad V = \\frac{Q}{A} = ${f3(res.V)}\\text{ m/s}` },
+        { tex: `A = ${f3(Math.PI * Dm * Dm / 4)}\\text{ m}^2, \\qquad V = \\frac{Q}{A} = \\frac{${f3(Q)}}{${f3(Math.PI * Dm * Dm / 4)}} = ${f3(res.V)}\\text{ m/s}` },
         { tex: `Re = \\frac{VD}{\\nu} = \\frac{${f3(res.V)}\\times ${f3(Dm)}}{${f3(waterNu(temp))}} = ${f2(res.Re / 1e5)}\\times 10^5` },
         { text: `ν from the water temperature ${f2(temp)} °C. ${res.regime === 'laminar' ? 'Re < 2300: laminar — Poiseuille applies, f = 64/Re.' : res.regime === 'transition' ? '2300–4000: the transition band — neither law holds cleanly, so treat f as approximate.' : 'Re > 4000: turbulent — Colebrook–White applies.'}` },
       ],
@@ -84,6 +84,7 @@ export default function PipeFlow() {
         ? [{ tex: `f = \\frac{64}{Re} = ${f3(res.f)}` }]
         : [
             { tex: `\\frac{1}{\\sqrt{f}} = -2\\log_{10}\\left(\\frac{\\varepsilon}{3.7 D} + \\frac{2.51}{Re\\sqrt{f}}\\right) \\;\\Rightarrow\\; f = ${f3(res.f)}` },
+            { tex: `\\frac{1}{\\sqrt{f}} = -2\\log_{10}\\left(\\frac{${f3(parseFloat(eps) || 0)}}{3.7\\times ${f3(Dm)}} + \\frac{2.51}{${f2(res.Re / 1e5)}\\times 10^5\\sqrt{f}}\\right) \\;\\Rightarrow\\; f = ${f3(res.f)}` },
             { text: `ε/D = ${f3((parseFloat(eps) || 0) / Dm)}. The Colebrook equation is implicit in f — the engine iterates it to machine precision (your Moody-chart reading, refined).` },
           ],
     },
@@ -91,7 +92,7 @@ export default function PipeFlow() {
       title: 'Head loss',
       lines: [
         { tex: `h_f = f\\,\\frac{L}{D}\\,\\frac{V^2}{2g} = ${f3(res.f)}\\times\\frac{${f2(L)}}{${f3(Dm)}}\\times\\frac{${f3(res.V)}^2}{2\\times 9.81} = ${f3(res.hf)}\\text{ m}` },
-        { tex: `h_m = \\Sigma K\\,\\frac{V^2}{2g} = ${f3(res.hm)}\\text{ m} \\;\\Rightarrow\\; h_{total} = ${f3(res.hTotal)}\\text{ m}` },
+        { tex: `h_m = \\Sigma K\\,\\frac{V^2}{2g} = ${f2(K)}\\times\\frac{${f3(res.V)}^2}{2\\times 9.81} = ${f3(res.hm)}\\text{ m} \\;\\Rightarrow\\; h_{total} = ${f3(res.hTotal)}\\text{ m}` },
         ...res.warnings.map((w) => ({ item: w })),
       ],
     },

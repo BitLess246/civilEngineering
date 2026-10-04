@@ -82,7 +82,7 @@ export default function RationalMethod() {
       title: 'Composite runoff coefficient',
       lines: [
         ...res.subAreas.map((s) => ({ item: `${s.name}: C = ${f3(s.c)}, A = ${f3(s.a)} ha → C·A = ${f3(s.c * s.a)}` })),
-        { tex: `C = \\frac{\\sum C_i A_i}{\\sum A_i} = ${f3(res.C)},\\qquad A = ${f3(res.A)}\\text{ ha}` },
+        { tex: `C = \\frac{\\sum C_i A_i}{\\sum A_i} = \\frac{${res.subAreas.map((s) => `${f3(s.c)}\\times ${f3(s.a)}`).join(' + ')}}{${res.subAreas.map((s) => `${f3(s.a)}`).join(' + ')}} = \\frac{${f3(res.subAreas.reduce((s, x) => s + x.c * x.a, 0))}}{${f3(res.A)}} = ${f3(res.C)},\\qquad A = ${f3(res.A)}\\text{ ha}` },
         { text: 'The coefficient averages the surface character of the catchment, weighted by area — pavement drags it up, grass holds it down.' },
       ],
     },
@@ -95,7 +95,7 @@ export default function RationalMethod() {
           ]
         : res.tcMethod === 'faa'
           ? [
-              { tex: `T_c = \\frac{1.8\\,(1.1-C)\\,L_{ft}^{0.5}}{S_{\\%}^{0.333}} = ${f3(res.tcMin)}\\text{ min}` },
+              { tex: `T_c = \\frac{1.8\\,(1.1-C)\\,L_{ft}^{0.5}}{S_{\\%}^{0.333}} = \\frac{1.8\\times (1.1 - ${f3(res.C)})\\times ${f2(lenM * 3.28084)}^{0.5}}{${f2(slopeIsPct ? slope : slope * 100)}^{0.333}} = ${f3(res.tcMin)}\\text{ min}` },
               { text: 'The FAA overland-flow formula carries the rational C inside it — the same coefficient that feeds Q — with L in feet and the slope in percent.' },
             ]
           : [{ text: `Tc given directly as ${f3(res.tcMin)} min.` }],
@@ -107,7 +107,10 @@ export default function RationalMethod() {
             { tex: `i = \\frac{a}{(T_c + b)^c} = \\frac{${f3(idfA)}}{(${f3(res.tcMin)} + ${f3(idfB)})^{${idfC.trim() === '' ? '1' : f3(sNum(idfC))}}} = ${f3(res.i)}\\text{ mm/h}` },
             { text: 'The classic textbook IDF form. A storm of duration Tc and some return period is read off the local curves — in the board room the coefficients come printed in the problem.' },
           ]
-        : [{ tex: `i = ${f3(res.i)}\\text{ mm/h}` }],
+        : [
+            { tex: `i = i_{given} = ${f3(mmPerHour)}\\text{ mm/h}` },
+            { text: 'The intensity is read straight from the gauge or the problem statement — no IDF curve is fitted, so the given value is the design value.' },
+          ],
     },
     {
       title: 'Peak flow',

@@ -67,6 +67,9 @@ export default function PumpStation() {
       lines: [
         { tex: 'H_{sys}(Q) = H_{static} + h_f(Q) + h_m(Q)' },
         { tex: `h_f = \\frac{10.67\\,L\\,Q^{1.852}}{C^{1.852} D^{4.8704}} \\quad h_m = \\Sigma K \\frac{V^2}{2g}` },
+        { tex: `h_{f,s} = \\frac{10.67\\times ${f2(sL)}\\times ${f3(op.Q)}^{1.852}}{${f2(sC)}^{1.852}\\times ${f3(sD)}^{4.8704}} = ${f3(hwFriction(sL, op.Q, sC, sD))}\\text{ m}, \\; h_{f,d} = \\frac{10.67\\times ${f2(dL)}\\times ${f3(op.Q)}^{1.852}}{${f2(dC)}^{1.852}\\times ${f3(dD)}^{4.8704}} = ${f3(hwFriction(dL, op.Q, dC, dD))}\\text{ m}` },
+        { tex: `h_m = ${f2(sK)}\\times\\frac{${f3(op.Q / (Math.PI * sD * sD / 4))}^2}{19.62} + ${f2(dK)}\\times\\frac{${f3(op.Q / (Math.PI * dD * dD / 4))}^2}{19.62} = ${f3(minorLoss(op.Q, sD, sK) + minorLoss(op.Q, dD, dK))}\\text{ m}` },
+        { tex: `H_{sys}(${f3(op.Q)}) = ${f2(staticLift)} + ${f2(pressureHead)} + ${f3(hwFriction(sL, op.Q, sC, sD) + hwFriction(dL, op.Q, dC, dD))} + ${f3(minorLoss(op.Q, sD, sK) + minorLoss(op.Q, dD, dK))} = ${f2(op.H)}\\text{ m}` },
         { text: `Static lift ${f2(staticLift)} m plus ${f2(pressureHead)} m delivery head; Hazen–Williams on both legs (C ${f2(sC)} suction / ${f2(dC)} discharge) and ${f2(sK + dK)} K-units of fittings. At the operating point the circuit demands H = ${f2(op.H)} m.` },
       ],
     },
@@ -74,6 +77,7 @@ export default function PumpStation() {
       title: 'The pump curve and the crossing',
       lines: [
         { tex: `H_{pump}(Q) = H_0 - (H_0 - H_d)\\left(\\frac{Q}{Q_d}\\right)^2` },
+        { tex: `H_{pump}(${f3(op.Q)}) = ${f2(H0)} - (${f2(H0)}-${f2(Hd)})\\times\\left(\\frac{${f3(op.Q)}}{${f3(Qd)}}\\right)^2 = ${f2(op.H)}\\text{ m} = H_{sys}` },
         { text: `Pinned on shutoff H0 = ${f2(H0)} m and the rated point (${f3(Qd)} m³/s, ${f2(Hd)} m). The pump head falls, the system head rises — bisection finds the unique crossing.` },
         { tex: `Q^{*} = ${f3(op.Q)}\\ \\text{m}^3/\\text{s} \\quad H^{*} = ${f2(op.H)}\\ \\text{m}` },
       ],
@@ -81,15 +85,15 @@ export default function PumpStation() {
     {
       title: 'Power chain',
       lines: [
-        { tex: `P_{water} = \\gamma\\,Q^{*}H^{*} = ${f2(op.Pwater)}\\ \\text{kW}` },
-        { tex: `P_{shaft} = \\frac{P_{water}}{\\eta_{pump}} = ${f2(op.Pshaft)}\\ \\text{kW} \\quad P_{motor} = \\frac{P_{shaft}}{\\eta_{motor}} = ${f2(op.Pmotor)}\\ \\text{kW}` },
+        { tex: `P_{water} = \\gamma\\,Q^{*}H^{*} = 9.81\\times ${f3(op.Q)}\\times ${f2(op.H)} = ${f2(op.Pwater)}\\ \\text{kW}` },
+        { tex: `P_{shaft} = \\frac{P_{water}}{\\eta_{pump}} = \\frac{${f2(op.Pwater)}}{${f2(eta)}} = ${f2(op.Pshaft)}\\ \\text{kW}, \\; P_{motor} = \\frac{P_{shaft}}{\\eta_{motor}} = \\frac{${f2(op.Pshaft)}}{${f2(motorEta)}} = ${f2(op.Pmotor)}\\ \\text{kW}` },
         { text: `Pump η = ${f2(eta)} at the rated point, motor η = ${f2(motorEta)}; the unit carries ${f2(op.kwhPerM3)} kWh of shaft energy per m³ lifted. A +15 % speed turn by the affinity laws would move the duty to ${f3(r115?.Q ?? 0)} m³/s at ${f2(r115?.H ?? 0)} m (${f2(r115?.P ?? 0)} kW shaft — cubes, mind the motor).` },
       ],
     },
     ...(nps ? [{
       title: 'NPSH margin at the suction',
       lines: [
-        { tex: `NPSH_a = \\frac{P_{atm} - P_v}{\\gamma} + z_{suction} - h_{f,s} = ${f2(nps.npshAvailable)}\\ \\text{m}` },
+        { tex: `NPSH_a = \\frac{P_{atm} - P_v}{\\gamma} + z_{suction} - h_{f,s} = (${f2(PATM_HEAD)} - ${f2(vapourHead)}) + ${f2(zSuction)} - ${f3(hwFriction(sL, op.Q, sC, sD) + minorLoss(op.Q, sD, sK))} = ${f2(nps.npshAvailable)}\\ \\text{m}` },
         { text: `Suction losses at duty: Hazen–Williams + fittings on the ${f2(sL)} m suction leg (${f2(sK)} K-units). Sea-level atmosphere ${f2(PATM_HEAD)} m, vapour head ${f2(vapourHead)} m.` },
         { tex: `NPSH_a ${nps.ok ? '\\geq' : '<'} 1.3\\times NPSH_r = ${f2(nps.npshRequired)}\\ \\text{m}` },
         { text: nps.ok

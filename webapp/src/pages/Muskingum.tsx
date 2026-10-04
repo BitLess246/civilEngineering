@@ -45,7 +45,8 @@ export default function Muskingum() {
       title: 'Routing coefficients',
       lines: [
         { tex: 'C_0 = \\frac{0.5\\Delta t - KX}{K(1-X) + 0.5\\Delta t},\\quad C_1 = \\frac{0.5\\Delta t + KX}{K(1-X) + 0.5\\Delta t},\\quad C_2 = \\frac{K(1-X) - 0.5\\Delta t}{K(1-X) + 0.5\\Delta t}' },
-        { tex: `C_0 = ${f3(r.C0)},\\quad C_1 = ${f3(r.C1)},\\quad C_2 = ${f3(r.C2)},\\quad C_0+C_1+C_2 = 1` },
+        { tex: `D = ${f2(K)}\\times ${(1 - X).toFixed(2)} + 0.5\\times ${f2(dt)} = ${f3(K * (1 - X) + 0.5 * dt)}` },
+        { tex: `C_0 = \\frac{0.5\\times ${f2(dt)} - ${f2(K)}\\times ${f2(X)}}{D} = ${f3(r.C0)},\\; C_1 = \\frac{0.5\\times ${f2(dt)} + ${f2(K)}\\times ${f2(X)}}{D} = ${f3(r.C1)},\\; C_2 = \\frac{${f2(K)}\\times ${(1 - X).toFixed(2)} - 0.5\\times ${f2(dt)}}{D} = ${f3(r.C2)},\\; \\sum C = 1` },
         { text: `All three are non-negative because 2KX = ${f2(2 * K * X)} h ≤ Δt = ${f2(dt)} h ≤ 2K(1−X) = ${f2(2 * K * (1 - X))} h — the stability window.` },
       ],
     },
@@ -53,6 +54,7 @@ export default function Muskingum() {
       title: 'Step the hydrograph',
       lines: [
         { tex: 'O_2 = C_0 I_2 + C_1 I_1 + C_2 O_1' },
+        { tex: `O_1 = ${f3(r.C0)}\\times ${f2(inflow[1])} + ${f3(r.C1)}\\times ${f2(inflow[0])} + ${f3(r.C2)}\\times ${f2(r.outflow[0])} = ${f2(r.outflow[1])}\\ \\text{m}^3/\\text{s}` },
         { text: `Starting from steady flow O0 = I0 = ${f2(inflow[0])} m³/s, each interval routes ${f2(dt)} h of inflow. ${inflow.length} ordinates in, ${inflow.length} out.` },
         { tex: `Q_{peak}\\colon ${f2(r.peakIn)} \\rightarrow ${f2(r.peakOut)}\\ \\text{m}^3/\\text{s} \\quad (${f2(r.attenuationPct)}\\%\\ \\text{attenuated})` },
         { text: `The peak passes the reach ${f2(r.lagHr)} h later than it entered — translation plus storage.` },
@@ -62,6 +64,7 @@ export default function Muskingum() {
       title: 'Volume check',
       lines: [
         { tex: '\\text{trap}(I) - \\text{trap}(O) = \\Delta S = K[\\,XI + (1-X)O\\,]_{end} - K[\\,XI + (1-X)O\\,]_{start}' },
+        { tex: `\\text{trap}(I) - \\text{trap}(O) = ${(r.volumeIn / 1000).toFixed(1)} - ${(r.volumeOut / 1000).toFixed(1)} = ${((r.volumeIn - r.volumeOut) / 1000).toFixed(1)}\\ \\times 10^3\\text{ m}^3 = \\Delta S` },
         { text: `Inflow ${(r.volumeIn / 1000).toFixed(1)} ×10³ m³, outflow ${(r.volumeOut / 1000).toFixed(1)} ×10³ m³; the difference is stored in (or released from) the reach, exactly the change in K[XI+(1−X)O].` },
       ],
     },

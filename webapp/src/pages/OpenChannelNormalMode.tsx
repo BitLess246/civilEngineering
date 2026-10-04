@@ -48,14 +48,21 @@ export function NormalMode() {
     {
       title: 'Section geometry at the normal depth',
       lines: [
-        { tex: `A = ${f3(res.g.A)}\\text{ m}^2, \\quad P = ${f3(res.g.P)}\\text{ m}, \\quad R = \\frac{A}{P} = ${f3(res.g.R)}\\text{ m}` },
+        { tex: ch.kind === 'rect'
+          ? `A = b\\,y_n = ${f3(ch.b)}\\times ${f3(res.yn)} = ${f3(res.g.A)}\\text{ m}^2, \\quad P = b + 2y_n = ${f3(ch.b)} + 2\\times ${f3(res.yn)} = ${f3(res.g.P)}\\text{ m}`
+          : ch.kind === 'trap'
+            ? `A = (b + z\\,y_n)\\,y_n = (${f3(ch.b)} + ${f3(ch.z)}\\times ${f3(res.yn)})\\times ${f3(res.yn)} = ${f3(res.g.A)}\\text{ m}^2, \\quad P = b + 2y_n\\sqrt{1+z^2} = ${f3(res.g.P)}\\text{ m}`
+            : ch.kind === 'tri'
+              ? `A = z\\,y_n^2 = ${f3(ch.z)}\\times ${f3(res.yn)}^2 = ${f3(res.g.A)}\\text{ m}^2, \\quad P = 2y_n\\sqrt{1+z^2} = ${f3(res.g.P)}\\text{ m}`
+              : `A = D^2(\\theta-\\sin\\theta)/8 = ${f3(res.g.A)}\\text{ m}^2, \\quad P = D\\theta/2 = ${f3(res.g.P)}\\text{ m} \\;\\; (D = ${f3(ch.D)}\\text{ m},\\; y_n = ${f3(res.yn)}\\text{ m})` },
+        { tex: `R = \\frac{A}{P} = \\frac{${f3(res.g.A)}}{${f3(res.g.P)}} = ${f3(res.g.R)}\\text{ m}` },
         { text: 'Geometry follows from the shape: rectangle A = by, trapezoid A = (b + zy)y with P = b + 2y√(1+z²), triangle A = zy², circle A = D²(θ − sinθ)/8 with θ from the segment.' },
       ],
     },
     {
       title: 'Manning equation — solve for the depth',
       lines: [
-        { tex: `Q = \\frac{1}{n} A R^{2/3} \\sqrt{S} = \\frac{1}{${f3(n)}}\\times ${f3(res.g.A)}\\times ${f3(res.g.R)}^{2/3}\\times \\sqrt{${f3(slope)}} = ${f3(Q)}\\text{ m}^3\\text{/s}` },
+        { tex: `Q = \\frac{1}{n} A R^{2/3} \\sqrt{S} = \\frac{1}{${f3(n)}}\\times ${f3(res.g.A)}\\times ${f3(res.g.R)}^{2/3}\\times \\sqrt{${f3(slope)}} = ${f3(Q)}\\text{ m}^3\\text{/s} \\;\\Rightarrow\\; y_n = ${f3(res.yn)}\\text{ m}` },
         { text: `The depth that satisfies this is yn = ${f3(res.yn)} m — found by bisection, since A and R are both functions of y and no closed form exists for trapezoids or circles.` },
       ],
     },
@@ -63,7 +70,7 @@ export function NormalMode() {
       title: 'Velocity and flow state',
       lines: [
         { tex: `V = \\frac{Q}{A} = \\frac{${f3(Q)}}{${f3(res.g.A)}} = ${f3(res.V)}\\text{ m/s}` },
-        { tex: `Fr = \\sqrt{\\frac{Q^2 T}{g A^3}} = ${f3(res.Fr)} \\;\\Rightarrow\\; \\text{${res.Fr < 1 ? 'subcritical (tranquil)' : 'supercritical (rapid)'}}` },
+        { tex: `Fr = \\sqrt{\\frac{Q^2 T}{g A^3}} = \\sqrt{\\frac{${f3(Q)}^2\\times ${f3(res.g.T)}}{9.81\\times ${f3(res.g.A)}^3}} = ${f3(res.Fr)} \\;\\Rightarrow\\; \\text{${res.Fr < 1 ? 'subcritical (tranquil)' : 'supercritical (rapid)'}}` },
         { text: `Subcritical flow is deep and slow — depth control sits downstream. Supercritical is shallow and fast — control sits upstream, and any disturbance becomes a standing wave.` },
       ],
     },

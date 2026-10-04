@@ -57,6 +57,8 @@ export default function StormSewer() {
       title: 'Intensity at the point of concentration',
       lines: [
         { tex: `i(t_c) = \\frac{${f2(a)}}{(t_c + ${f2(b)})^{${f3(c)}}} \\;\\; \\text{mm/h}` },
+        { tex: `${res.runs[0].name}:\\; i = \\frac{${f2(a)}}{(${f2(res.runs[0].tcHead)} + ${f2(b)})^{${f3(c)}}} = ${f2(res.runs[0].iDesign)}\\ \\text{mm/h}` },
+        ...res.runs.slice(1).map((r) => ({ item: `${r.name}: tc = ${f2(r.tcHead)} min → i = ${f2(a)}/(${f2(r.tcHead)} + ${f2(b)})^${f3(c)} = ${f2(r.iDesign)} mm/h` })),
         { text: `tc at each run's head is the later of its own inlet time and the upstream arrival (upstream tc + travel time L/V) — intensity falls as the network accumulates, which is why Line 2 is not sized at Inlet 2's minute.` },
       ],
     },
@@ -64,13 +66,15 @@ export default function StormSewer() {
       title: 'Rational accumulation at each head',
       lines: [
         { tex: 'Q = C_{comp}\\cdot i(t_c)\\cdot \\Sigma A / 360 \\qquad C_{comp} = \\frac{\\Sigma(C\\cdot A)}{\\Sigma A}' },
-        { text: `Q in m³/s with i in mm/h and A in hectares (the 1/360 unit chain: 0.6 × 71.6 × 2/360 ≈ 0.24 m³/s for Line 1's sample values).` },
+        ...res.runs.map((r) => ({ tex: `${r.name}:\\; Q = \\frac{${f2(r.Ccomp)}\\times ${f2(r.iDesign)}\\times ${f2(r.areaHa)}}{360} = ${f3(r.Qdesign)}\\ \\text{m}^3/\\text{s}` })),
+        { text: `Q in m³/s with i in mm/h and A in hectares — the 1/360 unit chain on ${res.runs[0].name}: ${f2(res.runs[0].Ccomp)} × ${f2(res.runs[0].iDesign)} × ${f2(res.runs[0].areaHa)}/360 = ${f3(res.runs[0].Qdesign)} m³/s.` },
       ],
     },
     {
       title: 'Manning sizing and self-cleansing',
       lines: [
         { tex: 'Q_f = \\frac{1}{n}\\cdot\\frac{\\pi D^2}{4}\\cdot\\left(\\frac{D}{4}\\right)^{2/3}\\sqrt{S}' },
+        ...res.runs.map((r, i) => ({ tex: `${r.name}~\\text{(DN ${r.dn})}:\\; Q_f = \\frac{1}{${f3(runs[i]?.n ?? 0)}}\\cdot\\frac{\\pi\\times ${f3(r.dn / 1000)}^2}{4}\\cdot\\left(\\frac{${f3(r.dn / 1000)}}{4}\\right)^{2/3}\\sqrt{${f3(r.slopePct / 100)}} = ${f3(r.Qfull)}\\ \\text{m}^3\\text{/s} \\ge Q = ${f3(r.Qdesign)},\\; V_{part} = ${f2(r.Vpart)}\\text{ m/s}` })),
         { text: `The smallest commercial size whose full-flow capacity covers Q and whose PART-FULL (normal-depth) velocity keeps ≥ ${f2(Vmin)} m/s for self-cleansing. Part-full velocity falls as the pipe grows at fixed Q and grade, so when no size clears the floor the picker holds the smallest sufficient DN and flags the run — steepen the grade, do not upsize. Travel time uses the full-flow velocity — the standard simplification. Erosion checks at ${f2(Vwarn)} m/s.` },
       ],
     },
