@@ -226,6 +226,20 @@ export const GROUP_ICONS: Record<string, GroupIcon> = {
       'M12 6.4C13.8 5 16.4 4.4 20.5 4.6V17.4C16.4 17.2 13.8 17.8 12 19.2',
     ],
   },
+  Mathematics: {
+    // A cash-flow timeline: the time axis with one receipt arrow up and one
+    // disbursement arrow down — the diagram every time-value problem starts from.
+    depicts: 'cash-flow timeline with receipt and disbursement arrows',
+    paths: [
+      'M2.5 16H21.5',
+      'M7 16V7',
+      'M7 7L5 9.4',
+      'M7 7L9 9.4',
+      'M16 16V21',
+      'M16 21L14 18.6',
+      'M16 21L18 18.6',
+    ],
+  },
 }
 
 /** Does every group in the catalog have a mark? The rail is unusable without

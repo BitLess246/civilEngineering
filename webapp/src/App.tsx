@@ -70,6 +70,7 @@ const AxleLoads = lazy(() => import('./pages/AxleLoads'))
 const StormSewer = lazy(() => import('./pages/StormSewer'))
 const PumpStation = lazy(() => import('./pages/PumpStation'))
 const WaterDemand = lazy(() => import('./pages/WaterDemand'))
+const EngEconomy = lazy(() => import('./pages/EngEconomy'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const Validation = lazy(() => import('./pages/Validation'))
 const Terms = lazy(() => import('./pages/legal/Terms'))
@@ -275,6 +276,8 @@ export default function App() {
         <Route path="/storm-sewer" element={<StormSewer />} />
         <Route path="/pump-station" element={<PumpStation />} />
         <Route path="/water-demand" element={<WaterDemand />} />
+        {/* mathematics: engineering economy (board-exam money mathematics) */}
+        <Route path="/eng-economy" element={<EngEconomy />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected
             without the lazy chunk being fetched at all. Inside, the import
             starts before the gate has an answer. */}

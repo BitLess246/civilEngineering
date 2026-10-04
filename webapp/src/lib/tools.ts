@@ -100,6 +100,12 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     ],
   },
   {
+    label: 'Mathematics',
+    tools: [
+      { to: '/eng-economy', name: 'Engineering Economy', sub: 'Time value · NPV/IRR · depreciation', group: 'Time Value of Money' },
+    ],
+  },
+  {
     label: 'Project Planning',
     tools: [
       { to: '/schedule',        name: 'Project Schedule', sub: 'CPM · PERT · progress' },
@@ -148,6 +154,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = (() => {
   const surveying = TOOL_CATEGORIES.find((c) => c.label === 'Surveying')!
   const transportation = TOOL_CATEGORIES.find((c) => c.label === 'Transportation')!
   const water = TOOL_CATEGORIES.find((c) => c.label === 'Water Resources')!
+  const mathematics = TOOL_CATEGORIES.find((c) => c.label === 'Mathematics')!
   const short: Record<string, string> = {
     'Analysis & Modelling': 'Analysis',
     'Steel & Connections': 'Steel',
@@ -158,6 +165,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = (() => {
     { label: 'Surveying', tools: surveying.tools },
     { label: 'Transportation', tools: transportation.tools },
     { label: 'Water', tools: water.tools },
+    { label: 'Mathematics', tools: mathematics.tools },
     { label: 'Planning', tools: planning.tools },
     { label: 'Estimates', tools: takeoff.tools },
     { label: 'Reference', tools: reference.tools },
