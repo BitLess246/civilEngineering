@@ -93,6 +93,9 @@ describe('single pile in sand (K·σ′·tanδ shaft, capped Meyerhof tip)', () 
     const f1 = K * 27 * tanDelta // σ′mid = 1.5·18
     const f2 = K * (54 + 3.5 * (18 - 9.81)) * tanDelta // σ′mid = 3·18 + 3.5·8.19 (6.5 m depth)
     expect(res.Qs).toBeCloseTo(Math.PI * 0.4 * (f1 * 3 + f2 * 7), 3)
+    // The reported f is the length-weighted mean over both WT pieces —
+    // the deeper piece alone would read ~25 % high.
+    expect(res.segments[0].f).toBeCloseTo((f1 * 3 + f2 * 7) / 10, 6)
   })
 
   it('two sand layers report their own mid-depth frictions', () => {

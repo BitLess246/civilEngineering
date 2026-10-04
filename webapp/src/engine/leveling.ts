@@ -6,7 +6,7 @@
 //   STA | BS  | HI   | IFS | FS  | ELEV
 //   BM1 | 1.50| 101.5|     |     | 100.00
 //   TP1 | 1.20| 101.8|     | 0.90| 100.60
-//   S1  |     |      | 2.30|     |  99.20   (intermediate / profile point)
+//   S1  |     |      | 2.30|     |  99.50   (intermediate / profile point)
 //   BM2 |     |      |     | 2.05|  99.75
 //
 // The engine walks the book once and produces both classic reductions:

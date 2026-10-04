@@ -85,16 +85,24 @@ describe('live load from the HL-93 machinery', () => {
     const r = bridgeRating({ L: 30, deck, DC: 12, DW: 2, Mn: 6000, Vn: 1400 })
     expect(r.DF).toBeCloseTo(1.25, 6) // interior girders at 2.4 m: two lanes govern
     expect(r.hl.envelope.length).toBe(101)
-    // the static LL is the combined per-girder value divided by (1+IM)
-    expect(r.flexure.LLstatic).toBeCloseTo(r.hl.moment.value / 1.33, 9)
-    expect(r.flexure.RF_inventory).toBeCloseTo(3975 / (1.75 * r.hl.moment.value), 9)
-    expect(r.flexure.RF_operating).toBeCloseTo(3975 / (1.35 * r.hl.moment.value), 9)
+    // the static LL strips IM off the vehicle part only — the lane slice is
+    // already static (dividing the combined value would deflate the lane)
+    expect(r.flexure.LLstatic).toBeCloseTo(r.hl.moment.vehPart / 1.33 + r.hl.moment.lanePart, 9)
+    // MBE denominator puts IM back on the vehicle part only:
+    // γLL·(vehPart + 1.33·lanePart) ≈ 1.75·5160.6 → RF 0.440 (inventory),
+    // 1.35·5160.6 → RF 0.570 (operating). The old value/1.33 form understated
+    // the denominator by the lane's missing IM — unconservative.
+    expect(r.flexure.LLwithIM).toBeCloseTo(
+      r.hl.moment.vehPart + 1.33 * r.hl.moment.lanePart, 9)
+    expect(r.flexure.LLwithIM).toBeCloseTo(5160.6, 0)
+    expect(r.flexure.RF_inventory).toBeCloseTo(3975 / (1.75 * r.flexure.LLwithIM), 9)
+    expect(r.flexure.RF_operating).toBeCloseTo(3975 / (1.35 * r.flexure.LLwithIM), 9)
   })
 
   it('a DF override rescales the HL-93 live load', () => {
     const r = bridgeRating({ L: 30, deck, DC: 12, DW: 2, Mn: 6000, Vn: 1400, DF: 0.9 })
     expect(r.DF).toBe(0.9)
-    expect(r.flexure.LLstatic).toBeCloseTo((r.hl.moment.value / 1.33) * (0.9 / 1.25), 9)
+    expect(r.flexure.LLstatic).toBeCloseTo((r.hl.moment.vehPart / 1.33 + r.hl.moment.lanePart) * (0.9 / 1.25), 9)
     expect(r.notes.some((n) => n.includes('lever rule was skipped'))).toBe(true)
   })
 

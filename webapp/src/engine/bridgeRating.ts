@@ -136,8 +136,10 @@ export function bridgeRating(p: RatingInput): RatingResult {
   const dfScale = p.DF != null ? p.DF / hl.DF : 1
 
   // — per-girder live load (static, no IM) —
-  const llMStatic = p.LLm ?? (hl.moment.value / (1 + im)) * dfScale
-  const llVStatic = p.LLv ?? (Math.abs(hl.shear.value) / (1 + im)) * dfScale
+  // IM rides on the vehicle part only: strip it there and leave the lane
+  // part alone (dividing the combined effect deflates the lane slice).
+  const llMStatic = p.LLm ?? (hl.moment.vehPart / (1 + im) + hl.moment.lanePart) * dfScale
+  const llVStatic = p.LLv ?? (hl.shear.vehPart / (1 + im) + hl.shear.lanePart) * dfScale
 
   // — permanent-load effects on one girder —
   const Mdc = p.DC * p.L * p.L / 8

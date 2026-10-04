@@ -180,6 +180,7 @@ export function pileCapacity(p: PileInput): PileResult {
       pieces.push({ a: z, b: bottom })
     }
     let segQ = 0
+    let segSpan = 0
     let fVal = 0
     let detail = ''
     for (const pc of pieces) {
@@ -205,8 +206,13 @@ export function pileCapacity(p: PileInput): PileResult {
         detail = `K = ${K.toFixed(3)}, δ = ${((p.deltaDeg ?? phi - 5)).toFixed(1)}°, σ′ mid = ${sigmaMid.toFixed(2)} kPa → f = K·σ′·tanδ = ${fVal.toFixed(2)} kPa (β = ${(K * Math.tan(delta)).toFixed(3)})`
       }
       segQ += perimeter * fVal * len
+      segSpan += len
     }
-    segments.push({ from: z, to: bottom, kind: layer.kind, f: fVal, detail, Q: segQ })
+    // Length-weighted mean over the pieces: when the water table splits a
+    // layer, the reported f must average both pieces — the deeper piece alone
+    // reads up to 25 % high.
+    const fMean = segSpan > 1e-12 ? segQ / (perimeter * segSpan) : 0
+    segments.push({ from: z, to: bottom, kind: layer.kind, f: fMean, detail, Q: segQ })
     Qs += segQ
 
     // tip inside this layer?
