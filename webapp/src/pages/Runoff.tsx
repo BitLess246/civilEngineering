@@ -44,8 +44,9 @@ export default function Runoff() {
       title: 'Composite curve number',
       lines: [
         { tex: 'CN = \\frac{\\sum A_i CN_i}{\\sum A_i}' },
+        { tex: `CN = \\frac{${s.composite.rows.map((r) => `${f2(r.area)}\\times ${f2(r.cn)}`).join(' + ')}}{${s.composite.rows.map((r) => `${f2(r.area)}`).join(' + ')}} = ${f2(s.composite.cn)}` },
         { text: s.composite.rows.map((r) => `${r.name}: ${r.area} ha × CN ${r.cn} (${(r.weight * 100).toFixed(0)} %)`).join(' · ') },
-        { tex: `CN = ${f2(s.composite.cn)} \\quad\\Rightarrow\\quad S = \\frac{25400}{CN} - 254 = ${f2(s.runoff.S)}\\ \\text{mm}` },
+        { tex: `S = \\frac{25400}{CN} - 254 = \\frac{25400}{${f2(s.composite.cn)}} - 254 = ${f2(s.runoff.S)}\\ \\text{mm}` },
       ],
     },
     {
@@ -60,6 +61,7 @@ export default function Runoff() {
       title: 'Lag time → time of concentration (TR-55)',
       lines: [
         { tex: 'T_{lag} = \\frac{L^{0.8}(S + 25.4)^{0.7}}{7069\\sqrt{Y}} \\quad\\quad T_c = \\frac{T_{lag}}{0.6}' },
+        { tex: `T_{lag} = \\frac{${f3(L)}^{0.8}(${f2(s.runoff.S)} + 25.4)^{0.7}}{7069\\sqrt{${f2(slopePct)}}} = ${f3(s.lag.lagHr)}\\ \\text{h}, \\quad T_c = ${f3(s.lag.tcHr)}\\ \\text{h}` },
         { text: `L = ${f3(L)} m of hydraulic length, Y = ${f2(slopePct)} % average watershed slope, S in mm. Lag = ${f3(s.lag.lagHr)} h → Tc = ${f3(s.lag.tcHr)} h (${f2(s.lag.tcHr * 60)} min).` },
       ],
     },
@@ -67,8 +69,9 @@ export default function Runoff() {
       title: 'Triangular unit hydrograph peak',
       lines: [
         { tex: 'T_p = \\frac{\\Delta t}{2} + 0.6\\,T_c \\quad\\quad Q_p = \\frac{0.208\\,A\\,Q}{T_p}' },
+        { tex: `T_p = \\frac{${f2(dtMin)}}{120} + 0.6\\times ${f3(s.lag.tcHr)} = ${f3(s.uh.tp)}\\ \\text{h}` },
+        { tex: `Q_p = \\frac{0.208\\times ${(s.composite.area / 100).toFixed(2)}\\times ${f2(s.runoff.Q)}}{${f3(s.uh.tp)}} = ${f2(s.uh.qp)}\\ \\text{m}^3/\\text{s},\\quad t_b = 2.67\\,T_p = ${f2(s.uh.tb)}\\ \\text{h}` },
         { text: `Δt = ${dtMin} min computation interval, A = ${(s.composite.area / 100).toFixed(2)} km², Q in mm. The SI coefficient 0.208 is the metric twin of the 484 in TR-55's US-unit equation; the base time is 2.67·Tp.` },
-        { tex: `T_p = ${f3(s.uh.tp)}\\ \\text{h} \\;\\Rightarrow\\; Q_p = ${f2(s.uh.qp)}\\ \\text{m}^3/\\text{s},\\quad t_b = ${f2(s.uh.tb)}\\ \\text{h}` },
       ],
     },
     ...s.runoff.notes.map((nt) => ({ title: 'Note', lines: [{ text: nt }] })),

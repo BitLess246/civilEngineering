@@ -37,12 +37,45 @@ export default function Gvf() {
   })()
   const r = out.r
 
+  // Control-section geometry from the live shape inputs — the same
+  // formulas the solver uses, so the Sf/Fr lines show real A and R.
+  const chG = buildShape(shape)
+  const ctrlGeom = (() => {
+    const y = yControl
+    if (chG.kind === 'rect') return { A: chG.b * y, R: (chG.b * y) / (chG.b + 2 * y) }
+    if (chG.kind === 'trap') {
+      const A = (chG.b + chG.z * y) * y
+      return { A, R: A / (chG.b + 2 * y * Math.sqrt(1 + chG.z * chG.z)) }
+    }
+    if (chG.kind === 'tri') {
+      const A = chG.z * y * y
+      return { A, R: A / (2 * y * Math.sqrt(1 + chG.z * chG.z)) }
+    }
+    const th = 2 * Math.acos(Math.min(1, Math.max(-1, 1 - (2 * y) / chG.D)))
+    const A = (chG.D * chG.D / 8) * (th - Math.sin(th))
+    return { A, R: A / (chG.D * th / 2) }
+  })()
+  // One RK4 example step: control slope times the first station interval.
+  const rk = r && r.stations.length > 1
+    ? {
+        s: gvfSlope(chG, yControl, Q, n, S0),
+        dx: r.stations[1].x - r.stations[0].x,
+        dy: r.stations[1].y - r.stations[0].y,
+        y1: r.stations[1].y,
+      }
+    : null
+
   const steps: SolutionStep[] = r ? [
     {
       title: 'Normal and critical depths',
       lines: [
+        { tex: `Q = ${f3(Q)}\\text{ m}^3\\text{/s}, \\quad n = ${f3(n)}, \\quad S_0 = ${f3(S0)}\\text{ m/m}` },
         { tex: 'Q = \\tfrac{1}{n}A R^{2/3} S_0^{1/2} \\;\\Rightarrow\\; y_n = ' + f3(r.yn ?? 0) + '\\ \\text{m}' },
+        ...(r.yn !== null
+          ? [{ tex: `S_f(y_n = ${f3(r.yn)}) = ${f4(frictionSlope(chG, r.yn, Q, n))} \\approx S_0 = ${f3(S0)}` }]
+          : []),
         { tex: 'Q^2 T / (g A^3) = 1 \\;\\Rightarrow\\; y_c = ' + f3(r.yc) + '\\ \\text{m}' },
+        { tex: `Fr(y_c = ${f3(r.yc)}) = ${f3(froude(chG, r.yc, Q))} = 1 \\;\\; (Q = ${f3(Q)}\\text{ m}^3\\text{/s})` },
         { text: r.slopeClass === 'horizontal' || r.slopeClass === 'adverse'
           ? 'The bed is ' + (r.slopeClass === 'horizontal' ? 'horizontal (S0 = 0) — no uniform-flow depth exists.' : 'adverse (S0 < 0) — no uniform-flow depth exists.')
           : `Solving Manning for the depth gives yn = ${f3(r.yn ?? 0)} m and the critical-depth condition gives yc = ${f3(r.yc)} m.` },
@@ -59,6 +92,7 @@ export default function Gvf() {
       title: 'GVF equation and the control',
       lines: [
         { tex: '\\frac{dy}{dx} = \\frac{S_0 - S_f}{1 - Fr^2}, \\qquad S_f = \\left(\\frac{Q\\,n}{A R^{2/3}}\\right)^{2}' },
+        { tex: `y_{ctrl} = ${f3(yControl)}\\text{ m}:\\; A = ${f3(ctrlGeom.A)}\\text{ m}^2,\\; R = ${f3(ctrlGeom.R)}\\text{ m} \\;\\; (Q = ${f3(Q)}\\text{ m}^3\\text{/s},\\; n = ${f3(n)})` },
         { tex: `S_f(${f3(yControl)}) = ${f4(frictionSlope(buildShape(shape), yControl, Q, n))} \\quad Fr = ${f3(froude(buildShape(shape), yControl, Q))}` },
         { tex: `\\left.\\frac{dy}{dx}\\right|_{ctrl} = ${f4(gvfSlope(buildShape(shape), yControl, Q, n, S0))}\\ \\text{m/m}` },
       ],
@@ -67,6 +101,9 @@ export default function Gvf() {
       title: 'March from the control',
       lines: [
         { text: `${r.FrControl > 1 ? 'Supercritical control (Fr > 1) sits at the upstream end and the march runs downstream.' : 'Subcritical control (Fr < 1) sits at the downstream end and the march runs upstream.'} The RK4 march stops at: ${r.terminus}.` },
+        ...(rk
+          ? [{ tex: `\\Delta y \\approx \\left.\\frac{dy}{dx}\\right|_{ctrl}\\Delta x = ${f4(rk.s)}\\times ${f3(rk.dx)} = ${f4(rk.s * rk.dx)}\\text{ m} \\;\\Rightarrow\\; y_1 = ${f3(rk.y1)}\\text{ m (RK4, actual }\\Delta y = ${f4(rk.dy)}\\text{ m)}` }]
+          : []),
         { text: `Far-end depth y = ${f3(r.yEnd)} m${r.yn !== null ? ` against yn = ${f3(r.yn)} m` : ''} over the ${f0(L)} m reach.` },
       ],
     },

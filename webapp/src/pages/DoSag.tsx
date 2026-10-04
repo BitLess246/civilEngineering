@@ -62,6 +62,9 @@ export default function DoSag() {
       title: 'The sag equation',
       lines: [
         { tex: 'D(t) = \\frac{k_d L_0}{k_r - k_d}\\left(e^{-k_d t} - e^{-k_r t}\\right) + D_0\\,e^{-k_r t}' },
+        ...(r.tc !== null && r.Dcrit !== null
+          ? [{ tex: `D(${f3(r.tc)}) = \\frac{${f3(r.kd)}\\times ${f2(r.L0)}}{${f3(r.kr)}-${f3(r.kd)}}(e^{-${f3(r.kd)}\\times ${f3(r.tc)}}-e^{-${f3(r.kr)}\\times ${f3(r.tc)}}) + ${f2(r.D0)}\\,e^{-${f3(r.kr)}\\times ${f3(r.tc)}} = ${f2(r.Dcrit)}\\ \\text{mg/L}` }]
+          : [{ tex: `D(${f3(r.curve[60].t)}) = \\frac{${f3(r.kd)}\\times ${f2(r.L0)}}{${f3(r.kr)}-${f3(r.kd)}}(e^{-${f3(r.kd)}\\times ${f3(r.curve[60].t)}}-e^{-${f3(r.kr)}\\times ${f3(r.curve[60].t)}}) + ${f2(r.D0)}\\,e^{-${f3(r.kr)}\\times ${f3(r.curve[60].t)}} = ${f2(r.curve[60].D)}\\ \\text{mg/L}` }]),
         { text: 'The first term is the oxygen demanded by the decaying BOD load L(t) = L0·e^(−kd·t); the second is the initial deficit being re-aerated away.' },
       ],
     },
@@ -69,7 +72,8 @@ export default function DoSag() {
       title: 'Critical point',
       lines: [
         { tex: 't_c = \\frac{1}{k_r - k_d}\\,\\ln\\!\\left[\\frac{k_r}{k_d}\\left(1 - \\frac{D_0(k_r - k_d)}{k_d L_0}\\right)\\right]' },
-        { tex: `t_c = ${f3(r.tc)}\\ \\text{d} \\;\\Rightarrow\\; D_{crit} = \\frac{k_d L_0}{k_r}e^{-k_d t_c} = ${f2(r.Dcrit ?? 0)}\\ \\text{mg/L}` },
+        { tex: `t_c = \\frac{1}{${f3(r.kr)}-${f3(r.kd)}}\\,\\ln\\!\\left[\\frac{${f3(r.kr)}}{${f3(r.kd)}}\\left(1-\\frac{${f2(r.D0)}(${f3(r.kr)}-${f3(r.kd)})}{${f3(r.kd)}\\times ${f2(r.L0)}}\\right)\\right] = ${f3(r.tc)}\\ \\text{d}` },
+        { tex: `D_{crit} = \\frac{k_d L_0}{k_r}e^{-k_d t_c} = \\frac{${f3(r.kd)}\\times ${f2(r.L0)}}{${f3(r.kr)}}e^{-${f3(r.kd)}\\times ${f3(r.tc)}} = ${f2(r.Dcrit ?? 0)}\\ \\text{mg/L}` },
         { text: `DO bottoms at ${f2(r.DOcrit ?? 0)} mg/L${r.xc !== null ? `, ${f1(r.xc)} km downstream at u = ${f2(u)} m/s` : ''}. ${r.anoxic ? 'That is below zero — the reach turns anoxic.' : r.DOcrit !== null && r.DOcrit < 2 ? 'Severe stress for aquatic life (below about 2 mg/L).' : 'Above the 2 mg/L stress line, but check the fishery standard.'}` },
       ],
     } : {

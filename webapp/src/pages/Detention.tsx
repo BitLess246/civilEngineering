@@ -57,7 +57,9 @@ export default function Detention() {
       title: 'Stage–storage (trapezoidal basin)',
       lines: [
         { tex: 'A(h) = (W + 2zh)(L + 2zh)' },
+        { tex: `A(${f2(depthMax)}) = (${f2(bottomWidth)} + 2\\times ${f2(sideZ)}\\times ${f2(depthMax)})(${f2(bottomLength)} + 2\\times ${f2(sideZ)}\\times ${f2(depthMax)}) = ${f0(pondGeometry(bottomWidth, bottomLength, sideZ, depthMax).area)}\\ \\text{m}^2` },
         { tex: 'S(h) = WLh + z(W+L)h^2 + \\tfrac{4}{3}z^2h^3' },
+        { tex: `S(${f2(depthMax)}) = ${f2(bottomWidth)}\\times ${f2(bottomLength)}\\times ${f2(depthMax)} + ${f2(sideZ)}(${f2(bottomWidth)}+${f2(bottomLength)})${f2(depthMax)}^2 + \\tfrac{4}{3}${f2(sideZ)}^2${f2(depthMax)}^3 = ${f0(pondGeometry(bottomWidth, bottomLength, sideZ, depthMax).storage)}\\ \\text{m}^3` },
         { text: `W = ${f2(bottomWidth)} m, L = ${f2(bottomLength)} m, side slope z = ${f2(sideZ)}. At the usable depth ${f2(depthMax)} m the pond stores ${f0(pondGeometry(bottomWidth, bottomLength, sideZ, depthMax).storage)} m³.` },
       ],
     },
@@ -65,6 +67,11 @@ export default function Detention() {
       title: 'Stage–discharge (outlet works)',
       lines: [
         { tex: 'Q_o = C_d\\,a\\sqrt{2g\\,h_o} \\qquad Q_w = C\\,L_w h_w^{3/2}' },
+        { tex: `Q_o = ${f2(orificeCd)}\\times ${f2(orificeArea)}\\sqrt{2\\times 9.81\\times ${f2(Math.max(r.peakStage - orificeInvert, 0))}} = ${f3(orificeArea > 0 && r.peakStage > orificeInvert ? orificeCd * orificeArea * Math.sqrt(2 * 9.81 * (r.peakStage - orificeInvert)) : 0)}\\ \\text{m}^3/\\text{s} \\;\\; (h_o = ${f2(r.peakStage)} - ${f2(orificeInvert)})` },
+        ...(weirLength > 0
+          ? [{ tex: `Q_w = ${f2(weirC)}\\times ${f2(weirLength)}\\times ${f2(Math.max(r.peakStage - weirCrest, 0))}^{3/2} = ${f3(r.peakStage > weirCrest ? weirC * weirLength * Math.pow(r.peakStage - weirCrest, 1.5) : 0)}\\ \\text{m}^3/\\text{s} \\;\\; (h_w = ${f2(r.peakStage)} - ${f2(weirCrest)})` }]
+          : []),
+        { tex: `Q(${f3(r.peakStage)}) = ${f3(outletFlow(r.peakStage, { orificeArea, orificeCd, orificeInvert, weirLength, weirCrest, weirC }))}\\ \\text{m}^3/\\text{s} \\;\\; (Q_o + Q_w)` },
         { text: `Orifice a = ${f2(orificeArea)} m² (Cd = ${f2(orificeCd)}) set ${f2(orificeInvert)} m above the bottom${weirLength > 0 ? `; rectangular weir ${f2(weirLength)} m long on a crest ${f2(weirCrest)} m up (C = ${f2(weirC)})` : '; no weir'}. Peak outflow capacity at the routed high stage: ${f3(outletFlow(r.peakStage, { orificeArea, orificeCd, orificeInvert, weirLength, weirCrest, weirC }))} m³/s.` },
       ],
     },
@@ -72,6 +79,9 @@ export default function Detention() {
       title: 'Storage-indication routing',
       lines: [
         { tex: '\\frac{2S_2}{\\Delta t} + O_2 = (I_1 + I_2) + \\left(\\frac{2S_1}{\\Delta t} - O_1\\right)' },
+        ...(inflow.length > 1 && r.stages.length > 1
+          ? [{ tex: `F_1 = (I_0+I_1) + (F_0-2O_0) = (${f3(inflow[0])}+${f3(inflow[1])}) + 0 = ${f3(inflow[0] + inflow[1])} \\;\\Rightarrow\\; h_1 = ${f3(r.stages[1])}\\text{ m},\\; O_1 = ${f3(r.outflows[1])}\\text{ m}^3\\text{/s}` }]
+          : []),
         { text: `Every Δt = ${f2(dtMin)} min the right side is known; the strictly increasing curve F(h) = 2S/Δt + O is inverted by bisection for the new stage, so each step is unambiguous.` },
       ],
     },
