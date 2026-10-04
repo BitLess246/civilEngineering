@@ -103,6 +103,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     label: 'Mathematics',
     tools: [
       { to: '/eng-economy', name: 'Engineering Economy', sub: 'Time value · NPV/IRR · depreciation', group: 'Time Value of Money' },
+      { to: '/hydrostatics', name: 'Hydrostatics', sub: 'Plane force · gates · buoyancy · vessels', group: 'Fluid Statics' },
     ],
   },
   {

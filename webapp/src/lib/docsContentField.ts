@@ -838,4 +838,39 @@ export const FIELD_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'hydrostatics',
+    name: 'Hydrostatics',
+    route: '/hydrostatics',
+    group: 'Mathematics',
+    summary: 'Fluid at rest and in rigid-body motion: plane-surface force with its center of pressure, curved-gate components, buoyancy and metacentric stability, manometers, and accelerating or rotating vessels.',
+    basis: 'F = γ·hc·A with yp = yc + Ixx,c/(yc·A); quarter-gate Fh on the projection and Fv as fluid weight; GM = KB + BM − KG; manometer walk ±γh; tanθ = ax/g; p = ρ(g+az)h; z = ω²r²/2g.',
+    sections: [
+      {
+        id: 'hydrostatics-plane',
+        title: 'Plane surface and gate',
+        controls: [
+          { kind: 'field', name: 'Plate', what: 'Rectangle or circle with its dimensions, centroid depth and inclination from the horizontal.' },
+          { kind: 'field', name: 'Gate', what: 'Quarter-circular radius, width and centroid depth of the projected rectangle.' },
+          { kind: 'output', name: 'Force and CP', what: 'Resultant magnitude with the center of pressure along the plate and as a vertical depth, plus the gate components and angle.' },
+        ],
+      },
+      {
+        id: 'hydrostatics-float',
+        title: 'Flotation and stability',
+        controls: [
+          { kind: 'field', name: 'Barge', what: 'Length, beam, draft and KG above the keel of the box hull.' },
+          { kind: 'output', name: 'GM verdict', what: 'Buoyant force with displaced volume, and the metacentric height with a stable/unstable verdict.' },
+        ],
+      },
+      {
+        id: 'hydrostatics-motion',
+        title: 'Manometer and moving vessels',
+        controls: [
+          { kind: 'field', name: 'Legs', what: 'Manometer fluids with column heights, walking down (+) or up (−) from the starting pressure.' },
+          { kind: 'output', name: 'Pressures and motion', what: 'Far-end pressure, surface tilt under horizontal acceleration, pressure under vertical acceleration, and the forced-vortex rim rise.' },
+        ],
+      },
+    ],
+  },
 ]

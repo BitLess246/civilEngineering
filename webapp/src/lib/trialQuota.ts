@@ -59,6 +59,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/rigid-pavement', '/roundabout', '/esal', '/storm-sewer', '/pump-station', '/water-demand',
   // mathematics: engineering economy
   '/eng-economy',
+  // fluid statics: hydrostatics
+  '/hydrostatics',
 ]
 
 /**
