@@ -95,7 +95,7 @@ export function TrussMode() {
         lines: [
           { text: 'Simply supported on a span L, so the reactions follow from moments about each support — per kN of moving load:' },
           { tex: `R_L = \\frac{L - x}{L} = \\frac{${f2(span)} - ${f2(xc)}}{${f2(span)}} = ${f3(RLv)}\\text{ kN}` },
-          { tex: `R_R = \\frac{x}{L} = ${f3(1 - RLv)}\\text{ kN}` },
+          { tex: `R_R = \\frac{x}{L} = \\frac{${f2(xc)}}{${f2(span)}} = ${f3(1 - RLv)}\\text{ kN}` },
         ],
       },
       {

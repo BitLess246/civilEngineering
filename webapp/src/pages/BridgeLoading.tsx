@@ -58,20 +58,22 @@ export default function BridgeLoading() {
       title: 'Longitudinal extremes — the vehicle walk',
       lines: [
         { tex: `M = DF\\left[(1+IM)\\max_{x}\\sum_i P_i\\,\\mathrm{IL}(x+o_i) + w\\,\\frac{a(L-a)}{2}\\right]` },
+        { tex: `\\sum P_i\\,y_i = ${res.moment.axles.map((a) => `${f2(a.p)}\\times${f3(a.ord)}`).join(' + ')} = ${f3(res.moment.axles.reduce((s, r) => s + r.contribution, 0))}\\text{ kN·m per lane}` },
         { text: `The design truck (35 + 145 + 145 kN, rear spacing swept ${'4.26–9.0 m'}) and the tandem (2×110 kN at 1.2 m) drive over the exact piecewise influence line of every section; the truck OR the tandem governs per section. IM = ${f2(imPct)}% applies to the vehicle only; the 9.3 kN/m lane load acts with it, full span.` },
       ],
     },
     {
       title: 'Governing moment',
       lines: [
-        { tex: `M = DF\\,(1+IM)\\,M_{${res.moment.vehicle === 'truck' ? `\\text{truck},\\,s=${f3(res.moment.spacing ?? 0)}` : '\\text{tandem}'}} + DF\\,M_{\\text{lane}} = ${f3(res.moment.vehPart * scaleBack)} + ${f3(res.moment.lanePart * scaleBack)} = ${f3(res.moment.value * scaleBack)}\\text{ kN·m}` },
-        { text: `Governing vehicle parked with its leading axle at x = ${f3(res.moment.position)} m; the section is at ${f3(res.moment.section)} m.` },
+        { tex: `M = DF\\,(1+IM)\\sum P_i y_i + DF\\,M_{\\text{lane}} = ${f3(DF)}\\times${f3(1 + res.IM)}\\times${f3(res.moment.axles.reduce((s, r) => s + r.contribution, 0))} + ${f3(DF)}\\times${f3(res.moment.lanePart / res.DF)} = ${f3(res.moment.vehPart * scaleBack)} + ${f3(res.moment.lanePart * scaleBack)} = ${f3(res.moment.value * scaleBack)}\\text{ kN·m}` },
+        { text: `Governing ${res.moment.vehicle === 'truck' ? `truck (rear spacing ${f3(res.moment.spacing ?? 0)} m)` : 'tandem'} parked with its leading axle at x = ${f3(res.moment.position)} m; the section is at ${f3(res.moment.section)} m.` },
       ],
     },
     {
       title: 'Governing shear and reaction',
       lines: [
-        { tex: `V = ${f3(Math.abs(res.shear.value) * scaleBack)}\\text{ kN at the ${res.shear.sectionLabel}}; \\qquad R = ${f3(res.reaction.value * scaleBack)}\\text{ kN}` },
+        { tex: `V = DF\\,(1+IM)\\sum P_i y_i + DF\\,V_{\\text{lane}} = ${f3(DF)}\\times${f3(1 + res.IM)}\\times${f3(res.shear.vehPart / (res.DF * (1 + res.IM)))} + ${f3(DF)}\\times${f3(Math.abs(res.shear.lanePart / res.DF))} = ${f3(Math.abs(res.shear.vehPart) * scaleBack)} + ${f3(Math.abs(res.shear.lanePart) * scaleBack)} = ${f3(Math.abs(res.shear.value) * scaleBack)}\\text{ kN at the ${res.shear.sectionLabel}}` },
+        { tex: `R = DF\\,(1+IM)\\sum P_i y_i + DF\\,\\frac{wL}{2} = ${f3(DF)}\\times${f3(1 + res.IM)}\\times${f3(res.reaction.vehPart / (res.DF * (1 + res.IM)))} + ${f3(DF)}\\times\\frac{${f3(res.laneW)}\\times${f3(res.L)}}{2} = ${f3(res.reaction.vehPart * scaleBack)} + ${f3(res.reaction.lanePart * scaleBack)} = ${f3(res.reaction.value * scaleBack)}\\text{ kN}` },
         { text: `Reaction = vehicle ${f3(res.reaction.vehPart * scaleBack)} kN (IM included) + lane ${f3(res.reaction.lanePart * scaleBack)} kN (wL/2 per lane). The tandem never governs the reaction on this span.` },
       ],
     },

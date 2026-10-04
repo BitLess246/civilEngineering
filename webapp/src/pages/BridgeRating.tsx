@@ -61,7 +61,10 @@ export default function BridgeRating() {
       title: 'Live load — ' + (llMode === 'hl93' ? `the HL-93 walk (DF = ${f2(r.DF)})` : 'user-supplied static effects'),
       lines: llMode === 'hl93' ? [
         { text: `The lever rule on ${girder} girders at ${f2(S)} m gives DF = ${f2(r.DF)} including multiple presence; the HL-93 truck/tandem plus lane load walk the span's influence lines. Governing per girder: LL(M) = ${f3(r.flexure.LLstatic)} kN·m static, LL(V) = ${f3(r.shear.LLstatic)} kN static, both ×(1+IM) in the denominator.` },
-        { tex: `LL_M^{(1+IM)} = ${f3(r.flexure.LLstatic)}\\times1.33 = ${f3(r.flexure.LLwithIM)}\\ \\text{kN·m}` },
+        { tex: `DF = g\\cdot m = ${f2(r.hl.lever.governing.g)}\\times${f2(r.hl.lever.governing.m)} = ${f2(r.hl.DF)}${r.DF !== r.hl.DF ? `\\;\\Rightarrow\\; DF_{used} = ${f2(r.DF)}` : ''}` },
+        { tex: `\\sum P_i\\,y_i = ${r.hl.moment.axles.map((a) => `${f2(a.p)}\\times${f3(a.ord)}`).join(' + ')} = ${f3(r.hl.moment.axles.reduce((s, q) => s + q.contribution, 0))}\\text{ kN·m per lane}` },
+        { tex: `LL_{M} = DF\\,(\\sum P_i y_i + M_{lane}) = ${f2(r.DF)}\\times(${f3(r.hl.moment.axles.reduce((s, q) => s + q.contribution, 0))} + ${f3(r.hl.moment.lanePart / r.hl.DF)}) = ${f3(r.flexure.LLstatic)}\\text{ kN·m static}` },
+        { tex: `LL_M^{(1+IM)} = ${f3(r.flexure.LLstatic)}\\times${f3(1 + r.IM)} = ${f3(r.flexure.LLwithIM)}\\ \\text{kN·m}` },
       ] : [
         { text: `Static per-girder effects supplied directly (e.g. from an FE model): LL(M) = ${f3(LLm)} kN·m, LL(V) = ${f3(LLv)} kN — the engine applies (1+IM) and γLL.` },
       ],
@@ -69,7 +72,7 @@ export default function BridgeRating() {
     {
       title: 'Flexure',
       lines: [
-        { tex: `M_{DC} = ${f2(r.Mdc)}\\ \\text{kN·m}, \\quad M_{DW} = ${f2(r.Mdw)}\\ \\text{kN·m} \\quad (wL^2/8)` },
+        { tex: `M_{DC} = \\frac{w_{DC}L^2}{8} = \\frac{${f2(DC)}\\times${f2(L)}^2}{8} = ${f2(r.Mdc)}\\ \\text{kN·m}, \\quad M_{DW} = \\frac{w_{DW}L^2}{8} = \\frac{${f2(DW)}\\times${f2(L)}^2}{8} = ${f2(r.Mdw)}\\ \\text{kN·m}` },
         { tex: `RF_M = \\frac{1.0\\times${f3(Mn)} - 1.25\\times${f2(r.Mdc)} - 1.50\\times${f2(r.Mdw)}}{1.75\\times${f3(r.flexure.LLwithIM)}} = ${f3(r.flexure.RF_inventory)}` },
         { text: `Operating: RF = ${f3(r.flexure.RF_operating)} (γLL = 1.35). Utilisation at inventory ${(r.flexure.util_inventory * 100).toFixed(1)} %.` },
       ],
@@ -77,7 +80,7 @@ export default function BridgeRating() {
     {
       title: 'Shear',
       lines: [
-        { tex: `V_{DC} = ${f2(r.Vdc)}\\ \\text{kN}, \\quad V_{DW} = ${f2(r.Vdw)}\\ \\text{kN} \\quad (wL/2)` },
+        { tex: `V_{DC} = \\frac{w_{DC}L}{2} = \\frac{${f2(DC)}\\times${f2(L)}}{2} = ${f2(r.Vdc)}\\ \\text{kN}, \\quad V_{DW} = \\frac{w_{DW}L}{2} = \\frac{${f2(DW)}\\times${f2(L)}}{2} = ${f2(r.Vdw)}\\ \\text{kN}` },
         { tex: `RF_V = \\frac{1.0\\times${f3(Vn)} - 1.25\\times${f2(r.Vdc)} - 1.50\\times${f2(r.Vdw)}}{1.75\\times${f3(r.shear.LLwithIM)}} = ${f3(r.shear.RF_inventory)}` },
         { text: `Operating: RF = ${f3(r.shear.RF_operating)}. Governing effect: ${r.governing}.` },
       ],
