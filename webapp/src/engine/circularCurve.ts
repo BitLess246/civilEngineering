@@ -82,7 +82,9 @@ export function solveCurve(input: CurveInput): CurveResult {
   // Degree of curve: degrees subtended by a standard arc — 20 m (metric full
   // station) and 100 ft (US highway practice).
   const D20 = (20 / L) * deltaDeg
-  const D100ft = ((100 / 0.3048) / L) * deltaDeg
+  // 100 ft = 30.48 m of arc (US highway practice): D = 5729.578/R_ft.
+  // The arc basis must be converted TO metres (×0.3048) to match L in metres.
+  const D100ft = ((100 * 0.3048) / L) * deltaDeg
 
   const pi = input.piStation ?? 0
   const pc = pi - T

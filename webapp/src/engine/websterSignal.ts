@@ -119,7 +119,6 @@ export function websterTiming(input: WebsterInput): WebsterResult {
   const C0 = (1.5 * L + 5) / (1 - Y)
   const C = input.cycleOverride ?? C0
   if (C <= L) throw new Error('Cycle length must exceed the total lost time.')
-  const oversaturated = input.cycleOverride !== undefined && C <= C0 - 1e-9
 
   let qTotal = 0
   let delaySum = 0
@@ -135,10 +134,15 @@ export function websterTiming(input: WebsterInput): WebsterResult {
     }
   })
 
-  const avgDelay = qTotal > 0 ? delaySum / qTotal : 0
+  // Saturated means a phase runs at X ≥ 1 — not merely "shorter than optimum".
+  // A sub-optimum but undersaturated override (every X < 1) is mistimed, not
+  // oversaturated. And a saturated phase has no finite delay, so the average
+  // is undefined (NaN) rather than a number diluted with zeros.
+  const saturated = results.some((r) => Number.isNaN(r.delay) || r.x >= 1)
+  const avgDelay = saturated ? NaN : qTotal > 0 ? delaySum / qTotal : 0
   return {
     Y, L, C0, C, phases: results, avgDelay,
-    los: losByDelay(avgDelay, results.some((r) => Number.isNaN(r.delay) || r.x >= 1)),
-    oversaturated,
+    los: losByDelay(avgDelay, saturated),
+    oversaturated: saturated,
   }
 }

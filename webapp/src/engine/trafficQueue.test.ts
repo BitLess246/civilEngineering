@@ -51,6 +51,29 @@ describe('solveDD1 — the classic toll-booth problem', () => {
   })
 })
 
+describe('solveDD1 — twin peaks report the last clearing', () => {
+  // 600/10 then 100/30 then 600/10 then 100/40 @ μ = 400: the first hump
+  // clears near t = 17, the queue reforms, and finally clears near t = 57.
+  // Dissipation means "returns to zero for good" — the first clearing, not the last.
+  const res = solveDD1({
+    periods: [
+      { rate: 600, minutes: 10 }, { rate: 100, minutes: 30 },
+      { rate: 600, minutes: 10 }, { rate: 100, minutes: 40 },
+    ],
+    service: 400,
+  })
+  it('stamps the final clearing, not the first', () => {
+    expect(res.dissipation).toBeGreaterThan(50)
+    near(res.ticks[res.dissipation! - 1].queue, 0, 1e-9)
+  })
+  it('discharges at the service rate while a backlog drains', () => {
+    // t = 16 of the classic case: backlog ≈ 48, arrivals 300/h — the server
+    // still puts out 400/h, not the arrival rate.
+    const c = solveDD1(CLASSIC)
+    near(c.ticks[15].departures, 400, 1e-9)
+  })
+})
+
 describe('solveDD1 — undersaturated demand never queues', () => {
   const res = solveDD1({ periods: [{ rate: 300, minutes: 20 }], service: 400 })
   it('zero queue, zero delay, no dissipation event', () => {

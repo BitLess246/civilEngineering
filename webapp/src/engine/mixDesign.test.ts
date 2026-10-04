@@ -119,6 +119,14 @@ describe('designMix — air entrainment', () => {
     near(r.airPct, 1.5)
     expect(r.airEntrained).toBe(false)
   })
+  it('severe exposure follows ACI 211.1 Table 6.3.3 (25 mm → 6.0 %, 50 mm → 5.0 %)', () => {
+    // Transcription guard: the severe column once shipped 1 % low for ≥25 mm rock.
+    const r25 = designMix({ ...BASE, exposure: 'severe' })
+    near(r25.airPct, 6.0)
+    const r50 = designMix({ ...BASE, exposure: 'severe', maxAgg: 50 })
+    near(r50.airPct, 5.0)
+    expect(r25.airEntrained).toBe(true)
+  })
 })
 
 describe('designMix — input guards', () => {

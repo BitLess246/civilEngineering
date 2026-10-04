@@ -61,8 +61,9 @@ export default function WaterDemand() {
         { tex: `P_n = P_0 + n\\cdot\\frac{P_0 - P_1}{t_{census}} = ${P0.toLocaleString()} + ${years}\\cdot\\frac{${P0.toLocaleString()} - ${P1.toLocaleString()}}{${censusYears}}` },
         { tex: `P_n = ${Math.round(Pn).toLocaleString()}\\ \\text{capita}` },
       ] : [
-        { tex: `P_n = P_0 + n\\,a ${method === 'incremental' ? '+' : '-'} \\frac{n(n+1)}{2}\\,b` },
-        { tex: `P_n = ${Math.round(Pn).toLocaleString()}\\ \\text{capita}` },
+        { tex: `P_n = P_0 + n\\,a ${method === 'incremental' ? '+' : '-'} \\frac{n(n+1)}{2}\\,b \\qquad n\\text{ in decades}` },
+        { tex: `n = ${f2(years)}/10 = ${f2(years / 10)} \\quad a = ${f2(a)}\\text{/dec} \\quad b = ${f2(b)}\\text{/dec}` },
+        { tex: `P_n = ${P0.toLocaleString()} ${method === 'incremental' ? '+' : '-'} ${f2(years / 10)}\\times${f2(a)} ${method === 'incremental' ? '+' : '-'} ${f2((years / 10) * (years / 10 + 1) / 2 * b)} = ${Math.round(Pn).toLocaleString()}\\ \\text{capita}` },
       ],
     },
     {

@@ -42,7 +42,9 @@ export function zrFromReliability(R: number): number {
     q = Math.sqrt(-2 * Math.log(1 - p))
     x = -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) / ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1)
   }
-  return -Math.abs(x)
+  // Plain quantile: R < 50 gives a positive ZR (over-design only if misread —
+  // never silently flip the sign).
+  return x
 }
 
 /** AASHTO's printed ZR table, for the worked-solution reference. */

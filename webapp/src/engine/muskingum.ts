@@ -94,8 +94,12 @@ export function muskingumRoute(input: MuskingumInput): MuskingumResult {
   const tPeakIn = inflow.indexOf(peakIn) * dt
   const tPeakOut = outflow.indexOf(peakOut) * dt
   const dtSec = dt * 3600
-  const volumeIn = inflow.reduce((s, q) => s + q, 0) * dtSec - inflow[inflow.length - 1] * dtSec / 2
-  const volumeOut = outflow.reduce((s, q) => s + q, 0) * dtSec - outflow[outflow.length - 1] * dtSec / 2
+  // Full trapezoid on both ends: (Σq − (first + last)/2)·Δt. Dropping the
+  // first ordinate overstates the volume by inflow[0]·Δt/2 whenever the
+  // hydrograph does not start at zero.
+  const trap = (qs: number[]) => (qs.reduce((s, q) => s + q, 0) - (qs[0] + qs[qs.length - 1]) / 2) * dtSec
+  const volumeIn = trap(inflow)
+  const volumeOut = trap(outflow)
 
   return {
     C0, C1, C2, outflow,

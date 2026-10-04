@@ -221,7 +221,9 @@ describe('the ribbon is an Office ribbon', () => {
   it('names that scroll region, because focus can land in it', () => {
     // The same `tabIndex`/`aria-label` pairing the audit's scroll-region pass
     // established for the data tables: a focusable box that announces nothing.
-    expect(ribbon).toMatch(/overflow-x-auto"\n\s*tabIndex=\{0\} role="group" aria-label="[^"]+"/)
+    // \r? — ModelSpace.tsx is committed with CRLF, so a bare \n only matches
+    // LF checkouts; the pairing under test is the attributes, not the newline.
+    expect(ribbon).toMatch(/overflow-x-auto"\r?\n\s*tabIndex=\{0\} role="group" aria-label="[^"]+"/)
   })
 
   it('stacks the mark over the word, at a fixed command width', () => {

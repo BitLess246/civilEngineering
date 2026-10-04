@@ -251,9 +251,10 @@ export function leverRule(p: DeckInput): LeverResult {
       for (const w of [laneWidth / 2 - wheelSpacing / 2, laneWidth / 2 + wheelSpacing / 2]) {
         const fromEdge = laneStart + w
         const x = fromEdge - d // position relative to the exterior girder
-        // simple beam A (girder) — B (first interior girder, span S), cantilever left of A
+        // simple beam A (girder) — B (first interior girder, span S), cantilever left of A.
+        // ΣM about B: R_A·S = 1·(S − x), so r = (S − x)/S — over 1 on the overhang.
         let r: number
-        if (x <= 0) r = 1 + x / p.S // on the overhang: A takes more than the wheel
+        if (x <= 0) r = 1 - x / p.S // on the overhang: A takes more than the wheel
         else if (x >= p.S) r = 0 // at or beyond B: nothing comes to A
         else r = (p.S - x) / p.S
         wheels.push({ x, r })

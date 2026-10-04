@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   geomAt, manningQ, normalDepth, criticalDepth, criticalDepthRect, specificEnergy,
-  froude, hydraulicJump, rectJumpLoss, circularPeakCapacity, momentum,
+  froude, hydraulicJump, rectJumpLoss, circularPeakCapacity, momentum, centroidDepth,
   type ChannelShape,
 } from './openChannel'
 
@@ -119,6 +119,15 @@ describe('hydraulic jump', () => {
     near(momentum(TRAP, j.y2, 3), momentum(TRAP, 0.4, 3), 1e-7)
     expect(j.y2).toBeGreaterThan(criticalDepth(TRAP, 3))
     expect(j.closedForm).toBe(false)
+  })
+  it('triangular jump lands on the hand sequent depth (z=2, Q=3, y1=0.4 → y2≈1.600)', () => {
+    // Guards the centroid: with ȳ = y/3 the momentum balance closes at 1.600 m.
+    const j = hydraulicJump(TRI, 3, 0.4)
+    near(j.y2, 1.6, 5e-3)
+  })
+  it('circle half-full centroid is 4r/3π below the surface', () => {
+    near(centroidDepth(CIRC, 1), 4 / (3 * Math.PI), 1e-6)
+    near(centroidDepth(TRI, 1), 1 / 3, 1e-12)
   })
   it('circular jump conserves momentum', () => {
     const j = hydraulicJump(CIRC, 0.8, 0.2)

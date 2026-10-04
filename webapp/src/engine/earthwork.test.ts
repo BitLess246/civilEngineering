@@ -75,9 +75,22 @@ describe('solveEarthwork — factors and haul', () => {
     near(res.rows[1].massOrdinate, 168) // 8 + (180·0.9 − 20)
     near(res.balance, 320 * 0.9 - 120)
   })
-  it('haul upper bound = Σ |ordinate| · distance', () => {
+  it('haul upper bound holds the larger end-ordinate per interval', () => {
     const res = solveEarthwork(STRIP)
     near(res.totalHaulUpper, 20 * 20 + 200 * 20)
+  })
+  it('a falling interval still counts haul (the to-ordinate alone would report 0)', () => {
+    // Mass 0 → 200 → 0 over two 20 m intervals: the old to-ordinate sum gave
+    // 200·20 + 0·20 = 4000 — below the trapezoidal 4000 only by luck here,
+    // and exactly 0 on a pure 200 → 0 fall. A bound must hold the larger end.
+    const res = solveEarthwork({
+      sections: [
+        { station: 0, cut: 0, fill: 0 },
+        { station: 20, cut: 20, fill: 0 },
+        { station: 40, cut: 0, fill: 40 },
+      ],
+    })
+    near(res.totalHaulUpper, 200 * 20 + 200 * 20)
   })
 })
 

@@ -83,18 +83,20 @@ describe('T-shape 300×150×20×10 (asymmetric)', () => {
 })
 
 describe('channel 200×75×10×8', () => {
+  // Web/flange corners counted once: flanges are (bf − tw) wide, so
+  // A = 8·200 + 2·67·10 = 2940 (not 3100).
   const s = channelShape(200, 75, 10, 8)
   it('area and symmetric depth centroid', () => {
-    near(s.A, 200 * 8 + 2 * 75 * 10)
+    near(s.A, 200 * 8 + 2 * 67 * 10)
     near(s.cy, 100)
   })
   it('centroid pulls toward the web (x̄ > bf/2)', () => {
     expect(s.cx).toBeGreaterThan(37.5)
-    near(s.cx, (1600 * 71 + 1500 * 37.5) / 3100, 1e-3)
+    near(s.cx, (1600 * 71 + 1340 * 33.5) / 2940, 1e-3)
   })
   it('Ix (symmetric about the horizontal axis)', () => {
     const web = 8 * 200 ** 3 / 12 + 1600 * (100 - 100) ** 2
-    const flange = 75 * 10 ** 3 / 12 + 750 * 95 ** 2
+    const flange = 67 * 10 ** 3 / 12 + 670 * 95 ** 2
     near(s.Ix, web + 2 * flange, 1)
   })
 })

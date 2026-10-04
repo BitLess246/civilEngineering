@@ -102,10 +102,14 @@ export function solveDD1(input: DD1Input): DD1Result {
     departures += served
     queue = arrivals - departures
     totalDelay += queue // veh queued for one more minute
-    if (queue > 1e-9) everQueued = true
+    if (queue > 1e-9) { everQueued = true; dissipation = null }
     if (queue > maxQueue + 1e-9) { maxQueue = queue; maxQueueMinute = t }
+    // Dissipation is the LAST clearing ("returns to zero for good"): a queue
+    // that reforms later re-arms the stamp.
     if (queue <= 1e-9) { queue = 0; if (everQueued && dissipation === null) dissipation = t }
-    ticks.push({ t, arrivals: rateAt[t - 1] * 60, departures: Math.min(rateAt[t - 1], input.service / 60) * 60, queue })
+    // Departures are what the server actually discharged this minute — the
+    // full service rate while a backlog drains, not the arrival rate.
+    ticks.push({ t, arrivals: rateAt[t - 1] * 60, departures: served * 60, queue })
     cumArrivals.push(arrivals)
     cumDepartures.push(departures)
   }

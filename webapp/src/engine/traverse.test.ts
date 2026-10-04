@@ -72,6 +72,11 @@ describe('solveTraverse — perfect square', () => {
     expect(v[4][0]).toBeCloseTo(v[0][0]) // closes
     expect(v[4][1]).toBeCloseTo(v[0][1])
   })
+  it('the closing vertex re-takes the start name (same monument, not a new station)', () => {
+    const names = res.vertices.map((p) => p.name)
+    expect(names[0]).toBe('A')
+    expect(names[names.length - 1]).toBe('A')
+  })
 })
 
 describe('solveTraverse — misclosed lot (Bowditch)', () => {
@@ -105,6 +110,20 @@ describe('solveTraverse — misclosed lot (Bowditch)', () => {
     const t = solveTraverse({ ...LOT, rule: 'transit' })
     near(t.rows.reduce((s, r) => s + r.adjLat, 0), 0, 1e-7)
     expect(Math.abs(t.areaM2 - res.areaM2)).toBeLessThan(10)
+  })
+})
+
+describe('solveTraverse — transit on a degenerate straight line', () => {
+  it('refuses the transit rule with no latitude component instead of NaN', () => {
+    // E 100 / W 60 / W 40: every lat is 0, so Σ|lat| = 0 divides the correction.
+    expect(() => solveTraverse({
+      courses: [
+        { name: 'AB', length: 100, dir: 'N 90 E' },
+        { name: 'BC', length: 60, dir: 'S 90 E' },
+        { name: 'CA', length: 40, dir: 'S 90 E' },
+      ],
+      rule: 'transit',
+    })).toThrow(/Transit rule/)
   })
 })
 

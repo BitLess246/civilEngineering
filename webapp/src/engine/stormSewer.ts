@@ -50,19 +50,40 @@ export function velocityPartFull(Dm: number, Q: number, n: number, S: number): n
   return manningV(shape, y, n, S)
 }
 
-/** Smallest standard DN whose capacity ≥ Q and part-full velocity ≥ Vmin. */
+/**
+ * Smallest standard DN whose capacity ≥ Q and part-full velocity ≥ Vmin.
+ *
+ * Part-full velocity FALLS as the diameter grows at fixed Q and S, so the
+ * velocity constraint binds on the grade, not the size: when no size clears
+ * Vmin the picker returns the smallest capacity-sufficient DN with
+ * meetsVelocity = false (never a giant pipe blessed as self-cleansing) and
+ * the caller must say "steepen the grade".
+ */
 export function pickDiameter(Q: number, n: number, S: number, Vmin: number):
-  { dn: number; Qfull: number; Vfull: number } {
-  for (const dn of STD_DN) {
+  { dn: number; Qfull: number; Vfull: number; Vpart: number; meetsVelocity: boolean } {
+  const row = (dn: number) => {
     const Qfull = fullFlowQ(dn / 1000, n, S)
-    if (Qfull < Q) continue
-    if (velocityPartFull(dn / 1000, Q, n, S) >= Vmin) {
-      return { dn, Qfull, Vfull: velocityAt(dn / 1000, Qfull) }
-    }
+    return { dn, Qfull, Vfull: velocityAt(dn / 1000, Qfull), Vpart: velocityPartFull(dn / 1000, Q, n, S) }
+  }
+  let firstFit: { dn: number; Qfull: number; Vfull: number; Vpart: number } | null = null
+  for (const dn of STD_DN) {
+    // Capacity first: normal depth does not exist above a DN's peak Q.
+    if (fullFlowQ(dn / 1000, n, S) < Q) continue
+    const r = row(dn)
+    if (!firstFit) firstFit = r
+    if (r.Vpart >= Vmin) return { ...r, meetsVelocity: true }
   }
   const last = STD_DN[STD_DN.length - 1]
-  const Qfull = fullFlowQ(last / 1000, n, S)
-  return { dn: last, Qfull, Vfull: velocityAt(last / 1000, Qfull) }
+  // No capacity anywhere: keep the old fallthrough (largest DN, full-flow
+  // figures) with the velocity flag down — no normal depth exists above a
+  // pipe's peak Q, so Vpart is honestly 0 rather than a thrown error.
+  const fallthrough = firstFit ?? {
+    dn: last,
+    Qfull: fullFlowQ(last / 1000, n, S),
+    Vfull: velocityAt(last / 1000, fullFlowQ(last / 1000, n, S)),
+    Vpart: 0,
+  }
+  return { ...fallthrough, meetsVelocity: false }
 }
 
 export interface InletRow {
@@ -101,6 +122,8 @@ export interface RunResult {
   dn: number
   Qfull: number
   Vfull: number
+  Vpart: number        // normal-depth velocity at Qdesign — the cleansing check
+  meetsVelocity: boolean
   utilization: number    // Q / Qfull
   travelMin: number
   slopePct: number       // the run's grade, %
@@ -184,11 +207,15 @@ export function designSewer(
     if (pick.dn === STD_DN[STD_DN.length - 1] && pick.Qfull < Qdesign) {
       warns.push(`Even DN ${pick.dn} cannot carry ${Qdesign.toFixed(2)} m³/s at this slope — steepen the grade or add a parallel barrel.`)
     }
+    if (!pick.meetsVelocity) {
+      warns.push(`Part-full velocity ${pick.Vpart.toFixed(2)} m/s is below the ${Vmin} m/s self-cleansing floor — steepen the grade (a larger pipe flows slower at the same Q, not faster).`)
+    }
 
     out.push({
       name: run.name, inlet: run.inlet, upstreamNames,
       areaHa, Ccomp, Qdesign, tcHead, iDesign,
-      dn: pick.dn, Qfull: pick.Qfull, Vfull: pick.Vfull,
+      dn: pick.dn, Qfull: pick.Qfull, Vfull: pick.Vfull, Vpart: pick.Vpart,
+      meetsVelocity: pick.meetsVelocity,
       utilization, travelMin, slopePct: run.slopePct, warnings: warns,
     })
     upIdx[idx] = run.upstream

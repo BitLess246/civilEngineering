@@ -45,6 +45,14 @@ describe('routing recurrence', () => {
     for (const o of r.outflow) expect(o).toBeCloseTo(42, 9)
   })
 
+  it('volumes use the full trapezoid on a nonzero-start hydrograph', () => {
+    // 8 × 42 m³/s at Δt = 1 h: (336 − 42)·3600 = 1 058 400 m³. Dropping the
+    // first ordinate would report 1 134 000 m³ (+7.1 %).
+    const r = muskingumRoute({ K: 2, X: 0.25, dt: 1, inflow: Array(8).fill(42) })
+    expect(r.volumeIn).toBeCloseTo(1058400, 3)
+    expect(r.volumeOut).toBeCloseTo(1058400, 3)
+  })
+
   it('continuity: trap(I) − trap(O) = S_end − S_0 exactly', () => {
     const inflow = [0, 20, 55, 80, 60, 35, 15, 5, 2, 0, 0]
     const dt = 1

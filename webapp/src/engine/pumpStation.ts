@@ -61,8 +61,10 @@ export interface SystemInput {
 export function systemHead(sys: SystemInput, Q: number): number {
   const hf = hwFriction(sys.suction.L, Q, sys.suction.C, sys.suction.D) +
     hwFriction(sys.discharge.L, Q, sys.discharge.C, sys.discharge.D)
-  const Dref = sys.discharge.D
-  const hm = minorLoss(Q, Dref, sys.suction.K + sys.discharge.K)
+  // Minor losses ride on each side's own velocity — a wide suction bell with
+  // the same ΣK as the discharge line dissipates far less head.
+  const hm = minorLoss(Q, sys.suction.D, sys.suction.K) +
+    minorLoss(Q, sys.discharge.D, sys.discharge.K)
   return sys.staticLift + sys.pressureHead + hf + hm
 }
 
@@ -118,7 +120,8 @@ export function operatingPoint(sys: SystemInput, pump: PumpSpec): OperatingPoint
   const Pwater = (GAMMA_W * Q * H)
   const Pshaft = Pwater / pump.eta
   const Pmotor = Pshaft / motorEta
-  return { Q, H, Pwater, Pshaft, Pmotor, kwhPerM3: Pshaft / (Q * 1000) }
+  // P/Q is kJ/m³ (kW·s/m³); 1 kWh = 3600 kJ — not 1000.
+  return { Q, H, Pwater, Pshaft, Pmotor, kwhPerM3: Pshaft / (Q * 3600) }
 }
 
 export interface NpshInput {

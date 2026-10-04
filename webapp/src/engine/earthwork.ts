@@ -132,10 +132,15 @@ export function solveEarthwork(input: EarthworkInput): EarthworkResult {
   let minOrdinate = 0
   let minOrdinateStation = sections[0].station
   let haulSum = 0
+  let prevMass = 0
   for (const r of rows) {
     if (r.massOrdinate > maxOrdinate) { maxOrdinate = r.massOrdinate; maxOrdinateStation = r.to }
     if (r.massOrdinate < minOrdinate) { minOrdinate = r.massOrdinate; minOrdinateStation = r.to }
-    haulSum += Math.abs(r.massOrdinate) * r.distance
+    // Genuine upper bound on haul: the larger end-ordinate held over the
+    // whole interval. The to-ordinate alone is NOT a bound — on a falling
+    // interval (200 → 0) it reports 0 against a true haul near 2000.
+    haulSum += Math.max(Math.abs(prevMass), Math.abs(r.massOrdinate)) * r.distance
+    prevMass = r.massOrdinate
   }
 
   return {
@@ -144,8 +149,6 @@ export function solveEarthwork(input: EarthworkInput): EarthworkResult {
     balance: totalCut - totalFill,
     maxOrdinate, maxOrdinateStation,
     minOrdinate, minOrdinateStation,
-    // Upper bound on haul: ordinates held over the full interval (the
-    // trapezoidal mass curve integral).
     totalHaulUpper: haulSum,
     cutFactor, fillFactor,
   }

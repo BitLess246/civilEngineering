@@ -71,7 +71,7 @@ export default function StormSewer() {
       title: 'Manning sizing and self-cleansing',
       lines: [
         { tex: 'Q_f = \\frac{1}{n}\\cdot\\frac{\\pi D^2}{4}\\cdot\\left(\\frac{D}{4}\\right)^{2/3}\\sqrt{S}' },
-        { text: `The smallest commercial size whose full-flow capacity covers Q and whose PART-FULL (normal-depth) velocity keeps ≥ ${f2(Vmin)} m/s for self-cleansing. Travel time uses the full-flow velocity — the standard simplification. Erosion checks at ${f2(Vwarn)} m/s.` },
+        { text: `The smallest commercial size whose full-flow capacity covers Q and whose PART-FULL (normal-depth) velocity keeps ≥ ${f2(Vmin)} m/s for self-cleansing. Part-full velocity falls as the pipe grows at fixed Q and grade, so when no size clears the floor the picker holds the smallest sufficient DN and flags the run — steepen the grade, do not upsize. Travel time uses the full-flow velocity — the standard simplification. Erosion checks at ${f2(Vwarn)} m/s.` },
       ],
     },
     ...res.runs.flatMap((r) => r.warnings.map((w) => ({ title: `${r.name} — check`, lines: [{ text: w }] }))),
@@ -150,7 +150,7 @@ export default function StormSewer() {
                   <Row label={`Design flow Q`} value={`${f3(r.Qdesign)} m³/s`}
                     sub={`i = ${f2(r.iDesign)} mm/h at tc = ${f2(r.tcHead)} min · Ccomp ${f2(r.Ccomp)} · ${f2(r.areaHa)} ha`} />
                   <Row label={`Capacity of DN ${r.dn}`} value={`${f3(r.Qfull)} m³/s`}
-                    sub={`V full ${f2(r.Vfull)} m/s · utilization ${Math.round(r.utilization * 100)} %`} />
+                    sub={`V full ${f2(r.Vfull)} m/s · V part-full ${f2(r.Vpart)} m/s${r.meetsVelocity ? '' : ' — below cleansing floor'} · utilization ${Math.round(r.utilization * 100)} %`} />
                   <Row label="Travel time" value={`${f2(r.travelMin)} min`}
                     sub={r.upstreamNames.length > 0 ? `receives ${r.upstreamNames.join(', ')}` : 'head of the network'} alert={r.warnings.length > 0} />
                   {r.warnings.map((w, j) => (

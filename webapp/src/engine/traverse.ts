@@ -151,6 +151,12 @@ export function solveTraverse(input: TraverseInput): TraverseResult {
   const sumAbsLat = parsed.reduce((s, r) => s + Math.abs(r.lat), 0)
   const sumAbsDep = parsed.reduce((s, r) => s + Math.abs(r.dep), 0)
 
+  // The transit rule divides by the summed absolute components — a degenerate
+  // all-east/west (or all-north/south) traverse zeroes one of them, so guard
+  // before the 0/0 can poison the adjustment into silent NaN.
+  if (rule === 'transit' && (sumAbsLat < 1e-12 || sumAbsDep < 1e-12)) {
+    throw new Error('Transit rule needs both latitude and departure components — a straight-line traverse has nothing to distribute on one axis (use Bowditch).')
+  }
   const out: CourseRow[] = parsed.map((r) => {
     const cLat = rule === 'bowditch'
       ? -(eLat * r.length) / perimeter
@@ -171,12 +177,15 @@ export function solveTraverse(input: TraverseInput): TraverseResult {
   })
 
   // Adjusted coordinates, x east / y north, from the given starting vertex.
+  // The closing vertex re-takes the START name: it is the same monument the
+  // traverse returns to, not a new station.
   const x0 = input.x0 ?? 0
   const y0 = input.y0 ?? 0
   const vertices = [{ name: 'A', x: x0, y: y0 }]
   for (let i = 0; i < out.length; i++) {
     const v = vertices[i]
-    vertices.push({ name: vertexName(i + 1), x: v.x + out[i].adjDep, y: v.y + out[i].adjLat })
+    const closing = i === out.length - 1
+    vertices.push({ name: closing ? vertices[0].name : vertexName(i + 1), x: v.x + out[i].adjDep, y: v.y + out[i].adjLat })
   }
 
   // DMD + double area on the ADJUSTED values:
