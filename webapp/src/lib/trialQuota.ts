@@ -63,6 +63,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/hydrostatics',
   // mechanics: dynamics
   '/dynamics',
+  // drafting: 2D floor plans → 3D
+  '/drafting3d',
 ]
 
 /**

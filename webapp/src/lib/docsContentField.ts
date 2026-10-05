@@ -931,4 +931,33 @@ export const FIELD_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'drafting3d',
+    name: 'Drafting3D',
+    route: '/drafting3d',
+    group: 'Mathematics',
+    summary: '2D floor plan drafting with real-time 3D viewport. Draw walls, beams, columns, and slabs on a grid; see them instantly in 3D; export to ModelSpace for structural analysis.',
+    basis: 'Grid-based 2D drafting with snap-to-grid; real-time 3D sync via react-three-fiber; exports to StructuralModel (nodes, members, plates, sections) for ModelSpace analysis.',
+    sections: [
+      {
+        id: 'drafting3d-2d',
+        title: '2D Floor Plan Editor',
+        controls: [
+          { kind: 'field', name: 'Tools', what: 'Select, Wall, Beam, Column, Slab, Grid tools with grid-snap drawing.' },
+          { kind: 'field', name: 'Grid', what: 'Configurable X/Y grid with snap tolerance; levels with independent grids.' },
+          { kind: 'field', name: 'Sections', what: 'Predefined concrete section library (beams, columns, slabs, walls); custom sections supported.' },
+          { kind: 'output', name: 'Real-time 3D', what: 'Instant 3D viewport synced with 2D; orbit/pan/zoom; selection sync between 2D and 3D.' },
+        ],
+      },
+      {
+        id: 'drafting3d-export',
+        title: 'Export to ModelSpace',
+        controls: [
+          { kind: 'field', name: 'Export', what: 'One-click JSON export of StructuralModel (nodes, members, plates, sections, supports) ready for ModelSpace.' },
+          { kind: 'field', name: 'Auto-supports', what: 'Ground-level columns automatically get fixed supports for immediate analysis.' },
+        ],
+      },
+    ],
+  },
 ]
+
