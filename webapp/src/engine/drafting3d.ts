@@ -14,14 +14,14 @@ export interface DraftNode {
   z: number    // level Z (m)
 }
 
-/** A wall or beam drawn on the floor plan. */
+/** A wall, beam, column, slab — or a Revit-style component hosted on them. */
 export interface DraftElement {
   id: string
-  type: 'wall' | 'beam' | 'column' | 'slab'
+  type: 'wall' | 'beam' | 'column' | 'slab' | 'door' | 'window' | 'ceiling'
   nodes: [string, string]  // node ids
   sectionId: string        // RectSection id
-  role?: 'wall' | 'beam' | 'column' | 'slab'
-  // For slabs: corners in CCW order
+  role?: 'wall' | 'beam' | 'column' | 'slab' | 'ceiling'
+  // For slabs (and ceilings): corners in CCW order
   corners?: [string, string, string, string]
   // For openings in slabs
   openings?: Array<{
@@ -31,6 +31,74 @@ export interface DraftElement {
     w?: number; h?: number
     r?: number
   }>
+  // --- Wall-hosted components (doors, windows), Revit-style: the component
+  // --- remembers its HOST and a position along it, so moving/stretching the
+  // --- wall carries the openings with it and re-export never loses them.
+  hostId?: string   // the wall element this door/window sits in
+  at?: number       // metres from the host wall's i-end to the opening CENTRE
+  width?: number    // opening width (m)
+  height?: number   // opening height (m)
+  sill?: number     // sill height above the floor (m) — doors are 0
+  swing?: 0 | 1 | 2 | 3  // door hinge + swing quadrant (see doorSwing)
+  // --- Finish material (slabs, ceilings) — an id into SLAB_MATERIALS or
+  // --- CEILING_MATERIALS. Absent ⇒ the catalog's first entry.
+  materialId?: string
+}
+
+/** Revit-style defaults for wall-hosted components. */
+export const DEFAULT_DOOR = { width: 0.9, height: 2.1, sill: 0 } as const
+export const DEFAULT_WINDOW = { width: 1.2, height: 1.2, sill: 0.9 } as const
+
+/** How far a click may fall from a wall's centreline and still host a
+ *  door/window (m) — generous, because fingers are fatter than cursors. */
+export const WALL_HOST_TOLERANCE = 0.35
+
+/** A finish material for slabs or ceilings: drives the plan fill, the 3D tint
+ *  and (for slabs) documents the self-weight density the panel implies.
+ *  `load` is the finish's own surface dead load in kN/m² — ceilings are pure
+ *  finish (never structural), slabs' structural self-weight still comes from
+ *  the ModelSpace loads pipeline; this number is shown for reference. */
+export interface DraftFinishMaterial {
+  id: string
+  name: string
+  color: string       // hex — plan fill and 3D tint
+  load: number        // kN/m² surface dead load of the finish itself
+  note: string
+}
+
+/** Slab construction materials, Revit-style type catalog. */
+export const SLAB_MATERIALS: DraftFinishMaterial[] = [
+  { id: 'conc-cast', name: 'Cast-in-place concrete', color: '#7ba6d4', load: 0, note: 'RC slab — self-weight from thickness × 24 kN/m³' },
+  { id: 'steel-deck', name: 'Composite steel deck', color: '#8fa3b8', load: 0.3, note: 'Corrugated deck + topping; heavier unit weight' },
+  { id: 'precast', name: 'Precast hollow core', color: '#c9ccd4', load: 0, note: 'Hollow cores cut unit weight to ≈ 18 kN/m³' },
+  { id: 'timber', name: 'Timber floor', color: '#c8a06a', load: 0.25, note: 'Joists + decking — light residential floors' },
+]
+
+/** Ceiling finish catalogs (architectural — never exported to the frame). */
+export const CEILING_MATERIALS: DraftFinishMaterial[] = [
+  { id: 'gypsum', name: 'Gypsum board', color: '#e8ecf2', load: 0.15, note: '12 mm board on furring channels' },
+  { id: 'acoustic', name: 'Acoustic tile grid', color: '#dfe6ee', load: 0.1, note: 'Lay-in tile on exposed T-grid' },
+  { id: 'plaster', name: 'Plaster on soffit', color: '#f0ede6', load: 0.25, note: 'Direct-applied cement plaster' },
+  { id: 'exposed', name: 'Exposed structure', color: '#cfd6df', load: 0, note: 'No ceiling — soffit painted' },
+]
+
+/** Look up a finish material by catalog + id (first entry when absent). */
+export function finishMaterial(catalog: DraftFinishMaterial[], id?: string): DraftFinishMaterial {
+  return catalog.find(m => m.id === id) ?? catalog[0]
+}
+
+/** Resolve a stored materialId against BOTH catalogs (the element itself knows
+ *  whether it is a slab or a ceiling, but ids never collide, so one lookup
+ *  serves rendering everywhere). */
+export function resolveFinishMaterial(id?: string): DraftFinishMaterial {
+  return SLAB_MATERIALS.find(m => m.id === id) ?? CEILING_MATERIALS.find(m => m.id === id) ?? SLAB_MATERIALS[0]
+}
+
+/** Door swing quadrant: hinge end × swing side, exactly the four combos a
+ *  real door leaf has. Rendered as the standard plan symbol (leaf + arc). */
+export function doorSwing(swing: 0 | 1 | 2 | 3 | undefined): { hinge: 'left' | 'right'; inward: boolean } {
+  const s = swing ?? 0
+  return { hinge: s % 2 === 0 ? 'left' : 'right', inward: s < 2 }
 }
 
 /** A level/storey in the building. */
@@ -194,6 +262,13 @@ export function draftToStructuralModel(project: DraftProject): StructuralModel {
       if (!modelI || !modelJ) continue
 
       switch (el.type) {
+        case 'door':
+        case 'window':
+        case 'ceiling':
+          // Architectural components — hosted openings and ceiling finishes
+          // are NOT structural members: they ride along as metadata on the
+          // wall (see `openings` below) and never enter the frame.
+          break
         case 'column':
         case 'beam': {
           if (modelI === modelJ) continue  // zero-length member — the solver cannot use it
@@ -251,6 +326,30 @@ export function draftToStructuralModel(project: DraftProject): StructuralModel {
       }
     }
   }
+
+  // Attach hosted doors/windows to their wall as ordered metadata — the
+  // drawing's openings travel with the export (ModelSpace renders solid walls
+  // for now; the geometry is here for the next step, and no old consumer
+  // breaks: the field is optional).
+  for (const level of project.levels.values()) {
+    for (const el of level.elements.values()) {
+      if (el.type !== 'door' && el.type !== 'window') continue
+      if (!el.hostId || el.at === undefined || el.width === undefined) continue
+      const wall = walls.find(w => w.id === el.hostId)
+      if (!wall) continue
+      const length = wallLengthOf(level, el.hostId)
+      if (length === null) continue
+      const list = (wall.openings ??= [])
+      list.push({
+        kind: el.type,
+        t: clampOpeningAt(el.at, el.width, length),
+        w: el.width,
+        h: el.height ?? (el.type === 'door' ? DEFAULT_DOOR.height : DEFAULT_WINDOW.height),
+        sill: el.sill ?? (el.type === 'door' ? DEFAULT_DOOR.sill : DEFAULT_WINDOW.sill),
+      })
+    }
+  }
+  for (const w of walls) w.openings?.sort((a, b) => a.t - b.t)
 
   // Add default supports at the base of ground-level columns
   const groundLevel = Array.from(project.levels.values()).find(l => l.elevation === 0)
@@ -332,6 +431,138 @@ export function deserializeProject(json: string): DraftProject {
 /** Generate a unique ID. */
 export function uid(prefix = 'd'): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+// --- Wall-hosted components (doors, windows) --------------------------------
+
+/** Project a plan point onto a wall's centreline.
+ *  Returns the foot point, its distance `t` (m) from the wall's i-end (NOT
+ *  clamped — callers decide), the wall's length and unit direction, or null
+ *  when the wall or its nodes are missing. */
+export function projectOnWall(
+  wall: DraftElement,
+  nodes: Map<string, DraftNode>,
+  p: { x: number; y: number },
+): { t: number; point: { x: number; y: number }; length: number; ux: number; uy: number } | null {
+  const a = nodes.get(wall.nodes[0])
+  const b = nodes.get(wall.nodes[1])
+  if (!a || !b) return null
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const length = Math.hypot(dx, dy)
+  if (length < 1e-9) return null
+  const ux = dx / length
+  const uy = dy / length
+  const t = (p.x - a.x) * ux + (p.y - a.y) * uy
+  return { t, point: { x: a.x + t * ux, y: a.y + t * uy }, length, ux, uy }
+}
+
+/** Clamp an opening's centre distance so the opening stays inside its host:
+ *  `t` ∈ [w/2, L − w/2]. An opening wider than the wall centres itself. */
+export function clampOpeningAt(t: number, openingWidth: number, wallLength: number): number {
+  const half = openingWidth / 2
+  if (half * 2 >= wallLength) return wallLength / 2
+  return Math.max(half, Math.min(wallLength - half, t))
+}
+
+/** World-space span of a hosted opening along its wall: the two jamb points,
+ *  the wall's plan angle (rad) and the centre point. `nodes` overrides the
+ *  level's joints — the canvas passes its drag-preview view so openings follow
+ *  a wall being dragged. Null when the host, the opening's position or the
+ *  wall's nodes are unusable. */
+export function openingSpan(
+  opening: DraftElement,
+  level: DraftLevel,
+  nodes?: Map<string, DraftNode>,
+): { p1: { x: number; y: number }; p2: { x: number; y: number }; angle: number; centre: { x: number; y: number } } | null {
+  const nm = nodes ?? level.nodes
+  if (!opening.hostId) return null
+  const host = level.elements.get(opening.hostId)
+  if (!host || host.type !== 'wall') return null
+  const proj = projectOnWall(host, nm, { x: 0, y: 0 })
+  if (!proj || opening.at === undefined || opening.width === undefined) return null
+  const a = nm.get(host.nodes[0])
+  if (!a) return null
+  const t = clampOpeningAt(opening.at, opening.width, proj.length)
+  const cx = a.x + t * proj.ux
+  const cy = a.y + t * proj.uy
+  const half = opening.width / 2
+  return {
+    p1: { x: cx - half * proj.ux, y: cy - half * proj.uy },
+    p2: { x: cx + half * proj.ux, y: cy + half * proj.uy },
+    angle: Math.atan2(proj.uy, proj.ux),
+    centre: { x: cx, y: cy },
+  }
+}
+
+/** Create a door or window hosted on a wall, placed at the projection of a
+ *  plan click. Returns null when the click misses every wall (beyond
+ *  WALL_HOST_TOLERANCE) or the host is not a wall — the canvas treats null as
+ *  "nothing to place". `at` is clamped so the opening fits inside the wall. */
+export function createWallOpening(
+  kind: 'door' | 'window',
+  hostId: string | null,
+  t: number,
+  level: DraftLevel,
+  overrides: Partial<Pick<DraftElement, 'width' | 'height' | 'sill' | 'swing'>> = {},
+): DraftElement | null {
+  const host = hostId ? level.elements.get(hostId) : undefined
+  if (!host || host.type !== 'wall') return null
+  const proj = projectOnWall(host, level.nodes, { x: 0, y: 0 })
+  if (!proj) return null
+  const dims = kind === 'door' ? DEFAULT_DOOR : DEFAULT_WINDOW
+  const width = overrides.width ?? dims.width
+  const height = overrides.height ?? dims.height
+  const sill = overrides.sill ?? dims.sill
+  return {
+    id: uid(kind === 'door' ? 'door' : 'win'),
+    type: kind,
+    nodes: [host.nodes[0], host.nodes[1]],   // reference the host's joints for serialization uniformity
+    sectionId: host.sectionId,
+    hostId: hostId ?? undefined,
+    at: clampOpeningAt(t, width, proj.length),
+    width,
+    height,
+    sill,
+    swing: overrides.swing ?? 0,
+  }
+}
+
+/** Delete elements by id — walls take their hosted doors/windows with them
+ *  (Revit warns and deletes dependents) — then drop nodes nothing references
+ *  any more. Returns a NEW level object with fresh Maps; the input is not
+ *  mutated, so React state can flow through `onProjectChange` untouched. */
+export function deleteDraftElements(level: DraftLevel, ids: string[]): DraftLevel {
+  const doomed = new Set(ids)
+  // Cascade: deleting a wall deletes the components hosted in it.
+  for (const el of level.elements.values()) {
+    if (el.hostId && doomed.has(el.hostId)) doomed.add(el.id)
+  }
+  const elements = new Map(level.elements)
+  for (const id of doomed) elements.delete(id)
+  const referenced = new Set<string>()
+  for (const el of elements.values()) {
+    if (el.corners) for (const c of el.corners) referenced.add(c)
+    else {
+      referenced.add(el.nodes[0])
+      referenced.add(el.nodes[1])
+    }
+  }
+  const nodes = new Map(level.nodes)
+  for (const nid of [...nodes.keys()]) {
+    if (!referenced.has(nid)) nodes.delete(nid)
+  }
+  return { ...level, nodes, elements }
+}
+
+/** Plan length of a wall element on a level (m), or null when unresolvable. */
+function wallLengthOf(level: DraftLevel, wallId: string): number | null {
+  const host = level.elements.get(wallId)
+  if (!host || host.type !== 'wall') return null
+  const a = level.nodes.get(host.nodes[0])
+  const b = level.nodes.get(host.nodes[1])
+  if (!a || !b) return null
+  return Math.hypot(b.x - a.x, b.y - a.y)
 }
 
 /** Grid intersection point for snapping. */

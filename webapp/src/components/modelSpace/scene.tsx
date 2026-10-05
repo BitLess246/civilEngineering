@@ -300,12 +300,15 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, axisRotation, s
  */
 const SLAB_FALLBACK_T = 0.125
 
-export function Slab3D({ corners, thickness, selected, shell, deck, style = 'solid', onPick }: {
+export function Slab3D({ corners, thickness, selected, shell, deck, style = 'solid', color, onPick }: {
   corners: THREE.Vector3[]; thickness?: number
   selected: boolean; shell?: boolean; deck?: WoodDeck
   /** See `viewMode`. A floor is the largest thing in the model and the one
    *  that hides most of what is under it, so it wireframes with the rest. */
   style?: SurfaceStyle
+  /** Panel tint override (Drafting3D finish materials). Absent keeps the
+   *  classic concrete blue, and the deck/shell branches ignore it. */
+  color?: string
   onPick: () => void
 }) {
   // The node line of a floor is the TOP of the beams framing into it — see
@@ -435,7 +438,7 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
     <mesh position={[mid.x, mid.y - thick / 2, mid.z]}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
       <boxGeometry args={[sx * 0.96, thick, sz * 0.96]} />
-      <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : '#7ba6d4'}
+      <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : (color ?? '#7ba6d4')}
         transparent opacity={selected ? 0.85 : 0.45} depthWrite={style === 'solid'} />
     </mesh>
   )
