@@ -4,13 +4,17 @@
  *
  * Interaction model (pointer events — ONE code path for mouse, touch, pen):
  *  - Columns place on a tap. Walls/beams complete on the second tap, or by
- *    PRESS-DRAG-RELEASE — the natural gesture on a phone.
- *  - Slabs and ceilings accumulate four corner taps.
+ *    PRESS-DRAG-RELEASE — the natural gesture on a phone. Every drawn end
+ *    AUTO-CONNECTS: inside the snap radius an existing joint wins over the
+ *    grid (green ring), so members weld to the model Revit-style.
+ *  - Slabs and ceilings accumulate four corner taps — each corner snaps to
+ *    joints first, so panels close onto the structure around them.
  *  - Doors/windows tap onto the wall nearest the pointer (host within
  *    WALL_HOST_TOLERANCE), previewed live as the pointer moves.
  *  - SELECT mode: drag an element or joint to MOVE it (drag & drop — the
- *    grabbed point snaps to the grid, neighbours sharing its joints follow);
- *    drag empty space to pan the sheet.
+ *    grabbed point snaps to the grid, neighbours sharing its joints follow;
+ *    dropping a joint ON another joint welds them — every reference is
+ *    rewritten, true auto-connect); drag empty space to pan the sheet.
  *  - Two fingers pinch-zoom + pan in ANY tool; the wheel zooms about the
  *    cursor. Wall bands draw at true thickness so openings read as gaps.
  */
@@ -25,6 +29,9 @@ import {
   openingSpan,
   createWallOpening,
   deleteDraftElements,
+  mergeDraftNodes,
+  canMergeDraftNodes,
+  nearestDraftNode,
   doorSwing,
   resolveFinishMaterial,
   DEFAULT_DOOR,
@@ -49,6 +56,11 @@ interface FloorPlanCanvasProps {
 
 const GRID_SNAP_TOLERANCE = 0.15  // m
 const NODE_REUSE_TOL = 0.02  // m — a tap reuses an existing joint this close
+/** Node auto-connect: a drawn end or dragged joint snaps onto an existing
+ *  joint inside this radius — 14 screen px (fingers are fat), floored at
+ *  0.2 m so a far-zoomed-out plan still welds. Joints outrank the grid. */
+const NODE_SNAP_PX = 14
+const NODE_SNAP_MIN_M = 0.2
 /** Screen px a press-drag must cover before release commits a wall/beam. */
 const DRAW_COMMIT_PX = 8
 /** Screen px a select-drag must cover before it counts as a move, not a tap. */
@@ -116,7 +128,7 @@ function withEditableLevel(project: DraftProject, level: DraftLevel): {
 type Gesture =
   | { mode: 'idle' }
   | { mode: 'draw'; wasDrawing: boolean; startScreen: { x: number; y: number }; movedPx: number }
-  | { mode: 'move'; startWorld: { x: number; y: number }; startScreen: { x: number; y: number }; primary: string; orig: Array<{ id: string; x: number; y: number }>; movedPx: number }
+  | { mode: 'move'; startWorld: { x: number; y: number }; startScreen: { x: number; y: number }; primary: string; orig: Array<{ id: string; x: number; y: number; z: number }>; movedPx: number }
   | { mode: 'moveOpening'; id: string; startScreen: { x: number; y: number }; movedPx: number }
   | { mode: 'pan'; startScreen: { x: number; y: number }; startPan: { x: number; y: number } }
   | { mode: 'pinch'; base: { dist: number; zoom: number; centroid: { x: number; y: number }; pan: { x: number; y: number } } }
@@ -149,6 +161,8 @@ export function FloorPlanCanvas({
   // sliding opening (element id → new centre distance along its host).
   const [nodePreview, setNodePreview] = useState<Map<string, { x: number; y: number }> | null>(null)
   const [openingPreview, setOpeningPreview] = useState<{ id: string; at: number } | null>(null)
+  // The joint a dragged joint would WELD into on release (auto-connect).
+  const [moveSnapTarget, setMoveSnapTarget] = useState<string | null>(null)
   const gestureRef = useRef<Gesture>({ mode: 'idle' })
   const pointersRef = useRef(new Map<number, { x: number; y: number }>())
   // Mirror of the current view for the native (non-React) wheel listener —
@@ -188,6 +202,33 @@ export function FloorPlanCanvas({
     }
     return m
   }, [level.nodes, nodePreview])
+
+  /** Auto-connect radius in world metres — 14 screen px, floored. */
+  const nodeSnapTolerance = useCallback(
+    () => Math.max(NODE_SNAP_MIN_M, NODE_SNAP_PX / (zoom * CANVAS_SCALE)),
+    [zoom],
+  )
+
+  /** Universal snap for anything drawn or dragged: an existing joint FIRST
+   *  (Revit-style auto-connect — a wall ends ON the joint it touches), then
+   *  a grid intersection, else the raw point. `z` restricts candidates to
+   *  one storey (defaults to the level floor, so a wall end never welds to
+   *  a column-top joint a storey up); `exclude` keeps a moving selection
+   *  from snapping onto its own joints. */
+  const snapPoint = useCallback(
+    (world: { x: number; y: number }, opts: { z?: number; exclude?: ReadonlySet<string> } = {})
+      : { x: number; y: number; nodeId: string | null } => {
+      const node = nearestDraftNode(nodesView, world.x, world.y, nodeSnapTolerance(), {
+        z: opts.z ?? level.elevation,
+        zTolerance: 0.01,
+        exclude: opts.exclude,
+      })
+      if (node) return { x: node.x, y: node.y, nodeId: node.id }
+      const g = snapToGrid(world.x, world.y)
+      return g ? { x: g.x, y: g.y, nodeId: null } : { x: world.x, y: world.y, nodeId: null }
+    },
+    [nodesView, nodeSnapTolerance, snapToGrid, level.elevation],
+  )
 
   /** Effective `at` of an opening while it is being slid along its wall. */
   const openingAt = useCallback((el: DraftElement): number | undefined => {
@@ -503,8 +544,10 @@ export function FloorPlanCanvas({
     }
 
     // Rubber band: walls/beams run start → pointer; slabs/ceilings trace the
-    // placed corners so far. Endpoints are WORLD coordinates here.
-    const hoverSnap = hoverPoint ? snapToGrid(hoverPoint.x, hoverPoint.y) ?? hoverPoint : null
+    // placed corners so far. Endpoints are WORLD coordinates here, snapped
+    // through snapPoint so the preview shows exactly what commit will draw.
+    const hoverSnapInfo = hoverPoint ? snapPoint(hoverPoint) : null
+    const hoverSnap = hoverSnapInfo ? { x: hoverSnapInfo.x, y: hoverSnapInfo.y } : null
     if ((drawingTool === 'wall' || drawingTool === 'beam') && drawStart && hoverSnap) {
       ctx.setLineDash([0.2, 0.2])
       ctx.strokeStyle = '#3b82f6'
@@ -528,6 +571,23 @@ export function FloorPlanCanvas({
       chain.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
       ctx.stroke()
       ctx.setLineDash([])
+    }
+
+    /** Green ring — Revit's "this end will weld to this joint" indicator. */
+    const snapRing = (x: number, y: number) => {
+      ctx.beginPath()
+      ctx.arc(x, y, 0.18, 0, Math.PI * 2)
+      ctx.strokeStyle = '#10b981'
+      ctx.lineWidth = 2.5 / (zoom * CANVAS_SCALE)
+      ctx.stroke()
+    }
+    if (hoverSnapInfo?.nodeId) {
+      const tn = nodesView.get(hoverSnapInfo.nodeId)
+      if (tn) snapRing(tn.x, tn.y)
+    }
+    if (moveSnapTarget) {
+      const tn = nodesView.get(moveSnapTarget)
+      if (tn) snapRing(tn.x, tn.y)
     }
 
     // Door/window ghost: the wall that would host the tap, with the clamped
@@ -561,12 +621,14 @@ export function FloorPlanCanvas({
       }
     }
 
-    // Hover snap ring
+    // Hover snap ring — green on a joint (auto-connect), blue on the grid
     if (hoverPoint && !drawingTool && activeTool !== 'door' && activeTool !== 'window') {
-      const snap = snapToGrid(hoverPoint.x, hoverPoint.y)
-      if (snap) {
+      const info = snapPoint(hoverPoint)
+      if (info.nodeId) {
+        snapRing(info.x, info.y)
+      } else if (info.x !== hoverPoint.x || info.y !== hoverPoint.y) {
         ctx.beginPath()
-        ctx.arc(snap.x, snap.y, 0.12, 0, Math.PI * 2)
+        ctx.arc(info.x, info.y, 0.12, 0, Math.PI * 2)
         ctx.strokeStyle = '#3b82f6'
         ctx.lineWidth = 2 / (zoom * CANVAS_SCALE)
         ctx.stroke()
@@ -574,8 +636,8 @@ export function FloorPlanCanvas({
     }
 
     ctx.restore()
-  }, [level, project, pan, zoom, selectedIds, drawingTool, drawStart, slabPts, hoverPoint, snapToGrid,
-      nodesView, openingAt, activeTool, nearestWall, sectionsById])
+  }, [level, project, pan, zoom, selectedIds, drawingTool, drawStart, slabPts, hoverPoint, snapPoint,
+      nodesView, openingAt, activeTool, nearestWall, sectionsById, moveSnapTarget])
   // Draw on every state change and on window resize
   useEffect(() => {
     render()
@@ -604,15 +666,16 @@ export function FloorPlanCanvas({
   }, [activeTool, level, nearestWall, onProjectChange, onSelectionChange, project])
 
   /** One tap of the slab/ceiling corner sequence (existing semantics — every
-   *  tap commits its joint first so the next tap's find-or-create sees it). */
+   *  tap commits its joint first so the next tap's find-or-create sees it).
+   *  Corners snap to existing joints first — panels close onto the structure. */
   const panelCornerTap = useCallback((world: { x: number; y: number }) => {
     const kind = activeTool === 'ceiling' ? 'ceiling' : 'slab'
-    const snap = snapToGrid(world.x, world.y) ?? world
+    const snap = snapPoint(world)
     const edit = withEditableLevel(project, level)
     const pid = findOrCreateNode(edit.nodes, snap.x, snap.y, level.elevation)
     if (drawingTool !== kind) {
       onProjectChange(edit.project)
-      setDrawStart(snap)
+      setDrawStart({ x: snap.x, y: snap.y })
       setSlabPts([pid])
       setDrawingTool(kind)
     } else {
@@ -637,12 +700,14 @@ export function FloorPlanCanvas({
         cancelDrawState()
       }
     }
-  }, [activeMaterialId, activeSectionId, activeTool, cancelDrawState, drawingTool, level, onProjectChange, project, slabPts, snapToGrid])
+  }, [activeMaterialId, activeSectionId, activeTool, cancelDrawState, drawingTool, level, onProjectChange, project, slabPts, snapPoint])
 
-  /** Commit a wall/beam from drawStart to the current snapped point. */
+  /** Commit a wall/beam from drawStart to the current snapped point. Both
+   *  ends went through snapPoint, so an end near an existing joint REUSES
+   *  that joint (find-or-create sees it at distance 0) — members weld. */
   const commitLineElement = useCallback((world: { x: number; y: number }) => {
     if (!drawStart) return
-    const snap = snapToGrid(world.x, world.y) ?? world
+    const snap = snapPoint(world)
     const edit = withEditableLevel(project, level)
     const ni = findOrCreateNode(edit.nodes, drawStart.x, drawStart.y, level.elevation)
     const nj = findOrCreateNode(edit.nodes, snap.x, snap.y, level.elevation)
@@ -658,7 +723,7 @@ export function FloorPlanCanvas({
       onProjectChange(edit.project)
     }
     cancelDrawState()
-  }, [activeSectionId, activeTool, cancelDrawState, drawStart, drawingTool, level, onProjectChange, project, snapToGrid])
+  }, [activeSectionId, activeTool, cancelDrawState, drawStart, drawingTool, level, onProjectChange, project, snapPoint])
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -679,12 +744,15 @@ export function FloorPlanCanvas({
       // A pinch is never a draw/move: drop the previews, keep the taps done.
       setNodePreview(null)
       setOpeningPreview(null)
+      setMoveSnapTarget(null)
       if (drawingTool === 'wall' || drawingTool === 'beam') cancelDrawState()
       return
     }
     if (pointersRef.current.size > 2) return
 
     const world = screenToWorld(e.clientX, e.clientY)
+    // Every new gesture starts with a clean weld target.
+    setMoveSnapTarget(null)
 
     if (activeTool === 'select') {
       const hit = pickAt(world)
@@ -699,7 +767,7 @@ export function FloorPlanCanvas({
         if (n) {
           gestureRef.current = {
             mode: 'move', startWorld: world, startScreen: { x: e.clientX, y: e.clientY }, primary: hit.id,
-            orig: [{ id: hit.id, x: n.x, y: n.y }], movedPx: 0,
+            orig: [{ id: hit.id, x: n.x, y: n.y, z: n.z }], movedPx: 0,
           }
         }
       } else {
@@ -712,7 +780,7 @@ export function FloorPlanCanvas({
           const orig = refs
             .map(id => ({ id, n: nodesView.get(id) }))
             .filter((o): o is { id: string; n: DraftNode } => o.n !== undefined)
-            .map(o => ({ id: o.id, x: o.n.x, y: o.n.y }))
+            .map(o => ({ id: o.id, x: o.n.x, y: o.n.y, z: o.n.z }))
           // the grabbed joint is the snap anchor — nearest of the referenced
           let primary = orig[0]?.id ?? ''
           let bestD = Infinity
@@ -730,7 +798,9 @@ export function FloorPlanCanvas({
     }
 
     if (activeTool === 'column') {
-      const snap = snapToGrid(world.x, world.y) ?? world
+      // The base snaps to the nearest existing joint first — a column dropped
+      // on a corner RISES FROM that corner, not from a new joint beside it.
+      const snap = snapPoint(world)
       const edit = withEditableLevel(project, level)
       const bottom = findOrCreateNode(edit.nodes, snap.x, snap.y, level.elevation)
       const top = findOrCreateNode(edit.nodes, snap.x, snap.y, level.elevation + level.height)
@@ -769,16 +839,17 @@ export function FloorPlanCanvas({
     }
 
     // wall | beam — the press STARTS the gesture; release decides tap-tap vs
-    // press-drag-release (DRAW_COMMIT_PX).
+    // press-drag-release (DRAW_COMMIT_PX). The start snaps to a joint first
+    // (auto-connect) so drawing FROM an existing joint reuses it.
     const wasDrawing = drawingTool === activeTool
-    const snap = snapToGrid(world.x, world.y) ?? world
     if (!wasDrawing) {
-      setDrawStart(snap)
+      const snap = snapPoint(world)
+      setDrawStart({ x: snap.x, y: snap.y })
       setDrawingTool(activeTool as 'wall' | 'beam')
     }
     gestureRef.current = { mode: 'draw', wasDrawing, startScreen: { x: e.clientX, y: e.clientY }, movedPx: 0 }
   }, [activeSectionId, activeTool, cancelDrawState, drawingTool, level, nodesView, onProjectChange,
-      onSelectionChange, pan, panelCornerTap, pickAt, placeOpening, project, screenToWorld, snapToGrid, zoom])
+      onSelectionChange, pan, panelCornerTap, pickAt, placeOpening, project, screenToWorld, snapPoint, zoom])
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     const tracked = pointersRef.current.get(e.pointerId)
@@ -816,12 +887,27 @@ export function FloorPlanCanvas({
       const world = screenToWorld(e.clientX, e.clientY)
       let dx = world.x - g.startWorld.x
       let dy = world.y - g.startWorld.y
-      // snap the GRABBED joint; the rest of the selection follows by the same
-      // delta so relative geometry survives
+      // the grabbed joint is the anchor: it snaps to an existing JOINT first
+      // (auto-connect — dropping it onto another joint welds them on release,
+      // guarded so no element spanning both can collapse), else to the grid;
+      // the rest of the selection follows by the same delta so relative
+      // geometry survives
       const anchor = g.orig.find(o => o.id === g.primary)
       if (anchor) {
-        const snapped = snapToGrid(anchor.x + dx, anchor.y + dy)
-        if (snapped) { dx = snapped.x - anchor.x; dy = snapped.y - anchor.y }
+        const ax = anchor.x + dx
+        const ay = anchor.y + dy
+        const target = nearestDraftNode(nodesView, ax, ay, nodeSnapTolerance(), {
+          z: anchor.z, zTolerance: 0.01, exclude: new Set(g.orig.map(o => o.id)),
+        })
+        if (target && canMergeDraftNodes(level, g.primary, target.id)) {
+          dx = target.x - anchor.x
+          dy = target.y - anchor.y
+          setMoveSnapTarget(target.id)
+        } else {
+          setMoveSnapTarget(null)
+          const snapped = snapToGrid(ax, ay)
+          if (snapped) { dx = snapped.x - anchor.x; dy = snapped.y - anchor.y }
+        }
       }
       const next = new Map<string, { x: number; y: number }>()
       for (const o of g.orig) next.set(o.id, { x: o.x + dx, y: o.y + dy })
@@ -841,7 +927,7 @@ export function FloorPlanCanvas({
       if (!proj || el.width === undefined) return
       setOpeningPreview({ id: g.id, at: clampOpeningAt(proj.t, el.width, proj.length) })
     }
-  }, [level.elements, nodesView, screenToWorld, snapToGrid])
+  }, [level, nodesView, nodeSnapTolerance, screenToWorld, snapToGrid])
 
   const endGesture = useCallback((e: React.PointerEvent<HTMLCanvasElement>, cancelled: boolean) => {
     pointersRef.current.delete(e.pointerId)
@@ -856,6 +942,7 @@ export function FloorPlanCanvas({
       gestureRef.current = { mode: 'idle' }
       setNodePreview(null)
       setOpeningPreview(null)
+      setMoveSnapTarget(null)
       return
     }
 
@@ -881,8 +968,23 @@ export function FloorPlanCanvas({
         const n = edit.nodes.get(id)
         if (n) edit.nodes.set(id, { ...n, x: p.x, y: p.y })
       }
-      onProjectChange(edit.project)
+      let next = edit.project
+      if (moveSnapTarget && moveSnapTarget !== g.primary) {
+        // the drag ended ON another joint: WELD — every reference to the
+        // dropped joint (member ends, panel corners, hosted components) is
+        // rewritten to the target, so the model is truly connected, not just
+        // two dots at the same spot
+        const edited: DraftLevel = { ...level, nodes: edit.nodes, elements: edit.elements }
+        const merged = mergeDraftNodes(edited, new Map([[g.primary, moveSnapTarget]]))
+        const levels = new Map(next.levels)
+        levels.set(level.id, merged)
+        next = { ...next, levels }
+        // the dropped joint no longer exists — keep the survivor selected
+        onSelectionChange([moveSnapTarget])
+      }
+      onProjectChange(next)
       setNodePreview(null)
+      setMoveSnapTarget(null)
       gestureRef.current = { mode: 'idle' }
       return
     }
@@ -901,7 +1003,8 @@ export function FloorPlanCanvas({
     }
 
     gestureRef.current = { mode: 'idle' }
-  }, [activeTool, commitLineElement, level, nodePreview, onProjectChange, openingPreview, project, screenToWorld])
+  }, [activeTool, commitLineElement, level, moveSnapTarget, nodePreview, onProjectChange,
+      onSelectionChange, openingPreview, project, screenToWorld])
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     endGesture(e, false)
@@ -945,6 +1048,7 @@ export function FloorPlanCanvas({
         cancelDrawState()
         setNodePreview(null)
         setOpeningPreview(null)
+        setMoveSnapTarget(null)
       }
     }
     window.addEventListener('keydown', handleKey)
