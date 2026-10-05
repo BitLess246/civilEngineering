@@ -24,11 +24,11 @@ const TOOL_GROUPS: Array<{ label: string; tools: PlanTool[] }> = [
 
 /** Status-bar hint per tool — the one-line contract before the first tap. */
 const TOOL_HINTS: Record<PlanTool, string> = {
-  select: 'Tap to select · drag an element or joint to move it · drag empty space to pan · pinch to zoom',
-  wall: 'Tap two points, or press-drag-release — the wall completes either way',
-  beam: 'Tap two points, or press-drag-release — the beam completes either way',
-  column: 'Tap a grid point to drop a column (bottom here, top one storey up)',
-  slab: 'Tap four corners to close a panel — the material picker sets its finish',
+  select: 'Tap to select · drag an element or joint to move it · drop a joint on another to weld them · pinch to zoom',
+  wall: 'Ends snap to joints & grid (green ring = weld) — tap two points or press-drag-release',
+  beam: 'Ends snap to joints & grid (green ring = weld) — tap two points or press-drag-release',
+  column: 'Tap to drop a column — its base snaps to the nearest joint or grid point',
+  slab: 'Tap four corners — they snap to joints & grid; the material picker sets the finish',
   door: 'Tap a wall — the door hosts on it and swings; drag it later to slide',
   window: 'Tap a wall — the window hosts on it at sill height; drag to slide',
   ceiling: 'Tap four corners of the room — the ceiling plane is finish, not structure',

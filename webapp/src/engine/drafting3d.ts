@@ -202,6 +202,85 @@ export function snapToGrid(x: number, y: number, gridX: number[], gridY: number[
   }
 }
 
+// --- Node auto-connect (Revit-style joint snapping) --------------------------
+
+/** Nearest joint to a plan point within `tolerance` (m) — the auto-connect
+ *  target for a drawn wall/beam end, a panel corner, or a dragged joint.
+ *  `options.z` restricts candidates to one storey (a wall's end on THIS level
+ *  must never weld to a column-top joint a storey up); `options.exclude`
+ *  keeps a moving selection from snapping onto itself. Null when nothing is
+ *  close enough — the caller falls back to grid snap. Pure. */
+export function nearestDraftNode(
+  nodes: Map<string, DraftNode>,
+  x: number,
+  y: number,
+  tolerance: number,
+  options: { z?: number; zTolerance?: number; exclude?: ReadonlySet<string> } = {},
+): DraftNode | null {
+  let best: DraftNode | null = null
+  let bestD = Infinity
+  for (const n of nodes.values()) {
+    if (options.exclude?.has(n.id)) continue
+    if (options.z !== undefined && Math.abs(n.z - options.z) > (options.zTolerance ?? 1e-6)) continue
+    const d = Math.hypot(n.x - x, n.y - y)
+    if (d < bestD) {
+      bestD = d
+      best = n
+    }
+  }
+  return best && bestD <= tolerance ? best : null
+}
+
+/** Whether joint `fromId` may be merged into joint `toId`: never when they
+ *  are the same joint, and never when any element references BOTH — a member
+ *  would collapse to zero length, a slab would lose a corner. Pure. */
+export function canMergeDraftNodes(level: DraftLevel, fromId: string, toId: string): boolean {
+  if (fromId === toId) return false
+  for (const el of level.elements.values()) {
+    const refs = el.corners ?? el.nodes
+    if (refs.includes(fromId) && refs.includes(toId)) return false
+  }
+  return true
+}
+
+/** Merge joints: every element reference to a `from` id (member ends, panel
+ *  corners, hosted components' host-joint copies) is rewritten to its `to`
+ *  id, the from-nodes disappear, and elements that would degenerate — both
+ *  ends on one joint, duplicate corners — are dropped (Revit warns on the
+ *  same operation). Orphaned joints are swept, matching
+ *  `deleteDraftElements`. Returns a NEW level; the input is not mutated, so
+ *  React state can flow through `onProjectChange` untouched. */
+export function mergeDraftNodes(level: DraftLevel, mapping: ReadonlyMap<string, string>): DraftLevel {
+  const nodes = new Map(level.nodes)
+  for (const from of mapping.keys()) nodes.delete(from)
+  const remap = (ref: string) => mapping.get(ref) ?? ref
+  const elements = new Map<string, DraftElement>()
+  for (const [id, el] of level.elements) {
+    const next: DraftElement = {
+      ...el,
+      nodes: [remap(el.nodes[0]), remap(el.nodes[1])] as [string, string],
+      corners: el.corners ? (el.corners.map(remap) as [string, string, string, string]) : undefined,
+    }
+    if (next.nodes[0] === next.nodes[1]) continue               // zero-length member
+    if (next.corners && new Set(next.corners).size !== 4) continue  // collapsed panel
+    elements.set(id, next)
+  }
+  // Sweep joints nothing references any more (an element may have been
+  // dropped above, orphaning its surviving end).
+  const referenced = new Set<string>()
+  for (const el of elements.values()) {
+    if (el.corners) for (const c of el.corners) referenced.add(c)
+    else {
+      referenced.add(el.nodes[0])
+      referenced.add(el.nodes[1])
+    }
+  }
+  for (const nid of [...nodes.keys()]) {
+    if (!referenced.has(nid)) nodes.delete(nid)
+  }
+  return { ...level, nodes, elements }
+}
+
 /** Convert DraftProject to StructuralModel for ModelSpace.
  *
  *  Coordinate convention of the exported model matches ModelSpace's: x = plan
