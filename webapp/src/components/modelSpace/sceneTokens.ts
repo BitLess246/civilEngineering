@@ -77,6 +77,51 @@ export function levelDrop(role: string, depth: number, a: THREE.Vector3, b: THRE
   return depth / 2
 }
 
+// ── Solid walls ──────────────────────────────────────────────────────────────
+/**
+ * How far a solid (architectural) wall's top face rises ABOVE its carrying
+ * member's node line, m.
+ *
+ * The floor above is drawn as a slab hanging below that same node line, so a
+ * wall whose top face sat exactly on it would put two coplanar faces at the
+ * same depth — classic z-fighting shimmer along every wall/slab junction.
+ * Two millimetres of proud wall kills the coincidence and is invisible at
+ * building scale; it reads the way Revit's plan shows a wall cut at a level.
+ */
+export const WALL_TOP_LIFT_M = 0.002
+
+/**
+ * The 8 corners of a wall drawn as a SOLID prism, given its four outline
+ * corners (top-i, top-j, bottom-i, bottom-j) and thickness in m.
+ *
+ * The prism is centred on the outline plane — half the thickness to each side
+ * along the wall's horizontal normal — so a solid wall lands exactly where the
+ * ghosted plane used to. `liftTop` raises only the two top corners (see
+ * WALL_TOP_LIFT_M). Works for diagonal walls: the normal is `dir × up`, which
+ * stays horizontal and perpendicular to the wall whatever the outline does.
+ * Returns corners ordered (bA−, bB−, tB−, tA−, bA+, bB+, tB+, tA+) — the −/+
+ * pairs are the two faces, which is the order the box indexing in Wall3D
+ * expects.
+ */
+export function wallPrismCorners(
+  tA: THREE.Vector3, tB: THREE.Vector3, bA: THREE.Vector3, bB: THREE.Vector3,
+  thickness: number, liftTop: number,
+): THREE.Vector3[] {
+  const dir = new THREE.Vector3().subVectors(tB, tA).normalize()
+  const up = new THREE.Vector3().subVectors(tA, bA).normalize()
+  // horizontal normal — cross with up keeps it perpendicular to the wall and
+  // flat in plan even when the outline is diagonal
+  const n = new THREE.Vector3().crossVectors(dir, up).normalize()
+  const half = Math.max(1e-4, thickness / 2)
+  const tAl = tA.clone(); tAl.y += liftTop
+  const tBl = tB.clone(); tBl.y += liftTop
+  const off = (p: THREE.Vector3, s: number) => p.clone().addScaledVector(n, s * half)
+  return [
+    off(bA, -1), off(bB, -1), off(tBl, -1), off(tAl, -1),
+    off(bA, +1), off(bB, +1), off(tBl, +1), off(tAl, +1),
+  ]
+}
+
 // ── Member force diagrams (BMD / SFD / axial / torsion) ─────────────────────
 export const DIAG_COLOR: Record<DiagramComp, string> = {
   Mz: '#d62728', My: '#ea580c', Vy: '#1f77b4', Vz: '#0e7490', N: '#7c3aed', T: '#b45309',

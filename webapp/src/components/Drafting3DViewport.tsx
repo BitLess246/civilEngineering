@@ -12,6 +12,13 @@
  * the storey top in their finish colour, and slabs tint by their material.
  * Doors/windows/ceilings are NOT in the structural model — the viewport reads
  * them from the draft levels directly, which is also why selection works.
+ *
+ * Walls render as the ARCHITECTURAL SOLID (Wall3D's solid mode): opaque, at
+ * their real thickness, click-to-pick. The conversion still idealises each
+ * wall as a carrying member at its top — that is how the frame export carries
+ * the wall's self-weight — but this viewport HIDES those members: in a
+ * drafting view a beam box capping every wall is idealisation noise, not
+ * building. ModelSpace keeps them; that is the structural reading.
  */
 
 import { useMemo } from 'react'
@@ -19,6 +26,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import type { DraftProject, DraftLevel, DraftElement } from '../engine/drafting3d'
+import type { RectSection } from '../engine/model'
 import { draftToStructuralModel, clampOpeningAt, resolveFinishMaterial, projectOnWall } from '../engine/drafting3d'
 import { Member3D, Nodes3D, Slab3D, Wall3D, GridBubbles3D } from './modelSpace/scene'
 
@@ -42,10 +50,14 @@ function worldOf(x: number, yPlan: number, zElev: number): THREE.Vector3 {
 }
 
 /** One wall-hosted door or window: a frame box plus the leaf/glazing panel,
- *  centred on the host wall's plane at the opening's clamped position. */
-function Opening3D({ el, level, selected, onPick }: {
+ *  centred on the host wall's plane at the opening's clamped position. The
+ *  frame is deeper than its host wall — a casing proud of the solid wall on
+ *  both faces, the way a real frame reads — since the wall itself no longer
+ *  hides anything. */
+function Opening3D({ el, level, sections, selected, onPick }: {
   el: DraftElement
   level: DraftLevel
+  sections: Map<string, RectSection>
   selected: boolean
   onPick: () => void
 }) {
@@ -65,21 +77,24 @@ function Opening3D({ el, level, selected, onPick }: {
     const centre = worldOf(cx, cy, a.z + sill + el.height / 2)
     // rotation mapping +X onto the wall's plan direction in model coords
     const rotationY = Math.atan2(-(b.y - a.y), b.x - a.x)
-    return { centre, rotationY, width: el.width, height: el.height, kind: el.type }
-  }, [el, level])
+    // the host wall's thickness (section h) sets the frame's depth — the
+    // casing must clear the solid wall to be seen at all
+    const sec = sections.get(host.sectionId)
+    const wallT = sec ? sec.h / 1000 : 0.2
+    return { centre, rotationY, width: el.width, height: el.height, kind: el.type, frameT: Math.max(0.12, wallT + 0.04) }
+  }, [el, level, sections])
 
   if (!geo) return null
   const panelT = 0.06   // leaf/glazing thickness, m
-  const frameT = 0.12   // frame depth — proud of any wall we draw (≤ 0.3 m)
   const tint = selected ? SEL_COLOR : geo.kind === 'door' ? DOOR_COLOR : GLASS_COLOR
   return (
     <group position={geo.centre} rotation={[0, geo.rotationY, 0]} onClick={(e) => { e.stopPropagation(); onPick() }}>
       {/* frame: a slightly larger, shallower box behind the panel */}
       <mesh>
-        <boxGeometry args={[geo.width + 0.08, geo.height + 0.08, frameT]} />
+        <boxGeometry args={[geo.width + 0.08, geo.height + 0.08, geo.frameT]} />
         <meshStandardMaterial color={selected ? SEL_COLOR : FRAME_COLOR} />
       </mesh>
-      <mesh position={[0, 0, frameT / 2 + panelT / 2 + 0.001]}>
+      <mesh position={[0, 0, geo.frameT / 2 + panelT / 2 + 0.001]}>
         <boxGeometry args={[geo.width, geo.height, panelT]} />
         <meshStandardMaterial
           color={tint}
@@ -161,6 +176,10 @@ export function Drafting3DViewport({ project, selectedIds, onSelect, style }: Dr
    *  element lives on (openings/ceilings resolve their geometry per level). */
   const levelsList = useMemo(() => Array.from(project.levels.values()), [project])
 
+  /** Members that exist only to CARRY a wall (the exported frame's self-weight
+   *  path) — hidden here, drawn by the wall itself instead. */
+  const wallMemberIds = useMemo(() => new Set((model.walls ?? []).map(w => w.member)), [model])
+
   const slabTint = useMemo(() => {
     const tints = new Map<string, string>()
     for (const lvl of levelsList) {
@@ -191,8 +210,13 @@ export function Drafting3DViewport({ project, selectedIds, onSelect, style }: Dr
           minDistance={2}
           maxDistance={50}
         />
-        {/* Members — solid, drawn to their section, amber when selected */}
+        {/* Members — solid, drawn to their section, amber when selected.
+            EXCEPT the walls' carrying members: each wall exports a beam at its
+            top (the self-weight path), and drawing it caps every wall with a
+            beam box. The wall below renders as the solid; the idealisation
+            stays in the export where it belongs. */}
         {model.members.map((m) => {
+          if (wallMemberIds.has(m.id)) return null
           const a = nodePos.get(m.i)
           const b = nodePos.get(m.j)
           if (!a || !b) return null
@@ -225,7 +249,8 @@ export function Drafting3DViewport({ project, selectedIds, onSelect, style }: Dr
           )
         })}
         {/* Walls hang one full storey below their carrying member's node line —
-            exactly the storey the drafted wall closes */}
+            exactly the storey the drafted wall closes — and render as the
+            architectural solid: opaque, real thickness, click selects the wall */}
         {(model.walls ?? []).map((w) => {
           const m = model.members.find(mm => mm.id === w.member)
           const tA = m && nodePos.get(m.i)
@@ -240,6 +265,10 @@ export function Drafting3DViewport({ project, selectedIds, onSelect, style }: Dr
               bA={tA.clone().add(drop)}
               bB={tB.clone().add(drop)}
               shear={w.shearWall}
+              solid
+              thicknessM={w.thickness / 1000}
+              selected={selectedIds.includes(w.id)}
+              onPick={() => onSelect?.(w.id)}
             />
           )
         })}
@@ -252,6 +281,7 @@ export function Drafting3DViewport({ project, selectedIds, onSelect, style }: Dr
                 key={el.id}
                 el={el}
                 level={lvl}
+                sections={project.sections}
                 selected={selectedIds.includes(el.id)}
                 onPick={() => onSelect?.(el.id)}
               />
