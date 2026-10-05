@@ -4,7 +4,7 @@
  * Units: coordinates m; sections mm; loads kN, kN/m, kPa.
  */
 
-import type { StructuralModel, Node, Member, Plate, RectSection, Wall, SlabOpening, ModelLoad, NodeSupport } from './model'
+import type { StructuralModel, Node, Member, Plate, RectSection, Wall, ModelLoad, NodeSupport } from './model'
 
 /** A draggable point on the 2D canvas (floor plan view). */
 export interface DraftNode {
@@ -107,7 +107,9 @@ export function createDraftProject(name = 'Untitled'): DraftProject {
 export function addLevel(project: DraftProject, height = 3.5): DraftLevel {
   const highest = Math.max(...Array.from(project.levels.values()).map(l => l.elevation))
   const newElevation = highest + (project.levels.size === 1 ? height : 3.5)
-  const levelId = `level-${Date.now()}`
+  // uid(), not Date.now() alone: two calls inside the same millisecond must
+  // not collide — a collision would silently overwrite an existing level.
+  const levelId = uid('level')
   const level: DraftLevel = {
     id: levelId,
     name: `Level ${project.levels.size + 1}`,
@@ -132,7 +134,18 @@ export function snapToGrid(x: number, y: number, gridX: number[], gridY: number[
   }
 }
 
-/** Convert DraftProject to StructuralModel for ModelSpace. */
+/** Convert DraftProject to StructuralModel for ModelSpace.
+ *
+ *  Coordinate convention of the exported model matches ModelSpace's: x = plan
+ *  X, y = HEIGHT (the level elevation a node stands at), z = plan Y — the
+ *  draft's (y, z) swap on the way out, which is what puts the drafting plan
+ *  flat on the X–Z ground plane with storeys stacking along +y the way
+ *  `GridBubbles3D` and the rest of the scene read it.
+ *
+ *  Nodes that land on the same spot (within 1 mm) merge into one model node —
+ *  a column drawn at a grid intersection rises from this level's joint to the
+ *  next level's, and those two joints must be THE SAME node or the floors
+ *  never connect. */
 export function draftToStructuralModel(project: DraftProject): StructuralModel {
   const nodes: Node[] = []
   const members: Member[] = []
@@ -141,21 +154,37 @@ export function draftToStructuralModel(project: DraftProject): StructuralModel {
   const sections = Array.from(project.sections.values())
   const loads: ModelLoad[] = []
   const supports: NodeSupport[] = []
+  const storeys = Array.from(project.levels.values()).map(l => ({ id: l.id, name: l.name, elevation: l.elevation }))
 
-  let nodeId = 0
   const draftNodeToModelNode = new Map<string, string>()
+  const modelNodeByKey = new Map<string, string>()
+  let nodeCount = 0
+  const modelNodeId = (dn: DraftNode): string => {
+    // 1 mm plan/elevation tolerance: coincident joints share a model node.
+    const key = `${dn.x.toFixed(3)}|${dn.y.toFixed(3)}|${dn.z.toFixed(3)}`
+    const seen = modelNodeByKey.get(key)
+    if (seen) {
+      draftNodeToModelNode.set(dn.id, seen)
+      return seen
+    }
+    const id = `n${nodeCount++}`
+    modelNodeByKey.set(key, id)
+    draftNodeToModelNode.set(dn.id, id)
+    // draft (x, y-plan, z-elevation) → model (x, y-up, z-plan)
+    nodes.push({ id, x: dn.x, y: dn.z, z: dn.y })
+    return id
+  }
+
+  // Register every draft node first, so element order never decides which
+  // joints exist (a level's elements may reference any earlier level's nodes).
+  for (const level of project.levels.values()) {
+    for (const dn of level.nodes.values()) modelNodeId(dn)
+  }
 
   // Process each level
   for (const level of project.levels.values()) {
-    // Convert nodes
-    for (const [id, dn] of level.nodes) {
-      const modelId = `n${nodeId++}`
-      draftNodeToModelNode.set(id, modelId)
-      nodes.push({ id: modelId, x: dn.x, y: dn.y, z: dn.z })
-    }
-
     // Convert elements
-    for (const [id, el] of level.elements) {
+    for (const el of level.elements.values()) {
       const section = sections.find(s => s.id === el.sectionId)
       if (!section) continue
 
@@ -166,38 +195,54 @@ export function draftToStructuralModel(project: DraftProject): StructuralModel {
 
       switch (el.type) {
         case 'column':
-        case 'beam':
-        case 'brace':
-        case 'girder': {
+        case 'beam': {
+          if (modelI === modelJ) continue  // zero-length member — the solver cannot use it
           members.push({
-            id: `m${members.length}`,
+            id: el.id,                    // draft id kept: selection sync + traceability
             i: modelI,
             j: modelJ,
-            role: el.type === 'column' ? 'column' : el.type === 'girder' ? 'girder' : el.type === 'brace' ? 'brace' : 'beam',
+            role: el.type,
             section: el.sectionId,
           })
           break
         }
         case 'wall': {
+          // A wall drawn on this level's plan stands on the floor and rises a
+          // full storey. ModelSpace walls hang BELOW their carrying member
+          // (Wall3D draws from the member's node line down `height`), so the
+          // carrying member goes at the wall's TOP: two extra joints one storey
+          // up, merged with the next level's grid when the user draws it.
+          const tops = el.nodes.map(nid => {
+            const dn = level.nodes.get(nid)
+            if (!dn) return null
+            return modelNodeId({ ...dn, z: dn.z + level.height })
+          })
+          if (tops.some(t => !t) || tops[0] === tops[1]) break
+          members.push({
+            id: el.id,
+            i: tops[0]!,
+            j: tops[1]!,
+            role: 'beam',
+            section: el.sectionId,
+          })
           walls.push({
-            id: `w${walls.length}`,
-            member: modelI,  // wall attached to first node's member
-            height: section.h / 1000,
-            thickness: section.b / 1000,
-            shearWall: el.role === 'shearWall',
+            id: el.id,
+            member: el.id,
+            height: level.height,
+            thickness: section.h,          // mm — the wall section's h IS its thickness
+            shearWall: false,
           })
           break
         }
         case 'slab': {
           if (el.corners) {
-            const [c0, c1, c2, c3] = el.corners
-            const corners = [c0, c1, c2, c3].map(c => draftNodeToModelNode.get(c)!).filter(Boolean)
+            const corners = el.corners.map(c => draftNodeToModelNode.get(c)!).filter(Boolean)
             if (corners.length === 4) {
               plates.push({
-                id: `p${plates.length}`,
+                id: el.id,
                 corners: corners as [string, string, string, string],
                 role: 'slab',
-                thickness: section.h,
+                thickness: section.h,      // mm
               })
             }
           }
@@ -207,20 +252,22 @@ export function draftToStructuralModel(project: DraftProject): StructuralModel {
     }
   }
 
-  // Add default supports at ground level columns
+  // Add default supports at the base of ground-level columns
   const groundLevel = Array.from(project.levels.values()).find(l => l.elevation === 0)
   if (groundLevel) {
-    for (const [id, el] of groundLevel.elements) {
+    for (const el of groundLevel.elements.values()) {
       if (el.type === 'column') {
-        const modelI = draftNodeToModelNode.get(el.nodes[0])
-        const modelJ = draftNodeToModelNode.get(el.nodes[1])
-        if (modelI) supports.push({ node: modelI, fixity: { x: true, y: true, z: true, rx: true, ry: true, rz: true } })
-        if (modelJ) supports.push({ node: modelJ, fixity: { x: true, y: true, z: true, rx: true, ry: true, rz: true } })
+        // el.nodes[0] is the column's BOTTOM joint (the canvas always writes
+        // [bottom, top]); the top joint is the next level's business.
+        const base = draftNodeToModelNode.get(el.nodes[0])
+        if (base) supports.push({ node: base, fixity: 'fixed' })
       }
     }
   }
 
   return {
+    version: 1,
+    name: project.name,
     nodes,
     members,
     plates,
@@ -228,10 +275,7 @@ export function draftToStructuralModel(project: DraftProject): StructuralModel {
     sections,
     loads,
     supports,
-    // Defaults for analysis
-    concreteClass: 'C28/35',
-    steelGrade: 'S420',
-    cover: 40,
+    storeys,
   }
 }
 
@@ -240,7 +284,7 @@ export function serializeProject(project: DraftProject): string {
   const serializable = {
     id: project.id,
     name: project.name,
-    levels: Array.from(project.levels.entries()).map(([id, l]) => ({
+    levels: Array.from(project.levels.entries()).map(([, l]) => ({
       ...l,
       nodes: Array.from(l.nodes.entries()),
       elements: Array.from(l.elements.entries()),
@@ -253,9 +297,22 @@ export function serializeProject(project: DraftProject): string {
   return JSON.stringify(serializable, null, 2)
 }
 
+/** The JSON shape serializeProject writes (Maps flattened to entry arrays;
+ *  each level keeps its id INSIDE the object — the entries' keys were the
+ *  level ids, and the spread carries them through). */
+interface SerializedProject {
+  id: string
+  name: string
+  levels: Array<DraftLevel & { nodes: [string, DraftNode][]; elements: [string, DraftElement][] }>
+  sections: [string, RectSection][]
+  activeLevelId: string
+  gridX: number[]
+  gridY: number[]
+}
+
 /** Load from JSON. */
 export function deserializeProject(json: string): DraftProject {
-  const data = JSON.parse(json)
+  const data = JSON.parse(json) as SerializedProject
   const project: DraftProject = {
     id: data.id,
     name: data.name,
@@ -263,8 +320,8 @@ export function deserializeProject(json: string): DraftProject {
       ...l,
       nodes: new Map(l.nodes),
       elements: new Map(l.elements),
-    }])) as Map<string, DraftLevel>,
-    sections: new Map(data.sections) as Map<string, RectSection>,
+    }])),
+    sections: new Map(data.sections),
     activeLevelId: data.activeLevelId,
     gridX: data.gridX,
     gridY: data.gridY,

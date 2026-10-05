@@ -921,12 +921,14 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'ΔKE and W_net', what: 'Change in kinetic energy, net work, and the result variable, all with substitutions shown.' },
         ],
       },
-{
-    id: 'dynamics-impulse',
-    title: 'Impulse–Momentum',
-    controls: [
-      { kind: 'field', name: 'Impulse or final velocity', what: 'Mass, initial velocity, and either impulse (or F_avg and t) or final velocity.' },
-      { kind: 'output', name: 'Δp and I', what: 'Change in momentum, impulse, and the result variable with the substitution.' },
+      {
+        id: 'dynamics-impulse',
+        title: 'Impulse–Momentum',
+        controls: [
+          { kind: 'field', name: 'Impulse or final velocity', what: 'Mass, initial velocity, and either impulse (or F_avg and t) or final velocity.' },
+          { kind: 'output', name: 'Δp and I', what: 'Change in momentum, impulse, and the result variable with the substitution.' },
+        ],
+      },
     ],
   },
   {
@@ -958,5 +960,4 @@ export const FIELD_TOOLS: DocTool[] = [
     ],
   },
 ]
-}
 

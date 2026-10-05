@@ -4,30 +4,14 @@
  */
 
 import { useState, useCallback, useMemo } from 'react'
-import { Drafting3DViewport } from './Drafting3DViewport'
-import { FloorPlanCanvas } from './FloorPlanCanvas'
-import { ReportControls } from './ReportControls'
-import { Card, Num, Pick } from './qty'
+import { Drafting3DViewport } from '../components/Drafting3DViewport'
+import { FloorPlanCanvas } from '../components/FloorPlanCanvas'
 import { useDraftProject } from '../lib/drafting3dSession'
-import type { DraftProject, DraftLevel, RectSection } from '../engine/drafting3d'
-
-const DEFAULT_SECTIONS: Array<{ id: string; name: string; b: number; h: number }> = [
-  { id: 'beam-300x500', name: 'Beam 300×500', b: 300, h: 500 },
-  { id: 'beam-300x600', name: 'Beam 300×600', b: 300, h: 600 },
-  { id: 'beam-350x600', name: 'Beam 350×600', b: 350, h: 600 },
-  { id: 'beam-400x700', name: 'Beam 400×700', b: 400, h: 700 },
-  { id: 'col-400x400', name: 'Column 400×400', b: 400, h: 400 },
-  { id: 'col-500x500', name: 'Column 500×500', b: 500, h: 500 },
-  { id: 'col-600x600', name: 'Column 600×600', b: 600, h: 600 },
-  { id: 'slab-150', name: 'Slab 150', b: 1000, h: 150 },
-  { id: 'slab-200', name: 'Slab 200', b: 1000, h: 200 },
-  { id: 'slab-250', name: 'Slab 250', b: 1000, h: 250 },
-  { id: 'wall-200', name: 'Wall 200', b: 1000, h: 200 },
-  { id: 'wall-250', name: 'Wall 250', b: 1000, h: 250 },
-]
+import type { DraftProject } from '../engine/drafting3d'
+import { addLevel } from '../engine/drafting3d'
 
 export default function Drafting3D() {
-  const { project, setProject, saveProject, exportToModelSpace } = useDraftProject()
+  const { project, setProject, exportToModelSpace } = useDraftProject()
   const [activeTool, setActiveTool] = useState<'select' | 'wall' | 'beam' | 'column' | 'slab' | 'grid'>('select')
   const [activeSectionId, setActiveSectionId] = useState('col-400x400')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -35,15 +19,30 @@ export default function Drafting3D() {
   const [showSectionPanel, setShowSectionPanel] = useState(false)
   const [showLevelPanel, setShowLevelPanel] = useState(false)
 
-  const level = useMemo(() => project.levels.get(project.activeLevelId), [project, project.activeLevelId])!
+  const level = useMemo(() => project.levels.get(project.activeLevelId)!, [project])
+  const sections = useMemo(() => Array.from(project.sections.values()), [project.sections])
 
-  const handleProjectChange = useCallback((newProject: typeof project) => {
+  const handleProjectChange = useCallback((newProject: DraftProject) => {
     setProject(newProject)
   }, [setProject])
 
   const handleSelectionChange = useCallback((ids: string[]) => {
     setSelectedIds(ids)
   }, [])
+
+  const handleSelect3D = useCallback((id: string) => {
+    setSelectedIds(prev => (prev.length === 1 && prev[0] === id ? [] : [id]))
+  }, [])
+
+  const activateLevel = useCallback((id: string) => {
+    setProject({ ...project, activeLevelId: id })
+  }, [project, setProject])
+
+  const handleAddLevel = useCallback(() => {
+    const clone: DraftProject = { ...project, levels: new Map(project.levels) }
+    addLevel(clone)
+    setProject(clone)
+  }, [project, setProject])
 
   const handleExportModelSpace = useCallback(() => {
     const model = exportToModelSpace(project)
@@ -57,7 +56,7 @@ export default function Drafting3D() {
   }, [project, exportToModelSpace])
 
   return (
-    <div className="h-screen w-full flex flex-col bg-gray-50">
+    <div className="h-screen w-full flex flex-col bg-sheet">
       {/* Top Toolbar */}
       <header className="bg-white border-b border-hairline shadow-sm z-10">
         <div className="mx-auto max-w-full px-4 py-3 flex flex-wrap items-center gap-4">
@@ -137,7 +136,7 @@ export default function Drafting3D() {
             <button onClick={() => setShowSectionPanel(false)} className="text-muted hover:text-ink">×</button>
           </div>
           <div className="p-4 space-y-3 max-h-[calc(100vh-100px)] overflow-auto">
-{DEFAULT_SECTIONS.map(sec => (
+            {sections.map(sec => (
               <button
                 key={sec.id}
                 onClick={() => setActiveSectionId(sec.id)}
@@ -165,7 +164,7 @@ export default function Drafting3D() {
             {Array.from(project.levels.values()).map(l => (
               <button
                 key={l.id}
-                onClick={() => { /* activate level */ }}
+                onClick={() => activateLevel(l.id)}
                 className={`w-full text-left p-3 rounded-lg border transition ${
                   project.activeLevelId === l.id
                     ? 'bg-brand-tint border-brand'
@@ -177,7 +176,7 @@ export default function Drafting3D() {
               </button>
             ))}
             <button
-              onClick={() => { /* add level */ }}
+              onClick={handleAddLevel}
               className="w-full p-3 rounded-lg border border-dashed border-hairline text-muted hover:border-brand hover:text-brand transition"
             >
               + Add Level
@@ -195,6 +194,7 @@ export default function Drafting3D() {
               level={level}
               activeTool={activeTool}
               activeSectionId={activeSectionId}
+              selectedIds={selectedIds}
               onProjectChange={handleProjectChange}
               onSelectionChange={handleSelectionChange}
             />
@@ -203,7 +203,7 @@ export default function Drafting3D() {
 
         {viewMode === '3d' && (
           <div className="h-full w-full">
-            <Drafting3DViewport project={project} level={level} selectedIds={selectedIds} />
+            <Drafting3DViewport project={project} selectedIds={selectedIds} onSelect={handleSelect3D} />
           </div>
         )}
 
@@ -215,12 +215,13 @@ export default function Drafting3D() {
                 level={level}
                 activeTool={activeTool}
                 activeSectionId={activeSectionId}
+                selectedIds={selectedIds}
                 onProjectChange={handleProjectChange}
                 onSelectionChange={handleSelectionChange}
               />
             </div>
             <div className="w-1/2 h-full">
-              <Drafting3DViewport project={project} level={level} selectedIds={selectedIds} />
+              <Drafting3DViewport project={project} selectedIds={selectedIds} onSelect={handleSelect3D} />
             </div>
           </div>
         )}
