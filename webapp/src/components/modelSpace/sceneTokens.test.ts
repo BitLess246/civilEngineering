@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { memberColor, ROLE_COLOR, SEL } from './sceneTokens'
+import * as THREE from 'three'
+import { memberColor, ROLE_COLOR, SEL, wallPrismCorners, WALL_TOP_LIFT_M } from './sceneTokens'
 
 describe('memberColor — the solid and the skeleton have to agree', () => {
   // This is shared rather than repeated because the wireframe draws the same
@@ -47,5 +48,56 @@ describe('memberColor — the solid and the skeleton have to agree', () => {
     memberColor('beam', false, 1, 'wood')
     expect(ROLE_COLOR.beam).toBe(before)
     expect(memberColor('beam', false, 0)).toBe(before)
+  })
+})
+
+describe('wallPrismCorners — the solid wall sits where the ghost plane was', () => {
+  // The drafting viewport swaps the ghosted wall quad for a solid prism. The
+  // prism has to be centred on that quad (half thickness each side), rise the
+  // wall's full height, and lift its TOP face clear of the slab node line —
+  // coplanar faces there would z-fight along every wall/slab junction.
+  const t = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z)
+
+  it('centres the thickness on the outline plane of a straight wall', () => {
+    const c = wallPrismCorners(t(0, 3, 0), t(4, 3, 0), t(0, 0, 0), t(4, 0, 0), 0.2, 0)
+    expect(c).toHaveLength(8)
+    // both faces land at z = ±0.1 for a 200 mm wall along X
+    const zs = new Set(c.map(p => +p.z.toFixed(6)))
+    expect(zs).toEqual(new Set([-0.1, 0.1]))
+    // the outline plane (z = 0) stays the prism's mid-plane
+    const midZ = c.reduce((s, p) => s + p.z, 0) / 8
+    expect(midZ).toBeCloseTo(0, 10)
+  })
+
+  it('keeps the bottom at its elevation and lifts only the top corners', () => {
+    const c = wallPrismCorners(t(0, 3, 0), t(4, 3, 0), t(0, 0, 0), t(4, 0, 0), 0.2, WALL_TOP_LIFT_M)
+    const ys = c.map(p => +p.y.toFixed(6))
+    // corners 0,1 (bottom −) and 4,5 (bottom +) stay at y = 0
+    expect(ys[0]).toBe(0); expect(ys[1]).toBe(0); expect(ys[4]).toBe(0); expect(ys[5]).toBe(0)
+    // corners 2,3 (top −) and 6,7 (top +) carry the lift
+    expect(ys[2]).toBeCloseTo(3 + WALL_TOP_LIFT_M, 10)
+    expect(ys[3]).toBeCloseTo(3 + WALL_TOP_LIFT_M, 10)
+    expect(ys[6]).toBeCloseTo(3 + WALL_TOP_LIFT_M, 10)
+    expect(ys[7]).toBeCloseTo(3 + WALL_TOP_LIFT_M, 10)
+  })
+
+  it('stays perpendicular and horizontal for a 45° diagonal wall', () => {
+    // wall from (0,·,0) to (3,·,3): dir ∝ (1,0,1); the normal must be
+    // horizontal, perpendicular to dir, and unit-length
+    const c = wallPrismCorners(t(0, 2.8, 0), t(3, 2.8, 3), t(0, 0, 0), t(3, 0, 3), 0.2, 0)
+    const a = c[0], b = c[4]        // the two ± faces at the same outline corner
+    const n = a.clone().sub(b).normalize()
+    expect(n.y).toBeCloseTo(0, 10)                       // horizontal
+    const dir = new THREE.Vector3(3, 0, 3).normalize()
+    expect(Math.abs(n.dot(dir))).toBeCloseTo(0, 10)      // perpendicular to the wall
+    expect(n.length()).toBeCloseTo(1, 10)
+    expect(a.distanceTo(b)).toBeCloseTo(0.2, 10)         // full thickness across
+  })
+
+  it('keeps a usable thickness even when asked for a degenerate one', () => {
+    // a 0-thickness call must not collapse the prism into the plane — the
+    // guard floors half-thickness at 0.1 mm
+    const c = wallPrismCorners(t(0, 3, 0), t(4, 3, 0), t(0, 0, 0), t(4, 0, 0), 0, 0)
+    expect(c[0].distanceTo(c[4])).toBeGreaterThanOrEqual(1.9e-4)
   })
 })

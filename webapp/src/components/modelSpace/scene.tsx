@@ -23,7 +23,7 @@ import { memberDiagramRibbon, type DiagramComp } from '../../engine/memberDiagra
 import { footingPrism } from '../../engine/footingLayout'
 import { shapeByName, effectiveSection } from '../../engine/aiscSections'
 import { buildSectionShapes } from '../../lib/sectionShapes3d'
-import { SEL, LOAD_COLOR, levelDrop, memberColor, DIAG_COLOR, UP, TRIB_COLOR, slabTributaryPolys, type TribKind } from './sceneTokens'
+import { SEL, LOAD_COLOR, levelDrop, memberColor, DIAG_COLOR, UP, TRIB_COLOR, slabTributaryPolys, wallPrismCorners, WALL_TOP_LIFT_M, type TribKind } from './sceneTokens'
 
 /**
  * The EDGES of the mesh this sits inside, drawn only in wireframe.
@@ -662,8 +662,30 @@ export function BaseHardware3D({ p, plate, grout, rods, straps, postD, rotDeg = 
   )
 }
 
-export function Wall3D({ tA, tB, bA, bB, shear }: { tA: THREE.Vector3; tB: THREE.Vector3; bA: THREE.Vector3; bB: THREE.Vector3; shear: boolean }) {
-  const { fill, x1, x2 } = useMemo(() => {
+/**
+ * A wall between two joints.
+ *
+ * TWO renderings, one component:
+ *  - GHOST (default): the ModelSpace look — a translucent plane, 14 % opaque
+ *    (22 % for shear walls), because there a wall is a LOAD SOURCE on the
+ *    frame, not stiffness, and the members behind it must stay readable.
+ *  - SOLID (`solid` + `thicknessM`): the architectural look the Drafting3D
+ *    viewport asks for — a closed prism at the wall's real thickness, opaque
+ *    and lit like any other building element, with an edge outline so it reads
+ *    against the white sheet, optional selection tint and click-to-pick. The
+ *    top face lifts WALL_TOP_LIFT_M proud of the node line so it never sits
+ *    coplanar with the slab above (z-fighting).
+ */
+export function Wall3D({ tA, tB, bA, bB, shear, solid, thicknessM, selected, onPick }: {
+  tA: THREE.Vector3; tB: THREE.Vector3; bA: THREE.Vector3; bB: THREE.Vector3; shear: boolean
+  /** Draw the architectural solid instead of the ghost plane (Drafting3D). */
+  solid?: boolean
+  /** Wall thickness in m — required by the solid look, ignored by the ghost. */
+  thicknessM?: number
+  selected?: boolean
+  onPick?: () => void
+}) {
+  const ghost = useMemo(() => {
     const pos = [bA, bB, tB, bA, tB, tA].flatMap((p) => [p.x, p.y, p.z])
     const fill = new THREE.BufferGeometry()
     fill.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
@@ -674,14 +696,50 @@ export function Wall3D({ tA, tB, bA, bB, shear }: { tA: THREE.Vector3; tB: THREE
     }
   }, [tA, tB, bA, bB])
   const color = shear ? '#7c3aed' : '#94a3b8'
+
+  const solidGeo = useMemo(() => {
+    if (!solid || !thicknessM || thicknessM <= 0) return null
+    const corners = wallPrismCorners(tA, tB, bA, bB, thicknessM, WALL_TOP_LIFT_M)
+    // box indexing on the (bA−, bB−, tB−, tA− / +) corner order — two triangles
+    // per face; DoubleSide makes the winding a rendering choice, not a bug
+    const idx = [
+      0, 1, 2, 0, 2, 3,   // − face
+      4, 7, 6, 4, 6, 5,   // + face
+      0, 4, 5, 0, 5, 1,   // bottom
+      3, 2, 6, 3, 6, 7,   // top
+      0, 3, 7, 0, 7, 4,   // i end
+      1, 5, 6, 1, 6, 2,   // j end
+    ]
+    const fill = new THREE.BufferGeometry()
+    const flat = corners.flatMap((p) => [p.x, p.y, p.z])
+    fill.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3))
+    fill.setIndex(idx)
+    fill.computeVertexNormals()
+    return { fill, edges: new THREE.EdgesGeometry(fill, 10) }
+  }, [solid, thicknessM, tA, tB, bA, bB])
+
+  if (solidGeo) {
+    const face = selected ? SEL : shear ? '#c4b5fd' : '#d6d3d1'
+    return (
+      <group>
+        <mesh geometry={solidGeo.fill} onClick={(e) => { if (onPick) { e.stopPropagation(); onPick() } }}>
+          <meshStandardMaterial color={face} roughness={0.9} metalness={0} side={THREE.DoubleSide} />
+        </mesh>
+        <lineSegments geometry={solidGeo.edges}>
+          <lineBasicMaterial color={selected ? SEL : '#94a3b8'} />
+        </lineSegments>
+      </group>
+    )
+  }
+
   return (
     <group>
-      <mesh geometry={fill}>
+      <mesh geometry={ghost.fill}>
         <meshBasicMaterial color={color} transparent opacity={shear ? 0.22 : 0.14} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
       {shear && <>
-        <primitive object={new THREE.Line(x1, new THREE.LineBasicMaterial({ color }))} />
-        <primitive object={new THREE.Line(x2, new THREE.LineBasicMaterial({ color }))} />
+        <primitive object={new THREE.Line(ghost.x1, new THREE.LineBasicMaterial({ color }))} />
+        <primitive object={new THREE.Line(ghost.x2, new THREE.LineBasicMaterial({ color }))} />
       </>}
     </group>
   )
