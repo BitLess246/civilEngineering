@@ -197,6 +197,11 @@ export interface Wall {
   height: number                // m
   thickness: number             // mm
   shearWall: boolean
+  /** Doors/windows hosted in this wall (Drafting3D export): `t` = centre
+   *  distance from the carrying member's i-end (m), w/h/sill in m. The panel
+   *  solve still treats the wall as solid — the lintel/load path above a door
+   *  is real structure — so this is geometry metadata, not a mesh change. */
+  openings?: Array<{ kind: 'door' | 'window'; t: number; w: number; h: number; sill: number }>
 }
 
 export type SupportFixity = 'pin' | 'fixed' | 'roller' | 'spring'

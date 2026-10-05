@@ -28,7 +28,12 @@ function level(id: string, name: string, elevation: number, height: number,
 const n = (id: string, x: number, y: number, z: number): DraftNode => ({ id, x, y, z })
 const el = (id: string, type: DraftElement['type'], nodes: [string, string],
   sectionId = 'beam-300x500', extra: Partial<DraftElement> = {}): DraftElement =>
-  ({ id, type, nodes, sectionId, role: type, ...extra })
+  ({
+    id, type, nodes, sectionId,
+    // role is the STRUCTURAL duty — doors/windows/ceilings carry none
+    ...(type === 'door' || type === 'window' ? {} : { role: type }),
+    ...extra,
+  })
 
 /** Level 1 (EL 0, 3.5 m storey) + Level 2 (EL 3.5) with a beam, two columns, a slab and a wall. */
 function sampleProject(): DraftProject {
