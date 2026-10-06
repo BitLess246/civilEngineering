@@ -35,7 +35,7 @@ export function Axes({ box, xMax, yMax, xLabel, yLabel }: {
       {xt.map((v) => (
         <g key={`x${v}`}>
           <line x1={X(v)} x2={X(v)} y1={box.base} y2={box.base + 4} stroke={INK} strokeWidth="1" />
-          <text x={X(v)} y={box.base + 15} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily={mono}>{tickLabel(v, xs)}</text>
+          {v > 0 && <text x={X(v)} y={box.base + 15} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily={mono}>{tickLabel(v, xs)}</text>}
         </g>
       ))}
       <line x1={box.x0} x2={box.x1} y1={box.base} y2={box.base} stroke={INK} strokeWidth="1.2" />
@@ -101,20 +101,20 @@ export function RationalBars({ res }: { res: RationalResult }) {
 // ── SCS triangular unit hydrograph ───────────────────────────────────────
 
 export function TriHydrograph({ tp, qp, tb, P, Q }: { tp: number; qp: number; tb: number; P: number; Q: number }) {
-  const W = 640, H = 320
-  const box = { x0: 70, x1: W - 40, top: 56, base: H - 80 }
+  const W = 640, H = 350
+  const box = { x0: 70, x1: W - 40, top: 56, base: H - 104 }
   const xMax = tb * 1.08, yMax = qp * 1.2
   const { X, Y } = axesMap(box, xMax, yMax)
   return (
     <Chart label="Triangular unit hydrograph" W={W} H={H}>
       <Axes box={box} xMax={xMax} yMax={yMax} xLabel="t (h)" yLabel="Q (m³/s)" />
       <polygon points={`${X(0)},${Y(0)} ${X(tp)},${Y(qp)} ${X(tb)},${Y(0)}`} fill="rgba(15,76,146,0.14)" stroke={WATER} strokeWidth="1.8" />
-      <line x1={X(tp)} x2={X(tp)} y1={Y(qp)} y2={box.base + 34} stroke={MUTED} strokeWidth="0.8" strokeDasharray="4 3" />
-      <line x1={X(tb)} x2={X(tb)} y1={box.base} y2={box.base + 52} stroke={MUTED} strokeWidth="0.8" />
-      <line x1={X(0)} x2={X(0)} y1={box.base} y2={box.base + 52} stroke={MUTED} strokeWidth="0.8" />
+      <line x1={X(tp)} x2={X(tp)} y1={Y(qp)} y2={box.base + 50} stroke={MUTED} strokeWidth="0.8" strokeDasharray="4 3" />
+      <line x1={X(tb)} x2={X(tb)} y1={box.base} y2={box.base + 76} stroke={MUTED} strokeWidth="0.8" />
+      <line x1={X(0)} x2={X(0)} y1={box.base} y2={box.base + 76} stroke={MUTED} strokeWidth="0.8" />
       <text x={X(tp) + 7} y={Y(qp) - 4} fontSize="10.5" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>Qp = {f2(qp)} m³/s</text>
-      <HDim y={box.base + 30} a={X(0)} b={X(tp)} label={`Tp = ${f3(tp)} h`} color={MUTED} />
-      <HDim y={box.base + 48} a={X(0)} b={X(tb)} label={`tb = ${f2(tb)} h = 2.67 Tp`} color={MUTED} />
+      <HDim y={box.base + 46} a={X(0)} b={X(tp)} label={`Tp = ${f3(tp)} h`} color={MUTED} />
+      <HDim y={box.base + 72} a={X(0)} b={X(tb)} label={`tb = ${f2(tb)} h = 2.67 Tp`} color={MUTED} />
       <text x={box.x0 + 8} y={box.top - 26} fontSize="10" fill={MUTED} fontFamily={mono}>P = {f2(P)} mm → runoff Q = {f2(Q)} mm</text>
     </Chart>
   )
