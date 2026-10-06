@@ -192,3 +192,61 @@ export function DetentionCharts({ inflow, outflows, stages, dtMin, peakIn, peakO
     </Chart>
   )
 }
+
+// ── Streeter–Phelps oxygen sag ───────────────────────────────────────────
+
+/** DO and remaining BOD are both mg/L but of very different size, so each
+ *  gets its own panel over ONE travel-time axis. The deficits D₀ and Dc are
+ *  dimensioned down from the saturation line; the BOD exerted by tc is
+ *  dimensioned down from L₀, carried across as an extension line. */
+export function SagCharts({ curve, DOsat, DOmix, L0, kd, tc, DOcrit, anoxic }: {
+  curve: { t: number; DO: number; BOD: number }[]; DOsat: number; DOmix: number; L0: number; kd: number
+  tc: number | null; DOcrit: number | null; anoxic: boolean
+}) {
+  const W = 640, H = 500
+  const tEnd = curve[curve.length - 1].t
+  const top = { x0: 66, x1: W - 40, top: 56, base: 246 }
+  const bot = { x0: 66, x1: W - 40, top: 330, base: H - 50 }
+  const doMax = Math.max(DOsat, ...curve.map((p) => p.DO)) * 1.25
+  const bodMax = Math.max(L0, 1e-6) * 1.25
+  const A = axesMap(top, tEnd, doMax), B = axesMap(bot, tEnd, bodMax)
+  const doLine = curve.map((p, i) => `${i ? 'L' : 'M'} ${A.X(p.t).toFixed(2)} ${A.Y(Math.max(p.DO, 0)).toFixed(2)}`).join(' ')
+  const bodLine = curve.map((p, i) => `${i ? 'L' : 'M'} ${B.X(p.t).toFixed(2)} ${B.Y(p.BOD).toFixed(2)}`).join(' ')
+  const red = 'rgba(200,60,60,0.9)'
+  const crit = tc !== null && DOcrit !== null ? { x: A.X(tc), y: A.Y(Math.max(DOcrit, 0)), L: L0 * Math.exp(-kd * tc) } : null
+  return (
+    <Chart label="Streeter–Phelps oxygen sag — DO and BOD" W={W} H={H}>
+      <Axes box={top} xMax={tEnd} yMax={doMax} xLabel="t (d)" yLabel="DO (mg/L)" />
+      <line x1={top.x0} x2={top.x1} y1={A.Y(DOsat)} y2={A.Y(DOsat)} stroke={MUTED} strokeWidth="1" strokeDasharray="6 4" />
+      <text x={top.x1 - 4} y={A.Y(DOsat) - 5} textAnchor="end" fontSize="9.5" fill={MUTED} fontFamily={mono} {...halo}>saturation {f2(DOsat)}</text>
+      <line x1={top.x0} x2={top.x1} y1={A.Y(2)} y2={A.Y(2)} stroke={red} strokeWidth="1" strokeDasharray="3 3" />
+      <text x={top.x1 - 4} y={A.Y(2) - 5} textAnchor="end" fontSize="9.5" fill={red} fontFamily={mono} {...halo}>2 mg/L stress line</text>
+      <path d={`${doLine} L ${A.X(tEnd)} ${top.base} L ${A.X(0)} ${top.base} Z`} fill="rgba(15,76,146,0.12)" />
+      <path d={doLine} fill="none" stroke={WATER} strokeWidth="2.2" />
+      {/* D₀ at the outfall: from the saturation line down to the mixed DO */}
+      {DOsat - DOmix > 0.05 && <>
+        <line x1={top.x0} x2={top.x0 + 26} y1={A.Y(DOmix)} y2={A.Y(DOmix)} stroke={MUTED} strokeWidth="0.8" />
+        <VDim x={top.x0 + 20} a={A.Y(DOsat)} b={A.Y(DOmix)} label={`D₀ ${f2(DOsat - DOmix)}`} color={INK} />
+      </>}
+      {crit && DOcrit !== null && <>
+        <VDim x={crit.x} a={A.Y(DOsat)} b={crit.y} label={`Dc ${f2(DOsat - DOcrit)}`} color={INK} />
+        <circle cx={crit.x} cy={crit.y} r="3.5" fill={anoxic ? red : WATER} />
+        <text x={crit.x + 7} y={Math.min(crit.y + 16, top.base - 6)} fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>
+          {anoxic ? 'anoxic' : `DOmin ${f2(DOcrit)}`} at tc = {f2(tc ?? 0)} d
+        </text>
+        {/* the same instant carried down to the BOD panel */}
+        <line x1={crit.x} x2={crit.x} y1={crit.y} y2={B.Y(crit.L)} stroke={MUTED} strokeWidth="0.8" strokeDasharray="3 3" />
+      </>}
+
+      <Axes box={bot} xMax={tEnd} yMax={bodMax} xLabel="t (d)" yLabel="BOD (mg/L)" />
+      <path d={`${bodLine} L ${B.X(tEnd)} ${bot.base} L ${B.X(0)} ${bot.base} Z`} fill="rgba(15,76,146,0.12)" />
+      <path d={bodLine} fill="none" stroke={WATER} strokeWidth="2" />
+      <text x={bot.x0 + 8} y={B.Y(L0) - 7} fontSize="10" fill={INK} fontFamily={mono} {...halo}>L₀ {f2(L0)} mg/L</text>
+      {crit && <>
+        <line x1={bot.x0} x2={crit.x + 6} y1={B.Y(L0)} y2={B.Y(L0)} stroke={MUTED} strokeWidth="0.8" />
+        <circle cx={crit.x} cy={B.Y(crit.L)} r="3" fill={WATER} />
+        <VDim x={crit.x} a={B.Y(L0)} b={B.Y(crit.L)} label={`exerted by tc ${f2(L0 - crit.L)}`} color={INK} />
+      </>}
+    </Chart>
+  )
+}
