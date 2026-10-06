@@ -250,3 +250,84 @@ export function SagCharts({ curve, DOsat, DOmix, L0, kd, tc, DOcrit, anoxic }: {
     </Chart>
   )
 }
+
+// ── Storm sewer longitudinal profile ─────────────────────────────────────
+
+/** The ladder drawn as a sewer profile: each run's invert and crown at its
+ *  own grade between manholes, crowns matched where the pipe grows, invert
+ *  levels at every manhole and the run lengths dimensioned between manhole
+ *  centrelines. Levels are relative to the head invert; the vertical scale
+ *  is exaggerated and says by how much. */
+export function SewerProfile({ runs }: {
+  runs: { name: string; dn: number; slopePct: number; Q: number; p: { chainU: number; chainD: number; invU: number; invD: number; D: number } }[]
+}) {
+  const W = 680, H = 390
+  const box = { x0: 96, x1: W - 44, top: 56, base: 244 }
+  const Ltot = runs[runs.length - 1].p.chainD
+  const zTop = Math.max(...runs.map((r) => r.p.invU + r.p.D)) + 0.3
+  const zBot = Math.min(...runs.map((r) => r.p.invD)) - 0.25
+  const kx = (box.x1 - box.x0) / Math.max(Ltot, 1e-9), ky = (box.base - box.top) / (zTop - zBot)
+  const X = (c: number) => box.x0 + c * kx
+  const Y = (z: number) => box.top + (zTop - z) * ky
+  const mh = 6 // manhole half-width, px
+  // one manhole per node: the incoming and outgoing inverts and the highest crown
+  const nodes = Array.from({ length: runs.length + 1 }, (_, j) => {
+    const inn = runs[j - 1]?.p, out = runs[j]?.p
+    const ils = [inn?.invD, out?.invU].filter((v): v is number => v !== undefined)
+    const crowns = [inn && inn.invD + inn.D, out && out.invU + out.D].filter((v): v is number => v !== undefined)
+    return { x: X(out ? out.chainU : inn!.chainD), inn: inn?.invD, out: out?.invU, bottom: Math.min(...ils) - 0.12, top: Math.max(...crowns) + 0.2 }
+  })
+  const zs = niceStep(zTop - zBot, 6)
+  const ticks: number[] = []
+  for (let z = Math.ceil(zBot / zs) * zs; z <= zTop + 1e-9; z += zs) ticks.push(z)
+  const ax = box.x0 - 34
+  const lvl = (z: number) => (Math.abs(z) < 5e-4 ? '0.000' : z.toFixed(3))
+  return (
+    <Chart label="Storm sewer longitudinal profile" W={W} H={H}>
+      {/* level scale */}
+      <line x1={ax} x2={ax} y1={Y(zTop)} y2={Y(zBot)} stroke={INK} strokeWidth="1.1" />
+      {ticks.map((z) => (
+        <g key={z}>
+          <line x1={ax - 4} x2={ax} y1={Y(z)} y2={Y(z)} stroke={INK} strokeWidth="1" />
+          <text x={ax - 7} y={Y(z) + 3.5} textAnchor="end" fontSize="9.5" fill={MUTED} fontFamily={mono}>{tickLabel(z, zs)}</text>
+        </g>
+      ))}
+      <text x={ax + 8} y={Y(zTop) - 10} textAnchor="end" fontSize="10" fill={MUTED} fontFamily={mono}>level (m)</text>
+      {runs.map((r, i) => {
+        const a = X(r.p.chainU) + mh, b = X(r.p.chainD) - mh
+        const at = (x: number) => r.p.invU + (r.p.invD - r.p.invU) * ((x - X(r.p.chainU)) / Math.max(X(r.p.chainD) - X(r.p.chainU), 1e-9))
+        const mid = (a + b) / 2
+        // the label clears the crown at its high (upstream) end
+        const yLab = Y(at(Math.max(a, mid - 60)) + r.p.D)
+        return (
+          <g key={i}>
+            <polygon points={`${a},${Y(at(a))} ${b},${Y(at(b))} ${b},${Y(at(b) + r.p.D)} ${a},${Y(at(a) + r.p.D)}`} fill="rgba(15,76,146,0.14)" stroke="none" />
+            <line x1={a} x2={b} y1={Y(at(a))} y2={Y(at(b))} stroke={INK} strokeWidth="1.5" />
+            <line x1={a} x2={b} y1={Y(at(a) + r.p.D)} y2={Y(at(b) + r.p.D)} stroke={INK} strokeWidth="1.5" />
+            <text x={mid} y={yLab - 20} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>DN {r.dn} @ {f2(r.slopePct)} %</text>
+            <text x={mid} y={yLab - 8} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily={mono} {...halo}>Q {f3(r.Q)} m³/s</text>
+            <HDim y={box.base + 96} a={X(r.p.chainU)} b={X(r.p.chainD)} label={`${f2(r.p.chainD - r.p.chainU)} m`} />
+          </g>
+        )
+      })}
+      {nodes.map((n, j) => {
+        const last = j === nodes.length - 1
+        // invert levels read up the manhole centreline: in on the left, out on the right
+        const il = (x: number, txt: string) => <text x={x} y={box.base + 86} transform={`rotate(-90 ${x} ${box.base + 86})`} fontSize="9.5" fill={INK} fontFamily={mono}>{txt}</text>
+        return (
+          <g key={`mh${j}`}>
+            <rect x={n.x - mh} y={Y(n.top)} width={2 * mh} height={Y(n.bottom) - Y(n.top)} fill="var(--sheet)" stroke={INK} strokeWidth="1.3" />
+            {/* the centreline carries down to the chainage dimension */}
+            <line x1={n.x} x2={n.x} y1={Y(n.bottom)} y2={box.base + 100} stroke={MUTED} strokeWidth="0.8" />
+            <text x={n.x} y={Y(n.top) - 6} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>{last ? 'Outfall' : `MH${j + 1}`}</text>
+            {n.inn !== undefined && il(n.x - 4, `IL in ${lvl(n.inn)}`)}
+            {n.out !== undefined && il(n.x + 12, `IL out ${lvl(n.out)}`)}
+          </g>
+        )
+      })}
+      <text x={box.x0 - 40} y={H - 12} fontSize="9.5" fill={MUTED} fontFamily={mono}>
+        levels relative to the head invert (0.000) · crowns matched where the pipe grows · vertical ×{Math.round(ky / kx)}
+      </text>
+    </Chart>
+  )
+}

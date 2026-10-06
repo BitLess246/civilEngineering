@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fullFlowQ, velocityAt, pickDiameter, designSewer } from './stormSewer'
+import { fullFlowQ, velocityAt, pickDiameter, designSewer, sewerProfile } from './stormSewer'
 
 describe('Manning full-flow capacity', () => {
   it('matches the hand evaluation for DN 300 at 0.5 %', () => {
@@ -100,5 +100,32 @@ describe('the network ladder', () => {
       name: 'L1', upstream: -1, L: 100, slopePct: 1, n: 0.013,
       inlet: { name: 'A', areaHa: 1, C: 1.5, tcMin: 10 },
     }], IDF)).toThrow()
+  })
+})
+
+describe('the longitudinal profile', () => {
+  it('falls each run on its own grade and matches crowns where the pipe grows', () => {
+    const p = sewerProfile([
+      { L: 200, slopePct: 0.5, dn: 450 },
+      { L: 250, slopePct: 0.5, dn: 600 },
+      { L: 180, slopePct: 0.4, dn: 600 },
+    ])
+    // run 1: 0 → −1.000; DN 450 → 600 drops 0.150 so the crowns meet
+    expect(p[0].invD).toBeCloseTo(-1.0, 9)
+    expect(p[1].drop).toBeCloseTo(0.15, 9)
+    expect(p[1].invU + p[1].D).toBeCloseTo(p[0].invD + p[0].D, 9)
+    // run 2: −1.150 − 250·0.005 = −2.400; same size → inverts match
+    expect(p[1].invD).toBeCloseTo(-2.4, 9)
+    expect(p[2].drop).toBe(0)
+    expect(p[2].invU).toBeCloseTo(-2.4, 9)
+    expect(p[2].invD).toBeCloseTo(-3.12, 9)
+    expect(p[2].chainU).toBe(450)
+    expect(p[2].chainD).toBe(630)
+  })
+
+  it('never raises the crown when the pipe shrinks', () => {
+    const p = sewerProfile([{ L: 100, slopePct: 1, dn: 600 }, { L: 100, slopePct: 1, dn: 450 }])
+    expect(p[1].invU).toBeCloseTo(p[0].invD, 9)
+    expect(p[1].invU + p[1].D).toBeLessThan(p[0].invD + p[0].D)
   })
 })

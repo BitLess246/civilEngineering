@@ -223,3 +223,38 @@ export function designSewer(
 
   return { runs: out, Vmin, Vwarn, Vmax }
 }
+
+/** One run laid out on the longitudinal profile. Levels in m relative to the
+ *  head invert (0.000); chainage in m from the head manhole. */
+export interface ProfileRun {
+  chainU: number
+  chainD: number
+  invU: number
+  invD: number
+  /** Drop taken at the run's upstream manhole, m (0 at the head). */
+  drop: number
+  D: number
+}
+
+/**
+ * Lay a linear ladder out as a longitudinal profile. Each run falls L·S along
+ * its own grade; at each manhole the outgoing pipe's CROWN is matched to the
+ * incoming one when the pipe grows (the invert drops by the diameter
+ * increase), so the larger pipe does not surcharge the smaller one; when the
+ * size holds or shrinks the inverts are matched instead, so the crown never
+ * rises in the direction of flow. (Crown matching: ASCE MOP 60 / WEF MOP FD-5,
+ * Gravity Sanitary Sewer Design and Construction; the same practice holds
+ * for storm sewers.)
+ */
+export function sewerProfile(runs: { L: number; slopePct: number; dn: number }[]): ProfileRun[] {
+  const out: ProfileRun[] = []
+  runs.forEach((r, i) => {
+    const D = r.dn / 1000
+    const prev = out[i - 1]
+    const drop = prev ? Math.max(0, D - prev.D) : 0
+    const invU = prev ? prev.invD - drop : 0
+    const chainU = prev ? prev.chainD : 0
+    out.push({ chainU, chainD: chainU + r.L, invU, invD: invU - (r.L * r.slopePct) / 100, drop, D })
+  })
+  return out
+}
