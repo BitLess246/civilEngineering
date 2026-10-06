@@ -331,3 +331,45 @@ export function SewerProfile({ runs }: {
     </Chart>
   )
 }
+
+// ── Pump and system curves ───────────────────────────────────────────────
+
+/** Pump and system curves on numbered axes. The duty point is read on both
+ *  axes (Q* under the flow axis, H* along the head leader), each curve is
+ *  labelled on itself, and the head lost to friction and fittings at duty
+ *  is dimensioned between the static line and the duty point. */
+export function PumpCurves({ pump, system, Hstatic, H0, Q, H }: {
+  pump: { Q: number; H: number }[]; system: { Q: number; H: number }[]; Hstatic: number; H0: number; Q: number; H: number
+}) {
+  const W = 640, H_ = 360
+  const box = { x0: 66, x1: W - 40, top: 52, base: H_ - 70 }
+  const qMax = system[system.length - 1].Q
+  const hMax = Math.max(H0, ...system.map((p) => p.H)) * 1.1
+  const { X, Y } = axesMap(box, qMax, hMax)
+  const pts = (ps: { Q: number; H: number }[]) => ps.filter((p) => p.H >= 0 && p.H <= hMax).map((p) => `${X(p.Q).toFixed(2)},${Y(p.H).toFixed(2)}`).join(' ')
+  const sysLab = system[Math.round(system.length * 0.8)]
+  const red = 'rgba(200,60,60,0.95)'
+  // the losses dimension stands where the band between the static line and
+  // H* is empty: past the flow at which the pump curve drops below static
+  const qClear = pump.find((p) => p.Q > Q && p.H < Hstatic)?.Q
+  const xd = qClear !== undefined && X(qClear) + 140 < box.x1 ? X(qClear) + 26 : X(Q) + 18
+  return (
+    <Chart label="Pump and system curves" W={W} H={H_}>
+      <Axes box={box} xMax={qMax} yMax={hMax} xLabel="Q (m³/s)" yLabel="H (m)" />
+      <line x1={box.x0} x2={box.x1} y1={Y(Hstatic)} y2={Y(Hstatic)} stroke={MUTED} strokeWidth="1" strokeDasharray="5 3" />
+      <text x={box.x0 + 6} y={Y(Hstatic) + 14} fontSize="9.5" fill={MUTED} fontFamily={mono} {...halo}>static head {f2(Hstatic)} m</text>
+      <polyline points={pts(system)} fill="none" stroke={MUTED} strokeWidth="2" />
+      <text x={X(sysLab.Q) - 8} y={Y(sysLab.H) - 8} textAnchor="end" fontSize="10" fill={INK} fontFamily={mono} {...halo}>system curve</text>
+      <polyline points={pts(pump)} fill="none" stroke={WATER} strokeWidth="2.2" />
+      <circle cx={box.x0} cy={Y(H0)} r="3" fill={WATER} />
+      <text x={box.x0 + 8} y={Y(H0) - 7} fontSize="10" fill={INK} fontFamily={mono} {...halo}>pump curve · shutoff H₀ {f2(H0)} m</text>
+      {/* the duty point read on both axes */}
+      <line x1={X(Q)} x2={X(Q)} y1={Y(H)} y2={box.base + 22} stroke={red} strokeWidth="0.9" strokeDasharray="4 3" />
+      <line x1={box.x0} x2={xd + 6} y1={Y(H)} y2={Y(H)} stroke={red} strokeWidth="0.9" strokeDasharray="4 3" />
+      <text x={X(Q)} y={box.base + 34} textAnchor="middle" fontSize="10" fontWeight="700" fill={red} fontFamily={mono}>Q* {f3(Q)}</text>
+      <text x={box.x0 + 6} y={Y(H) - 5} fontSize="10" fontWeight="700" fill={red} fontFamily={mono} {...halo}>H* {f2(H)}</text>
+      <circle cx={X(Q)} cy={Y(H)} r="4.5" fill={red} />
+      <VDim x={xd} a={Y(H)} b={Y(Hstatic)} label={`losses ${f2(H - Hstatic)} m`} color={INK} />
+    </Chart>
+  )
+}
