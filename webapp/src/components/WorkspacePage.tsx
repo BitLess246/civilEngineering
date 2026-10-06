@@ -13,6 +13,7 @@ import {
   ReportTitleBlock, type KeyValue, type ResultRow,
 } from './workspace'
 import { useWorkspaceReport } from '../lib/useWorkspaceReport'
+import type { CalcReportData } from './ReportControls'
 
 export interface WorkspacePageProps {
   title: string
@@ -28,12 +29,20 @@ export interface WorkspacePageProps {
   resultsCaption?: ReactNode
   steps: SolutionStep[]
   references: { topic: string; basis: ReactNode; source: string }[]
+  /** Page-level controls beside the title (a mode toggle). */
+  actions?: ReactNode
+  /** Further numbered sections on the drawing sheet, after the results —
+   *  a schedule, a serviceability table, a bar ranking. */
+  extraSections?: { title: string; node: ReactNode }[]
+  /** The structured PDF payload; without it Export prints the page. */
+  report?: CalcReportData
 }
 
 export function WorkspacePage(p: WorkspacePageProps) {
-  const report = useWorkspaceReport(p.title, p.badges)
+  const report = useWorkspaceReport(p.title, p.badges, p.report)
+  const resultsNum = p.drawing ? 3 : 2
   return (
-    <Workspace title={p.title} badges={p.badges} intro={p.intro}
+    <Workspace title={p.title} badges={p.badges} intro={p.intro} actions={p.actions}
       inputs={<InputRail>{report.group}{p.inputs}</InputRail>}
       checks={p.checks}
       document={
@@ -50,7 +59,10 @@ export function WorkspacePage(p: WorkspacePageProps) {
                     {p.drawing.node}
                   </DocSection>
                 )}
-                <DocSection num={p.drawing ? 3 : 2} title="Results summary"><ResultsTable rows={p.results} caption={p.resultsCaption} /></DocSection>
+                <DocSection num={resultsNum} title="Results summary"><ResultsTable rows={p.results} caption={p.resultsCaption} /></DocSection>
+                {p.extraSections?.map((x, i) => (
+                  <DocSection key={x.title} num={resultsNum + 1 + i} title={x.title}>{x.node}</DocSection>
+                ))}
               </>
             ),
           },
