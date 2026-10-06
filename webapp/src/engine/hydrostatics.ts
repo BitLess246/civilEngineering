@@ -68,7 +68,8 @@ export interface CurvedGateInput {
   R: number
   /** Gate width into the page, m. */
   W: number
-  /** Vertical depth of the arc's horizontal-diameter level, m. */
+  /** Vertical depth of the centroid of the gate's VERTICAL PROJECTION, m —
+   *  hc = h₀ + R/2, with h₀ the water standing above the gate's top. */
   hc: number
   /** Fluid unit weight, kN/m³ (default water). */
   gamma?: number
@@ -81,16 +82,26 @@ export interface CurvedGateResult {
   thetaDeg: number // resultant angle above horizontal, degrees
 }
 
-/** Quarter-circular gate: Fh on the vertical projection, Fv as the fluid
- *  weight over it; the resultant passes through the arc's center. */
+/** Quarter-circular gate holding water on its concave side: Fh on the
+ *  vertical projection, Fv the weight of the water vertically above the arc —
+ *  the quarter circle PLUS the R × h₀ block standing over it when the free
+ *  surface is h₀ above the gate's top. The resultant passes through the arc's
+ *  center.
+ *
+ *  Fv used to be the quarter circle alone, which is right only at h₀ = 0
+ *  (hc = R/2): every deeper gate under-reported the vertical force, and the
+ *  resultant with it. */
 export function curvedGateForce(p: CurvedGateInput): CurvedGateResult {
   if (!(p.R > 0)) throw new Error('Radius must be positive.')
   if (!(p.W > 0)) throw new Error('Width must be positive.')
   if (!(p.hc > 0)) throw new Error('Centroid depth must be positive.')
+  // the free surface cannot sit below the gate's top: hc ≥ R/2
+  if (p.hc < p.R / 2 - 1e-9) throw new Error('The free surface must be at or above the gate top (hc ≥ R/2).')
   const gamma = p.gamma ?? GAMMA_W
   if (!(gamma > 0)) throw new Error('Unit weight must be positive.')
+  const h0 = Math.max(0, p.hc - p.R / 2)
   const Fh = gamma * p.hc * (p.R * p.W)
-  const Fv = gamma * ((Math.PI * p.R * p.R) / 4) * p.W
+  const Fv = gamma * (p.R * h0 + (Math.PI * p.R * p.R) / 4) * p.W
   return {
     Fh, Fv,
     R: Math.hypot(Fh, Fv),

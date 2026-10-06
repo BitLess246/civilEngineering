@@ -35,7 +35,9 @@ export default function Hydrostatics() {
   const [theta, setTheta] = useState(90)
   const [gateR, setGateR] = useState(2)
   const [gateW, setGateW] = useState(3)
-  const [gateHc, setGateHc] = useState(1)
+  // water standing above the gate's top; the projection's centroid is h₀ + R/2
+  const [gateH0, setGateH0] = useState(0)
+  const gateHc = gateH0 + gateR / 2
   const [bargeL, setBargeL] = useState(10)
   const [bargeB, setBargeB] = useState(4)
   const [draft, setDraft] = useState(1.5)
@@ -53,7 +55,7 @@ export default function Hydrostatics() {
 
   const loadSample = () => {
     setShape('rect'); setB(2); setH(3); setDia(2); setHc(1.5); setTheta(90)
-    setGateR(2); setGateW(3); setGateHc(1)
+    setGateR(2); setGateW(3); setGateH0(0)
     setBargeL(10); setBargeB(4); setDraft(1.5); setKG(1.2)
     setPStart(50)
     setLegs([{ gamma: '133.1', h: '0.1', sign: 'down' }, { gamma: '9.81', h: '0.2', sign: 'up' }])
@@ -83,8 +85,9 @@ export default function Hydrostatics() {
     {
       title: 'Quarter-circular gate — two components, one center',
       lines: [
+        { tex: `h_c = h_0 + \\tfrac{R}{2} = ${f2(gateH0)} + ${f2(gateR / 2)} = ${f2(gateHc)}\\ \\text{m}` },
         { tex: `F_h = \\gamma\\,h_c\\,(R\\cdot W) = ${f2(GAMMA_W)}\\times${f2(gateHc)}\\times${f2(gateR * gateW)} = ${f2(gate.Fh)}\\ \\text{kN}` },
-        { tex: `F_v = \\gamma\\,V = ${f2(GAMMA_W)}\\times${f3((Math.PI * gateR * gateR) / 4 * gateW)} = ${f2(gate.Fv)}\\ \\text{kN}` },
+        { tex: `F_v = \\gamma\\,W\\left(R\\,h_0 + \\tfrac{\\pi R^2}{4}\\right) = ${f2(GAMMA_W)}\\times${f2(gateW)}\\times${f3(gateR * gateH0 + (Math.PI * gateR * gateR) / 4)} = ${f2(gate.Fv)}\\ \\text{kN}` },
         { tex: `R = \\sqrt{F_h^2+F_v^2} = ${f2(gate.R)}\\ \\text{kN} \\qquad \\theta = \\tan^{-1}(F_v/F_h) = ${f2(gate.thetaDeg)}^\\circ` },
         { text: 'The horizontal push is the force on the projected rectangle; the vertical one is the fluid weight the arc holds up. On a circular arc the resultant always passes through the center — the pressure acts normal to the skin everywhere.' },
       ],
@@ -145,7 +148,7 @@ export default function Hydrostatics() {
           <Card title="Curved gate (quarter-circular)">
             <Num label="Radius R" unit="m" value={gateR} onChange={setGateR} min={0.1} step="0.5" />
             <Num label="Width W" unit="m" value={gateW} onChange={setGateW} min={0.1} step="0.5" />
-            <Num label="Centroid depth" unit="m" value={gateHc} onChange={setGateHc} min={0.05} step="0.1" />
+            <Num label="Water above gate top h₀" unit="m" value={gateH0} onChange={setGateH0} min={0} step="0.1" />
           </Card>
 
           <Card title="Box barge">

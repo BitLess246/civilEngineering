@@ -40,6 +40,17 @@ describe('quarter-circular gate', () => {
     expect(r.R).toBeCloseTo(109.603, 2)
     expect(r.thetaDeg).toBeCloseTo(57.518, 2)
   })
+  it('submerged: water 2 m over the top of an R = 2, W = 3 gate carries the block above the arc too', () => {
+    // hc = 2 + 1 = 3: Fh = 9.81·3·6 = 176.58; Fv = 9.81·3·(2·2 + π·4/4) = 9.81·3·7.14159 = 210.177
+    const r = curvedGateForce({ R: 2, W: 3, hc: 3 })
+    expect(r.Fh).toBeCloseTo(176.58, 2)
+    expect(r.Fv).toBeCloseTo(210.177, 2)
+    // the old quarter-circle-only Fv (92.46) would hold for hc = 1 alone
+    expect(r.Fv).toBeGreaterThan(curvedGateForce({ R: 2, W: 3, hc: 1 }).Fv)
+  })
+  it('a free surface below the gate top is refused, not silently computed', () => {
+    expect(() => curvedGateForce({ R: 2, W: 3, hc: 0.9 })).toThrow(/gate top/)
+  })
 })
 
 describe('box-barge flotation and stability', () => {
