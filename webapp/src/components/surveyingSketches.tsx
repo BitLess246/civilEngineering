@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { LevelResult } from '../engine/leveling'
 import type { TraverseResult } from '../engine/traverse'
+import type { CurveResult } from '../engine/circularCurve'
 import { INK, BRAND, FAIL, MUTED, HAIR, f2, f3 } from '../lib/influenceStyle'
 
 // ── profile drawing ───────────────────────────────────────────────────────
@@ -162,6 +163,73 @@ export function TraversePlot({ res }: { res: TraverseResult }) {
           misclosure {f3(res.linear)} m → {res.rule === 'bowditch' ? 'Bowditch' : 'transit'} adjusted
         </text>
       )}
+    </svg>
+  )
+}
+
+// ── curve figure ──────────────────────────────────────────────────────────
+
+/** The curve drawn to scale on its tangents. The tangent triangle sets the
+ *  scale so the curve fills the sheet whatever Δ is; the radii run to the
+ *  centre O when it fits on the sheet and are drawn as stubs pointing at it
+ *  when it does not (a flat curve's centre is far below its PI). */
+export function CurveFigure({ el }: { el: CurveResult['el'] }) {
+  const W = 640
+  const pad = 40
+  const h = el.deltaRad / 2
+  const mono = 'var(--font-mono, monospace)'
+  // tangent triangle: half-width T·cos h, rise T·sin h (screen y down)
+  const k = Math.min((W - 2 * pad - 80) / (2 * el.T * Math.cos(h)), 300 / Math.max(el.T * Math.sin(h), 1e-9))
+  const piX = W / 2, piY = pad + 10
+  const pcX = piX - el.T * k * Math.cos(h), pcY = piY + el.T * k * Math.sin(h)
+  const ptX = piX + el.T * k * Math.cos(h), ptY = pcY
+  const Rk = el.R * k
+  const oY = piY + (el.R / Math.cos(h)) * k     // centre, on the bisector below the PI
+  const midY = piY + el.E * k                     // mid-curve point
+  const full = oY <= 460                          // can the centre sit on the sheet?
+  const stub = Math.min(Rk, 120)
+  // unit vectors PC→O and PT→O
+  const ux = (piX - pcX) / Rk, uy = (oY - pcY) / Rk
+  const H = Math.round((full ? oY + 34 : pcY + stub * uy + 46))
+  const path = `M ${pcX} ${pcY} A ${Rk} ${Rk} 0 0 1 ${ptX} ${ptY}`
+  const halo = { paintOrder: 'stroke' as const, stroke: 'var(--sheet)', strokeWidth: 3 }
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Circular curve layout">
+      {/* radii toward the centre */}
+      <line x1={pcX} y1={pcY} x2={pcX + ux * (full ? Rk : stub)} y2={pcY + uy * (full ? Rk : stub)} stroke={MUTED} strokeWidth="1" strokeDasharray="5 4" />
+      <line x1={ptX} y1={ptY} x2={ptX - ux * (full ? Rk : stub)} y2={ptY + uy * (full ? Rk : stub)} stroke={MUTED} strokeWidth="1" strokeDasharray="5 4" />
+      {full ? (
+        <>
+          <circle cx={piX} cy={oY} r="3" fill={INK} />
+          <text x={piX} y={oY + 18} textAnchor="middle" fontSize="11" fontWeight="700" fill={INK} fontFamily={mono}>O</text>
+          <text x={piX + 8} y={oY - 10} fontSize="10" fill={INK} fontFamily={mono}>Δ = {f2(el.deltaDeg)}°</text>
+        </>
+      ) : (
+        <text x={piX} y={pcY + stub * uy + 18} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={mono}>radii continue to the centre O, {f2(el.R / Math.cos(h) - el.T * Math.sin(h))} m below the chord</text>
+      )}
+      <text x={pcX + ux * stub * 0.55 - 8} y={pcY + uy * stub * 0.55} textAnchor="end" fontSize="10" fill={MUTED} fontFamily={mono} {...halo}>R = {f2(el.R)} m</text>
+      {/* tangents, long chord, bisector */}
+      <line x1={pcX} y1={pcY} x2={piX} y2={piY} stroke={INK} strokeWidth="1.6" />
+      <line x1={piX} y1={piY} x2={ptX} y2={ptY} stroke={INK} strokeWidth="1.6" />
+      <line x1={pcX} y1={pcY} x2={ptX} y2={ptY} stroke={BRAND} strokeWidth="1.1" strokeDasharray="6 3" />
+      <line x1={piX} y1={piY} x2={piX} y2={pcY} stroke={HAIR} strokeWidth="1" strokeDasharray="3 3" />
+      <path d={path} fill="none" stroke={BRAND} strokeWidth="2.6" />
+      {/* points */}
+      <circle cx={piX} cy={piY} r="3.2" fill={INK} />
+      <circle cx={pcX} cy={pcY} r="3.2" fill={BRAND} />
+      <circle cx={ptX} cy={ptY} r="3.2" fill={BRAND} />
+      <circle cx={piX} cy={midY} r="2.6" fill={MUTED} />
+      <text x={piX} y={piY - 10} textAnchor="middle" fontSize="11" fontWeight="700" fill={INK} fontFamily={mono}>PI</text>
+      <text x={pcX - 8} y={pcY + 4} textAnchor="end" fontSize="11" fontWeight="700" fill={BRAND} fontFamily={mono}>PC</text>
+      <text x={ptX + 8} y={ptY + 4} fontSize="11" fontWeight="700" fill={BRAND} fontFamily={mono}>PT</text>
+      {/* element labels, each clear of the lines it names */}
+      <text x={(piX + pcX) / 2 - 6} y={(piY + pcY) / 2 - 6} textAnchor="end" fontSize="10" fill={INK} fontFamily={mono} {...halo}>T = {f3(el.T)} m</text>
+      <text x={(piX + ptX) / 2 + 6} y={(piY + ptY) / 2 - 6} fontSize="10" fill={INK} fontFamily={mono} {...halo}>T</text>
+      <text x={piX + 8} y={(piY + midY) / 2 + 4} fontSize="10" fill={MUTED} fontFamily={mono} {...halo}>E = {f3(el.E)} m</text>
+      <text x={piX + 8} y={(midY + pcY) / 2 + 4} fontSize="10" fill={MUTED} fontFamily={mono} {...halo}>M = {f3(el.M)} m</text>
+      <text x={(pcX + ptX) / 2 + (ptX - pcX) / 4} y={pcY + 16} textAnchor="middle" fontSize="10" fill={BRAND} fontFamily={mono} {...halo}>LC = {f3(el.LC)} m</text>
+      <text x={(pcX + ptX) / 2 - (ptX - pcX) / 4} y={pcY - 8} textAnchor="middle" fontSize="10" fill={BRAND} fontFamily={mono} {...halo}>L = {f3(el.L)} m</text>
     </svg>
   )
 }
