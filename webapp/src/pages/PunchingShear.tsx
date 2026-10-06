@@ -135,8 +135,8 @@ export default function PunchingShear() {
         { check: 'Effective depth', basis: 'h − cover − db/2', demand: `${f1(d)} mm`, status: 'info' as const },
         { check: 'Critical perimeter b₀', basis: `§22.6.4.1 · αs ${r.alphaS}`, demand: `${f0(r.b0)} mm`, status: 'info' as const },
         { check: 'Vc (a)', basis: '0.33λ√f′c·b₀d', demand: `${f1(r.Vc3)} kN`, status: 'info' as const },
-        { check: 'Vc (b)', basis: `(0.17 + 0.33/βc)λ√f′c·b₀d · βc ${f2(r.betac)}`, demand: `${f1(r.Vc1)} kN`, status: 'info' as const },
-        { check: 'Vc (c)', basis: '(0.083αs·d/b₀ + 0.17)λ√f′c·b₀d', demand: `${f1(r.Vc2)} kN`, status: 'info' as const },
+        { check: 'Vc (b)', basis: `0.17(1 + 2/βc)λ√f′c·b₀d · βc ${f2(r.betac)}`, demand: `${f1(r.Vc1)} kN`, status: 'info' as const },
+        { check: 'Vc (c)', basis: '0.083(2 + αs·d/b₀)λ√f′c·b₀d', demand: `${f1(r.Vc2)} kN`, status: 'info' as const },
         { check: 'Punching shear', basis: 'φ = 0.75, least Vc', demand: `${f1(f.Vu)} kN`, limit: `${f1(r.phiVc)} kN`, ratio: r.ratio, status: r.ok ? 'pass' as const : 'fail' as const },
       ] : []}
       steps={solution ?? []}
