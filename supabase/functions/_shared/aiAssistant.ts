@@ -257,7 +257,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/water-demand', name: 'Water Demand', sub: 'Forecast · peaking · storage', group: 'Water' },
   { route: '/pump-station', name: 'Pump Station', sub: 'System × pump · NPSH · power', group: 'Water' },
   { route: '/eng-economy', name: 'Engineering Economy', sub: 'Time value · NPV/IRR · depreciation', group: 'Mathematics' },
-  { route: '/hydrostatics', name: 'Hydrostatics', sub: 'Plane force · gates · buoyancy · vessels', group: 'Mathematics' },
+  { route: '/hydrostatics', name: 'Hydrostatics & Hydraulics', sub: 'Plane force · gates · buoyancy · Bernoulli · jets', group: 'Mathematics' },
   { route: '/dynamics', name: 'Dynamics', sub: 'Kinematics · kinetics · work-energy · impulse', group: 'Mathematics' },
   { route: '/drafting3d', name: 'Drafting3D', sub: 'Floor plans → 3D → ModelSpace', group: 'Mathematics' },
 ]

@@ -840,18 +840,18 @@ export const FIELD_TOOLS: DocTool[] = [
   },
   {
     id: 'hydrostatics',
-    name: 'Hydrostatics',
+    name: 'Hydrostatics & Hydraulics',
     route: '/hydrostatics',
     group: 'Mathematics',
-    summary: 'Fluid at rest and in rigid-body motion: plane-surface force with its center of pressure, curved-gate components, buoyancy and metacentric stability, manometers, and accelerating or rotating vessels.',
-    basis: 'F = γ·hc·A with yp = yc + Ixx,c/(yc·A); quarter-gate Fh on the projection and Fv as fluid weight; GM = KB + BM − KG; manometer walk ±γh; tanθ = ax/g; p = ρ(g+az)h; z = ω²r²/2g.',
+    summary: 'Fluid at rest, in rigid-body motion and in steady flow: plane-surface force with its center of pressure, curved-gate components, buoyancy and metacentric stability, manometers, accelerating or rotating vessels, the energy equation with pumps, turbines and losses, and a water jet on a vane.',
+    basis: 'F = γ·hc·A with yp = yc + Ixx,c/(yc·A); quarter-gate Fh on the projection and Fv as the weight of water above the arc; GM = KB + BM − KG; manometer walk ±γh; tanθ = ax/g; p = ρ(g+az)h; z = ω²r²/2g; p₁/γ + v₁²/2g + z₁ + hP = p₂/γ + v₂²/2g + z₂ + hT + hL; F = ρQ(v−u)(1−cosθ).',
     sections: [
       {
         id: 'hydrostatics-plane',
         title: 'Plane surface and gate',
         controls: [
           { kind: 'field', name: 'Plate', what: 'Rectangle or circle with its dimensions, centroid depth and inclination from the horizontal.' },
-          { kind: 'field', name: 'Gate', what: 'Quarter-circular radius, width and centroid depth of the projected rectangle.' },
+          { kind: 'field', name: 'Gate', what: 'Quarter-circular radius, width, and the depth of water standing above the gate top.' },
           { kind: 'output', name: 'Force and CP', what: 'Resultant magnitude with the center of pressure along the plate and as a vertical depth, plus the gate components and angle.' },
         ],
       },
@@ -869,6 +869,15 @@ export const FIELD_TOOLS: DocTool[] = [
         controls: [
           { kind: 'field', name: 'Legs', what: 'Manometer fluids with column heights, walking down (+) or up (−) from the starting pressure.' },
           { kind: 'output', name: 'Pressures and motion', what: 'Far-end pressure, surface tilt under horizontal acceleration, pressure under vertical acceleration, and the forced-vortex rim rise.' },
+        ],
+      },
+      {
+        id: 'hydrostatics-flow',
+        title: 'Energy equation and jets',
+        controls: [
+          { kind: 'field', name: 'Energy equation', what: 'Pressure, velocity and elevation at two points with head loss, pump and turbine heads; pick the unknown and its field is computed.' },
+          { kind: 'field', name: 'Jet on a vane', what: 'Jet velocity and diameter, deflection angle (90° flat plate, 180° full reversal) and vane speed.' },
+          { kind: 'output', name: 'Flow results', what: 'The solved unknown with the total head at each point; the jet force, power delivered and efficiency.' },
         ],
       },
     ],

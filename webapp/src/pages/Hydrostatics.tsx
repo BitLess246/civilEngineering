@@ -7,16 +7,30 @@ import {
   accelTilt, accelPressure, rotationRise, GAMMA_W,
   type PlaneShape,
 } from '../engine/hydrostatics'
-import { Card, Num, Pick, ResultCard, Row } from '../components/qty'
+import { bernoulli, waterJet } from '../engine/hydraulics'
+import { Num, Pick } from '../components/qty'
 import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
+import {
+  Workspace, InputRail, InputGroup, CheckCard, DocPanel, DocSection, KeyValueGrid,
+  ResultsTable, ReferenceList, ReportTitleBlock,
+} from '../components/workspace'
+import { useWorkspaceReport } from '../lib/useWorkspaceReport'
 import type { SolutionStep } from '../lib/solution'
 import { f2, f3 } from '../lib/influenceStyle'
 
-// Hydrostatics — force on plane surfaces with the center of pressure,
-// curved-gate components, buoyancy and metacentric stability, manometers,
-// and relative equilibrium (engine/hydrostatics.ts).
+// Hydrostatics & hydraulics — force on plane surfaces with the center of
+// pressure, curved-gate components, buoyancy and metacentric stability,
+// manometers and relative equilibrium (engine/hydrostatics.ts), plus the
+// energy equation and the jet on a vane (engine/hydraulics.ts). Laid out on
+// the three-column workspace (components/workspace.tsx).
+
+const TITLE = 'Hydrostatics & Hydraulics'
+type BernoulliUnknown = 'p2' | 'v2' | 'z2' | 'hL' | 'hP' | 'hT'
+const UNKNOWN_LABEL: Record<BernoulliUnknown, string> = {
+  p2: 'p₂', v2: 'v₂', z2: 'z₂', hL: 'head loss hL', hP: 'pump head hP', hT: 'turbine head hT',
+}
+const round = (x: number) => (Number.isFinite(x) ? Math.round(x * 1000) / 1000 : 0)
 
 interface LegUI {
   gamma: string
@@ -52,6 +66,23 @@ export default function Hydrostatics() {
   const [az, setAz] = useState(2)
   const [omega, setOmega] = useState(3)
   const [rotR, setRotR] = useState(1)
+  // energy equation (folded in from the Hydraulics engine) — kPa at the page edge
+  const [solveFor, setSolveFor] = useState<BernoulliUnknown>('p2')
+  const [p1, setP1] = useState(200)
+  const [v1, setV1] = useState(2)
+  const [z1, setZ1] = useState(10)
+  const [p2, setP2] = useState(150)
+  const [v2, setV2] = useState(4)
+  const [z2, setZ2] = useState(12)
+  const [hL, setHL] = useState(0.5)
+  const [hP, setHP] = useState(0)
+  const [hT, setHT] = useState(0)
+  // jet on a vane
+  const [jetV, setJetV] = useState(20)
+  const [jetD, setJetD] = useState(50)
+  const [jetTheta, setJetTheta] = useState(90)
+  const [jetU, setJetU] = useState(5)
+  const report = useWorkspaceReport(TITLE, ['Hydrostatics', 'Hydraulics'])
 
   const loadSample = () => {
     setShape('rect'); setB(2); setH(3); setDia(2); setHc(1.5); setTheta(90)
@@ -60,6 +91,8 @@ export default function Hydrostatics() {
     setPStart(50)
     setLegs([{ gamma: '133.1', h: '0.1', sign: 'down' }, { gamma: '9.81', h: '0.2', sign: 'up' }])
     setAx(3); setAzH(2); setAz(2); setOmega(3); setRotR(1)
+    setSolveFor('p2'); setP1(200); setV1(2); setZ1(10); setP2(150); setV2(4); setZ2(12); setHL(0.5); setHP(0); setHT(0)
+    setJetV(20); setJetD(50); setJetTheta(90); setJetU(5)
   }
 
   const planeShape: PlaneShape = shape === 'rect' ? { kind: 'rect', b, h } : { kind: 'circle', d: dia }
@@ -68,6 +101,32 @@ export default function Hydrostatics() {
   const fl = floatingStability({ L: bargeL, B: bargeB, draft, KG: kg })
   const tilt = accelTilt(ax)
   const mano = manometer(pStart, legs.map((l) => ({ gamma: sNum(l.gamma), h: sNum(l.h), sign: l.sign === 'down' ? 1 as const : -1 as const })))
+
+  const rise = rotationRise(omega, rotR)
+  // only the KNOWN quantities go in; the unknown is the engine's to return
+  const known = <T,>(k: BernoulliUnknown, v: T): T | undefined => (solveFor === k ? undefined : v)
+  let bern: ReturnType<typeof bernoulli>
+  let bernOk = true
+  try {
+    bern = bernoulli({
+      p1: p1 * 1000, v1, z1, p2: known('p2', p2 * 1000), v2: known('v2', v2), z2: known('z2', z2),
+      hL: known('hL', hL), hP: known('hP', hP), hT: known('hT', hT), solveFor,
+    })
+  } catch {
+    // v₂ with negative head: the flow cannot get there with this much energy
+    bernOk = false
+    bern = { p2: p2 * 1000, v2: 0, z2, hL, hP, hT, head1: NaN, head2: NaN }
+  }
+  if (bernOk && solveFor === 'hL' && bern.hL < 0) bernOk = false   // energy gained with no pump
+  const bernValue = !bernOk && solveFor === 'v2'
+    ? { value: '—', unit: 'no real v₂' }
+    : solveFor === 'p2' ? { value: f2(bern.p2 / 1000), unit: 'kPa' }
+    : solveFor === 'v2' ? { value: f3(bern.v2), unit: 'm/s' }
+    : { value: f3(bern[solveFor]), unit: 'm' }
+  // total head at 2 from the FINAL p₂, v₂, z₂ — the engine's `head2` is a
+  // working quantity (the velocity head when solving for v₂), not this
+  const H2 = bern.p2 / (GAMMA_W * 1000) + (bern.v2 * bern.v2) / 19.62 + bern.z2
+  const jet = waterJet({ v: jetV, d: jetD / 1000, thetaDeg: jetTheta, u: Math.min(jetU, jetV) })
 
   const setLeg = (k: number, patch: Partial<LegUI>) =>
     setLegs((ls) => ls.map((l, j) => (j === k ? { ...l, ...patch } : l)))
@@ -111,24 +170,41 @@ export default function Hydrostatics() {
         { text: 'Walk a manometer adding γh going down, subtracting going up. Accelerate the tank and the free surface tilts (or the pressure gains ρ·az·h); spin it and the surface is a paraboloid rising ω²r²/2g at the rim.' },
       ],
     },
+    {
+      title: `Energy equation — solving for ${UNKNOWN_LABEL[solveFor]}`,
+      lines: bernOk ? [
+        { tex: `H_1 = \\frac{p_1}{\\gamma} + \\frac{v_1^2}{2g} + z_1 = \\frac{${f2(p1)}}{${f2(GAMMA_W)}} + \\frac{${f2(v1)}^2}{19.62} + ${f2(z1)} = ${f3(bern.head1)}\\ \\text{m}` },
+        { tex: `H_1 + h_P = H_2 + h_T + h_L \\;\\Rightarrow\\; ${f3(bern.head1)} + ${f3(bern.hP)} = ${f3(H2)} + ${f3(bern.hT)} + ${f3(bern.hL)}` },
+        { tex: `${solveFor === 'p2' ? 'p_2' : solveFor === 'v2' ? 'v_2' : solveFor === 'z2' ? 'z_2' : solveFor === 'hL' ? 'h_L' : solveFor === 'hP' ? 'h_P' : 'h_T'} = ${bernValue.value}\\ \\text{${bernValue.unit}}` },
+        { text: solveFor === 'hL' && bern.hL < 0
+          ? 'A negative head loss means point 2 holds more energy than point 1 supplied — the flow runs the other way, or a pump is missing.'
+          : 'Total head is conserved between the points once the machines add (pump) or take (turbine) their share and friction takes the loss.' },
+      ] : [
+        { text: 'No real solution: with the given heads the flow has less energy at point 2 than its pressure and elevation alone require, so v₂² would be negative. Lower z₂ or p₂, or add a pump.' },
+      ],
+    },
+    {
+      title: 'Jet on a vane — impulse–momentum',
+      lines: [
+        { tex: `A = \\tfrac{\\pi}{4}d^2 = ${f3(jet.A * 1e4)}\\times10^{-4}\\ \\text{m}^2 \\qquad Q_r = A(v-u) = ${f3(jet.Q)}\\ \\text{m}^3/\\text{s}` },
+        { tex: `F_x = \\rho Q_r (v-u)(1-\\cos\\theta) = ${f2(jet.F_x)}\\ \\text{N} \\qquad P = F_x u = ${f2(jet.power)}\\ \\text{W}` },
+        { tex: `\\eta = \\frac{F_x u}{\\tfrac12 \\rho A v^3} = ${f2(jet.efficiency * 100)}\\%` },
+        { text: 'A single moving vane intercepts only the relative flow A(v − u); its efficiency peaks at u = v/3 — 8/27 for a flat plate, twice that for a full reversal.' },
+      ],
+    },
   ]
 
   return (
-    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <ReportControls title="Hydrostatics Report" badges={[`F ${f2(pl.F)} kN @ ${f3(pl.hpVertical)} m`, fl.stable ? `GM ${f3(fl.GM)} m — stable` : 'Unstable']} />
-      <p className="mt-2 max-w-3xl text-sm text-muted">
-        Fluid at rest and in rigid-body motion: plane-surface force with its center of
-        pressure, curved-gate components, buoyancy and metacentric stability, manometers,
-        and accelerating or rotating vessels — every line worked with your numbers below.
-      </p>
-
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <Card title="Plane surface">
-            <div className="sm:col-span-2 lg:col-span-3">
+    <Workspace title={TITLE} badges={['Statics', 'Bernoulli', 'Momentum']}
+      intro="Fluid at rest, in rigid-body motion and in steady flow: plane and curved surfaces, buoyancy and stability, manometers, accelerating and spinning vessels, the energy equation with pumps and losses, and a jet on a vane — every line worked with your numbers."
+      inputs={
+        <InputRail>
+          {report.group}
+          <InputGroup title="Plane surface">
+            <div className="col-span-2">
               <button type="button" onClick={loadSample}
                 className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                Load the sample — 2×3 plate at 1.5 m
+                Load the sample set
               </button>
             </div>
             <Pick label="Shape" value={shape} onChange={(v) => setShape(v as typeof shape)}
@@ -143,74 +219,163 @@ export default function Hydrostatics() {
             )}
             <Num label="Centroid depth hc" unit="m" value={hc} onChange={setHc} min={0.05} step="0.1" />
             <Num label="Inclination θ" unit="°" value={theta} onChange={setTheta} min={1} max={90} step="5" />
-          </Card>
+          </InputGroup>
 
-          <Card title="Curved gate (quarter-circular)">
+          <InputGroup title="Curved gate (quarter circle)">
             <Num label="Radius R" unit="m" value={gateR} onChange={setGateR} min={0.1} step="0.5" />
             <Num label="Width W" unit="m" value={gateW} onChange={setGateW} min={0.1} step="0.5" />
-            <Num label="Water above gate top h₀" unit="m" value={gateH0} onChange={setGateH0} min={0} step="0.1" />
-          </Card>
+            <div className="col-span-2">
+              <Num label="Water above gate top h₀" unit="m" value={gateH0} onChange={setGateH0} min={0} step="0.1" />
+            </div>
+          </InputGroup>
 
-          <Card title="Box barge">
+          <InputGroup title="Box barge">
             <Num label="Length L" unit="m" value={bargeL} onChange={setBargeL} min={1} step="1" />
             <Num label="Beam B" unit="m" value={bargeB} onChange={setBargeB} min={0.5} step="0.5" />
             <Num label="Draft d" unit="m" value={draft} onChange={setDraft} min={0.1} step="0.1" />
             <Num label="KG above keel" unit="m" value={kg} onChange={setKG} min={0} step="0.1" />
-          </Card>
+          </InputGroup>
 
-          <Card title="Manometer legs">
+          <InputGroup title="Manometer">
+            <div className="col-span-2">
+              <Num label="Starting pressure" unit="kPa" value={pStart} onChange={setPStart} step="1" />
+            </div>
             {legs.map((l, k) => (
-              <div key={k} className="flex items-center gap-2 sm:col-span-2 lg:col-span-3">
-                <Num label="γ" unit="kN/m³" value={sNum(l.gamma)} onChange={(v) => setLeg(k, { gamma: String(v) })} min={0.1} step="0.1" />
+              <div key={k} className="col-span-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
+                <Num label={`γ leg ${k + 1}`} unit="kN/m³" value={sNum(l.gamma)} onChange={(v) => setLeg(k, { gamma: String(v) })} min={0.1} step="0.1" />
                 <Num label="h" unit="m" value={sNum(l.h)} onChange={(v) => setLeg(k, { h: String(v) })} min={0} step="0.05" />
                 <Pick label="Going" value={l.sign} onChange={(v) => setLeg(k, { sign: v as LegUI['sign'] })}
                   options={[['down', 'Down +'], ['up', 'Up −']]} />
                 <button type="button" aria-label={`Remove leg ${k + 1}`} onClick={() => setLegs((ls) => ls.filter((_, j) => j !== k))}
-                  className="rounded-md border border-field-line px-1 py-1 text-xs text-muted hover:text-fail">✕</button>
+                  className="mb-1 rounded-md border border-field-line px-1.5 py-1 text-xs text-muted hover:text-fail">✕</button>
               </div>
             ))}
-            <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
+            <div className="col-span-2">
               <button type="button" onClick={() => setLegs((ls) => [...ls, { gamma: '9.81', h: '0.1', sign: 'down' }])}
                 className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
                 + Add leg
               </button>
-              <Num label="Starting pressure" unit="kPa" value={pStart} onChange={setPStart} step="1" />
             </div>
-          </Card>
+          </InputGroup>
 
-          <Card title="Moving vessels">
+          <InputGroup title="Moving vessels">
             <Num label="Horizontal ax" unit="m/s²" value={ax} onChange={setAx} step="0.5" />
-            <Num label="Depth h (vertical accel)" unit="m" value={azH} onChange={setAzH} min={0} step="0.5" />
             <Num label="Vertical az (+ up)" unit="m/s²" value={az} onChange={setAz} step="0.5" />
+            <Num label="Depth h (vertical)" unit="m" value={azH} onChange={setAzH} min={0} step="0.5" />
             <Num label="Spin ω" unit="rad/s" value={omega} onChange={setOmega} min={0} step="0.5" />
             <Num label="Rim radius r" unit="m" value={rotR} onChange={setRotR} min={0} step="0.5" />
-          </Card>
-        </div>
+          </InputGroup>
 
-        <div className="space-y-5">
-          <ResultCard title="Plane force">
-            <Row label="Resultant F" value={`${f2(pl.F)} kN`} sub={`γ·hc·A = ${f2(GAMMA_W)}·${f2(hc)}·${f3(pl.A)}`} />
-            <Row label="Center of pressure" value={`${f3(pl.hpVertical)} m deep`} sub={`${f3(pl.ypPlane)} m along the plate`} />
-          </ResultCard>
+          <InputGroup title="Energy equation (Bernoulli)" hint="Point 1 → point 2; pick the unknown — its field is computed.">
+            <div className="col-span-2">
+              <Pick label="Solve for" value={solveFor} onChange={(v) => setSolveFor(v as BernoulliUnknown)}
+                options={[['p2', 'Pressure p₂'], ['v2', 'Velocity v₂'], ['z2', 'Elevation z₂'], ['hL', 'Head loss hL'], ['hP', 'Pump head hP'], ['hT', 'Turbine head hT']]} />
+            </div>
+            <Num label="p₁" unit="kPa" value={p1} onChange={setP1} step="1" />
+            <Num label="p₂" unit="kPa" value={solveFor === 'p2' ? round(bern.p2 / 1000) : p2} onChange={setP2} step="1" disabled={solveFor === 'p2'} />
+            <Num label="v₁" unit="m/s" value={v1} onChange={setV1} min={0} step="0.1" />
+            <Num label="v₂" unit="m/s" value={solveFor === 'v2' ? round(bern.v2) : v2} onChange={setV2} min={0} step="0.1" disabled={solveFor === 'v2'} />
+            <Num label="z₁" unit="m" value={z1} onChange={setZ1} step="0.5" />
+            <Num label="z₂" unit="m" value={solveFor === 'z2' ? round(bern.z2) : z2} onChange={setZ2} step="0.5" disabled={solveFor === 'z2'} />
+            <Num label="Head loss hL" unit="m" value={solveFor === 'hL' ? round(bern.hL) : hL} onChange={setHL} min={0} step="0.1" disabled={solveFor === 'hL'} />
+            <Num label="Pump head hP" unit="m" value={solveFor === 'hP' ? round(bern.hP) : hP} onChange={setHP} min={0} step="0.5" disabled={solveFor === 'hP'} />
+            <Num label="Turbine head hT" unit="m" value={solveFor === 'hT' ? round(bern.hT) : hT} onChange={setHT} min={0} step="0.5" disabled={solveFor === 'hT'} />
+          </InputGroup>
 
-          <ResultCard title="Gate + flotation">
-            <Row label="Gate resultant" value={`${f2(gate.R)} kN @ ${f2(gate.thetaDeg)}°`} sub={`Fh ${f2(gate.Fh)} · Fv ${f2(gate.Fv)} kN`} />
-            <Row label="Buoyancy" value={`${f2(fl.Fb)} kN`} sub={`V ${f2(fl.V)} m³`} />
-            <Row label="GM" value={`${f3(fl.GM)} m`} sub={fl.stable ? 'stable — righting couple' : 'NOT stable'} alert={!fl.stable} />
-          </ResultCard>
-
-          <ResultCard title="Manometer + motion">
-            <Row label="Far-end pressure" value={`${f2(mano)} kPa`} sub={`from ${f2(pStart)} kPa over ${legs.length} legs`} />
-            <Row label="Surface tilt" value={`${f2(tilt.thetaDeg)}°`} sub={`tanθ ${f3(tilt.tanTheta)}`} />
-            <Row label="Rim rise" value={`${f3(rotationRise(omega, rotR))} m`} sub={`ω ${f2(omega)} rad/s · r ${f2(rotR)} m`} />
-          </ResultCard>
-
-          <PressureDiagram thetaDeg={theta} />
-
-          <WorkedSolution steps={steps} title="Hydrostatics — step by step" />
-        </div>
-      </div>
-    </div>
+          <InputGroup title="Jet on a vane">
+            <Num label="Jet velocity v" unit="m/s" value={jetV} onChange={setJetV} min={0.1} step="1" />
+            <Num label="Jet diameter d" unit="mm" value={jetD} onChange={setJetD} min={1} step="5" />
+            <Num label="Deflection θ" unit="°" value={jetTheta} onChange={setJetTheta} min={0} max={180} step="15" />
+            <Num label="Vane speed u" unit="m/s" value={jetU} onChange={setJetU} min={0} step="1" />
+          </InputGroup>
+        </InputRail>
+      }
+      checks={
+        <>
+          <CheckCard title="Plane force" basis={`${shape === 'rect' ? `${f2(b)} × ${f2(h)} m plate` : `⌀${f2(dia)} m plate`} · θ = ${f2(theta)}°`}
+            status="info" value={f2(pl.F)} unit="kN" formula={`F = γ·hc·A = ${f2(GAMMA_W)}·${f2(hc)}·${f3(pl.A)}`}
+            pairs={[{ label: 'CP depth hp', value: `${f3(pl.hpVertical)} m` }, { label: 'CP along plate', value: `${f3(pl.ypPlane)} m` }]} />
+          <CheckCard title="Curved gate" basis={`R ${f2(gateR)} m · h₀ ${f2(gateH0)} m above the top`}
+            status="info" value={f2(gate.R)} unit="kN" formula={`R = √(Fh² + Fv²) at ${f2(gate.thetaDeg)}°`}
+            pairs={[{ label: 'Fh (projection)', value: `${f2(gate.Fh)} kN` }, { label: 'Fv (water above)', value: `${f2(gate.Fv)} kN` }]} />
+          <CheckCard title="Flotation stability" basis={`${f2(bargeL)} × ${f2(bargeB)} m barge · draft ${f2(draft)} m`}
+            status={fl.stable ? 'pass' : 'fail'} pillLabel={fl.stable ? 'STABLE' : 'UNSTABLE'}
+            value={f3(fl.GM)} unit="m" formula="GM = KB + BM − KG  (> 0 to right itself)"
+            pairs={[{ label: 'Buoyancy Fb', value: `${f2(fl.Fb)} kN` }, { label: 'BM = I/V', value: `${f3(fl.BM)} m` }]} />
+          <CheckCard title="Manometer" basis={`${legs.length} legs from ${f2(pStart)} kPa`}
+            status="info" value={f2(mano)} unit="kPa" formula="p = p₀ + Σ ±γ·h" />
+          <CheckCard title="Moving vessel" basis={`ax ${f2(ax)} · az ${f2(az)} m/s² · ω ${f2(omega)} rad/s`}
+            status="info" value={f2(tilt.thetaDeg)} unit="° tilt" formula="tanθ = ax / g"
+            pairs={[{ label: `p at ${f2(azH)} m`, value: `${f2(accelPressure(azH, az))} kPa` }, { label: 'Rim rise', value: `${f3(rise)} m` }]} />
+          <CheckCard title="Energy equation" basis={`solving for ${UNKNOWN_LABEL[solveFor]}`}
+            status={bernOk ? 'info' : 'warn'} pillLabel={bernOk ? undefined : 'CHECK'}
+            value={bernValue.value} unit={bernValue.unit} formula="p₁/γ + v₁²/2g + z₁ + hP = p₂/γ + v₂²/2g + z₂ + hT + hL"
+            pairs={[{ label: 'Head at 1', value: `${f3(bern.head1)} m` }, { label: 'Head at 2', value: `${f3(H2)} m` }]} />
+          <CheckCard title="Jet on a vane" basis={`${f2(jetV)} m/s jet · θ ${f2(jetTheta)}° · u ${f2(jetU)} m/s`}
+            status="info" value={jet.F_x >= 1000 ? f2(jet.F_x / 1000) : f2(jet.F_x)} unit={jet.F_x >= 1000 ? 'kN' : 'N'} formula="Fx = ρQ(v − u)(1 − cosθ)"
+            pairs={[{ label: 'Power F·u', value: `${f2(jet.power / 1000)} kW` }, { label: 'Efficiency', value: `${f2(jet.efficiency * 100)} %` }]} />
+        </>
+      }
+      document={
+        <DocPanel tabs={[
+          {
+            id: 'sheet', label: 'Drawing sheet', content: (
+              <>
+                {report.printHeader}
+                <ReportTitleBlock title={TITLE} lh={report.lh} today={report.today} />
+                <DocSection num={1} title="Input summary">
+                  <KeyValueGrid items={[
+                    { label: 'Plate', value: shape === 'rect' ? `${f2(b)} × ${f2(h)} m` : `⌀${f2(dia)} m` },
+                    { label: 'Centroid depth hc', value: `${f2(hc)} m` },
+                    { label: 'Inclination θ', value: `${f2(theta)}°` },
+                    { label: 'Gate R × W', value: `${f2(gateR)} × ${f2(gateW)} m` },
+                    { label: 'Water over gate h₀', value: `${f2(gateH0)} m` },
+                    { label: 'Barge L × B', value: `${f2(bargeL)} × ${f2(bargeB)} m` },
+                    { label: 'Draft / KG', value: `${f2(draft)} / ${f2(kg)} m` },
+                    { label: 'Unit weight γ', value: `${f2(GAMMA_W)} kN/m³` },
+                    { label: 'Accel ax / az', value: `${f2(ax)} / ${f2(az)} m/s²` },
+                    { label: 'Spin ω / r', value: `${f2(omega)} rad/s / ${f2(rotR)} m` },
+                    { label: 'Point 1 p, v, z', value: `${f2(p1)} kPa, ${f2(v1)} m/s, ${f2(z1)} m` },
+                    { label: 'Jet v, d, θ, u', value: `${f2(jetV)} m/s, ${f2(jetD)} mm, ${f2(jetTheta)}°, ${f2(jetU)} m/s` },
+                  ]} />
+                </DocSection>
+                <DocSection num={2} title="Pressure on the plate" card aside={<span className="no-print rounded-full border border-ok-line bg-ok-tint px-2 py-0.5 text-[10px] font-bold text-ok">LIVE</span>}>
+                  <PressureDiagram thetaDeg={theta} />
+                </DocSection>
+                <DocSection num={3} title="Results summary">
+                  <ResultsTable caption="Values from the inputs on the left; flotation is the one pass/fail check — GM must be positive." rows={[
+                    { check: 'Plane resultant', basis: 'γ·hc·A', demand: `${f2(pl.F)} kN`, status: 'info' },
+                    { check: 'Center of pressure', basis: 'yc + Ixx/(yc·A)', demand: `${f3(pl.hpVertical)} m`, status: 'info' },
+                    { check: 'Gate resultant', basis: '√(Fh² + Fv²)', demand: `${f2(gate.R)} kN`, status: 'info' },
+                    { check: 'Metacentric height GM', basis: 'KB + BM − KG', demand: `${f3(fl.GM)} m`, limit: '> 0', status: fl.stable ? 'pass' : 'fail' },
+                    { check: 'Manometer far end', basis: 'p₀ + Σ ±γh', demand: `${f2(mano)} kPa`, status: 'info' },
+                    { check: 'Surface tilt', basis: 'tan⁻¹(ax/g)', demand: `${f2(tilt.thetaDeg)}°`, status: 'info' },
+                    { check: `Energy eq. — ${UNKNOWN_LABEL[solveFor]}`, basis: 'Bernoulli with hP, hT, hL', demand: `${bernValue.value} ${bernValue.unit}`, status: bernOk ? 'info' : 'warn' },
+                    { check: 'Jet force on vane', basis: 'ρQ(v−u)(1−cosθ)', demand: jet.F_x >= 1000 ? `${f2(jet.F_x / 1000)} kN` : `${f2(jet.F_x)} N`, status: 'info' },
+                  ]} />
+                </DocSection>
+              </>
+            ),
+          },
+          { id: 'calc', label: 'Calculations', content: <WorkedSolution steps={steps} title="Hydrostatics & hydraulics — step by step" /> },
+          {
+            id: 'refs', label: 'References', content: (
+              <DocSection num={4} title="Basis of each result">
+                <ReferenceList items={[
+                  { topic: 'Plane surface', basis: 'F = γ·hc·A; yp = yc + Ixx,c/(yc·A) along the plane', source: 'Hydrostatics — force on plane areas' },
+                  { topic: 'Curved gate', basis: 'Fh on the vertical projection; Fv = weight of fluid vertically above the arc', source: 'Hydrostatics — curved surfaces' },
+                  { topic: 'Flotation', basis: 'Fb = γV; GM = KB + BM − KG, BM = I/V; stable for GM > 0', source: 'Archimedes; metacentric stability' },
+                  { topic: 'Manometer', basis: 'Walk the legs: +γh going down, −γh going up', source: 'Pressure measurement' },
+                  { topic: 'Relative equilibrium', basis: 'tanθ = ax/g; p = ρ(g + az)h; z = ω²r²/2g', source: 'Rigid-body motion of fluids' },
+                  { topic: 'Energy equation', basis: 'p₁/γ + v₁²/2g + z₁ + hP = p₂/γ + v₂²/2g + z₂ + hT + hL', source: 'Bernoulli, extended for machines and losses' },
+                  { topic: 'Jet on a vane', basis: 'F = ρQ(v − u)(1 − cosθ); η = F·u / (½ρAv³)', source: 'Impulse–momentum' },
+                ]} />
+              </DocSection>
+            ),
+          },
+        ]} />
+      }
+    />
   )
 }
 
@@ -233,8 +398,7 @@ function PressureDiagram({ thetaDeg }: { thetaDeg: number }) {
   })
   const cpF = 2 / 3
   return (
-    <div className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
-      <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">Pressure on the plate</p>
+    <div data-pdf-drawing className="mx-auto max-w-[640px]">
       <DrawingFrame label="Hydrostatic pressure distribution">
       <svg viewBox={`0 0 ${W} ${Hh}`} className="w-full" role="img" aria-label="Pressure distribution on an inclined plate">
         <title>Pressure distribution on an inclined plate</title>
