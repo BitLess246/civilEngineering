@@ -263,8 +263,9 @@ export function DocSection({ num, title, aside, children, card = false }: {
   return (
     <section className="print-avoid-break">
       <div className="mb-2 flex items-center gap-3">
-        <h2 className="whitespace-nowrap text-[14.5px] font-extrabold text-ink">{num}. {title}</h2>
-        <span aria-hidden className="h-[2px] flex-1 bg-ink" />
+        {/* a long title wraps on a phone instead of pushing the aside off-screen */}
+        <h2 className="min-w-0 text-balance text-[14.5px] font-extrabold text-ink sm:whitespace-nowrap">{num}. {title}</h2>
+        <span aria-hidden className="h-[2px] min-w-6 flex-1 bg-ink" />
         {aside}
       </div>
       {card ? <div className="rounded-lg border border-hairline bg-sheet p-3">{children}</div> : children}
