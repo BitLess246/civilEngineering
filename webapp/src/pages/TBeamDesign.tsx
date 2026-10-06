@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react'
 import { designTBeam, type TBeamKind } from '../engine/tbeam'
 import { buildTBeamSolution } from '../lib/tbeamSolution'
-import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
-import { initialLetterhead } from '../lib/letterhead'
-import { Num, Pick, Card } from '../components/qty'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { TSection } from '../components/TSection'
 
 const f0 = (v: number) => v.toFixed(0)
@@ -26,7 +25,6 @@ export default function TBeamDesign() {
   // section handed to you, not one you sized — could not be entered at all.
   const [mode, setMode] = useState<'design' | 'analyze'>('design')
   const [AsGiven, setAsGiven] = useState(3000)
-  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead(''))
 
   const inp = useMemo(() => ({
     kind, bw, h, hf, bfGiven: bfGiven > 0 ? bfGiven : undefined, ln, sw,
@@ -36,7 +34,6 @@ export default function TBeamDesign() {
   }), [kind, bw, h, hf, bfGiven, ln, sw, cover, stirrupDia, barDia, fc, fy, Mu, mode, AsGiven, dGiven])
   const r = useMemo(() => { try { return designTBeam(inp) } catch { return null } }, [inp])
   const steps = useMemo(() => (r ? buildTBeamSolution(inp, r) : []), [inp, r])
-  const badges = ['ACI 318-14', 'NSCP 2015']
   // Steel the detailed cage actually has. The summary printed "6-⌀25 (2112 mm²)"
   // — the bar count beside the area REQUIRED, which reads as the area those bars
   // supply and is not. The tension-controlled ratio has the same problem: the cap
@@ -45,120 +42,99 @@ export default function TBeamDesign() {
     ? AsGiven
     : r ? r.bars * (Math.PI / 4) * barDia ** 2 : 0
 
+  const flexRatio = r ? Math.abs(Mu) / Math.max(r.phiMn, 1e-9) : NaN
+  const tcRatio = r ? AsProv / Math.max(r.AsMax, 1e-9) : NaN
+  const behaviour = r ? (r.tBehavior ? 'true T (a > hf)' : Mu < 0 ? 'web rectangle (hogging)' : 'rectangular (a ≤ hf)') : ''
   return (
-    <div className="min-h-screen">
-      <PageHeader title="T-Beam Design & Analysis" badges={[...badges, kind, mode === 'analyze' ? 'analysis' : 'design']} />
-      {/* PrintReport carries the letterhead card AND the export button in one;
-          this bare one is the fallback for when the design has not solved. */}
-      {!r && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} /></div>}
-      {r && (
-        <PrintReport docTitle={mode === 'analyze' ? 'T-Beam Analysis' : 'T-Beam Design'} docCode="TB-01" badges={badges} ok={r.ok}
-          governing={`${r.tBehavior ? 'true T behaviour' : 'rectangular behaviour'} · utilization ${(Math.abs(Mu) / Math.max(r.phiMn, 1e-9)).toFixed(2)}`}
-          lh={lh} onLhChange={(p) => setLh((s) => ({ ...s, ...p }))}
-          stats={[
-            { label: 'Steel', value: `${r.bars}-⌀${barDia}`, unit: `(${f0(AsProv)} mm²)` },
-            { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
-            { label: 'bf', value: f0(r.bf), unit: 'mm' },
-          ]}
-          checks={[
-            { name: 'Flexure Mu/φMn', ratio: Math.abs(Mu) / Math.max(r.phiMn, 1e-9), ok: r.phiMn >= Math.abs(Mu) },
-            { name: 'Tension-controlled', ratio: AsProv / Math.max(r.AsMax, 1e-9), ok: AsProv <= r.AsMax },
-          ]}
-          data={[
-            ['Type', kind], ['Web bw × h', `${bw} × ${h} mm`], ['Flange bf × hf', `${f0(r.bf)} × ${hf} mm`],
-            ["f'c / fy", `${fc} / ${fy} MPa`], ['Mu', `${Mu} kN·m`], ['d / dt', `${f1(r.d)} / ${f1(r.dt)} mm`],
-            ['As req / prov', `${f0(r.As)} / ${f0(AsProv)} mm²`],
-            ['fs', `${f1(r.fs)} MPa ${r.fsYields ? '(yields)' : `< fy = ${f0(fy)} — over-reinforced`}`],
-            ['Mn / φMn', `${f1(r.Mn)} / ${f1(r.phiMn)} kN·m`],
-            ['a req / prov / max', `${f1(r.aReq)} / ${f1(r.a)} / ${f1(r.aMax)} mm`],
-          ]}
-          steps={steps}
-          drawing={<TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} aReq={r.aReq} edge={kind === 'edge'}
-            bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />}
-          drawingTitle={kind === 'edge' ? 'Edge (L) beam section' : 'T-beam section'} />
+    <WorkspacePage title="T-Beam Design" badges={['Concrete', 'ACI 318-14 · NSCP 2015']}
+      intro="Flanged-beam flexure, both ways. Design solves the compression block from the moment and the steel from C = T — the block fills the flange before it enters the web. Analysis takes the steel as given and solves C(c) = T(c) for the neutral axis with fs = min(fy, 600(d − c)/c), so an over-reinforced section settles below yield. §6.3.2 effective width, §9.6.1.2 minimum steel, εt and φ per §21.2.2. Positive Mu = flange in compression."
+      report={r ? {
+        docCode: 'TB-01', ok: r.ok,
+        governing: `${r.tBehavior ? 'true T behaviour' : 'rectangular behaviour'} · utilization ${flexRatio.toFixed(2)}`,
+        stats: [
+          { label: 'Steel', value: `${r.bars}-⌀${barDia}`, unit: `(${f0(AsProv)} mm²)` },
+          { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
+          { label: 'bf', value: f0(r.bf), unit: 'mm' },
+        ],
+        checks: [
+          { name: 'Flexure Mu/φMn', ratio: flexRatio, ok: r.phiMn >= Math.abs(Mu) },
+          { name: 'Tension-controlled', ratio: tcRatio, ok: AsProv <= r.AsMax },
+        ],
+        data: [
+          ['Type', kind], ['Web bw × h', `${bw} × ${h} mm`], ['Flange bf × hf', `${f0(r.bf)} × ${hf} mm`],
+          ["f'c / fy", `${fc} / ${fy} MPa`], ['Mu', `${Mu} kN·m`], ['d / dt', `${f1(r.d)} / ${f1(r.dt)} mm`],
+          ['As req / prov', `${f0(r.As)} / ${f0(AsProv)} mm²`],
+          ['fs', `${f1(r.fs)} MPa ${r.fsYields ? '(yields)' : `< fy = ${f0(fy)} — over-reinforced`}`],
+          ['Mn / φMn', `${f1(r.Mn)} / ${f1(r.phiMn)} kN·m`],
+          ['a req / prov / max', `${f1(r.aReq)} / ${f1(r.a)} / ${f1(r.aMax)} mm`],
+        ],
+        steps, drawingTitle: kind === 'edge' ? 'Edge (L) beam section' : 'T-beam section',
+      } : undefined}
+      inputs={<>
+        <InputGroup title="Section">
+          <div className="col-span-2">
+            <Pick label="Beam type" value={kind} onChange={(v) => setKind(v as TBeamKind)} options={[['interior', 'Interior T'], ['edge', 'Edge (L-beam)'], ['isolated', 'Isolated T']]} />
+          </div>
+          <Num label="Web bw" unit="mm" value={bw} onChange={setBw} />
+          <Num label="Total depth h" unit="mm" value={h} onChange={setH} />
+          <Num label="Flange hf" unit="mm" value={hf} onChange={setHf} />
+          <Num label="bf (0 = §6.3.2)" unit="mm" value={bfGiven} onChange={setBfGiven} />
+          <Num label="Clear span ln" unit="m" value={ln} onChange={setLn} />
+          <Num label="Web spacing sw" unit="m" value={sw} onChange={setSw} />
+        </InputGroup>
+        <InputGroup title="Materials and detailing">
+          <Num label="f′c" unit="MPa" value={fc} onChange={setFc} />
+          <Num label="fy" unit="MPa" value={fy} onChange={setFy} />
+          <Num label="Cover" unit="mm" value={cover} onChange={setCover} />
+          <Num label="Stirrup ⌀" unit="mm" value={stirrupDia} onChange={setStirrupDia} />
+          <Num label="Bar ⌀" unit="mm" value={barDia} onChange={setBarDia} />
+          <Num label="Depth d (0 = derive)" unit="mm" value={dGiven} onChange={setDGiven} />
+        </InputGroup>
+        <InputGroup title="Demand" hint="+ sagging (flange in compression), − hogging.">
+          <div className="col-span-2">
+            <Pick label="Mode" value={mode} onChange={(v) => setMode(v as 'design' | 'analyze')} options={[['design', 'Design — size As from Mu'], ['analyze', 'Analyse — φMn of a given As']]} />
+          </div>
+          <Num label="Mu" unit="kN·m" value={Mu} onChange={setMu} />
+          {mode === 'analyze' && <Num label="As provided" unit="mm²" value={AsGiven} onChange={setAsGiven} />}
+        </InputGroup>
+      </>}
+      checks={r ? <>
+        <CheckCard title={mode === 'analyze' ? 'Analysis' : 'Design'} basis={behaviour} status={r.ok ? 'pass' : 'fail'} pillLabel={r.ok ? (mode === 'analyze' ? 'ANALYSIS OK' : 'DESIGN OK') : 'REVISE'}
+          value={mode === 'analyze' ? `${f0(AsProv)} mm²` : `${r.bars}-⌀${barDia}`} unit={mode === 'analyze' ? 'given' : `${f0(AsProv)} mm²`}
+          pairs={[{ label: 'bf', value: `${f0(r.bf)} mm` }, { label: 'd', value: `${f1(r.d)} mm` }]} />
+        <CheckCard title="Flexure" basis="Mu ≤ φMn" status={flexRatio <= 1.0001 ? 'pass' : 'fail'} value={f1(r.phiMn)} unit="kN·m φMn"
+          ratio={flexRatio} ratioLabel="Mu ÷ φMn" pairs={[{ label: 'εt / φ', value: `${r.et.toFixed(4)} / ${r.phi.toFixed(2)}` }, { label: 'fs', value: `${f1(r.fs)} MPa${r.fsYields ? ' (yields)' : ' < fy'}` }]} />
+        <CheckCard title="Tension-controlled" basis="As,prov ≤ As,max" status={tcRatio <= 1.0001 ? 'pass' : 'fail'} value={f0(r.AsMax)} unit="mm² As,max"
+          ratio={tcRatio} ratioLabel="As,prov ÷ As,max" pairs={[{ label: 'Block a req / prov', value: `${f1(r.aReq)} / ${f1(r.a)} mm` }, { label: 'a max', value: `${f1(r.aMax)} mm` }]} />
+      </> : (
+        <CheckCard title="Check the inputs" basis="T-beam" status="warn" pillLabel="CHECK" value="—" formula="Positive section dimensions and materials; hf < h." />
       )}
-      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <p className="no-print text-[13px] text-muted">
-          Flanged-beam flexure, both ways. <b>Design</b> solves the compression block from the moment
-          (§22.2.2.4.1) and the steel from C = T — the block grows with Mu and fills the flange before it
-          enters the web. <b>Analysis</b> takes the steel as given and solves C(c) = T(c) for the neutral
-          axis, with fs = min(fy, 600(d−c)/c): an over-reinforced section settles BELOW yield and its
-          capacity has to be solved for, not assumed. §6.3.2 effective width, §9.6.1.2 minimum steel,
-          εt/φ per §21.2.2. Positive Mu = flange in compression.
-        </p>
-        <div className="no-print mt-4 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(330px,1fr)]">
-          <div className="space-y-4">
-            <Card title="Section" hint="web + flange">
-              <Pick label="Beam type" value={kind} onChange={(v) => setKind(v as TBeamKind)}
-                options={[['interior', 'Interior T'], ['edge', 'Edge (L-beam)'], ['isolated', 'Isolated T']]} />
-              <Num label="Web bw" unit="mm" value={bw} onChange={setBw} />
-              <Num label="Total depth h" unit="mm" value={h} onChange={setH} />
-              <Num label="Flange hf" unit="mm" value={hf} onChange={setHf} />
-              <Num label="bf override (0 = table)" unit="mm" value={bfGiven} onChange={setBfGiven} />
-              <Num label="Clear span ln" unit="m" value={ln} onChange={setLn} />
-              <Num label="Web clear spacing sw" unit="m" value={sw} onChange={setSw} />
-            </Card>
-            <Card title="Materials & detailing">
-              <Num label="f'c" unit="MPa" value={fc} onChange={setFc} />
-              <Num label="fy" unit="MPa" value={fy} onChange={setFy} />
-              <Num label="Cover" unit="mm" value={cover} onChange={setCover} />
-              <Num label="Stirrup ⌀" unit="mm" value={stirrupDia} onChange={setStirrupDia} />
-              <Num label="Bar ⌀" unit="mm" value={barDia} onChange={setBarDia} />
-              <Num label="Effective depth d (0 = derive)" unit="mm" value={dGiven} onChange={setDGiven} />
-            </Card>
-            <Card title="Demand" hint="+ sagging / − hogging">
-              <Pick label="Mode" value={mode} onChange={(v) => setMode(v as 'design' | 'analyze')}
-                options={[['design', 'Design — size As from Mu'], ['analyze', 'Analyse — φMn of a given As']]} />
-              <Num label="Mu" unit="kN·m" value={Mu} onChange={setMu} />
-              {mode === 'analyze' && <Num label="As provided" unit="mm²" value={AsGiven} onChange={setAsGiven} />}
-            </Card>
-          </div>
-          <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-            {r && (
-              <VerdictPanel ok={r.ok}
-                headline={r.ok ? (mode === 'analyze' ? 'ANALYSIS OK' : 'DESIGN OK') : 'CHECK FAILED'}
-                governing={`${r.tBehavior ? 'real T-beam (a > hf)' : Mu < 0 ? 'web rectangle (hogging)' : 'rectangular (a ≤ hf)'} · bf ${f0(r.bf)} mm · d ${f1(r.d)} mm`}
-                // Each stat gets ~150 px, so the value carries the number and
-                // the unit carries a SHORT qualifier — the long parenthetical
-                // that used to trail "Steel" (and called a bar schedule "mm")
-                // simply did not fit, and pushed the panel off its own card.
-                stats={mode === 'analyze' ? [
-                  { label: 'As', value: f0(AsProv), unit: 'mm² given' },
-                  { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
-                  { label: 'Block a', value: f1(r.a), unit: 'mm' },
-                  { label: 'εt / φ', value: `${r.et.toFixed(4)} / ${r.phi.toFixed(2)}` },
-                  // The stress the steel actually reaches. An over-reinforced
-                  // section settles below fy, and its capacity is smaller than
-                  // assuming yield would say — see `tBeamCapacity`.
-                  { label: 'fs', value: f1(r.fs), unit: r.fsYields ? 'MPa — yields' : 'MPa < fy' },
-                ] : [
-                  { label: 'Steel', value: `${r.bars}-⌀${barDia}`, unit: `${f0(AsProv)} mm²` },
-                  { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
-                  { label: 'Block a req/prov', value: `${f1(r.aReq)} / ${f1(r.a)}`, unit: 'mm' },
-                  { label: 'εt / φ', value: `${r.et.toFixed(4)} / ${r.phi.toFixed(2)}` },
-                  { label: 'fs', value: f1(r.fs), unit: r.fsYields ? 'MPa — yields' : 'MPa < fy' },
-                ]}
-                checks={[
-                  { name: 'Flexure Mu/φMn', ratio: r.phiMn > 0 ? Math.abs(Mu) / r.phiMn : 99 },
-                  { name: 'Tension-controlled As,prov/As,max', ratio: r.AsMax > 0 ? AsProv / r.AsMax : 99 },
-                ]}
-                footnote={r.notes.join(' · ') || undefined} />
-            )}
-            {r && (
-              <DrawingCard pdfDrawing title="Section & stress block"
-                meta={`${f0(r.bf)}×${hf} flange ${kind === 'edge' ? 'one side' : 'both sides'} · ${bw}×${h} web`}>
-                <TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} aReq={r.aReq} edge={kind === 'edge'}
-                  bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />
-              </DrawingCard>
-            )}
-          </div>
-        </div>
-        {r && (
-          <div className="no-print mt-5">
-            <WorkedSolution steps={steps} title="T-beam — worked solution" />
-          </div>
-        )}
-      </div>
-    </div>
+      summary={[
+        { label: 'Type', value: kind },
+        { label: 'Web bw × h', value: `${bw} × ${h} mm` },
+        { label: 'Flange hf', value: `${hf} mm${bfGiven > 0 ? `, bf ${bfGiven} mm given` : ''}` },
+        { label: "f'c / fy", value: `${fc} / ${fy} MPa` },
+        { label: 'Demand', value: `Mu ${Mu} kN·m (${mode})` },
+      ]}
+      drawing={r ? { title: kind === 'edge' ? 'Edge (L) beam section and stress block' : 'T-beam section and stress block', node: <div data-pdf-drawing>
+        <TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} aReq={r.aReq} edge={kind === 'edge'} bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />
+      </div> } : undefined}
+      resultsCaption={r && r.notes.length ? r.notes.join(' · ') : undefined}
+      results={r ? [
+        { check: 'Effective flange width', basis: bfGiven > 0 ? 'given' : '§6.3.2', demand: `${f0(r.bf)} mm`, status: 'info' as const },
+        { check: 'Depths d / dt', basis: `${r.layers.length} layer${r.layers.length > 1 ? 's' : ''}`, demand: `${f1(r.d)} / ${f1(r.dt)} mm`, status: 'info' as const },
+        { check: 'Steel required / provided', basis: mode === 'analyze' ? 'given' : `${r.bars}-⌀${barDia}`, demand: `${f0(r.As)} / ${f0(AsProv)} mm²`, status: 'info' as const },
+        { check: 'Steel stress fs', basis: r.fsYields ? 'yields' : 'over-reinforced: below fy', demand: `${f1(r.fs)} MPa`, limit: `${f0(fy)} MPa`, status: r.fsYields ? 'pass' as const : 'warn' as const },
+        { check: 'Flexure', basis: 'Mu ≤ φMn', demand: `${f1(Math.abs(Mu))} kN·m`, limit: `${f1(r.phiMn)} kN·m`, ratio: flexRatio, status: flexRatio <= 1.0001 ? 'pass' as const : 'fail' as const },
+        { check: 'Tension-controlled', basis: 'As,prov ≤ As,max', demand: `${f0(AsProv)} mm²`, limit: `${f0(r.AsMax)} mm²`, ratio: tcRatio, status: tcRatio <= 1.0001 ? 'pass' as const : 'fail' as const },
+      ] : [{ check: 'Section', basis: 'invalid input', demand: '—', status: 'warn' as const }]}
+      steps={steps.length ? steps : [{ title: 'Check the inputs', lines: [{ text: 'Positive section dimensions and materials; hf < h.' }] }]}
+      references={[
+        { topic: 'Effective flange width', basis: 'interior, edge and isolated T', source: 'ACI 318-14 §6.3.2; NSCP 2015 §406.3.2' },
+        { topic: 'Flexure', basis: 'rectangular stress block, C = T', source: 'ACI 318-14 §22.2.2' },
+        { topic: 'Strength reduction', basis: 'εt and φ', source: 'ACI 318-14 §21.2.2' },
+        { topic: 'Minimum steel', basis: 'As,min', source: 'ACI 318-14 §9.6.1.2' },
+      ]}
+    />
   )
 }

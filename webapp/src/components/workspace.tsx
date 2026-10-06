@@ -22,10 +22,12 @@ import type { LetterheadState } from './calc'
 
 /** The three-column page. Children are slots, so the DOM order (inputs →
  *  checks → document) is the reading order on a phone. */
-export function Workspace({ title, badges, intro, inputs, checks, document }: {
+export function Workspace({ title, badges, intro, actions, inputs, checks, document }: {
   title: string
   badges?: string[]
   intro?: ReactNode
+  /** Page-level controls beside the title — a mode toggle, say. */
+  actions?: ReactNode
   inputs: ReactNode
   checks: ReactNode
   document: ReactNode
@@ -37,6 +39,7 @@ export function Workspace({ title, badges, intro, inputs, checks, document }: {
         {badges?.map((b) => (
           <span key={b} className="whitespace-nowrap rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[10px] font-medium text-brand">{b}</span>
         ))}
+        {actions && <div className="ml-auto self-center">{actions}</div>}
         {intro && <p className="basis-full max-w-4xl text-[13px] text-muted">{intro}</p>}
       </div>
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_310px]">

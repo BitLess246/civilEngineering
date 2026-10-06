@@ -13,11 +13,14 @@
 
 import { DrawingFrame } from './DrawingFrame'
 
-const INK = '#37526e'
-const WALL = '#eef1f5'
-const LOAD = '#c2402a'
-const DIM = '#1f77b4'
-const FAINT = '#a39d8d'
+// Theme-aware: the sheet colour drives every halo and knock-out, so the
+// drawing reads on the dark theme as well as the light one.
+const INK = 'var(--ink, #37526e)'
+const WALL = 'rgba(115,109,94,0.12)'
+const LOAD = 'rgba(194,64,42,0.95)'
+const DIM = 'rgba(31,119,180,0.95)'
+const FAINT = 'var(--muted, #8a8473)'
+const SHEET = 'var(--sheet, #fff)'
 
 export interface LintelElevationProps {
   /** Clear opening and the effective span, m. */
@@ -52,7 +55,7 @@ export function LintelElevation({
   const cut = wallTop < wallHeightAbove - 1e-9
   const worldW = opening + 2 * jamb
   const worldH = hL + wallTop + stub
-  const M = { l: 54, r: 54, t: 26, b: 74 }
+  const M = { l: 54, r: 54, t: 26, b: 80 }
   const S = Math.min(560 / worldW, 320 / worldH)
   const W = M.l + worldW * S + M.r
   const HT = M.t + worldH * S + M.b
@@ -74,7 +77,7 @@ export function LintelElevation({
           // The wall carries on above: a break line rather than a solid top edge
           // that would read as the top of the wall.
           <g>
-            <rect x={X(0) - 1} y={Y(hL + wallTop) - 5} width={worldW * S + 2} height={10} fill="#fff" />
+            <rect x={X(0) - 1} y={Y(hL + wallTop) - 5} width={worldW * S + 2} height={10} fill={SHEET} />
             <path d={`M${X(0)} ${Y(hL + wallTop)} ${Array.from({ length: 9 }, (_, k) =>
               `L${X(0) + ((k + 1) * worldW * S) / 9} ${Y(hL + wallTop) + (k % 2 ? 4 : -4)}`).join(' ')}`}
               fill="none" stroke={INK} strokeWidth={1.2} />
@@ -97,7 +100,7 @@ export function LintelElevation({
             {/* Clear of the apex, not straddling it: at 6 the label sat on the
                 two lines it is describing. */}
             <text x={X(apex)} y={Y(hL + triangleHeight) - 13} fontSize={8} fill={LOAD} textAnchor="middle"
-              paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>
+              paintOrder="stroke" stroke={SHEET} strokeWidth={2.6}>
               arch closes {triangleHeight.toFixed(2)} m up
             </text>
           </>
@@ -106,7 +109,7 @@ export function LintelElevation({
             <rect x={X(oL)} y={Y(hL + wallHeightAbove)} width={opening * S} height={wallHeightAbove * S}
               fill={LOAD} opacity={0.17} stroke={LOAD} strokeWidth={1.1} strokeDasharray="5 3" />
             <text x={X(apex)} y={Y(hL + wallHeightAbove) - 6} fontSize={8} fill={LOAD} textAnchor="middle"
-              paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>
+              paintOrder="stroke" stroke={SHEET} strokeWidth={2.6}>
               no room for the arch — the whole rectangle bears
             </text>
           </>
@@ -114,28 +117,44 @@ export function LintelElevation({
 
         {/* the lintel itself, sitting on its bearings */}
         <rect x={X(oL - bear)} y={Y(hL)} width={(opening + 2 * bear) * S} height={hL * S}
-          fill="#dfe7f0" stroke={INK} strokeWidth={1.6} />
+          fill="rgba(15,76,146,0.12)" stroke={INK} strokeWidth={1.6} />
         {bars && (
           <text x={X(apex)} y={Y(hL / 2) + 3} fontSize={7.5} fill={LOAD} textAnchor="middle"
-            paintOrder="stroke" stroke="#fff" strokeWidth={2.4}>{bars}</text>
+            paintOrder="stroke" stroke={SHEET} strokeWidth={2.4}>{bars}</text>
         )}
 
-        {/* Dimensions BELOW the jamb stubs. Drawn at the soffit they ran across
-            the jambs, which are the things being dimensioned between. */}
-        <g stroke={DIM} strokeWidth={0.85} fill="none" fontSize={8}>
-          {[[oL, oR, stub * S + 20, `clear ${opening.toFixed(2)} m`],
-            [oL - bear, oR + bear, stub * S + 38, `span ${span.toFixed(2)} m`]].map(([x0, x1, dy, label], i) => (
-              <g key={i}>
-                <line x1={X(x0 as number)} y1={Y(0) + (dy as number)} x2={X(x1 as number)} y2={Y(0) + (dy as number)} />
-                {[x0, x1].map((x, k) => (
-                  <line key={k} x1={X(x as number) - 3} y1={Y(0) + (dy as number) + 3}
-                    x2={X(x as number) + 3} y2={Y(0) + (dy as number) - 3} strokeWidth={1.2} />
-                ))}
-                <text x={X(((x0 as number) + (x1 as number)) / 2)} y={Y(0) + (dy as number) - 3.5}
-                  fill={DIM} stroke="#fff" strokeWidth={2.4} paintOrder="stroke" textAnchor="middle">{label}</text>
-              </g>
-            ))}
-        </g>
+        {/* Dimensions BELOW the jamb stubs, each between extension lines from
+            the features it measures: the clear opening between the jamb faces,
+            the effective span between the support points marked on the soffit
+            (centred on the opening — §6.3.2.1 extends it by the same amount at
+            each end). The span used to be drawn between the lintel ENDS, which
+            are ℓn + 2·bearing apart, under a label that said ℓn + h. */}
+        {(() => {
+          const yClear = Y(0) + stub * S + 20, ySpan = Y(0) + stub * S + 40
+          const sL = apex - span / 2, sR = apex + span / 2
+          const dim = (x0: number, x1: number, y: number, label: string) => (
+            <g>
+              <line x1={X(x0)} y1={y} x2={X(x1)} y2={y} />
+              {[x0, x1].map((x, k) => (
+                <line key={k} x1={X(x) - 3} y1={y + 3} x2={X(x) + 3} y2={y - 3} strokeWidth={1.2} />
+              ))}
+              <text x={X((x0 + x1) / 2)} y={y - 3.5} fill={DIM} stroke={SHEET} strokeWidth={2.4} paintOrder="stroke" textAnchor="middle">{label}</text>
+            </g>
+          )
+          return (
+            <g stroke={DIM} strokeWidth={0.85} fill="none" fontSize={8}>
+              {[oL, oR].map((x) => <line key={`c${x}`} x1={X(x)} y1={Y(0) + stub * S + 2} x2={X(x)} y2={yClear + 4} strokeWidth={0.6} />)}
+              {[sL, sR].map((x) => (
+                <g key={`s${x}`}>
+                  <line x1={X(x)} y1={Y(0) - 4} x2={X(x)} y2={Y(0) + 4} strokeWidth={1.2} />
+                  <line x1={X(x)} y1={Y(0) + 6} x2={X(x)} y2={ySpan + 4} strokeWidth={0.6} strokeDasharray="3 2" />
+                </g>
+              ))}
+              {dim(oL, oR, yClear, `clear ${opening.toFixed(2)} m`)}
+              {dim(sL, sR, ySpan, `effective span ${span.toFixed(2)} m`)}
+            </g>
+          )
+        })()}
 
         {/* The bearing, marked ON the overlap it is: the length of lintel sitting
             on the jamb, which is the area the bearing stress is checked over.
@@ -148,7 +167,7 @@ export function LintelElevation({
             <line key={k} x1={X(x)} y1={Y(0) + 3} x2={X(x)} y2={Y(0) + 9} stroke={FAINT} strokeWidth={1.2} />
           ))}
           <text x={X(oL - bear / 2)} y={Y(0) + 17} fontSize={7.5} fill={FAINT} textAnchor="middle"
-            paintOrder="stroke" stroke="#fff" strokeWidth={2.4}>{bearing} bearing</text>
+            paintOrder="stroke" stroke={SHEET} strokeWidth={2.4}>{bearing} bearing</text>
         </g>
 
         <text x={W / 2} y={HT - 8} fontSize={7.5} fill={FAINT} textAnchor="middle">
