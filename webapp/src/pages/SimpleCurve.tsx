@@ -3,7 +3,6 @@ import { solveCurve, type CurveResult } from '../engine/circularCurve'
 import { Num } from '../components/qty'
 import { InputGroup, CheckCard } from '../components/workspace'
 import { WorkspacePage } from '../components/WorkspacePage'
-import { DrawingFrame } from '../components/DrawingFrame'
 import { CurveFigure } from '../components/surveyingSketches'
 import type { SolutionStep } from '../lib/solution'
 import { f2, f3 } from '../lib/influenceStyle'
@@ -84,7 +83,7 @@ export default function SimpleCurve() {
       ]}
       drawing={el && res ? { title: 'Curve layout and staking table', node: <>
         <div data-pdf-drawing className="mx-auto max-w-[680px]">
-          <DrawingFrame label="Circular curve layout"><CurveFigure el={el} /></DrawingFrame>
+          <CurveFigure el={el} />
         </div>
         <div className="mt-3 overflow-x-auto rounded-md border border-hairline bg-sheet">
           <table className="w-full min-w-[480px] border-collapse text-[11.5px]">

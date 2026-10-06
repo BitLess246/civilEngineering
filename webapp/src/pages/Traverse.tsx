@@ -3,7 +3,6 @@ import { solveTraverse, type TraverseCourse, type TraverseResult, type TraverseI
 import { Num, Pick } from '../components/qty'
 import { InputGroup, CheckCard } from '../components/workspace'
 import { WorkspacePage } from '../components/WorkspacePage'
-import { DrawingFrame } from '../components/DrawingFrame'
 import { TraversePlot } from '../components/surveyingSketches'
 import type { SolutionStep } from '../lib/solution'
 import { f2, f3 } from '../lib/influenceStyle'
@@ -140,7 +139,7 @@ export default function Traverse() {
       ]}
       drawing={res ? { title: 'Adjusted figure and course table', node: <>
         <div data-pdf-drawing className="mx-auto max-w-[680px]">
-          <DrawingFrame label="Adjusted traverse polygon"><TraversePlot res={res} /></DrawingFrame>
+          <TraversePlot res={res} />
         </div>
         <p className="mt-1 text-[10.5px] text-faint">x east, y north · vertices from the adjusted coordinates.</p>
         <div className="mt-3 overflow-x-auto rounded-md border border-hairline bg-sheet">

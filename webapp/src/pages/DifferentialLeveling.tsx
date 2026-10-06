@@ -3,7 +3,6 @@ import { reduceLeveling, accuracyClass, type LevelInput, type LevelResult } from
 import { Num } from '../components/qty'
 import { InputGroup, CheckCard } from '../components/workspace'
 import { WorkspacePage } from '../components/WorkspacePage'
-import { DrawingFrame } from '../components/DrawingFrame'
 import { LevelProfile } from '../components/surveyingSketches'
 import type { SolutionStep } from '../lib/solution'
 import { f2, f3 } from '../lib/influenceStyle'
@@ -135,7 +134,7 @@ export default function DifferentialLeveling() {
       ]}
       drawing={res ? { title: 'Profile and reduced level book', node: <>
         <div data-pdf-drawing>
-          <DrawingFrame label="Leveling profile with instrument heights"><LevelProfile res={res} startElev={startElev} /></DrawingFrame>
+          <LevelProfile res={res} startElev={startElev} />
         </div>
         <p className="mt-1 text-[10.5px] text-faint">Elevations to scale · dashed = height of instrument · dots = intermediate sights.</p>
         <div className="mt-3 overflow-x-auto rounded-md border border-hairline bg-sheet">

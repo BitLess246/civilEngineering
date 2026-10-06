@@ -3,9 +3,11 @@
 // polygon, the simple-curve layout and the mass-haul diagram. Each redraws
 // from the engine result it is given.
 // ─────────────────────────────────────────────────────────────────────────
+import { DrawingFrame } from './DrawingFrame'
 import type { LevelResult } from '../engine/leveling'
 import type { TraverseResult } from '../engine/traverse'
 import type { CurveResult } from '../engine/circularCurve'
+import type { EarthworkResult } from '../engine/earthwork'
 import { INK, BRAND, FAIL, MUTED, HAIR, f2, f3 } from '../lib/influenceStyle'
 
 // ── profile drawing ───────────────────────────────────────────────────────
@@ -28,55 +30,57 @@ export function LevelProfile({ res, startElev }: { res: LevelResult; startElev: 
   const y = (e: number) => padT + ((eMax - e) / Math.max(eMax - eMin, 1e-9)) * (H - padT - padB)
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Leveling profile">
-      {/* elevation grid */}
-      {gridTicks(eMin, eMax, 5).map((e) => (
-        <g key={e}>
-          <line x1={padL} x2={W - padR} y1={y(e)} y2={y(e)} stroke={HAIR} strokeWidth="1" />
-          <text x={padL - 6} y={y(e) + 3.5} textAnchor="end" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">{f2(e)}</text>
-        </g>
-      ))}
-
-      {/* HI lines: dashed horizontal at each setup's HI, spanning its two points */}
-      {res.points.map((p, i) => {
-        if (p.hi === null || p.bs === null) return null
-        const x1 = x(i)
-        const x2 = x(Math.min(i + 1, res.points.length - 1))
-        return <line key={`hi${i}`} x1={x1} x2={x2} y1={y(p.hi)} y2={y(p.hi)} stroke={BRAND} strokeWidth="1" strokeDasharray="4 3" opacity="0.65" />
-      })}
-
-      {/* ground profile through the turning points */}
-      <polyline
-        points={res.points.map((p, i) => `${x(i)},${y(p.elev)}`).join(' ')}
-        fill="none" stroke={INK} strokeWidth="2"
-      />
-      {/* IFS shots as small ticks below/above their row */}
-      {res.points.map((p, i) =>
-        p.ifs.map((z, k) => (
-          <g key={`ifs${i}-${k}`}>
-            <circle cx={x(i)} cy={y(z)} r="2.6" fill={BRAND} />
-            <text x={x(i) + 5} y={y(z) - 4} fontSize="9" fill={MUTED} fontFamily="var(--font-mono, monospace)">{f2(z)}</text>
+    <DrawingFrame label="Leveling profile with instrument heights">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Leveling profile">
+        {/* elevation grid */}
+        {gridTicks(eMin, eMax, 5).map((e) => (
+          <g key={e}>
+            <line x1={padL} x2={W - padR} y1={y(e)} y2={y(e)} stroke={HAIR} strokeWidth="1" />
+            <text x={padL - 6} y={y(e) + 3.5} textAnchor="end" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">{f2(e)}</text>
           </g>
-        )),
-      )}
+        ))}
 
-      {/* station marks + names */}
-      {res.points.map((p, i) => (
-        <g key={`st${i}`}>
-          <line x1={x(i)} x2={x(i)} y1={y(p.elev) - 4} y2={y(p.elev) + 4} stroke={INK} strokeWidth="1.5" />
-          <circle cx={x(i)} cy={y(p.elev)} r="2.5" fill={INK} />
-          <text x={x(i)} y={H - padB + 14} textAnchor="middle" fontSize="9.5" fill={INK} fontFamily="var(--font-mono, monospace)">{p.sta}</text>
-          <text x={x(i)} y={y(p.elev) + 16} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily="var(--font-mono, monospace)">{f2(p.adj)}</text>
-        </g>
-      ))}
+        {/* HI lines: dashed horizontal at each setup's HI, spanning its two points */}
+        {res.points.map((p, i) => {
+          if (p.hi === null || p.bs === null) return null
+          const x1 = x(i)
+          const x2 = x(Math.min(i + 1, res.points.length - 1))
+          return <line key={`hi${i}`} x1={x1} x2={x2} y1={y(p.hi)} y2={y(p.hi)} stroke={BRAND} strokeWidth="1" strokeDasharray="4 3" opacity="0.65" />
+        })}
 
-      {/* misclosure flag on the last point */}
-      {res.misclosure !== null && Math.abs(res.misclosure) > 1e-9 && (
-        <text x={x(res.points.length - 1)} y={padT - 8} textAnchor="end" fontSize="10" fill={FAIL} fontFamily="var(--font-mono, monospace)">
-          ε = {f3(res.misclosure)} m
-        </text>
-      )}
-    </svg>
+        {/* ground profile through the turning points */}
+        <polyline
+          points={res.points.map((p, i) => `${x(i)},${y(p.elev)}`).join(' ')}
+          fill="none" stroke={INK} strokeWidth="2"
+        />
+        {/* IFS shots as small ticks below/above their row */}
+        {res.points.map((p, i) =>
+          p.ifs.map((z, k) => (
+            <g key={`ifs${i}-${k}`}>
+              <circle cx={x(i)} cy={y(z)} r="2.6" fill={BRAND} />
+              <text x={x(i) + 5} y={y(z) - 4} fontSize="9" fill={MUTED} fontFamily="var(--font-mono, monospace)">{f2(z)}</text>
+            </g>
+          )),
+        )}
+
+        {/* station marks + names */}
+        {res.points.map((p, i) => (
+          <g key={`st${i}`}>
+            <line x1={x(i)} x2={x(i)} y1={y(p.elev) - 4} y2={y(p.elev) + 4} stroke={INK} strokeWidth="1.5" />
+            <circle cx={x(i)} cy={y(p.elev)} r="2.5" fill={INK} />
+            <text x={x(i)} y={H - padB + 14} textAnchor="middle" fontSize="9.5" fill={INK} fontFamily="var(--font-mono, monospace)">{p.sta}</text>
+            <text x={x(i)} y={y(p.elev) + 16} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily="var(--font-mono, monospace)">{f2(p.adj)}</text>
+          </g>
+        ))}
+
+        {/* misclosure flag on the last point */}
+        {res.misclosure !== null && Math.abs(res.misclosure) > 1e-9 && (
+          <text x={x(res.points.length - 1)} y={padT - 8} textAnchor="end" fontSize="10" fill={FAIL} fontFamily="var(--font-mono, monospace)">
+            ε = {f3(res.misclosure)} m
+          </text>
+        )}
+      </svg>
+    </DrawingFrame>
   )
 }
 
@@ -109,61 +113,63 @@ export function TraversePlot({ res }: { res: TraverseResult }) {
   const gx = verts.slice(0, res.n).reduce((t, v) => t + cx(v.x), 0) / res.n
   const gy = verts.slice(0, res.n).reduce((t, v) => t + cy(v.y), 0) / res.n
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Adjusted traverse polygon">
-      {/* grid */}
-      <line x1={pad} x2={W - pad} y1={H - pad} y2={H - pad} stroke={HAIR} />
-      <line x1={pad} x2={pad} y1={pad} y2={H - pad} stroke={HAIR} />
-      <text x={W - pad} y={H - pad + 16} textAnchor="end" fontSize="10" fill={MUTED}>E (m)</text>
-      <text x={pad - 8} y={pad - 14} fontSize="10" fill={MUTED}>N (m)</text>
+    <DrawingFrame label="Adjusted traverse polygon">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Adjusted traverse polygon">
+        {/* grid */}
+        <line x1={pad} x2={W - pad} y1={H - pad} y2={H - pad} stroke={HAIR} />
+        <line x1={pad} x2={pad} y1={pad} y2={H - pad} stroke={HAIR} />
+        <text x={W - pad} y={H - pad + 16} textAnchor="end" fontSize="10" fill={MUTED}>E (m)</text>
+        <text x={pad - 8} y={pad - 14} fontSize="10" fill={MUTED}>N (m)</text>
 
-      {/* polygon */}
-      <polygon
-        points={verts.slice(0, res.n).map((v) => `${cx(v.x)},${cy(v.y)}`).join(' ')}
-        fill="rgba(15,76,146,0.06)" stroke={INK} strokeWidth="1.8"
-      />
-      {/* courses with names */}
-      {res.rows.map((r, i) => {
-        const a = verts[i]
-        const b = verts[i + 1]
-        const mx = (cx(a.x) + cx(b.x)) / 2
-        const my = (cy(a.y) + cy(b.y)) / 2
-        // unit normal of the segment, turned to face away from the centroid
-        const sx = cx(b.x) - cx(a.x), sy = cy(b.y) - cy(a.y), len = Math.hypot(sx, sy) || 1
-        let nx = -sy / len, ny = sx / len
-        if (nx * (mx - gx) + ny * (my - gy) < 0) { nx = -nx; ny = -ny }
-        const lx = mx + nx * 12, ly = my + ny * 12 + (ny > 0.35 ? 8 : ny < -0.35 ? -2 : 3.5)
-        return (
+        {/* polygon */}
+        <polygon
+          points={verts.slice(0, res.n).map((v) => `${cx(v.x)},${cy(v.y)}`).join(' ')}
+          fill="rgba(15,76,146,0.06)" stroke={INK} strokeWidth="1.8"
+        />
+        {/* courses with names */}
+        {res.rows.map((r, i) => {
+          const a = verts[i]
+          const b = verts[i + 1]
+          const mx = (cx(a.x) + cx(b.x)) / 2
+          const my = (cy(a.y) + cy(b.y)) / 2
+          // unit normal of the segment, turned to face away from the centroid
+          const sx = cx(b.x) - cx(a.x), sy = cy(b.y) - cy(a.y), len = Math.hypot(sx, sy) || 1
+          let nx = -sy / len, ny = sx / len
+          if (nx * (mx - gx) + ny * (my - gy) < 0) { nx = -nx; ny = -ny }
+          const lx = mx + nx * 12, ly = my + ny * 12 + (ny > 0.35 ? 8 : ny < -0.35 ? -2 : 3.5)
+          return (
+            <g key={i}>
+              <text x={lx} y={ly} textAnchor={Math.abs(nx) < 0.35 ? 'middle' : nx > 0 ? 'start' : 'end'} fontSize="10" fill={BRAND} fontFamily="var(--font-mono, monospace)"
+                paintOrder="stroke" stroke="var(--sheet)" strokeWidth={3}>
+                {r.name} · {f2(r.adjLength)} m
+              </text>
+            </g>
+          )
+        })}
+        {/* vertices */}
+        {verts.slice(0, res.n).map((v, i) => (
           <g key={i}>
-            <text x={lx} y={ly} textAnchor={Math.abs(nx) < 0.35 ? 'middle' : nx > 0 ? 'start' : 'end'} fontSize="10" fill={BRAND} fontFamily="var(--font-mono, monospace)"
-              paintOrder="stroke" stroke="var(--sheet)" strokeWidth={3}>
-              {r.name} · {f2(r.adjLength)} m
-            </text>
+            <circle cx={cx(v.x)} cy={cy(v.y)} r="3" fill={INK} />
+            <text x={cx(v.x) + 7} y={cy(v.y) - 6} fontSize="11" fontWeight="700" fill={INK} fontFamily="var(--font-mono, monospace)">{v.name}</text>
           </g>
-        )
-      })}
-      {/* vertices */}
-      {verts.slice(0, res.n).map((v, i) => (
-        <g key={i}>
-          <circle cx={cx(v.x)} cy={cy(v.y)} r="3" fill={INK} />
-          <text x={cx(v.x) + 7} y={cy(v.y) - 6} fontSize="11" fontWeight="700" fill={INK} fontFamily="var(--font-mono, monospace)">{v.name}</text>
+        ))}
+        {/* north arrow */}
+        <g transform={`translate(${W - 34}, ${pad + 14})`}>
+          <line x1="0" y1="18" x2="0" y2="0" stroke={BRAND} strokeWidth="1.6" />
+          <polygon points="0,-4 3.4,4 -3.4,4" fill={BRAND} />
+          <text x="0" y="30" textAnchor="middle" fontSize="10" fill={BRAND}>N</text>
         </g>
-      ))}
-      {/* north arrow */}
-      <g transform={`translate(${W - 34}, ${pad + 14})`}>
-        <line x1="0" y1="18" x2="0" y2="0" stroke={BRAND} strokeWidth="1.6" />
-        <polygon points="0,-4 3.4,4 -3.4,4" fill={BRAND} />
-        <text x="0" y="30" textAnchor="middle" fontSize="10" fill={BRAND}>N</text>
-      </g>
-      {/* area stamp */}
-      <text x={pad} y={H - 8} fontSize="11" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-        A = {f3(res.areaM2)} m² = {f3(res.areaHa)} ha
-      </text>
-      {res.linear > 1e-9 && (
-        <text x={W - pad} y={H - 8} textAnchor="end" fontSize="10" fill={FAIL} fontFamily="var(--font-mono, monospace)">
-          misclosure {f3(res.linear)} m → {res.rule === 'bowditch' ? 'Bowditch' : 'transit'} adjusted
+        {/* area stamp */}
+        <text x={pad} y={H - 8} fontSize="11" fill={MUTED} fontFamily="var(--font-mono, monospace)">
+          A = {f3(res.areaM2)} m² = {f3(res.areaHa)} ha
         </text>
-      )}
-    </svg>
+        {res.linear > 1e-9 && (
+          <text x={W - pad} y={H - 8} textAnchor="end" fontSize="10" fill={FAIL} fontFamily="var(--font-mono, monospace)">
+            misclosure {f3(res.linear)} m → {res.rule === 'bowditch' ? 'Bowditch' : 'transit'} adjusted
+          </text>
+        )}
+      </svg>
+    </DrawingFrame>
   )
 }
 
@@ -195,41 +201,109 @@ export function CurveFigure({ el }: { el: CurveResult['el'] }) {
   const halo = { paintOrder: 'stroke' as const, stroke: 'var(--sheet)', strokeWidth: 3 }
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Circular curve layout">
-      {/* radii toward the centre */}
-      <line x1={pcX} y1={pcY} x2={pcX + ux * (full ? Rk : stub)} y2={pcY + uy * (full ? Rk : stub)} stroke={MUTED} strokeWidth="1" strokeDasharray="5 4" />
-      <line x1={ptX} y1={ptY} x2={ptX - ux * (full ? Rk : stub)} y2={ptY + uy * (full ? Rk : stub)} stroke={MUTED} strokeWidth="1" strokeDasharray="5 4" />
-      {full ? (
-        <>
-          <circle cx={piX} cy={oY} r="3" fill={INK} />
-          <text x={piX} y={oY + 18} textAnchor="middle" fontSize="11" fontWeight="700" fill={INK} fontFamily={mono}>O</text>
-          <text x={piX + 8} y={oY - 10} fontSize="10" fill={INK} fontFamily={mono}>Δ = {f2(el.deltaDeg)}°</text>
-        </>
-      ) : (
-        <text x={piX} y={pcY + stub * uy + 18} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={mono}>radii continue to the centre O, {f2(el.R / Math.cos(h) - el.T * Math.sin(h))} m below the chord</text>
-      )}
-      <text x={pcX + ux * stub * 0.55 - 8} y={pcY + uy * stub * 0.55} textAnchor="end" fontSize="10" fill={MUTED} fontFamily={mono} {...halo}>R = {f2(el.R)} m</text>
-      {/* tangents, long chord, bisector */}
-      <line x1={pcX} y1={pcY} x2={piX} y2={piY} stroke={INK} strokeWidth="1.6" />
-      <line x1={piX} y1={piY} x2={ptX} y2={ptY} stroke={INK} strokeWidth="1.6" />
-      <line x1={pcX} y1={pcY} x2={ptX} y2={ptY} stroke={BRAND} strokeWidth="1.1" strokeDasharray="6 3" />
-      <line x1={piX} y1={piY} x2={piX} y2={pcY} stroke={HAIR} strokeWidth="1" strokeDasharray="3 3" />
-      <path d={path} fill="none" stroke={BRAND} strokeWidth="2.6" />
-      {/* points */}
-      <circle cx={piX} cy={piY} r="3.2" fill={INK} />
-      <circle cx={pcX} cy={pcY} r="3.2" fill={BRAND} />
-      <circle cx={ptX} cy={ptY} r="3.2" fill={BRAND} />
-      <circle cx={piX} cy={midY} r="2.6" fill={MUTED} />
-      <text x={piX} y={piY - 10} textAnchor="middle" fontSize="11" fontWeight="700" fill={INK} fontFamily={mono}>PI</text>
-      <text x={pcX - 8} y={pcY + 4} textAnchor="end" fontSize="11" fontWeight="700" fill={BRAND} fontFamily={mono}>PC</text>
-      <text x={ptX + 8} y={ptY + 4} fontSize="11" fontWeight="700" fill={BRAND} fontFamily={mono}>PT</text>
-      {/* element labels, each clear of the lines it names */}
-      <text x={(piX + pcX) / 2 - 6} y={(piY + pcY) / 2 - 6} textAnchor="end" fontSize="10" fill={INK} fontFamily={mono} {...halo}>T = {f3(el.T)} m</text>
-      <text x={(piX + ptX) / 2 + 6} y={(piY + ptY) / 2 - 6} fontSize="10" fill={INK} fontFamily={mono} {...halo}>T</text>
-      <text x={piX + 8} y={(piY + midY) / 2 + 4} fontSize="10" fill={MUTED} fontFamily={mono} {...halo}>E = {f3(el.E)} m</text>
-      <text x={piX + 8} y={(midY + pcY) / 2 + 4} fontSize="10" fill={MUTED} fontFamily={mono} {...halo}>M = {f3(el.M)} m</text>
-      <text x={(pcX + ptX) / 2 + (ptX - pcX) / 4} y={pcY + 16} textAnchor="middle" fontSize="10" fill={BRAND} fontFamily={mono} {...halo}>LC = {f3(el.LC)} m</text>
-      <text x={(pcX + ptX) / 2 - (ptX - pcX) / 4} y={pcY - 8} textAnchor="middle" fontSize="10" fill={BRAND} fontFamily={mono} {...halo}>L = {f3(el.L)} m</text>
-    </svg>
+    <DrawingFrame label="Circular curve layout">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Circular curve layout">
+        {/* radii toward the centre */}
+        <line x1={pcX} y1={pcY} x2={pcX + ux * (full ? Rk : stub)} y2={pcY + uy * (full ? Rk : stub)} stroke={MUTED} strokeWidth="1" strokeDasharray="5 4" />
+        <line x1={ptX} y1={ptY} x2={ptX - ux * (full ? Rk : stub)} y2={ptY + uy * (full ? Rk : stub)} stroke={MUTED} strokeWidth="1" strokeDasharray="5 4" />
+        {full ? (
+          <>
+            <circle cx={piX} cy={oY} r="3" fill={INK} />
+            <text x={piX} y={oY + 18} textAnchor="middle" fontSize="11" fontWeight="700" fill={INK} fontFamily={mono}>O</text>
+            <text x={piX + 8} y={oY - 10} fontSize="10" fill={INK} fontFamily={mono}>Δ = {f2(el.deltaDeg)}°</text>
+          </>
+        ) : (
+          <text x={piX} y={pcY + stub * uy + 18} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={mono}>radii continue to the centre O, {f2(el.R / Math.cos(h) - el.T * Math.sin(h))} m below the chord</text>
+        )}
+        <text x={pcX + ux * stub * 0.55 - 8} y={pcY + uy * stub * 0.55} textAnchor="end" fontSize="10" fill={MUTED} fontFamily={mono} {...halo}>R = {f2(el.R)} m</text>
+        {/* tangents, long chord, bisector */}
+        <line x1={pcX} y1={pcY} x2={piX} y2={piY} stroke={INK} strokeWidth="1.6" />
+        <line x1={piX} y1={piY} x2={ptX} y2={ptY} stroke={INK} strokeWidth="1.6" />
+        <line x1={pcX} y1={pcY} x2={ptX} y2={ptY} stroke={BRAND} strokeWidth="1.1" strokeDasharray="6 3" />
+        <line x1={piX} y1={piY} x2={piX} y2={pcY} stroke={HAIR} strokeWidth="1" strokeDasharray="3 3" />
+        <path d={path} fill="none" stroke={BRAND} strokeWidth="2.6" />
+        {/* points */}
+        <circle cx={piX} cy={piY} r="3.2" fill={INK} />
+        <circle cx={pcX} cy={pcY} r="3.2" fill={BRAND} />
+        <circle cx={ptX} cy={ptY} r="3.2" fill={BRAND} />
+        <circle cx={piX} cy={midY} r="2.6" fill={MUTED} />
+        <text x={piX} y={piY - 10} textAnchor="middle" fontSize="11" fontWeight="700" fill={INK} fontFamily={mono}>PI</text>
+        <text x={pcX - 8} y={pcY + 4} textAnchor="end" fontSize="11" fontWeight="700" fill={BRAND} fontFamily={mono}>PC</text>
+        <text x={ptX + 8} y={ptY + 4} fontSize="11" fontWeight="700" fill={BRAND} fontFamily={mono}>PT</text>
+        {/* element labels, each clear of the lines it names */}
+        <text x={(piX + pcX) / 2 - 6} y={(piY + pcY) / 2 - 6} textAnchor="end" fontSize="10" fill={INK} fontFamily={mono} {...halo}>T = {f3(el.T)} m</text>
+        <text x={(piX + ptX) / 2 + 6} y={(piY + ptY) / 2 - 6} fontSize="10" fill={INK} fontFamily={mono} {...halo}>T</text>
+        <text x={piX + 8} y={(piY + midY) / 2 + 4} fontSize="10" fill={MUTED} fontFamily={mono} {...halo}>E = {f3(el.E)} m</text>
+        <text x={piX + 8} y={(midY + pcY) / 2 + 4} fontSize="10" fill={MUTED} fontFamily={mono} {...halo}>M = {f3(el.M)} m</text>
+        <text x={(pcX + ptX) / 2 + (ptX - pcX) / 4} y={pcY + 16} textAnchor="middle" fontSize="10" fill={BRAND} fontFamily={mono} {...halo}>LC = {f3(el.LC)} m</text>
+        <text x={(pcX + ptX) / 2 - (ptX - pcX) / 4} y={pcY - 8} textAnchor="middle" fontSize="10" fill={BRAND} fontFamily={mono} {...halo}>L = {f3(el.L)} m</text>
+      </svg>
+    </DrawingFrame>
+  )
+}
+
+// ── mass diagram ──────────────────────────────────────────────────────────
+
+export function MassDiagram({ res }: { res: EarthworkResult }) {
+  const W = 760
+  const H = 320
+  const padL = 62
+  const padR = 20
+  const padT = 22
+  const padB = 38
+
+  const stations = [res.rows[0].from, ...res.rows.map((r) => r.to)]
+  const ordinates = [0, ...res.rows.map((r) => r.massOrdinate)]
+  const sMin = Math.min(...stations); const sMax = Math.max(...stations)
+  const oMin = Math.min(...ordinates, 0); const oMax = Math.max(...ordinates, 0)
+  const spanO = Math.max(oMax - oMin, 1e-6)
+
+  const x = (s: number) => padL + ((s - sMin) / Math.max(sMax - sMin, 1e-6)) * (W - padL - padR)
+  const y = (o: number) => padT + ((oMax - o) / spanO) * (H - padT - padB)
+
+  const pts = stations.map((s, i) => `${x(s)},${y(ordinates[i])}`).join(' ')
+
+  return (
+    <DrawingFrame label="Mass-haul diagram">
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Mass-haul diagram">
+        {/* zero balance line */}
+        <line x1={padL} x2={W - padR} y1={y(0)} y2={y(0)} stroke={INK} strokeWidth="1.4" />
+        <text x={padL - 6} y={y(0) + 3.5} textAnchor="end" fontSize="10" fill={INK} fontFamily="var(--font-mono, monospace)">0</text>
+
+        {/* other gridlines */}
+        {ordinates.filter((o) => Math.abs(o) > 1e-9).map((o) => (
+          <g key={o}>
+            <line x1={padL} x2={W - padR} y1={y(o)} y2={y(o)} stroke={HAIR} />
+            <text x={padL - 6} y={y(o) + 3.5} textAnchor="end" fontSize="9" fill={MUTED} fontFamily="var(--font-mono, monospace)">{f2(o)}</text>
+          </g>
+        ))}
+
+        {/* the curve */}
+        <polyline points={pts} fill="none" stroke={BRAND} strokeWidth="2.4" />
+
+        {/* dots + station labels */}
+        {stations.map((s, i) => (
+          <g key={i}>
+            <circle cx={x(s)} cy={y(ordinates[i])} r="2.6" fill={INK} />
+            <text x={x(s)} y={H - padB + 18} textAnchor="middle" fontSize="9.5" fill={INK} fontFamily="var(--font-mono, monospace)">{f2(s)}</text>
+          </g>
+        ))}
+
+        {/* peak annotation */}
+        {res.maxOrdinate > 1e-9 && (
+          <text x={x(res.maxOrdinateStation)} y={y(res.maxOrdinate) - 8}
+            textAnchor={x(res.maxOrdinateStation) > W - padR - 70 ? 'end' : x(res.maxOrdinateStation) < padL + 70 ? 'start' : 'middle'}
+            fontSize="10" fill={BRAND} fontFamily="var(--font-mono, monospace)">
+            peak {f2(res.maxOrdinate)} m³
+          </text>
+        )}
+        {res.balance < -1e-9 && (
+          <text x={W - padR} y={padT - 6} textAnchor="end" fontSize="10" fill={FAIL} fontFamily="var(--font-mono, monospace)">
+            borrow {f2(-res.balance)} m³
+          </text>
+        )}
+        <text x={padL} y={padT - 6} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">ordinate (m³)</text>
+      </svg>
+    </DrawingFrame>
   )
 }
