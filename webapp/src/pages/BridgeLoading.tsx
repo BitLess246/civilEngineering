@@ -3,11 +3,11 @@ import 'katex/dist/katex.min.css'
 import {
   hl93SimpleSpan, leverRule, type BridgeResult, type DeckInput,
 } from '../engine/bridgeLoading'
-import { Card, Num, Pick, ResultCard, Row } from '../components/qty'
-import { DrawingCard } from '../components/calc'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { DimBelow } from '../components/dims'
 import type { SolutionStep } from '../lib/solution'
 import { INK, MUTED, BRAND, TINT_T, f2, f3 } from '../lib/influenceStyle'
 
@@ -79,129 +79,138 @@ export default function BridgeLoading() {
     },
   ] : []
 
+  const loadSample = () => { setL(30); setGirder('interior'); setS(2.4); setD(1.2); setImPct(33); setDfOverride(0) }
+  const report = res ? {
+    docCode: 'BR-01',
+    ok: true,
+    governing: `M ${f3(res.moment.value * scaleBack)} kN·m · V ${f3(Math.abs(res.shear.value) * scaleBack)} kN · R ${f3(res.reaction.value * scaleBack)} kN per girder (DF ${f3(DF)})`,
+    stats: [
+      { label: 'Moment', value: f3(res.moment.value * scaleBack), unit: 'kN·m' },
+      { label: 'Shear', value: f3(Math.abs(res.shear.value) * scaleBack), unit: 'kN' },
+      { label: 'DF', value: f3(DF), unit: dfOverride > 0 ? 'override' : 'lever rule' },
+    ],
+    data: [
+      ['Span L', `${f2(L)} m`], ['Girder', girder], ['Spacing S', `${f2(S)} m`],
+      ...(girder === 'exterior' ? [['Overhang d', `${f2(d)} m`] as [string, string]] : []),
+      ['IM', `${f2(imPct)} %`], ['DF', dfOverride > 0 ? `${f3(dfOverride)} (override)` : `${f3(DF)} (lever rule)`],
+    ] as [string, string][],
+    steps,
+  } : undefined
+
   return (
-    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <ReportControls title="Bridge Loading Report" badges={['AASHTO HL-93', 'Lever rule']} />
-      <p className="mt-2 max-w-3xl text-sm text-muted">
-        HL-93 on a simple span: the design truck and tandem drive over exact influence lines,
-        the 9.3 kN/m lane load rides with them, and the lever rule shares the result across the
-        deck to one girder. Hand-checkable statics at every step.
-      </p>
-
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <Card title="Span and deck">
-            <div className="sm:col-span-2 lg:col-span-3">
-              <button type="button"
-                onClick={() => { setL(30); setGirder('interior'); setS(2.4); setD(1.2); setImPct(33); setDfOverride(0) }}
-                className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                Load the sample — 30 m span, girders at 2.4 m
-              </button>
-            </div>
-            <Num label="Span L" unit="m" value={L} onChange={setL} min={5} max={80} step="1" />
-            <Pick label="Girder" value={girder} onChange={(v) => setGirder(v as GirderKind)}
-              options={[['interior', 'Interior girder'], ['exterior', 'Exterior girder']]} />
-            <Num label="Girder spacing S" unit="m" value={S} onChange={setS} min={0.6} max={6} step="0.1" />
-            {girder === 'exterior' && (
-              <Num label="Overhang d (edge → girder)" unit="m" value={d} onChange={setD} min={0} max={3} step="0.1" />
-            )}
-            <Num label="Dynamic allowance IM" unit="%" value={imPct} onChange={setImPct} min={0} max={60} step="1" />
-            <Num label="DF override" value={dfOverride} onChange={setDfOverride} min={0} max={3} step="0.05" />
-            <p className="text-[11px] text-faint sm:col-span-2 lg:col-span-3">
-              DF override 0 = use the lever rule. Type the specification equation value
-              (AASHTO 4.6.2.2) if you prefer it — every combined number rescales.
-            </p>
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          {res ? (
-            <>
-              <ResultCard title="Distribution and governing effects">
-                <Row label="Distribution factor DF" value={`${f3(DF)}`} sub={`lever ${f3(res.lever.governing.g)} × m ${f2(res.lever.governing.m)} (${res.lever.governing.m === 1.2 ? 'one' : 'two'} lane${res.lever.governing.m === 1.2 ? '' : 's'} loaded)`} />
-                <Row label="Governing moment" value={`${f3(res.moment.value * scaleBack)} kN·m`} sub={`${res.moment.vehicle === 'truck' ? `truck, rear spacing ${f3(res.moment.spacing ?? 0)} m` : 'tandem'} at x = ${f3(res.moment.position)} m · section ${f3(res.moment.section)} m`} />
-                <Row label="Vehicle / lane share" value={`${f3(res.moment.vehPart * scaleBack)} + ${f3(res.moment.lanePart * scaleBack)} kN·m`} sub="vehicle includes (1 + IM)" />
-                <Row label={`Governing shear`} value={`${f3(Math.abs(res.shear.value) * scaleBack)} kN`} sub={`at the ${res.shear.sectionLabel}, ${res.shear.sign > 0 ? 'positive' : 'negative'}`} />
-                <Row label="Reaction at support" value={`${f3(res.reaction.value * scaleBack)} kN`} sub={`${res.reaction.vehicle === 'truck' ? 'truck' : 'tandem'} + lane`} />
-              </ResultCard>
-
-              <DrawingCard title="Envelope and governing parking" meta="moment envelope along the span with the truck at its worst spot">
-                <DrawingFrame label="Moment envelope and governing load position">
-                  <EnvelopeDrawing res={res} scale={scaleBack} />
-                </DrawingFrame>
-              </DrawingCard>
-
-              <DrawingCard title="Influence line of the governing section" meta="with the parked axles and their ordinates">
-                <DrawingFrame label="Governing section influence line">
-                  <ILDrawing res={res} />
-                </DrawingFrame>
-              </DrawingCard>
-
-              <WorkedSolution steps={steps} title="HL-93 — step by step" />
-            </>
-          ) : (
-            <ResultCard title="Check the inputs">
-              <p className="text-sm text-fail">
-                Give a positive span and girder spacing (and an overhang for the exterior case).
-              </p>
-            </ResultCard>
+    <WorkspacePage title="Bridge Loading" badges={['Bridges', 'AASHTO HL-93 · lever rule']}
+      intro="HL-93 on a simple span: the design truck and tandem drive over exact influence lines, the 9.3 kN/m lane load rides with them, and the lever rule shares the result across the deck to one girder. Hand-checkable statics at every step."
+      report={report}
+      actions={<button type="button" onClick={loadSample}
+        className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
+        Load the 30 m sample
+      </button>}
+      inputs={
+        <InputGroup title="Span and deck" hint="DF override 0 uses the lever rule; type the AASHTO 4.6.2.2 equation value to use that instead — every combined number rescales.">
+          <Num label="Span L" unit="m" value={L} onChange={setL} min={5} max={80} step="1" />
+          <Pick label="Girder" value={girder} onChange={(v) => setGirder(v as GirderKind)}
+            options={[['interior', 'Interior girder'], ['exterior', 'Exterior girder']]} />
+          <Num label="Girder spacing S" unit="m" value={S} onChange={setS} min={0.6} max={6} step="0.1" />
+          {girder === 'exterior' && (
+            <Num label="Overhang d" unit="m" value={d} onChange={setD} min={0} max={3} step="0.1" />
           )}
+          <Num label="Dynamic allowance IM" unit="%" value={imPct} onChange={setImPct} min={0} max={60} step="1" />
+          <Num label="DF override" value={dfOverride} onChange={setDfOverride} min={0} max={3} step="0.05" />
+        </InputGroup>
+      }
+      checks={res ? <>
+        <CheckCard title="Distribution factor" basis={dfOverride > 0 ? 'override' : 'lever rule × multiple presence'} status="info" value={f3(DF)}
+          pairs={[{ label: 'Lever g', value: f3(res.lever.governing.g) }, { label: 'm', value: `${f2(res.lever.governing.m)} (${res.lever.governing.m === 1.2 ? 'one lane' : 'two lanes'})` }]} />
+        <CheckCard title="Governing moment" basis={res.moment.vehicle === 'truck' ? `truck, rear gap ${f3(res.moment.spacing ?? 0)} m` : 'tandem'} status="info"
+          value={f3(res.moment.value * scaleBack)} unit="kN·m"
+          pairs={[{ label: 'Vehicle + lane', value: `${f3(res.moment.vehPart * scaleBack)} + ${f3(res.moment.lanePart * scaleBack)}` }, { label: 'Section', value: `${f3(res.moment.section)} m` }]} />
+        <CheckCard title="Governing shear" basis={`at the ${res.shear.sectionLabel}`} status="info" value={f3(Math.abs(res.shear.value) * scaleBack)} unit="kN" />
+        <CheckCard title="Reaction" basis={`${res.reaction.vehicle === 'truck' ? 'truck' : 'tandem'} + lane`} status="info" value={f3(res.reaction.value * scaleBack)} unit="kN" />
+      </> : <p className="text-sm text-fail">Give a positive span and girder spacing, and an overhang for the exterior case.</p>}
+      summary={[
+        { label: 'Span', value: `${f2(L)} m simple span` },
+        { label: 'Girder', value: `${girder}, S ${f2(S)} m${girder === 'exterior' ? `, overhang ${f2(d)} m` : ''}` },
+        { label: 'Loading', value: `HL-93, IM ${f2(imPct)} %` },
+      ]}
+      drawing={res ? { title: 'Envelope and governing parking', node: <div className="space-y-4">
+        <div data-pdf-drawing>
+          <DrawingFrame label="Moment envelope and governing load position"><EnvelopeDrawing res={res} scale={scaleBack} /></DrawingFrame>
         </div>
-      </div>
-    </div>
+        <DrawingFrame label="Governing section influence line"><ILDrawing res={res} /></DrawingFrame>
+      </div> } : undefined}
+      results={res ? [
+        { check: 'Distribution factor', basis: dfOverride > 0 ? 'override' : `lever ${f3(res.lever.governing.g)} × m ${f2(res.lever.governing.m)}`, demand: f3(DF), status: 'info' as const },
+        { check: 'Governing moment', basis: `section ${f3(res.moment.section)} m, vehicle at ${f3(res.moment.position)} m`, demand: `${f3(res.moment.value * scaleBack)} kN·m`, status: 'info' as const },
+        { check: 'Vehicle / lane share', basis: 'vehicle includes (1 + IM)', demand: `${f3(res.moment.vehPart * scaleBack)} + ${f3(res.moment.lanePart * scaleBack)} kN·m`, status: 'info' as const },
+        { check: 'Governing shear', basis: `${res.shear.sectionLabel}, ${res.shear.sign > 0 ? 'positive' : 'negative'}`, demand: `${f3(Math.abs(res.shear.value) * scaleBack)} kN`, status: 'info' as const },
+        { check: 'Reaction at support', basis: `${res.reaction.vehicle} + lane`, demand: `${f3(res.reaction.value * scaleBack)} kN`, status: 'info' as const },
+      ] : []}
+      steps={steps}
+      references={[
+        { topic: 'HL-93 live load', basis: 'design truck or tandem with the design lane', source: 'AASHTO LRFD Bridge Design Specifications §3.6.1' },
+        { topic: 'Dynamic load allowance', basis: '33% on the vehicle, not the lane', source: 'AASHTO LRFD §3.6.2' },
+        { topic: 'Distribution to girders', basis: 'lever rule; multiple presence factor', source: 'AASHTO LRFD §4.6.2.2, §3.6.1.1.2' },
+      ]}
+    />
   )
 }
 
 // ── envelope + parked truck drawing ──────────────────────────────────────
 
 function EnvelopeDrawing({ res, scale }: { res: BridgeResult; scale: number }) {
-  const W = 680, H = 320
+  // Two bands on one horizontal scale: the deck with the governing vehicle
+  // PARKED ON IT (axle arrows landing on the deck), and below it the moment
+  // envelope on its own zero datum, sagging downward. The vehicle used to
+  // float in mid-air at the height of the moment peak, on the same baseline
+  // as the envelope — load and moment drawn as if they were one quantity.
+  const W = 680, H = 330
   const pad = 46
   const x0 = pad, x1 = W - pad
-  const baseY = H - 40
-  const topY = pad + 8
+  const deckY = 86
+  const zeroY = 150, depth = 110
   const maxM = Math.max(...res.envelope.map((e) => e.M)) * scale || 1
   const toX = (x: number) => x0 + (x / res.L) * (x1 - x0)
-  const toY = (m: number) => baseY - (m / (maxM * 1.12)) * (baseY - topY)
+  const toY = (m: number) => zeroY + (m / maxM) * depth
   const envPts = res.envelope.map((e) => `${toX(e.x)},${toY(e.M * scale)}`).join(' ')
   const gov = res.moment
-  // parked axles from the governing case, re-derived from the parked detail
-  const axX = gov.axles.map((a) => toX(Math.min(Math.max(a.x, -3), res.L + 3)))
-
+  const onDeck = gov.axles.filter((a) => a.x >= -1e-6 && a.x <= res.L + 1e-6)
+  const dimY = zeroY + depth + 34
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Moment envelope">
-      {/* span deck line */}
-      <line x1={x0 - 16} x2={x1 + 16} y1={baseY} y2={baseY} stroke={INK} strokeWidth="1.6" />
-      {/* supports */}
-      <path d={`M ${x0} ${baseY} l -7 12 h 14 z`} fill={INK} />
-      <path d={`M ${x1} ${baseY} l -7 12 h 14 z`} fill={INK} />
-      {/* envelope fill */}
-      <polygon points={`${x0},${baseY} ${envPts} ${x1},${baseY}`} fill={TINT_T} stroke="none" />
-      <polyline points={envPts} fill="none" stroke={BRAND} strokeWidth="1.8" />
-      {/* parked axles */}
-      {gov.axles.map((a, i) => (
+      {/* deck on its bearings */}
+      <line x1={x0} x2={x1} y1={deckY} y2={deckY} stroke={INK} strokeWidth="2.4" />
+      <path d={`M ${x0} ${deckY} l -7 12 h 14 z`} fill={INK} />
+      <circle cx={x1} cy={deckY + 6} r={6} fill="none" stroke={INK} strokeWidth="1.4" />
+      {/* the governing vehicle, axle loads landing on the deck */}
+      {onDeck.map((a, i) => (
         <g key={i}>
-          <line x1={axX[i]} x2={axX[i]} y1={toY(gov.value * scale) - 7} y2={baseY} stroke={INK} strokeWidth="1" />
-          <rect x={axX[i] - 9} y={toY(gov.value * scale) - 16} width={18} height={9} fill={INK} />
-          <text x={axX[i]} y={toY(gov.value * scale) - 20} textAnchor="middle" fontSize="9.5" fill={INK} fontFamily="var(--font-mono, monospace)">
-            {f2(a.p)} kN
-          </text>
+          <line x1={toX(a.x)} x2={toX(a.x)} y1={deckY - 34} y2={deckY - 6} stroke={INK} strokeWidth="1.3" />
+          <path d={`M ${toX(a.x) - 4} ${deckY - 7} L ${toX(a.x)} ${deckY - 1} L ${toX(a.x) + 4} ${deckY - 7} z`} fill={INK} />
+          <text x={toX(a.x)} y={deckY - 39} textAnchor="middle" fontSize="9.5" fill={INK} fontFamily="var(--font-mono, monospace)">{f2(a.p)} kN</text>
         </g>
       ))}
-      {/* vehicle connecting line */}
-      {axX.length > 1 && (
-        <line x1={axX[0]} y1={toY(gov.value * scale) - 11} x2={axX[axX.length - 1]} y2={toY(gov.value * scale) - 11} stroke={INK} strokeWidth="1.4" />
-      )}
-      {/* governing marker */}
-      <line x1={toX(gov.section)} x2={toX(gov.section)} y1={topY} y2={baseY} stroke={MUTED} strokeWidth="0.9" strokeDasharray="4 3" />
-      <text x={toX(gov.section) + 6} y={(topY + baseY) / 2} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-        section {f3(gov.section)} m
+      <text x={x0} y={20} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
+        {gov.vehicle === 'truck' ? `design truck, rear gap ${f3(gov.spacing ?? 0)} m` : 'design tandem'} + {f3(res.laneW)} kN/m lane, parked for the governing section
       </text>
-      <text x={x0} y={H - 8} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-        M max = {f3(gov.value * scale)} kN·m at DF = {f3(res.DF)} · veh + {f3(res.IM)} IM + lane
+      {/* moment envelope below its own datum */}
+      <line x1={x0} x2={x1} y1={zeroY} y2={zeroY} stroke={MUTED} strokeWidth="0.9" />
+      <text x={x0 - 6} y={zeroY + 3} fontSize="9" fill={MUTED} textAnchor="end">0</text>
+      <polygon points={`${x0},${zeroY} ${envPts} ${x1},${zeroY}`} fill={TINT_T} stroke="none" />
+      <polyline points={envPts} fill="none" stroke={BRAND} strokeWidth="1.8" />
+      <text x={x0 + 8} y={zeroY - 5} fontSize="9.5" fill={BRAND}>M envelope (sagging drawn down)</text>
+      {/* governing section through both bands */}
+      <line x1={toX(gov.section)} x2={toX(gov.section)} y1={deckY + 14} y2={toY(gov.value * scale)} stroke={MUTED} strokeWidth="0.9" strokeDasharray="4 3" />
+      <circle cx={toX(gov.section)} cy={toY(gov.value * scale)} r={3} fill={BRAND} />
+      <text x={toX(gov.section)} y={toY(gov.value * scale) + 16} fontSize="10" fill={BRAND} fontFamily="var(--font-mono, monospace)"
+        textAnchor="middle" paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>
+        M max {f3(gov.value * scale)} kN·m at {f3(gov.section)} m
       </text>
-      <text x={x1} y={H - 8} textAnchor="end" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-        L = {f3(res.L)} m
+      {/* the span, between the bearings */}
+      <DimBelow xA={x0} xB={x1} featY={zeroY + depth + 6} dY={dimY} label={`L = ${f3(res.L)} m`} />
+      <line x1={x0} x2={x0} y1={deckY + 14} y2={zeroY + depth + 10} stroke="#1f77b4" strokeWidth={0.6} />
+      <line x1={x1} x2={x1} y1={deckY + 14} y2={zeroY + depth + 10} stroke="#1f77b4" strokeWidth={0.6} />
+      <text x={W / 2} y={H - 6} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily="var(--font-mono, monospace)">
+        DF = {f3(res.DF * scale)} · vehicle × (1 + {f3(res.IM)}) + lane
       </text>
     </svg>
   )
