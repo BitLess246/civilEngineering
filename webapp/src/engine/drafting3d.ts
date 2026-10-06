@@ -862,3 +862,61 @@ export function deleteLevel(project: DraftProject, levelId: string): DraftProjec
   }
   return { ...project, levels, activeLevelId }
 }
+
+// --- Retype and duplicate -----------------------------------------------------
+
+/** Give the selected elements a new section — only those whose own role the
+ *  section is sized for (a beam section never lands on a slab). Returns a
+ *  new level, or the same one when nothing matched. */
+export function retypeElements(level: DraftLevel, ids: Iterable<string>, section: RectSection): DraftLevel {
+  const role = sectionRole(section)
+  let elements: Map<string, DraftElement> | null = null
+  for (const id of ids) {
+    const el = level.elements.get(id)
+    if (!el || el.type !== role || el.sectionId === section.id) continue
+    elements ??= new Map(level.elements)
+    elements.set(id, { ...el, sectionId: section.id })
+  }
+  return elements ? { ...level, elements } : level
+}
+
+/** Copy a level to a new storey on top of the building: every joint and
+ *  element with fresh ids, joints lifted by the elevation difference, hosted
+ *  doors/windows re-pointed at their copied walls. The copy becomes active.
+ *  The usual way a typical floor is drafted once and stacked. Pure. */
+export function duplicateLevelUp(project: DraftProject, levelId: string): DraftProject {
+  const src = project.levels.get(levelId)
+  if (!src) return project
+  const top = Array.from(project.levels.values()).reduce((a, b) => (b.elevation > a.elevation ? b : a))
+  const elevation = top.elevation + top.height
+  const dz = elevation - src.elevation
+  const nodeId = new Map<string, string>()
+  const nodes = new Map<string, DraftNode>()
+  for (const n of src.nodes.values()) {
+    const id = uid('n')
+    nodeId.set(n.id, id)
+    nodes.set(id, { id, x: n.x, y: n.y, z: n.z + dz })
+  }
+  const elemId = new Map<string, string>()
+  for (const el of src.elements.values()) elemId.set(el.id, uid('e'))
+  const remap = (r: string) => nodeId.get(r) ?? r
+  const elements = new Map<string, DraftElement>()
+  for (const el of src.elements.values()) {
+    const id = elemId.get(el.id)!
+    elements.set(id, {
+      ...el,
+      id,
+      nodes: [remap(el.nodes[0]), remap(el.nodes[1])],
+      corners: el.corners ? (el.corners.map(remap) as [string, string, string, string]) : undefined,
+      hostId: el.hostId ? elemId.get(el.hostId) : undefined,
+      openings: el.openings?.map(o => ({ ...o })),
+    })
+  }
+  const id = uid('level')
+  const levels = new Map(project.levels)
+  levels.set(id, {
+    id, name: `Level ${project.levels.size + 1}`, elevation, height: src.height, nodes, elements,
+    grids: src.grids ? { x: src.grids.x.slice(), y: src.grids.y.slice() } : undefined,
+  })
+  return { ...project, levels, activeLevelId: id }
+}

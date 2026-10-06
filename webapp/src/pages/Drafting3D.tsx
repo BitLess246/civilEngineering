@@ -13,7 +13,7 @@ import { Drafting3DViewport } from '../components/Drafting3DViewport'
 import { FloorPlanCanvas, type PlanTool } from '../components/FloorPlanCanvas'
 import { useDraftProject } from '../lib/drafting3dSession'
 import type { DraftProject } from '../engine/drafting3d'
-import { addLevel, SLAB_MATERIALS, CEILING_MATERIALS, finishMaterial, DEFAULT_SECTION_FOR, sectionRole, deleteDraftElements, renameLevel, setLevelHeight, canDeleteLevel, deleteLevel, type DraftSectionRole } from '../engine/drafting3d'
+import { addLevel, SLAB_MATERIALS, CEILING_MATERIALS, finishMaterial, DEFAULT_SECTION_FOR, sectionRole, deleteDraftElements, renameLevel, setLevelHeight, canDeleteLevel, deleteLevel, retypeElements, duplicateLevelUp, type DraftSectionRole } from '../engine/drafting3d'
 import { readSession, writeSession, writeOpenId } from '../lib/modelSpaceSession'
 
 /** The ribbon, grouped the way Revit groups its tools. */
@@ -217,21 +217,20 @@ export default function Drafting3D() {
   return (
     <div ref={fillRef} className="h-[calc(100dvh-7rem)] w-full flex flex-col bg-sheet" style={fillHeight ? { height: fillHeight } : undefined}>
       {/* Top Toolbar */}
-      <header className="bg-white border-b border-hairline shadow-sm z-10">
-        <div className="mx-auto max-w-full px-4 py-3 flex flex-wrap items-center gap-4">
+      <header className="bg-sheet border-b border-hairline shadow-sm z-10">
+        <div className="mx-auto max-w-full px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-ink">Drafting3D</h1>
-            <span className="px-2 py-0.5 text-xs font-semibold bg-brand-tint text-brand rounded">Beta</span>
+            <h1 className="text-lg font-bold text-ink">Drafting3D<sup className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-brand">beta</sup></h1>
           </div>
 
-          <div className="flex-1 flex justify-center items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {TOOL_GROUPS.map(group => (
-              <div key={group.label} className="flex items-center gap-1 bg-white border border-field-line rounded-lg p-1">
+              <div key={group.label} className="flex items-center gap-1 bg-field border border-field-line rounded-lg p-0.5">
                 {group.tools.map(tool => (
                   <button
                     key={tool}
                     onClick={() => setActiveTool(tool)}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                    className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition ${
                       activeTool === tool
                         ? 'bg-brand text-on-solid'
                         : 'text-muted hover:text-ink hover:bg-brand-tint'
@@ -244,33 +243,33 @@ export default function Drafting3D() {
             ))}
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
             {/* Edit — undo/redo and a Delete a finger can reach (the key is desktop-only) */}
-            <div className="flex items-center gap-1 bg-white border border-field-line rounded-lg p-1">
+            <div className="flex items-center gap-1 bg-field border border-field-line rounded-lg p-0.5">
               <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)" aria-label="Undo"
-                className="px-2.5 py-1.5 text-sm font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint disabled:opacity-40 disabled:hover:bg-transparent">↶ Undo</button>
+                className="px-2 py-1 text-[15px] leading-none font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint disabled:opacity-40 disabled:hover:bg-transparent">↶</button>
               <button onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo"
-                className="px-2.5 py-1.5 text-sm font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint disabled:opacity-40 disabled:hover:bg-transparent">↷ Redo</button>
+                className="px-2 py-1 text-[15px] leading-none font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint disabled:opacity-40 disabled:hover:bg-transparent">↷</button>
               <button onClick={deleteSelected} disabled={selectedIds.length === 0} title="Delete the selection (Delete)"
-                className="px-2.5 py-1.5 text-sm font-medium rounded-md text-fail hover:bg-fail-tint disabled:opacity-40 disabled:text-muted disabled:hover:bg-transparent">Delete</button>
+                className="px-2 py-1 text-[13px] font-medium rounded-md text-fail hover:bg-fail-tint disabled:opacity-40 disabled:text-muted disabled:hover:bg-transparent">Delete</button>
             </div>
 
             <label className="flex items-center gap-1.5 text-sm text-muted">
               <span className="sr-only">Active level</span>
               <select value={project.activeLevelId} onChange={e => activateLevel(e.target.value)}
-                className="py-1.5 pl-2 pr-7 text-sm border border-field-line rounded-lg text-ink">
+                className="py-1 pl-2 pr-7 text-[13px] border border-field-line rounded-lg text-ink">
                 {Array.from(project.levels.values()).sort((a, b) => a.elevation - b.elevation).map(l => (
-                  <option key={l.id} value={l.id}>{l.name} · EL {l.elevation.toFixed(2)}</option>
+                  <option key={l.id} value={l.id}>{l.name} · {l.elevation.toFixed(2)}</option>
                 ))}
               </select>
             </label>
 
-            <div className="flex items-center gap-1 bg-white border border-field-line rounded-lg p-1">
+            <div className="flex items-center gap-1 bg-field border border-field-line rounded-lg p-0.5">
               {(['2d', '3d', 'split'] as const).map(mode => (
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                  className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition ${
                     viewMode === mode
                       ? 'bg-brand text-on-solid'
                       : 'text-muted hover:text-ink hover:bg-brand-tint'
@@ -284,7 +283,7 @@ export default function Drafting3D() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowSectionPanel(!showSectionPanel)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition ${
                   showSectionPanel ? 'bg-brand text-on-solid' : 'text-muted hover:text-ink hover:bg-brand-tint'
                 }`}
               >
@@ -292,7 +291,7 @@ export default function Drafting3D() {
               </button>
               <button
                 onClick={() => setShowLevelPanel(!showLevelPanel)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition ${
                   showLevelPanel ? 'bg-brand text-on-solid' : 'text-muted hover:text-ink hover:bg-brand-tint'
                 }`}
               >
@@ -301,13 +300,13 @@ export default function Drafting3D() {
               <button
                 onClick={handleDownloadJson}
                 title="Download the frame as a StructuralModel JSON file"
-                className="px-3 py-1.5 text-sm font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint transition"
+                className="px-2.5 py-1 text-[13px] font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint transition"
               >
                 JSON
               </button>
               <button
                 onClick={handleOpenInModelSpace}
-                className="px-4 py-1.5 text-sm font-semibold bg-brand text-on-solid rounded hover:bg-brand-hover transition"
+                className="px-3 py-1.5 text-[13px] font-semibold bg-brand text-on-solid rounded hover:bg-brand-hover transition"
               >
                 Open in Model Space
               </button>
@@ -321,10 +320,10 @@ export default function Drafting3D() {
         <div className="fixed inset-y-0 right-0 z-50 w-80 bg-white border-l border-hairline shadow-xl flex flex-col overflow-auto">
           <div className="p-4 border-b border-hairline flex items-center justify-between">
             <h3 className="font-semibold text-ink">Sections</h3>
-            <button onClick={() => setShowSectionPanel(false)} className="text-muted hover:text-ink">×</button>
+            <button onClick={() => setShowSectionPanel(false)} aria-label="Close sections" className="text-muted hover:text-ink">×</button>
           </div>
           <div className="p-4 space-y-4 max-h-[calc(100vh-100px)] overflow-auto">
-            <p className="text-xs text-muted">Each tool draws with its own section. The highlighted one in each group is what that tool places next.</p>
+            <p className="text-xs text-muted">Each tool draws with its own section — the highlighted one in each group is what it places next. Picking a section also retypes the selected elements of that kind.</p>
             {ROLES.map(role => (
               <div key={role} className="space-y-2">
                 <div className={`text-xs font-semibold uppercase tracking-wide ${role === activeTool ? 'text-brand' : 'text-muted'}`}>
@@ -333,7 +332,16 @@ export default function Drafting3D() {
                 {sections.filter(sec => sectionRole(sec) === role).map(sec => (
                   <button
                     key={sec.id}
-                    onClick={() => setSectionByRole(prev => ({ ...prev, [role]: sec.id }))}
+                    onClick={() => {
+                      setSectionByRole(prev => ({ ...prev, [role]: sec.id }))
+                      // retype what is selected too (Revit's type selector)
+                      const next = retypeElements(level, selectedIds, sec)
+                      if (next !== level) {
+                        const levels = new Map(project.levels)
+                        levels.set(level.id, next)
+                        setProject({ ...project, levels })
+                      }
+                    }}
                     className={`w-full text-left p-3 rounded-lg border transition ${
                       sectionByRole[role] === sec.id
                         ? 'bg-brand-tint border-brand'
@@ -354,7 +362,7 @@ export default function Drafting3D() {
         <div className="fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-hairline shadow-xl flex flex-col overflow-auto">
           <div className="p-4 border-b border-hairline flex items-center justify-between">
             <h3 className="font-semibold text-ink">Levels</h3>
-            <button onClick={() => setShowLevelPanel(false)} className="text-muted hover:text-ink">×</button>
+            <button onClick={() => setShowLevelPanel(false)} aria-label="Close levels" className="text-muted hover:text-ink">×</button>
           </div>
           <div className="flex-1 p-4 space-y-2 overflow-auto">
             {Array.from(project.levels.values()).sort((x, y) => y.elevation - x.elevation).map(l => (
@@ -384,6 +392,8 @@ export default function Drafting3D() {
                       className="w-16 px-1.5 py-1 border border-field-line rounded text-ink" />
                     m
                   </label>
+                  <button onClick={() => { setProject(duplicateLevelUp(project, l.id)); setSelectedIds([]) }}
+                    className="px-2 py-1 rounded text-muted hover:text-brand hover:bg-brand-tint" title="Copy this floor to a new level on top">Duplicate</button>
                   {l.id === topLevelId && canDeleteLevel(project, l.id) && (
                     <button onClick={() => { if (window.confirm(`Delete ${l.name} and everything drawn on it?`)) setProject(deleteLevel(project, l.id)) }}
                       className="px-2 py-1 rounded text-fail hover:bg-fail-tint" title="Only the top level can be deleted">Delete</button>
@@ -391,7 +401,7 @@ export default function Drafting3D() {
                 </div>
               </div>
             ))}
-            <p className="text-xs text-muted">A taller storey lifts every level above it, so columns keep meeting the floor they carry.</p>
+            <p className="text-xs text-muted">A taller storey lifts every level above it, so columns keep meeting the floor they carry. Duplicate stacks a copy of a floor on top — draft a typical floor once.</p>
             <button
               onClick={handleAddLevel}
               className="w-full p-3 rounded-lg border border-dashed border-hairline text-muted hover:border-brand hover:text-brand transition"

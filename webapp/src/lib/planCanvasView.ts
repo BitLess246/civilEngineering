@@ -69,3 +69,16 @@ export function fitView(
     pan: { x: size.w / 2 - cx * zoom * CANVAS_SCALE, y: size.h / 2 - cy * zoom * CANVAS_SCALE },
   }
 }
+
+/** The live readout beside a wall/beam being drawn: its plan length and its
+ *  bearing from +x, counter-clockwise as the plan is read (canvas y points
+ *  down, so the sign of dy flips). "6.00 m · 90°". Pure. */
+export function runReadout(a: { x: number; y: number }, b: { x: number; y: number }): string {
+  const dx = b.x - a.x, dy = b.y - a.y
+  const len = Math.hypot(dx, dy)
+  if (len < 1e-9) return '0.00 m'
+  let deg = (Math.atan2(-dy, dx) * 180) / Math.PI
+  if (deg < 0) deg += 360
+  const shown = Math.round(deg * 10) / 10
+  return `${len.toFixed(2)} m · ${shown % 1 === 0 ? shown.toFixed(0) : shown.toFixed(1)}°`
+}

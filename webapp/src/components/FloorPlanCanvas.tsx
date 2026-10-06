@@ -39,7 +39,7 @@ import {
   DEFAULT_DOOR,
   DEFAULT_WINDOW,
 } from '../engine/drafting3d'
-import { CANVAS_SCALE, nextPinchView, anchoredZoom, fitView } from '../lib/planCanvasView'
+import { CANVAS_SCALE, nextPinchView, anchoredZoom, fitView, runReadout } from '../lib/planCanvasView'
 
 export type PlanTool = 'select' | 'wall' | 'beam' | 'column' | 'slab' | 'door' | 'window' | 'ceiling' | 'grid'
 
@@ -551,6 +551,23 @@ export function FloorPlanCanvas({
       ctx.fill()
     }
 
+    /** Live length and bearing of the segment being drawn, beside its
+     *  midpoint — the number you would otherwise type. Screen-size text. */
+    const runLabel = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+      if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-6) return
+      const px = 1 / (zoom * CANVAS_SCALE)
+      ctx.font = `600 ${12 * px}px system-ui, sans-serif`
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'bottom'
+      const tx = (a.x + b.x) / 2 + 8 * px, ty = (a.y + b.y) / 2 - 6 * px
+      const text = runReadout(a, b)
+      ctx.lineWidth = 4 * px
+      ctx.strokeStyle = '#ffffff'
+      ctx.strokeText(text, tx, ty)
+      ctx.fillStyle = '#1d4ed8'
+      ctx.fillText(text, tx, ty)
+    }
+
     // Rubber band: walls/beams run start → pointer; slabs/ceilings trace the
     // placed corners so far. Endpoints are WORLD coordinates here, snapped
     // through snapPoint so the preview shows exactly what commit will draw.
@@ -565,6 +582,7 @@ export function FloorPlanCanvas({
       ctx.lineTo(hoverSnap.x, hoverSnap.y)
       ctx.stroke()
       ctx.setLineDash([])
+      runLabel(drawStart, hoverSnap)
     }
     if ((drawingTool === 'slab' || drawingTool === 'ceiling') && hoverSnap) {
       const chain: Array<{ x: number; y: number }> = [
@@ -579,6 +597,7 @@ export function FloorPlanCanvas({
       chain.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
       ctx.stroke()
       ctx.setLineDash([])
+      if (chain.length >= 2 && slabPts.length > 0) runLabel(chain[chain.length - 2], chain[chain.length - 1])
     }
 
     /** Green ring — Revit's "this end will weld to this joint" indicator. */
