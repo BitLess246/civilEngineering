@@ -74,7 +74,7 @@ describe('selectFreeModels — the live catalogue is the allowlist', () => {
     const live = ['thinkingmachines/inkling-small:free', 'thinkingmachines/inkling:free', 'nvidia/nemotron-3.5-lightning:free',
       'nvidia/nemotron-3-ultra-550b-a55b:free', 'google/gemma-4-31b-it:free', 'nvidia/nemotron-3-super-120b-a12b:free']
     const sel = selectFreeModels([...live.map((id) => row(id)), row('liquid/lfm-2.5-2.6b:free')], FREE_CHAT_MODELS, now)
-    expect(sel.models.slice(0, 5)).toEqual([...FREE_CHAT_MODELS])
+    expect(sel.models.slice(0, FREE_CHAT_MODELS.length)).toEqual([...FREE_CHAT_MODELS])
     expect(sel.models).toContain('thinkingmachines/inkling-small:free')
     expect(sel.models).not.toContain('liquid/lfm-2.5-2.6b:free')
   })
@@ -298,8 +298,17 @@ describe('callWithRotation', () => {
     ])
   })
 
-  it('fails fast on 401/402/403 with that status', async () => {
-    for (const status of [401, 402, 403]) {
+  it('a 403 is one model refusing, not the account: it hands over, and a key forbidden everywhere still ends as 403', async () => {
+    const h = harness([{ ok: false, status: 403 }, { ok: true, status: 200, json: { ok: 1 } }])
+    const r = await callWithRotation(MODELS, 100, h.buildCall, h.fetchImpl, 1000)
+    expect(r).toEqual({ ok: true, model: MODELS[1], json: { ok: 1 } })
+    const all = harness([{ ok: false, status: 403 }])
+    expect(await callWithRotation(MODELS, 100, all.buildCall, all.fetchImpl, 1000)).toEqual({ ok: false, status: 403 })
+    expect(all.calls).toHaveLength(MODELS.length)
+  })
+
+  it('fails fast on 401/402 with that status', async () => {
+    for (const status of [401, 402]) {
       const h = harness([{ ok: false, status }])
       expect(await callWithRotation(MODELS, 100, h.buildCall, h.fetchImpl, 1000))
         .toEqual({ ok: false, status })

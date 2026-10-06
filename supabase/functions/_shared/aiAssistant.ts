@@ -32,10 +32,12 @@ export const UPSTREAM_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/
  * A paid model still can never ride the key: an id is used only when it is
  * literally free in the catalogue (`:free` suffix AND 0/0 pricing), or it is
  * one of these, each of which was verified that way.
+ *
+ * Not preferred (still used if the catalogue lists it): inkling:free answered
+ * 403 on every request on 2026-10-06 — 403 hands over, so it costs ~25 ms.
  */
 export const FREE_CHAT_MODELS = [
   'nvidia/nemotron-3-ultra-550b-a55b:free',
-  'thinkingmachines/inkling:free',
   'nvidia/nemotron-3-super-120b-a12b:free',
   'nvidia/nemotron-3.5-lightning:free',
   'google/gemma-4-31b-it:free',
@@ -66,7 +68,6 @@ export const EXCLUDED_MODEL_PATTERNS: readonly RegExp[] = [/\/lfm-/i, /content-s
 /** Context window of a fallback entry, tokens, for when the catalogue is unavailable. */
 const FALLBACK_CONTEXT_TOKENS: Readonly<Record<string, number>> = {
   'nvidia/nemotron-3-ultra-550b-a55b:free': 1000000,
-  'thinkingmachines/inkling:free': 1048576,
   'nvidia/nemotron-3-super-120b-a12b:free': 262144,
   'nvidia/nemotron-3.5-lightning:free': 1000000,
   'google/gemma-4-31b-it:free': 262144,
@@ -531,10 +532,16 @@ type AttemptOutcome =
  * Per model the policy is unchanged: skip it when the request cannot fit its
  * context window; POST with tools; on 400 retry ONCE without tools (an entry
  * can list tool support the serving endpoint does not honour); on 404
- * (rotated away), 408, 429, 5xx, a transport failure, or a 200 that `accept`
- * says is no answer, move on. Fail FAST on
- * 401 (bad key), 402 (no credit) and 403 (forbidden) — those describe the
- * account, not the model — and on any other 4xx, which is our request.
+ * (rotated away), 403, 408, 429, 5xx, a transport failure, or a 200 that
+ * `accept` says is no answer, move on. Fail FAST on 401 (bad key) and 402 (no
+ * credit) — those describe the account, not the model — and on any other 4xx,
+ * which is our request.
+ *
+ * 403 is per MODEL on OpenRouter (moderation, or a provider whose data policy
+ * the account has not opted into), not per account: measured on the live
+ * function, `inkling:free` answered 403 in 25 ms on every request while the
+ * nemotrons were fine, and treating it as fatal aborted them mid-answer. A key
+ * that is forbidden everywhere still ends as 403 — every model says so.
  *
  * `fetchImpl` is injected so the whole policy is unit-testable; the function
  * passes the real fetch.
@@ -593,10 +600,10 @@ export function callWithRotation(
       }
       opts.log?.({ model, withTools, status: res.status, ms: now() - t0 })
       if (res.status === 400 && withTools) continue // downgrade: same model, no tools
-      if (res.status === 404 || res.status === 408 || res.status === 429 || res.status >= 500) {
+      if (res.status === 403 || res.status === 404 || res.status === 408 || res.status === 429 || res.status >= 500) {
         return { kind: 'next', status: res.status }
       }
-      return { kind: 'fatal', status: res.status } // 401/402/403/other 4xx
+      return { kind: 'fatal', status: res.status } // 401/402/other 4xx
     }
     return { kind: 'next', status: 400 }
   }
