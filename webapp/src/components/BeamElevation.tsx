@@ -3,6 +3,7 @@ import type { JSX } from 'react'
 import { udlStations } from './udl'
 import type { Support, BeamLoad } from '../engine/beamAnalysis'
 import { DrawingFrame } from './DrawingFrame'
+import { DimBelow } from './dims'
 
 const BEAM = '#37526e'
 const LOAD = '#dc2626'
@@ -14,11 +15,25 @@ const SUP = '#0056b3'
 export function BeamElevation({ L, supports, loads }: {
   L: number; supports: Support[]; loads: BeamLoad[]
 }): JSX.Element {
-  const W = 560, H = 150
+  // Distributed loads that overlap along the span are STACKED, one tier per
+  // load, each sitting on the one below — drawn at the same height, a live
+  // UDL over the same span as the dead one vanished behind it.
+  const TIER = 40
+  const tierOf: number[] = []
+  const placed: { a: number; b: number; t: number }[] = []
+  loads.forEach((ld, i) => {
+    if (ld.type !== 'udl' && ld.type !== 'vdl') { tierOf[i] = 0; return }
+    const a = Math.min(ld.x1, ld.x2), b = Math.max(ld.x1, ld.x2)
+    let t = 0
+    while (placed.some((p) => p.t === t && p.a < b - 1e-9 && a < p.b - 1e-9)) t++
+    placed.push({ a, b, t }); tierOf[i] = t
+  })
+  const tiers = Math.max(1, ...placed.map((p) => p.t + 1))
+  const W = 560, H = 170 + (tiers - 1) * TIER
   const padL = 30, padR = 30
   const bx0 = padL, bx1 = W - padR
   const sx = (x: number) => bx0 + ((bx1 - bx0) * Math.max(0, Math.min(L, x))) / Math.max(L, 1e-9)
-  const by = 92
+  const by = 92 + (tiers - 1) * TIER
 
   const supSym = (s: Support, i: number) => {
     const x = sx(s.x)
@@ -86,19 +101,21 @@ export function BeamElevation({ L, supports, loads }: {
       )
     }
     const xa = sx(ld.x1), xb = sx(ld.x2)
+    const base = by - 3 - tierOf[i] * TIER          // the beam, or the top of the load below
     const h1 = ld.type === 'udl' ? 26 : Math.max(8, 26 * (Math.abs(ld.w1) / Math.max(Math.abs(ld.w1), Math.abs(ld.w2), 1e-9)))
     const h2 = ld.type === 'udl' ? 26 : Math.max(8, 26 * (Math.abs(ld.w2) / Math.max(Math.abs(ld.w1), Math.abs(ld.w2), 1e-9)))
     const stations = udlStations(xb - xa)
     const label = ld.type === 'udl' ? `${ld.w} kN/m (${ld.cat})` : `${ld.w1}→${ld.w2} kN/m (${ld.cat})`
     return (
       <g key={`l${i}`}>
-        <line x1={xa} y1={by - 4 - h1} x2={xb} y2={by - 4 - h2} stroke={LOAD} strokeWidth={1.2} />
+        <line x1={xa} y1={base - 1 - h1} x2={xb} y2={base - 1 - h2} stroke={LOAD} strokeWidth={1.2} />
         {stations.map((t, k) => {
           const x = xa + (xb - xa) * t
           const hh = h1 + (h2 - h1) * t
-          return arrow(x, by - 4 - hh, by - 3, LOAD, k)
+          return arrow(x, base - 1 - hh, base, LOAD, k)
         })}
-        <text x={(xa + xb) / 2} y={by - 10 - Math.max(h1, h2)} fontSize={8.5} fill={LOAD} textAnchor="middle">{label}</text>
+        <text x={(xa + xb) / 2} y={base - 7 - Math.max(h1, h2)} fontSize={8.5} fill={LOAD} textAnchor="middle"
+          paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{label}</text>
       </g>
     )
   }
@@ -110,8 +127,9 @@ export function BeamElevation({ L, supports, loads }: {
         <line x1={bx0} y1={by} x2={bx1} y2={by} stroke={BEAM} strokeWidth={4} strokeLinecap="round" />
         {supports.map(supSym)}
         {loads.map(loadGlyph)}
-        <text x={bx0} y={by + 56} fontSize={9} fill={BEAM}>0</text>
-        <text x={bx1} y={by + 56} fontSize={9} fill={BEAM} textAnchor="end">L = {L} m</text>
+        {/* the span, dimensioned — it used to be two loose labels, "0" and
+            "L = 6 m", with nothing between them */}
+        <DimBelow xA={bx0} xB={bx1} featY={by + 36} dY={by + 54} label={`L = ${L} m`} />
       </svg>
     </DrawingFrame>
   )
