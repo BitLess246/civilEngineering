@@ -9,11 +9,11 @@ import { BEAM_LOADS_HANDOFF_KEY } from './LoadPath'
 import { BeamElevation } from '../components/BeamElevation'
 import { Diagram } from '../components/Diagram'
 import { DIAGRAM_GRID } from '../lib/diagramLabel'
-import { ReportControls } from '../components/ReportControls'
-import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { f1, f2 } from '../lib/format'
 import 'katex/dist/katex.min.css'
-import { PageHeader } from '../components/calc'
 
 const CATS: [LoadCategory, string][] = [
   ['D', 'D — dead'], ['L', 'L — live'], ['Lr', 'Lr — roof live'],
@@ -106,26 +106,45 @@ export default function BeamAnalysis() {
   const allowDefl = (L * 1000) / 360
   const vlines = supports.map((s) => ({ x: s.x, label: s.type === 'spring' ? 'k' : s.type[0].toUpperCase() }))
 
+  const deflOK = r ? r.Dmax <= allowDefl : false
+  const gov = res ? res.perCombo[res.govIdx] : null
+  const report = res && r && shown ? {
+    docCode: 'BA-01',
+    ok: deflOK,
+    governing: `Governing ${gov?.combo.name ?? '—'}: Mmax ${f1(gov?.result?.Mmax ?? NaN)} kN·m, Vmax ${f1(gov?.result?.Vmax ?? NaN)} kN`,
+    stats: [
+      { label: 'Mmax', value: f1(r.Mmax), unit: 'kN·m' },
+      { label: 'Vmax', value: f1(r.Vmax), unit: 'kN' },
+      { label: 'δmax', value: f2(r.Dmax), unit: 'mm' },
+    ],
+    checks: [{ name: `Deflection δmax / (L/360) — ${shown.combo.name}`, ratio: r.Dmax / allowDefl, ok: deflOK }],
+    data: [
+      ['Span L', `${f2(L)} m`], ['E', `${E} MPa`], ['I', `${I.toExponential(3)} mm⁴`],
+      ['Supports', supports.map((s0) => `${s0.type} @ ${f2(s0.x)}`).join(', ')],
+      ...loads.map((ld) => [`${ld.type.toUpperCase()} (${ld.cat})`,
+        ld.type === 'point' ? `${f2(ld.P)} kN @ ${f2(ld.x)} m`
+          : ld.type === 'udl' ? `${f2(ld.w)} kN/m, ${f2(ld.x1)}–${f2(ld.x2)} m`
+            : ld.type === 'vdl' ? `${f2(ld.w1)}→${f2(ld.w2)} kN/m, ${f2(ld.x1)}–${f2(ld.x2)} m`
+              : `${f2(ld.M)} kN·m @ ${f2(ld.x)} m`] as [string, string]),
+    ] as [string, string][],
+    steps: res.perCombo.filter((pc) => pc.result).map((pc) => ({
+      title: pc.combo.name,
+      lines: [{ text: `Vmax ${f1(pc.result!.Vmax)} kN · Mmax ${f1(pc.result!.Mmax)} kN·m · δmax ${f2(pc.result!.Dmax)} mm` }],
+    })),
+  } : undefined
+
   return (
-    <div>
-      <PageHeader title="Beam Analysis" badges={['NSCP 2015', 'ACI 318-14']} />
-      <div className="mx-auto max-w-[1500px] px-6 pb-6 pt-5">
-      <p className="no-print mt-1 text-muted">
-        Euler–Bernoulli FEM (Hermite elements, Gauss-5) with modular supports — pin / roller / fixed / spring at any
-        position — and categorised loads run through all 7 NSCP 2015 load combinations. Includes a three-moment
-        (Clapeyron) cross-check for continuous beams.
-      </p>
-      <ReportControls title="Beam Analysis Report" />
-
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <div className="space-y-5">
-          <Card title="Beam">
-            <Num label="Span L" unit="m" value={L} onChange={setL} />
-            <Num label="Modulus E" unit="MPa" value={E} onChange={setE} />
-            <Num label="Inertia I" unit="mm⁴" value={I} onChange={setI} />
-          </Card>
-
-          <Card title="Supports" grid={false}>
+    <WorkspacePage title="Beam Analysis" badges={['Analysis', 'NSCP 2015 combinations']}
+      intro="Euler–Bernoulli finite elements with pin, roller, fixed or spring supports anywhere along the span, and categorised loads run through the NSCP 2015 load combinations. Continuous beams carry a three-moment (Clapeyron) cross-check."
+      report={report}
+      inputs={<>
+        <InputGroup title="Beam">
+          <Num label="Span L" unit="m" value={L} onChange={setL} />
+          <Num label="Modulus E" unit="MPa" value={E} onChange={setE} />
+          <Num label="Inertia I" unit="mm⁴" value={I} onChange={setI} />
+        </InputGroup>
+        <InputGroup title="Supports">
+          <div className="col-span-2">
             <div className="no-print mb-3 flex flex-wrap gap-2">
               {(['pin', 'roller', 'fixed', 'spring'] as SupportType[]).map((t) => (
                 <button key={t} type="button" onClick={() => addSupport(t)}
@@ -145,9 +164,10 @@ export default function BeamAnalysis() {
                 </ItemShell>
               ))}
             </div>
-          </Card>
-
-          <Card title="Loads" grid={false}>
+          </div>
+        </InputGroup>
+        <InputGroup title="Loads">
+          <div className="col-span-2">
             <div className="no-print mb-3 flex flex-wrap gap-2">
               {([['point', '+ Point'], ['udl', '+ UDL'], ['vdl', '+ VDL'], ['moment', '+ Moment']] as const).map(([t, lbl]) => (
                 <button key={t} type="button" onClick={() => addLoad(t)}
@@ -183,17 +203,48 @@ export default function BeamAnalysis() {
                 </ItemShell>
               ))}
             </div>
-          </Card>
+          </div>
+        </InputGroup>
+      </>}
+      checks={r && shown && res ? <>
+        <CheckCard title="Governing combination" basis="largest |M|" status="info" value={gov?.combo.name ?? '—'}
+          pairs={[{ label: 'Mmax', value: `${f1(gov?.result?.Mmax ?? NaN)} kN·m` }, { label: 'Vmax', value: `${f1(gov?.result?.Vmax ?? NaN)} kN` }]} />
+        <CheckCard title="Deflection" basis={`L/360 · ${shown.combo.name}`} status={deflOK ? 'pass' : 'fail'}
+          value={f2(r.Dmax)} unit="mm" ratio={r.Dmax / allowDefl} ratioLabel="δ ÷ L/360"
+          pairs={[{ label: 'Limit', value: `${f2(allowDefl)} mm` }]} />
+        <div className="no-print flex flex-wrap gap-2">
+          <Link to={`/beam-design?mu=${r.Mmax.toFixed(1)}&vu=${r.Vmax.toFixed(1)}`}
+            className="rounded-md border border-field-line px-3 py-1.5 text-xs font-semibold text-brand hover:bg-brand-tint">
+            Use Mmax and Vmax →
+          </Link>
+          <button type="button"
+            onClick={() => {
+              const g = res.perCombo[res.govIdx].result!
+              const secs = detectCriticalSections(g)
+              if (!secs.length) return
+              sessionStorage.setItem(SECTIONS_HANDOFF_KEY, JSON.stringify(secs))
+              navigate('/beam-design?sections=auto')
+            }}
+            className="rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-xs font-semibold text-brand">
+            Auto-detect critical sections → design
+          </button>
         </div>
-
-        <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
-          <ResultCard title="Model">
-            <BeamElevation L={L} supports={supports} loads={loads} />
-            {!stable && <p className="mt-1 text-sm text-fail">⚠ Unstable — add at least 2 supports (or one Fixed).</p>}
-          </ResultCard>
-
-          {res && (
-            <ResultCard title="NSCP 2015 load combinations">
+      </> : <p className="text-sm text-fail">{stable ? 'Add at least one load.' : 'Unstable — add at least two supports, or one fixed.'}</p>}
+      summary={[
+        { label: 'Beam', value: `L ${f2(L)} m, E ${E} MPa, I ${I.toExponential(3)} mm⁴` },
+        { label: 'Supports', value: supports.map((s0) => `${s0.type} @ ${f2(s0.x)} m`).join(', ') || '—' },
+        { label: 'Loads', value: `${loads.length} (${[...new Set(loads.map((ld) => ld.cat))].join(', ')})` },
+      ]}
+      drawing={{ title: 'Model', node: <div data-pdf-drawing><BeamElevation L={L} supports={supports} loads={loads} /></div> }}
+      resultsCaption={shown ? `Reactions and deflection for ${shown.combo.name} — pick another combination in the table below.` : undefined}
+      results={r && shown ? [
+        ...r.reactions.map((rc) => ({ check: `Reaction @ ${f2(rc.x)} m`, basis: rc.type, demand: `${f2(rc.Rv)} kN`,
+          limit: Math.abs(rc.Rm) > 0.01 ? `M ${f2(rc.Rm)} kN·m` : undefined, status: 'info' as const })),
+        { check: 'Deflection', basis: 'L/360', demand: `${f2(r.Dmax)} mm`, limit: `${f2(allowDefl)} mm`, ratio: r.Dmax / allowDefl, status: deflOK ? 'pass' as const : 'fail' as const },
+      ] : []}
+      extraSections={res && r && shown ? [
+        { title: 'NSCP 2015 load combinations', node: (
+          <div>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-xs">
                   <thead>
@@ -219,73 +270,43 @@ export default function BeamAnalysis() {
                   </tbody>
                 </table>
               </div>
-              <p className="mt-1 text-[11px] text-muted">★ governing (largest |M|). Click a row to view its reactions & diagrams.</p>
-            </ResultCard>
-          )}
-
-          {r && shown && (
-            <ResultCard title={`Reactions — ${shown.combo.name}`}>
-              {r.reactions.map((rc, i) => (
-                <Row key={i} label={`x = ${f2(rc.x)} m (${rc.type})`}
-                  value={`${f2(rc.Rv)} kN`}
-                  sub={Math.abs(rc.Rm) > 0.01 ? `M = ${f2(rc.Rm)} kN·m` : undefined} />
-              ))}
-              <Row alert={r.Dmax > allowDefl} label="Deflection vs L/360"
-                value={r.Dmax <= allowDefl ? '✓ OK' : '✗ exceeds'}
-                sub={`${f2(r.Dmax)} ≤ ${f2(allowDefl)} mm`} />
-              <div className="no-print mt-3 flex flex-wrap gap-2">
-                <Link to={`/beam-design?mu=${r.Mmax.toFixed(1)}&vu=${r.Vmax.toFixed(1)}`}
-                  className="inline-block rounded-lg border border-field-line bg-sheet px-4 py-2 text-sm font-semibold text-brand transition hover:border-brand hover:bg-brand-tint">
-                  Use Mmax & Vmax →
-                </Link>
-                <button type="button"
-                  onClick={() => {
-                    const gov = res!.perCombo[res!.govIdx].result!
-                    const secs = detectCriticalSections(gov)
-                    if (!secs.length) return
-                    sessionStorage.setItem(SECTIONS_HANDOFF_KEY, JSON.stringify(secs))
-                    navigate('/beam-design?sections=auto')
-                  }}
-                  className="inline-block rounded-md border border-brand-line bg-brand-tint px-4 py-2 text-sm font-semibold text-brand transition hover:bg-brand-tint">
-                  ⚡ Auto-detect critical sections → design
-                </button>
-              </div>
-            </ResultCard>
-          )}
-        </div>
-      </div>
-
-      {r && shown && (
-        <div className={`mt-6 gap-6 ${DIAGRAM_GRID}`}>
-          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+            <p className="mt-1 text-[11px] text-muted">★ governing (largest |M|). Click a row to view its reactions and diagrams.</p>
+          </div>
+        ) },
+        { title: `Shear, moment and deflection — ${shown.combo.name}`, node: (
+          <div className={`gap-6 ${DIAGRAM_GRID}`}>
             <Diagram xs={r.xs} ys={r.V} title={`SHEAR — ${shown.combo.name}`} unit="kN" color="#1f77b4" vlines={vlines} decimals={1} />
-          </div>
-          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
             <Diagram xs={r.xs} ys={r.M} title="MOMENT" unit="kN·m" color="#d62728" vlines={vlines} decimals={1} />
-          </div>
-          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
             <Diagram xs={r.xs} ys={r.D} title="DEFLECTION" unit="mm" color="#2ca02c" vlines={vlines} decimals={2} />
           </div>
-        </div>
-      )}
-
-      {res?.tmt && (
-        <div className="rail-card mt-6 rounded-lg border border-hairline bg-sheet p-4 print-avoid-break">
-          <h2 className="mb-2 text-[1.02rem] font-bold text-brand">
-            Three-moment theorem check <span className="text-xs font-normal text-muted">Clapeyron — governing combo, interior support moments</span>
-          </h2>
-          {res.tmt.positions.map((x, i) => (
-            <Row key={i} label={`Support @ x = ${f2(x)} m`}
-              value={`M = ${f2(res.tmt!.supportMoments[i])} kN·m`}
-              sub={`R = ${f2(res.tmt!.reactions[i])} kN`} />
-          ))}
-          <p className="mt-1 text-xs text-muted">
-            M₍ᵢ₋₁₎Lᵢ + 2Mᵢ(Lᵢ+Lᵢ₊₁) + Mᵢ₊₁Lᵢ₊₁ = −6(Q/L)ᵢ − 6(Q/L)ᵢ₊₁ — end moments 0, interior solved from the
-            tri-diagonal system. Compare with the FEM reactions above as an independent hand-method check.
-          </p>
-        </div>
-      )}
-      </div>
-    </div>
+        ) },
+        ...(res.tmt ? [{ title: 'Three-moment check (Clapeyron)', node: (
+          <div className="text-sm">
+            <table className="w-full text-xs">
+              <thead><tr className="text-left text-muted"><th className="py-1">Support</th><th className="text-right">M (kN·m)</th><th className="text-right">R (kN)</th></tr></thead>
+              <tbody>
+                {res.tmt.positions.map((x, i) => (
+                  <tr key={i} className="border-t border-hairline-2">
+                    <td className="py-1">x = {f2(x)} m</td>
+                    <td className="text-right font-mono">{f2(res.tmt!.supportMoments[i])}</td>
+                    <td className="text-right font-mono">{f2(res.tmt!.reactions[i])}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-1 text-xs text-muted">
+              M₍ᵢ₋₁₎Lᵢ + 2Mᵢ(Lᵢ+Lᵢ₊₁) + Mᵢ₊₁Lᵢ₊₁ = −6(Q/L)ᵢ − 6(Q/L)ᵢ₊₁ — end moments zero, the interior solved from the
+              tri-diagonal system, governing combination. Compare with the FEM reactions as an independent hand check.
+            </p>
+          </div>
+        ) }] : []),
+      ] : []}
+      steps={report?.steps ?? []}
+      references={[
+        { topic: 'Load combinations', basis: 'categorised loads factored per combination', source: 'NSCP 2015 §203.3' },
+        { topic: 'Analysis', basis: 'Hermite beam elements; three-moment cross-check', source: 'Hibbeler, Structural Analysis' },
+        { topic: 'Deflection limit', basis: 'L/360', source: 'ACI 318-14 Table 24.2.2 · NSCP 2015 Table 424.2.2' },
+      ]}
+    />
   )
 }

@@ -4,11 +4,11 @@ import {
   rectComposite, rectangle, circle, hollowCircle, iShape, tShape, channelShape, angleShape,
   type SectionResult, type RectRow,
 } from '../engine/sectionProperties'
-import { Card, Num, Pick, ResultCard, Row } from '../components/qty'
-import { DrawingCard } from '../components/calc'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { DimBelow, DimSide } from '../components/dims'
 import type { SolutionStep } from '../lib/solution'
 import { INK, MUTED, HAIR, f2, f3 } from '../lib/influenceStyle'
 
@@ -130,20 +130,33 @@ export default function SectionProperties() {
     },
   ]) : []
 
-  return (
-    <div>
-      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <ReportControls title="Section Properties Report" badges={['A · I · S · r']} />
-        <p className="mt-2 max-w-3xl text-sm text-muted">
-          The student toolkit behind every bending check: centroid, moments of inertia by the
-          parallel-axis theorem, section moduli and radii of gyration — for the single shapes or any
-          built-up stack of rectangles, with the whole table shown.
-        </p>
+  const presetName = PRESETS.find(([k]) => k === preset)?.[1] ?? preset
+  const report = res ? {
+    docCode: 'SP-01',
+    ok: true,
+    governing: `${presetName}: A = ${f2(res.A)} mm², Ix = ${f3(res.Ix / 1e6)}×10⁶ mm⁴, ȳ = ${f2(res.cy)} mm`,
+    stats: [
+      { label: 'Area A', value: f2(res.A), unit: 'mm²' },
+      { label: 'Ix', value: f3(res.Ix / 1e6), unit: '×10⁶ mm⁴' },
+      { label: 'Sx', value: f2(res.Sx / 1e3), unit: '×10³ mm³' },
+    ],
+    data: [
+      ['Section', presetName],
+      ['Centroid x̄ / ȳ', `${f2(res.cx)} / ${f2(res.cy)} mm`],
+      ['Iy', `${f3(res.Iy / 1e6)} ×10⁶ mm⁴`],
+      ['Sy', `${f2(res.Sy / 1e3)} ×10³ mm³`],
+      ['rx / ry', `${f2(res.rx)} / ${f2(res.ry)} mm`],
+    ] as [string, string][],
+    steps,
+  } : undefined
 
-        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-          <div className="space-y-5">
-            <Card title="Section">
-              <Pick label="Preset" value={preset} onChange={(v) => setPreset(v as Preset)} options={PRESETS} />
+  return (
+    <WorkspacePage title="Section Properties" badges={['Analysis', 'A · I · S · r']}
+      intro="The toolkit behind every bending check: centroid, moments of inertia by the parallel-axis theorem, section moduli and radii of gyration — for the single shapes or any built-up stack of rectangles, with the whole table shown."
+      report={report}
+      inputs={<>
+            <InputGroup title="Section">
+              <div className="col-span-2"><Pick label="Preset" value={preset} onChange={(v) => setPreset(v as Preset)} options={PRESETS} /></div>
               {preset === 'rect' && (
                 <>
                   <Num label="Base b" unit="mm" value={b} onChange={setB} min={5} max={2000} step="5" />
@@ -173,12 +186,12 @@ export default function SectionProperties() {
                   <Num label="Thickness t" unit="mm" value={thk} onChange={setThk} min={1} max={100} step="0.5" />
                 </>
               )}
-            </Card>
+            </InputGroup>
 
             {preset === 'custom' && (
-              <Card title="Rectangle stack" hint="x, y from the bottom-left of the section">
+              <InputGroup title="Rectangle stack" hint="x, y from the bottom-left of the section">
                 {rows.map((r, i) => (
-                  <div key={i} className="grid grid-cols-[3rem_3rem_3rem_3rem_1.4rem] items-end gap-1.5">
+                  <div key={i} className="col-span-2 grid grid-cols-[1fr_1fr_1fr_1fr_1.4rem] items-end gap-1.5">
                     <Num label="x" value={parseFloat(r.x) || 0} onChange={(v) => setRow(i, { x: String(v) })} step="1" />
                     <Num label="y" value={parseFloat(r.y) || 0} onChange={(v) => setRow(i, { y: String(v) })} step="1" />
                     <Num label="w" value={parseFloat(r.w) || 0} onChange={(v) => setRow(i, { w: String(v) })} step="1" />
@@ -188,44 +201,38 @@ export default function SectionProperties() {
                   </div>
                 ))}
                 <button type="button" onClick={() => setRows((rs) => [...rs, { x: '0', y: '0', w: '50', h: '50' }])}
-                  className="rounded-md border border-field-line px-2 py-0.5 text-[11px] font-semibold text-brand hover:bg-brand-tint">+ Add rectangle</button>
-              </Card>
+                  className="col-span-2 justify-self-start rounded-md border border-field-line px-2 py-0.5 text-[11px] font-semibold text-brand hover:bg-brand-tint">+ Add rectangle</button>
+              </InputGroup>
             )}
-          </div>
-
-          <div className="space-y-5">
-            {res ? (
-              <>
-                <ResultCard title="Section properties">
-                  <Row label="Area A" value={`${f2(res.A)} mm²`} sub={`${f2(res.A / 100)} cm²`} />
-                  <Row label="Centroid ȳ" value={`${f2(res.cy)} mm`} sub={`from bottom · x̄ = ${f2(res.cx)} mm from left`} />
-                  <Row label="Ix" value={`${f3(res.Ix / 1e6)} ×10⁶ mm⁴`} sub={`cTop = ${f2(res.cTop)} · cBot = ${f2(res.cBot)} mm`} />
-                  <Row label="Iy" value={`${f3(res.Iy / 1e6)} ×10⁶ mm⁴`} sub={`cLeft = ${f2(res.cLeft)} · cRight = ${f2(res.cRight)} mm`} />
-                  <Row label="Sx / Sy" value={`${f2(res.Sx / 1e3)} / ${f2(res.Sy / 1e3)} ×10³ mm³`} sub="weakest fibre governs" />
-                  <Row label="rx / ry" value={`${f2(res.rx)} / ${f2(res.ry)} mm`} sub="radii of gyration" />
-                </ResultCard>
-
-                <DrawingCard title="Section, to scale" meta="centroid marked · dimensions in mm">
-                  <SectionView preset={preset} res={res} inputs={{ b, h, d, D: Dout, dt, bf: b, tf, tw, leg, thk, rows: rows.map((r) => ({
-                    x: parseFloat(r.x) || 0, y: parseFloat(r.y) || 0, w: parseFloat(r.w) || 0, h: parseFloat(r.h) || 0,
-                  })) }} />
-                </DrawingCard>
-
-                <WorkedSolution steps={steps} title="Section properties — step-by-step" />
-              </>
-            ) : (
-              <ResultCard title="Check the inputs">
-                <p className="text-sm text-fail">
-                  Dimensions must be positive and consistent: the tube needs d &lt; D, the I and T
-                  need depth beyond twice the flange thickness, the angle needs leg &gt; thickness,
-                  and the custom stack needs at least one rectangle with positive size.
-                </p>
-              </ResultCard>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+                </>}
+      checks={res ? <>
+        <CheckCard title="Area" basis="A" status="info" value={f2(res.A)} unit="mm²"
+          pairs={[{ label: 'x̄ from left', value: `${f2(res.cx)} mm` }, { label: 'ȳ from bottom', value: `${f2(res.cy)} mm` }]} />
+        <CheckCard title="Moments of inertia" basis="about the centroidal axes" status="info" value={f3(res.Ix / 1e6)} unit="×10⁶ mm⁴ Ix"
+          pairs={[{ label: 'Iy', value: `${f3(res.Iy / 1e6)} ×10⁶ mm⁴` }]} />
+        <CheckCard title="Section moduli" basis="extreme fibre governs" status="info" value={f2(res.Sx / 1e3)} unit="×10³ mm³ Sx"
+          pairs={[{ label: 'Sy', value: `${f2(res.Sy / 1e3)} ×10³ mm³` }]} />
+        <CheckCard title="Radii of gyration" basis="√(I/A)" status="info" value={`${f2(res.rx)} / ${f2(res.ry)}`} unit="mm rx / ry" />
+      </> : <p className="text-sm text-fail">Dimensions must be positive and consistent: the tube needs d &lt; D, the I and T need depth beyond twice the flange thickness, the angle needs leg &gt; thickness, and the custom stack needs at least one rectangle with positive size.</p>}
+      summary={[{ label: 'Section', value: presetName }]}
+      drawing={res ? { title: 'Section, to scale', node: <div data-pdf-drawing>
+        <SectionView preset={preset} res={res} inputs={{ b, h, d, D: Dout, dt, bf: b, tf, tw, leg, thk, rows: rows.map((r) => ({
+          x: parseFloat(r.x) || 0, y: parseFloat(r.y) || 0, w: parseFloat(r.w) || 0, h: parseFloat(r.h) || 0,
+        })) }} />
+      </div> } : undefined}
+      results={res ? [
+        { check: 'Area', basis: 'A', demand: `${f2(res.A)} mm²`, limit: `${f2(res.A / 100)} cm²`, status: 'info' },
+        { check: 'Centroid', basis: 'x̄ from left · ȳ from bottom', demand: `${f2(res.cx)} · ${f2(res.cy)} mm`, status: 'info' },
+        { check: 'Ix', basis: `c top ${f2(res.cTop)} · bottom ${f2(res.cBot)} mm`, demand: `${f3(res.Ix / 1e6)} ×10⁶ mm⁴`, status: 'info' },
+        { check: 'Iy', basis: `c left ${f2(res.cLeft)} · right ${f2(res.cRight)} mm`, demand: `${f3(res.Iy / 1e6)} ×10⁶ mm⁴`, status: 'info' },
+        { check: 'Sx / Sy', basis: 'I ÷ c,max', demand: `${f2(res.Sx / 1e3)} / ${f2(res.Sy / 1e3)} ×10³ mm³`, status: 'info' },
+        { check: 'rx / ry', basis: '√(I/A)', demand: `${f2(res.rx)} / ${f2(res.ry)} mm`, status: 'info' },
+      ] : []}
+      steps={steps}
+      references={[
+        { topic: 'Composite sections', basis: 'area-weighted centroid; parallel-axis theorem', source: 'Beer & Johnston, Mechanics of Materials' },
+      ]}
+    />
   )
 }
 
@@ -259,11 +266,14 @@ function SectionView({ preset, res, inputs }: {
   if (preset === 'rect') {
     p.push(`M ${sx(0)} ${sy(0)} H ${sx(inputs.b)} V ${sy(inputs.h)} H ${sx(0)} Z`)
   } else if (preset === 'circle' || preset === 'tube') {
-    const r = sx(inputs.d / 2 + 0) - sx(0)
-    const cx = sx(inputs.d / 2), cy = sy(inputs.d / 2)
+    // the tube's outer diameter is D — drawing it from the solid circle's d
+    // left the outline frozen whatever D was entered
+    const Dd = preset === 'tube' ? inputs.D : inputs.d
+    const r = sx(Dd / 2) - sx(0)
+    const cx = sx(Dd / 2), cy = sy(Dd / 2)
     p.push(`M ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy} A ${r} ${r} 0 1 1 ${cx - r} ${cy}`)
     if (preset === 'tube') {
-      const r2 = (inputs.dt / inputs.d) * r
+      const r2 = (inputs.dt / Dd) * r
       p.push(`M ${cx - r2} ${cy} A ${r2} ${r2} 0 1 1 ${cx + r2} ${cy} A ${r2} ${r2} 0 1 1 ${cx - r2} ${cy}`)
     }
   } else if (preset === 'i') {
@@ -329,18 +339,20 @@ function SectionView({ preset, res, inputs }: {
         <line x1={sx(res.cx)} x2={sx(res.cx)} y1={sy(res.cy) - 26} y2={sy(res.cy) + 26} stroke={MUTED} strokeWidth="1.1" />
         <circle cx={sx(res.cx)} cy={sy(res.cy)} r="3" fill="none" stroke={MUTED} strokeWidth="1.1" />
         <text x={sx(res.cx) + 30} y={sy(res.cy) + 4} fontSize="10.5" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-          ȳ = {f2(res.cy)}
+          C
         </text>
 
-        {/* overall depth dimension */}
-        <line x1={sx(xHi) + 30} x2={sx(xHi) + 30} y1={sy(0)} y2={sy(yHi)} stroke={MUTED} strokeWidth="1" />
-        <text x={sx(xHi) + 36} y={sy(yHi) + 8} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-          {f2(yHi)} mm
-        </text>
-        <text x={sx(0)} y={sy(0) + 22} fontSize="10.5" fill={INK} fontFamily="var(--font-mono, monospace)">
+        {/* overall depth and width, and ȳ from the base — real dimensions on
+            extension lines (the depth used to be a bare line beside the
+            section, with no ticks and its label at one end) */}
+        <DimSide yA={sy(yHi)} yB={sy(0)} featX={sx(xHi)} dX={sx(xHi) + 26} label={`${f2(yHi)} mm`} side="right" />
+        <DimSide yA={sy(res.cy)} yB={sy(0)} featX={sx(0)} dX={sx(0) - 26} label={`ȳ = ${f2(res.cy)}`} side="left" />
+        <line x1={sx(res.cx) - 28} y1={sy(res.cy)} x2={sx(0) - 31} y2={sy(res.cy)} stroke="#1f77b4" strokeWidth={0.6} strokeDasharray="2 2" />
+        <DimBelow xA={sx(0)} xB={sx(xHi)} featY={sy(0)} dY={sy(0) + 20} label={`${f2(xHi)} mm`} />
+        <text x={W / 2} y={H - 24} fontSize="10.5" fill={INK} fontFamily="var(--font-mono, monospace)" textAnchor="middle">
           A = {f2(res.A)} mm² · Ix = {f3(res.Ix / 1e6)}×10⁶ mm⁴
         </text>
-        <text x={sx(0)} y={H - 8} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
+        <text x={W / 2} y={H - 8} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)" textAnchor="middle">
           dashed = the rectangle rows the parallel-axis table solves
         </text>
       </svg>

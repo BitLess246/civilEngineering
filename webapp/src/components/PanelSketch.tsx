@@ -55,7 +55,7 @@ export function PanelSketch({ r }: { r: TributaryResult }): JSX.Element {
         <text x={x0 - 6} y={y0 + h / 2} fontSize={9} fill={EDGE} textAnchor="end" fontWeight={700}>S1</text>
         <text x={x0 + w + 6} y={y0 + h / 2} fontSize={9} fill={EDGE} fontWeight={700}>S2</text>
 
-        <DimBelow xA={x0} xB={x0 + w} featY={y0 + h + 14} dY={y0 + h + 30} label={`ℓy = ${r.ly.toFixed(2)} m`} />
+        <DimBelow xA={x0} xB={x0 + w} featY={y0 + h} dY={y0 + h + 30} label={`ℓy = ${r.ly.toFixed(2)} m`} />
         <DimSide yA={y0} yB={y0 + h} featX={x0} dX={x0 - 22} label={`ℓx = ${r.lx.toFixed(2)} m`} side="left" />
       </svg>
     </DrawingFrame>
