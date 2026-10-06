@@ -14,8 +14,13 @@ describe('lintelSpan — ACI 318-14 §6.3.2.1', () => {
   })
 
   it('…but never more than the distance between support centres', () => {
-    // A short bearing puts the support centres closer than ln + h.
-    expect(lintelSpan(2.0, 300, 100)).toBeCloseTo(2.2, 12)
+    // A short bearing puts the support centres closer than ln + h: each centre
+    // is 50 mm behind its jamb face, so 2.0 + 0.05 + 0.05 = 2.1 m.
+    expect(lintelSpan(2.0, 300, 100)).toBeCloseTo(2.1, 12)
+  })
+
+  it('the centres are ln + bearing apart, not the out-to-out ln + 2·bearing', () => {
+    expect(lintelSpan(2.0, 500, 150)).toBeCloseTo(2.15, 12)
   })
 })
 
