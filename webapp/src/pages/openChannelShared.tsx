@@ -178,6 +178,8 @@ export function SectionSketch({ shape, y, caption }: { shape: ChannelShape; y: n
           return <line key={i} x1={x} x2={x + 7} y1={bedY + 3} y2={bedY + 11} stroke={HAIR} strokeWidth="1" />
         })}
         <line x1={cx - sx(widthTop / 2) - 24} x2={cx + sx(widthTop / 2) + 24} y1={bedY} y2={bedY} stroke={INK} strokeWidth="1.4" />
+        {/* extension of the bed out to the depth dimension */}
+        <line x1={cx + sx(widthTop / 2) + 26} x2={cx + sx(widthTop / 2) + 45} y1={bedY} y2={bedY} stroke={MUTED} strokeWidth="0.8" />
 
         {/* geometry stamp */}
         <text x={pad} y={vbTop + 18} fontSize="10.5" fill={INK} fontFamily="var(--font-mono, monospace)">

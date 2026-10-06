@@ -46,7 +46,7 @@ export function SurfaceMark({ x, y }: { x: number; y: number }) {
  *  runs V²/2g below the EGL. The pipe's elevation is schematic — only the
  *  heads are to scale. */
 export function PipeProfile({ L, res }: { L: number; res: PipeResult }) {
-  const W = 640, H = 330, x0 = 70, x1 = W - 110
+  const W = 640, H = 330, x0 = 60, x1 = W - 160
   const vhead = (res.V * res.V) / (2 * 9.81)
   const pipeTop = H - 70
   const top = 50
@@ -82,14 +82,17 @@ export function PipeProfile({ L, res }: { L: number; res: PipeResult }) {
         {res.hm * ky > 14
           ? <VDim x={xs + 12} a={E0} b={eAfterMinor} label={`hm = ${f3(res.hm)} m`} color={EGL} />
           : res.hm > 0 && <text x={x0} y={E0 - 6} fontSize="10" fill={EGL} fontFamily={mono}>hm = {f3(res.hm)} m step</text>}
-        <VDim x={x1 + 14} a={eAfterMinor} b={eEnd} label={`hf = ${f3(res.hf)} m`} color={EGL} />
+        {/* total loss, from the datum line (which runs out to here) down to an
+            extension line off the end of the EGL — both ends on drawn lines */}
+        <line x1={x1 + 3} x2={x1 + 20} y1={eEnd} y2={eEnd} stroke={EGL} strokeWidth="0.8" />
+        <VDim x={x1 + 14} a={E0} b={eEnd} label={`hm + hf = ${f3(res.hTotal)} m`} color={EGL} />
         {/* velocity head at the outlet: dimensioned, or called out when too small to see */}
         {vTiny ? (
           <text x={x1 - 4} y={hgl(eEnd) + 16} textAnchor="end" fontSize="10" fill={MUTED} fontFamily={mono} {...halo}>EGL − HGL = V²/2g = {f3(vhead)} m</text>
         ) : (
           <VDim x={x1 - 18} a={eEnd} b={hgl(eEnd)} label={`V²/2g = ${f3(vhead)} m`} side="left" />
         )}
-        <text x={x0} y={H - 10} fontSize="10" fill={MUTED} fontFamily={mono}>total loss {f3(res.hTotal)} m = hm + hf · heads to one scale · minor losses as one step</text>
+        <text x={x0} y={H - 10} fontSize="10" fill={MUTED} fontFamily={mono}>hf = {f3(res.hf)} m friction · heads to one scale · minor losses as one step</text>
       </svg>
     </DrawingFrame>
   )
