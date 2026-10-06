@@ -2,14 +2,12 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { designCombinedFooting, type CombinedFootingInput } from '../engine/combinedFooting'
 import { designFlexibleCombinedFooting } from '../engine/flexibleCombinedFooting'
 import { CombinedFootingSchematic } from '../components/CombinedFootingSchematic'
-import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
 import { ModelMemberResults } from '../components/ModelMemberResults'
 import type { MemberLoadRequest } from '../lib/modelMemberResults'
-import { Card } from '../components/qty'
-import { initialLetterhead } from '../lib/letterhead'
+import { InputGroup, CheckCard, type ResultRow } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { Diagram } from '../components/Diagram'
 import { DIAGRAM_GRID } from '../lib/diagramLabel'
-import { WorkedSolution } from '../components/WorkedSolution'
 import { buildCombinedFootingSolution } from '../lib/combinedFootingSolution'
 import { Math } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
@@ -106,19 +104,8 @@ function Select<T extends string>({ label, value, onChange, options }: {
 
 /** Result row. `check` is a third column the shared `Row` calls `sub`; the name
  *  differs but the palette must not — this matches `components/qty`. */
-function Row({ label, value, check }: { label: ReactNode; value: ReactNode; check?: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-hairline-2 py-1.5 last:border-0">
-      <span className="text-[12px] text-muted">{label}</span>
-      <span className="text-right font-mono text-[12.5px] font-semibold text-ink">{value}</span>
-      {check ? <span className="w-32 text-right text-[10.5px] text-faint">{check}</span> : null}
-    </div>
-  )
-}
-
 export default function CombinedFootingDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
-  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead('F-02 · Rev A'))
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm((s) => ({ ...s, [k]: v }))
 
   const valid = useMemo(() => {
@@ -184,47 +171,58 @@ export default function CombinedFootingDesign() {
     }))
   }
 
-  return (
-    <div>
-      <PageHeader title="Combined Footing" badges={['ACI 318-14', 'NSCP 2015']} />
-      {/* PrintReport carries the letterhead card AND the export button in one; this
-          bare one is the fallback for when the design has not solved. */}
-      {!(result && solutionSteps) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
-      {result && solutionSteps && (
-        <PrintReport
-          docTitle={result.shape === 'Trapezoidal (CTF)' ? 'Combined Footing (Trapezoidal)' : 'Combined Footing (Rectangular)'}
-          docCode="F-02" badges={['ACI 318-14', 'NSCP 2015']}
-          ok={result.qNet > 0} governing="Rigid (conventional) method — resultant matched to factored column loads"
-          lh={lh} onLhChange={(patch) => setLh((v) => ({ ...v, ...patch }))}
-          stats={[
-            { label: 'Plan', value: result.shape === 'Trapezoidal (CTF)' ? `${f2(result.Bx)} × ${f2(result.By1)}→${f2(result.By2)}` : `${f2(result.Bx)} × ${f2(result.By)}`, unit: 'm' },
-            { label: 'Thickness Dc', value: f0(result.Dc), unit: 'mm' },
-            { label: 'q net', value: f2(result.qNet), unit: 'kPa' },
-          ]}
-          data={[
-            ['Column 1 DL / LL', `${f0(form.dl1)} / ${f0(form.ll1)} kN`], ['Column 2 DL / LL', `${f0(form.dl2)} / ${f0(form.ll2)} kN`],
-            ['Column spacing', `${f2(form.spacing)} m`], ["Concrete f'c", `${form.fc} MPa`],
-            ['Steel fy', `${form.fy} MPa`], ['Allowable qa', `${form.qAllow} kPa`],
-            ['Total depth H', `${f2(form.H)} m`], ['Bar ⌀', `${form.barDia} mm`],
-          ]}
-          steps={solutionSteps}
-          drawingTitle="Combined Footing Plan"
-          drawing={<CombinedFootingSchematic
-            shape={result.shape} Bx={result.Bx} By={result.By} By1={result.By1} By2={result.By2}
-            x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width} />}
-        />
-      )}
-      {/* Same container as the letterhead — keeps the card aligned with the
-          rest of the page and out of the printed report. */}
-      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7">
-        <ModelMemberResults kind="combined" onLoad={loadSaved} />
-      </div>
-      <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
+  const trap = result?.shape[0] === 'T'
+  const plan = result ? (trap ? `${f2(result.Bx)} × (${f2(result.By1)}→${f2(result.By2)}) m` : `${f2(result.Bx)} × ${f2(result.By)} m`) : ''
+  const flexBearingOK = flexible ? !!flex && flex.bearingOK : true
+  const report = result && solutionSteps ? {
+    docCode: 'F-02',
+    ok: result.qNet > 0 && flexBearingOK,
+    governing: flexible
+      ? `Flexible (Winkler) method — q soil,max ${flex ? f2(flex.qSoilMax) : '—'} kPa vs q net ${f2(result.qNet)} kPa`
+      : 'Rigid (conventional) method — resultant matched to factored column loads',
+    stats: [
+      { label: 'Plan', value: trap ? `${f2(result.Bx)} × ${f2(result.By1)}→${f2(result.By2)}` : `${f2(result.Bx)} × ${f2(result.By)}`, unit: 'm' },
+      { label: 'Thickness Dc', value: f0(result.Dc), unit: 'mm' },
+      { label: 'q net', value: f2(result.qNet), unit: 'kPa' },
+    ],
+    checks: flexible && flex ? [{ name: 'Soil pressure q soil,max / q net (Winkler)', ratio: flex.qSoilMax / result.qNet, ok: flex.bearingOK }] : [],
+    data: [
+      ['Column 1 DL / LL', `${f0(form.dl1)} / ${f0(form.ll1)} kN`], ['Column 2 DL / LL', `${f0(form.dl2)} / ${f0(form.ll2)} kN`],
+      ['Column spacing', `${f2(form.spacing)} m`], ["Concrete f'c", `${form.fc} MPa`],
+      ['Steel fy', `${form.fy} MPa`], ['Allowable qa', `${form.qAllow} kPa`],
+      ['Total depth H', `${f2(form.H)} m`], ['Bar ⌀', `${form.barDia} mm`],
+      ['Method', flexible ? `flexible, ks ${form.ksubgrade} kN/m³` : 'rigid'],
+    ] as [string, string][],
+    steps: solutionSteps,
+    drawingTitle: 'Combined Footing Plan',
+  } : undefined
 
-      <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
-        {/* ── Inputs ── */}
-        <div className="space-y-5">
-          <Card title="Analysis method">
+  const rows: ResultRow[] = result ? [
+    { check: 'Shape', basis: result.widened ? 'widened for containment' : 'sized about the service resultant', demand: result.shape, status: 'info' },
+    { check: 'Net bearing', basis: 'qa − overburden − surcharge', demand: `${f3(result.qNet)} kPa`, status: 'info' },
+    { check: 'Plan size', basis: trap ? 'Bx × (By1 → By2)' : 'Bx × By', demand: plan, status: 'info' },
+    { check: 'Factored loads', basis: 'Pu1 / Pu2', demand: `${f0(result.Pu1)} / ${f0(result.Pu2)} kN`, status: 'info' },
+    { check: 'Thickness', basis: `d punching ${f0(result.dPunch)} · beam ${f0(result.dBeam)} mm`, demand: `Dc ${f0(result.Dc)} mm`, status: 'info' },
+    ...(!flexible ? [{ check: 'Peak moment', basis: `at x = ${f2(result.xPeak)} m`, demand: `${f0(result.mPeak)} kN·m`, status: 'info' as const }] : []),
+    ...(flexible && flex ? [
+      { check: 'Section EI', basis: `Ec ${f0(flex.Ec)} MPa`, demand: `${f0(flex.EI / 1000)}×10³ kN·m²`, status: 'info' as const },
+      { check: 'Relative rigidity βBx', basis: flex.betaBx < 1 ? 'short → about rigid' : flex.betaBx > 3 ? 'long → flexible' : 'intermediate', demand: f2(flex.betaBx), status: 'info' as const },
+      { check: 'Settlement', basis: flex.yMin < -1e-3 ? `uplift ${f2(flex.yMin)} mm` : 'full contact', demand: `${f2(flex.yMax)} mm max`, status: flex.yMin < -1e-3 ? 'warn' as const : 'info' as const },
+      { check: 'Soil pressure', basis: 'Winkler, vs q net', demand: `${f3(flex.qSoilMax)} kPa`, limit: `${f3(result.qNet)} kPa`, ratio: flex.qSoilMax / result.qNet, status: flex.bearingOK ? 'pass' as const : 'fail' as const },
+      { check: 'Peak |M|', basis: `at x = ${f2(flex.xPeak)} m`, demand: `${f0(flex.mPeak)} kN·m`, status: 'info' as const },
+    ] : []),
+    ...(longSections ?? result.longSections).map((sec) => ({ check: `Longitudinal — ${sec.label}`, basis: `Mu ${f0(sec.Mu)} kN·m · ${sec.top ? 'top' : 'bottom'}`, demand: `${sec.bars} ⌀${form.barDia} @ ${f0(sec.spacing)} mm`, status: 'info' as const })),
+    ...result.transverse.map((t) => ({ check: `Transverse — ${t.label}`, basis: `As ${f0(t.AsPerM)} mm²/m`, demand: `⌀${form.barDia} @ ${f0(t.spacing)} mm`, status: 'info' as const })),
+  ] : []
+
+  return (
+    <WorkspacePage title="Combined Footing" badges={['Foundations', 'ACI 318-14 · NSCP 2015']}
+      intro="Two columns on one footing. The rigid method sizes the plan about the service resultant so bearing is uniform (rectangular), or tapers it when both ends are restricted (trapezoidal), then integrates shear and moment along the length. The flexible method re-solves the same footing as a beam on Winkler springs."
+      report={report}
+      inputs={<>
+        <div className="no-print"><ModelMemberResults kind="combined" onLoad={loadSaved} /></div>
+
+          <InputGroup title="Analysis method">
             <Select label="Method" value={form.method} onChange={set('method')}
               options={[['rigid', 'Rigid (conventional)'], ['flexible', 'Flexible (Winkler)']]} />
             {flexible && (
@@ -236,9 +234,9 @@ export default function CombinedFootingDesign() {
                 q(x) = k_s·B·y(x). Typical k_s: loose sand ~10–25, dense sand / stiff clay ~40–120 MN/m³.
               </p>
             )}
-          </Card>
+          </InputGroup>
 
-          <Card title="Geometry">
+          <InputGroup title="Geometry">
             <NumField label={<>Column 1 <Math tex="c_1" /></>} unit="mm" value={form.col1Width} onChange={set('col1Width')} />
             <NumField label={<>Column 2 <Math tex="c_2" /></>} unit="mm" value={form.col2Width} onChange={set('col2Width')} />
             <NumField label="C/C spacing" unit="m" value={form.spacing} onChange={set('spacing')} />
@@ -256,149 +254,75 @@ export default function CombinedFootingDesign() {
               Both edges restricted → trapezoidal (CTF). Otherwise the slab is rectangular (CRF) and sized about the
               service-load resultant so bearing is uniform.
             </p>
-          </Card>
+          </InputGroup>
 
-          <Card title="Loads">
+          <InputGroup title="Loads">
             <NumField label={<>Col 1 dead <Math tex="D_1" /></>} unit="kN" value={form.dl1} onChange={set('dl1')} />
             <NumField label={<>Col 1 live <Math tex="L_1" /></>} unit="kN" value={form.ll1} onChange={set('ll1')} />
-            <div className="hidden lg:block" />
             <NumField label={<>Col 2 dead <Math tex="D_2" /></>} unit="kN" value={form.dl2} onChange={set('dl2')} />
             <NumField label={<>Col 2 live <Math tex="L_2" /></>} unit="kN" value={form.ll2} onChange={set('ll2')} />
-          </Card>
+          </InputGroup>
 
-          <Card title="Materials">
+          <InputGroup title="Materials">
             <NumField label={<Math tex="f'_c" />} unit="MPa" value={form.fc} onChange={set('fc')} />
             <NumField label={<Math tex="f_y" />} unit="MPa" value={form.fy} onChange={set('fy')} />
             <NumField label={<>Bar <Math tex="d_b" /></>} unit="mm" value={form.barDia} onChange={set('barDia')} />
             <NumField label="Clear cover" unit="mm" value={form.cover} onChange={set('cover')} />
-          </Card>
+          </InputGroup>
 
-          <Card title="Soil & Geometry">
+          <InputGroup title="Soil & Geometry">
             <NumField label={<Math tex="q_a" />} unit="kPa" value={form.qAllow} onChange={set('qAllow')} />
             <NumField label={<Math tex="\gamma_{soil}" />} unit="kN/m³" value={form.gammaSoil} onChange={set('gammaSoil')} />
             <NumField label={<Math tex="\gamma_{conc}" />} unit="kN/m³" value={form.gammaConc} onChange={set('gammaConc')} />
             <NumField label={<>Total depth <Math tex="H" /></>} unit="m" value={form.H} onChange={set('H')} />
             <NumField label="Surcharge" unit="kPa" value={form.surcharge} onChange={set('surcharge')} />
-          </Card>
-        </div>
-
-        {/* ── Results ── */}
-        <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
-          <div data-pdf-drawing className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-            <h2 className="mb-2 text-[13.5px] font-bold text-ink">Plan</h2>
-            {result ? (
-              <CombinedFootingSchematic
-                shape={result.shape} Bx={result.Bx} By={result.By} By1={result.By1} By2={result.By2}
-                x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width}
-              />
-            ) : (
-              <p className="py-8 text-center text-sm text-muted">Enter valid inputs — net bearing must be positive.</p>
-            )}
-          </div>
-
-          {result && (
-            <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-              <h2 className="mb-2 text-[13.5px] font-bold text-ink">Results</h2>
-              <Row label="Shape" value={result.shape} />
-              <Row label={<Math tex="q_{net}" />} value={`${f3(result.qNet)} kPa`} />
-              <Row label="Plan size"
-                value={result.shape[0] === 'T'
-                  ? `${f2(result.Bx)} m × (${f2(result.By1)}→${f2(result.By2)}) m`
-                  : `${f2(result.Bx)} × ${f2(result.By)} m`}
-                check={result.widened ? 'widened for containment' : undefined} />
-              <Row label={<>Factored loads <Math tex="P_{u1}/P_{u2}" /></>} value={`${f0(result.Pu1)} / ${f0(result.Pu2)} kN`} />
-              <Row label="Slab thickness Dc" value={`${f0(result.Dc)} mm`}
-                check={`d punch ${f0(result.dPunch)} · beam ${f0(result.dBeam)} mm`} />
-              {!flexible && (
-                <Row label={<>Peak +M <Math tex="M_u" /></>} value={`${f0(result.mPeak)} kN·m`} check={`at x = ${f2(result.xPeak)} m`} />
-              )}
-              {flexible && flex && (
-                <>
-                  <Row label={<>Section <Math tex="EI" /></>} value={`${f0(flex.EI / 1000)}×10³ kN·m²`} check={`Ec ${f0(flex.Ec)} MPa`} />
-                  <Row label={<>Rigidity <Math tex="\beta B_x" /></>} value={f2(flex.betaBx)}
-                    check={flex.betaBx < 1 ? 'short → ~rigid' : flex.betaBx > 3 ? 'long → flexible' : 'intermediate'} />
-                  <Row label="Max settlement" value={`${f2(flex.yMax)} mm`}
-                    check={flex.yMin < -1e-3 ? `uplift ${f2(flex.yMin)} mm` : 'full contact'} />
-                  <Row label={<Math tex="q_{soil,max}" />} value={`${f3(flex.qSoilMax)} kPa`}
-                    check={flex.bearingOK ? '✓ ≤ q_net' : '✗ > q_net'} />
-                  <Row label={<>Peak |M| <Math tex="M_u" /></>} value={`${f0(flex.mPeak)} kN·m`} check={`at x = ${f2(flex.xPeak)} m`} />
-                </>
-              )}
-              {flexible && !flex && (
-                <Row label="Flexible solve" value="—" check="check k_s > 0" />
-              )}
-            </div>
-          )}
-
-          {result && (
-            <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-              <h2 className="mb-2 text-[13.5px] font-bold text-ink">
-                Longitudinal flexure {flexible && <span className="text-xs font-normal text-muted">(from BEF moments)</span>}
-              </h2>
-              {(longSections ?? result.longSections).map((s) => (
-                <Row key={s.label} label={s.label}
-                  value={`${s.bars} ⌀${form.barDia} @ ${f0(s.spacing)} mm`}
-                  check={`Mu=${f0(s.Mu)} kN·m · ${s.top ? 'top' : 'bottom'}`} />
-              ))}
-              <h2 className="mb-2 mt-4 text-[13.5px] font-bold text-ink">Transverse (under columns)</h2>
-              {result.transverse.map((t) => (
-                <Row key={t.label} label={t.label}
-                  value={`⌀${form.barDia} @ ${f0(t.spacing)} mm`}
-                  check={`As=${f0(t.AsPerM)} mm²/m`} />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Diagrams (full width) ── */}
-      {samples && (
-        <div className={`mt-6 gap-6 ${DIAGRAM_GRID}`}>
-          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-            <Diagram xs={samples.x} ys={samples.w} title="SOIL REACTION (w)" unit="kN/m"
-              color="#16a34a" vlines={vlines} markExtrema={!flexible} decimals={1} />
-          </div>
-          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-            <Diagram xs={samples.x} ys={samples.V} title="SHEAR (Vu)" unit="kN"
-              color="#dc2626" vlines={vlines} decimals={0} />
-          </div>
-          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-            <Diagram xs={samples.x} ys={samples.M} title="MOMENT (Mu)" unit="kN·m"
-              color="#0056b3" vlines={vlines} decimals={0} />
-          </div>
+          </InputGroup>
+              </>}
+      checks={result ? <>
+        <CheckCard title="Plan" basis={result.shape} status="info" value={plan}
+          pairs={[{ label: 'q net', value: `${f2(result.qNet)} kPa` }, { label: 'Pu1 / Pu2', value: `${f0(result.Pu1)} / ${f0(result.Pu2)} kN` }]} />
+        <CheckCard title="Thickness" basis="d from two-way and one-way shear" status="info" value={f0(result.Dc)} unit="mm"
+          pairs={[{ label: 'd punching', value: `${f0(result.dPunch)} mm` }, { label: 'd beam', value: `${f0(result.dBeam)} mm` }]} />
+        {flexible && (flex
+          ? <CheckCard title="Soil pressure (Winkler)" basis="q soil,max ≤ q net" status={flex.bearingOK ? 'pass' : 'fail'}
+              value={f2(flex.qSoilMax)} unit="kPa" ratio={flex.qSoilMax / result.qNet} ratioLabel="q ÷ q net"
+              pairs={[{ label: 'Max settlement', value: `${f2(flex.yMax)} mm` }, { label: 'βBx', value: f2(flex.betaBx) }]} />
+          : <CheckCard title="Flexible solve" basis="needs ks > 0" status="info" pillLabel="NOT RUN" value="—" />)}
+        <CheckCard title="Peak moment" basis={flexible ? 'from the Winkler solution' : 'rigid method'} status="info"
+          value={f0(flexible && flex ? flex.mPeak : result.mPeak)} unit="kN·m"
+          pairs={[{ label: 'at x', value: `${f2(flexible && flex ? flex.xPeak : result.xPeak)} m` }]} />
+      </> : <p className="text-sm text-muted">Enter valid inputs — the net bearing must be positive.</p>}
+      summary={[
+        { label: 'Columns', value: `${form.col1Width} / ${form.col2Width} mm at ${f2(form.spacing)} m` },
+        { label: 'Loads', value: `D/L ${f0(form.dl1)}/${f0(form.ll1)} and ${f0(form.dl2)}/${f0(form.ll2)} kN` },
+        { label: 'Soil', value: `qa ${form.qAllow} kPa, H ${f2(form.H)} m` },
+        { label: 'Method', value: flexible ? `flexible, ks ${form.ksubgrade} kN/m³` : 'rigid' },
+      ]}
+      drawing={result ? { title: 'Plan', node: <div data-pdf-drawing>
+        <CombinedFootingSchematic
+          shape={result.shape} Bx={result.Bx} By={result.By} By1={result.By1} By2={result.By2}
+          x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width} />
+      </div> } : undefined}
+      resultsCaption={flexible
+        ? 'Flexible (Winkler) method: EI·y⁗ + ks·B·y = column loads, solved with Hermitian beam elements and consistent foundation springs; geometry and thickness are inherited from the rigid sizing. φ: shear 0.75, flexure 0.90.'
+        : 'Rigid (conventional) method: the line load varies linearly so its resultant matches the factored column loads; V(x) and M(x) are integrated along the footing. φ: shear 0.75, flexure 0.90.'}
+      results={rows}
+      extraSections={samples ? [{ title: 'Soil reaction, shear and moment', node: (
+        <div className={`gap-6 ${DIAGRAM_GRID}`}>
+          <Diagram xs={samples.x} ys={samples.w} title="SOIL REACTION (w)" unit="kN/m" color="#16a34a" vlines={vlines} markExtrema={!flexible} decimals={1} />
+          <Diagram xs={samples.x} ys={samples.V} title="SHEAR (Vu)" unit="kN" color="#dc2626" vlines={vlines} decimals={0} />
+          <Diagram xs={samples.x} ys={samples.M} title="MOMENT (Mu)" unit="kN·m" color="#0056b3" vlines={vlines} decimals={0} />
           {flexible && flex && (
-            <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-              <Diagram xs={flex.samples.x} ys={flex.samples.y} title="SETTLEMENT (y, + down)" unit="mm"
-                color="#7c3aed" vlines={vlines} decimals={2} />
-            </div>
+            <Diagram xs={flex.samples.x} ys={flex.samples.y} title="SETTLEMENT (y, + down)" unit="mm" color="#7c3aed" vlines={vlines} decimals={2} />
           )}
         </div>
-      )}
-
-      <div className="mt-6 rail-card rounded-lg border border-hairline bg-sheet p-4 text-sm text-muted">
-        <h2 className="mb-2 text-[13.5px] font-bold text-ink">Basis</h2>
-        <Math block tex={String.raw`q_{net} = q_a - \gamma_s D_s - \gamma_c D_c - q,\qquad P_u = \max(1.4D,\ 1.2D + 1.6L)`} />
-        {flexible ? (
-          <p className="mt-1 text-xs text-muted">
-            Flexible (Winkler) method: footing modelled as a beam on elastic foundation, EI·y'''' + k_s·B·y = column
-            loads, solved with Hermitian beam elements and consistent foundation springs. Soil pressure and internal
-            V/M follow the settlement field rather than an assumed linear pressure. Geometry/thickness are inherited
-            from the rigid sizing. NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90.
-          </p>
-        ) : (
-          <p className="mt-1 text-xs text-muted">
-            Rigid (conventional) method: equivalent line load varies linearly so its resultant matches the factored
-            column loads; V(x)/M(x) integrated along the footing. NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90.
-          </p>
-        )}
-      </div>
-
-      <div className="no-print">
-        {solutionSteps && (
-          <WorkedSolution steps={solutionSteps} title="Combined footing — worked solution (rigid method)" />
-        )}
-      </div>
-      </div>
-    </div>
+      ) }] : []}
+      steps={solutionSteps ?? []}
+      references={[
+        { topic: 'Net bearing and factored loads', basis: 'q net = qa − γs·Ds − γc·Dc − q; Pu = max(1.4D, 1.2D + 1.6L)', source: 'NSCP 2015 §203 · ACI 318-14 Ch. 13' },
+        { topic: 'Combined footings', basis: 'rigid method; trapezoidal for two restricted ends', source: 'Das, Principles of Foundation Engineering' },
+        { topic: 'Beam on elastic foundation', basis: 'Winkler springs', source: 'Hetényi, Beams on Elastic Foundation' },
+      ]}
+    />
   )
 }

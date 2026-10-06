@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { designSquareFooting, columnOffset, type ColumnOffset } from '../engine/isolatedFooting'
 import type { AsMinBasis } from '../engine/flexure'
 import {
@@ -17,13 +17,12 @@ import { MIN_FOOTING_DEPTH, type ColumnPosition } from '../engine/shear'
 import { FootingSchematic } from '../components/FootingSchematic'
 import { ExcelImport } from '../components/ExcelImport'
 import type { BatchResult } from '../lib/foundationExcel'
-import { WorkedSolution } from '../components/WorkedSolution'
 import { buildFoundationSolution, type SolutionCtx } from '../lib/foundationSolution'
 import { Math } from '../lib/math'
-import { PageHeader, CalcSection, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { InputGroup, CheckCard, type ResultRow } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { ModelMemberResults } from '../components/ModelMemberResults'
 import type { MemberLoadRequest } from '../lib/modelMemberResults'
-import { initialLetterhead } from '../lib/letterhead'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
 
@@ -138,37 +137,8 @@ function Select<T extends string>({ label, value, onChange, options }: {
   )
 }
 
-const SECTION_META: Record<string, { num: string; hint: string }> = {
-  'Footing': { num: '01', hint: 'geometry & method' },
-  'Loads & Column': { num: '02', hint: 'P = service, Pu = factored' },
-  'Materials': { num: '03', hint: 'concrete & rebar' },
-  'Soil & Geometry': { num: '04', hint: 'allowable bearing' },
-}
-function Card({ title, children }: { title: string; children: ReactNode }) {
-  const meta = SECTION_META[title] ?? { num: '··', hint: '' }
-  return <CalcSection num={meta.num} title={title} hint={meta.hint}>{children}</CalcSection>
-}
-
-function Row({ label, value, check }: { label: ReactNode; value: ReactNode; check?: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-hairline-2 py-1.5 last:border-0">
-      <span className="text-[12px] text-muted">{label}</span>
-      <span className="text-right font-mono text-[12.5px] font-semibold text-ink">{value}</span>
-      {check ? <span className="w-32 text-right text-[10.5px] text-faint">{check}</span> : null}
-    </div>
-  )
-}
-
-function steelRow(label: ReactNode, s: DirSteel, db: number) {
-  return (
-    <Row label={label} value={`${s.bars} ⌀${db} mm @ ${f0(s.spacing)} mm`}
-      check={`As=${f0(s.As)} mm² · ${s.usedMin ? 'ρ_min' : `ρ=${s.rho.toFixed(4)}`}`} />
-  )
-}
-
 export default function FoundationDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
-  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead('F-01 · Rev A'))
   const [batch, setBatch] = useState<BatchResult | null>(null)
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm((s) => ({ ...s, [k]: v }))
   const ecc = form.loadingType === 'eccentric'
@@ -365,107 +335,56 @@ export default function FoundationDesign() {
     }))
   }
 
+  const kern = view?.offset ?? null
+  const steelRow = (label: string, st: DirSteel): ResultRow => ({
+    check: label, basis: st.usedMin ? `minimum (${st.minGoverning === 'slab' ? '§24.4.3.2' : '§9.6.1.2'})` : `ρ ${st.rho.toFixed(4)}`,
+    demand: `As ${f0(st.As)} mm²`, limit: `${st.bars} ⌀${dbEff} @ ${f0(st.spacing)} mm`, status: 'info',
+  })
+  const caption = view
+    ? kern && !kern.kernOK
+      ? `Column flush with the ${form.position === 'corner' ? 'two free edges' : 'free edge'}: the load sits ${kern.e.toFixed(2)} m off the pad centroid — e_x/B + e_y/L is ${(kern.kernRatio / 6).toFixed(3)} against the 1/6 the kern allows, so part of the base lifts. A pad cannot be sized out of this — the offset grows with B. Tie it to an interior footing with a strap taking ${f0(kern.restraint)} kN·m, or use a combined footing.`
+      : view.long.usedMin
+        ? `Flexure: minimum steel governs — ${view.long.minGoverning === 'slab' ? '§24.4.3.2 shrinkage on b·h' : '§9.6.1.2 flexural on b·d'}.`
+        : `Flexure: ρ = ${view.long.rho.toFixed(4)}.`
+    : undefined
+  const report = view && solutionSteps ? {
+    docCode: 'F-01',
+    ok: allOK,
+    governing: `Governing: ${governing} · ${globalThis.Math.max(punchRatio, beamRatio).toFixed(2)}`,
+    stats: [
+      { label: 'Plan size', value: `${f2(view.Bx)} × ${f2(view.By)}`, unit: 'm' },
+      { label: 'Thickness Dc', value: f0(view.Dc), unit: 'mm' },
+      { label: view.type === 'square' ? 'Steel each way' : 'Steel — long', value: `${view.long.bars}-⌀${dbEff}`, unit: `@${f0(view.long.spacing)}` },
+    ],
+    checks: [
+      { name: 'Two-way (punching) shear — d req/prov', ratio: punchRatio, ok: view.punchOK },
+      { name: 'One-way (beam) shear — d req/prov', ratio: beamRatio, ok: view.beamOK },
+      { name: `Min. depth over the mat — ${MIN_FOOTING_DEPTH}/d prov (§413.3.1.2)`, ratio: MIN_FOOTING_DEPTH / view.dProvided, ok: view.minDepthOK },
+      ...(kern ? [{ name: `Resultant in the kern — e/(B/6) · ${form.position} column`, ratio: kern.kernRatio, ok: kern.kernOK }] : []),
+    ],
+    data: [
+      ['Service load P', `${f0(serviceLoad)} kN`], ['Ultimate load Pu', `${f0(ultimateLoad)} kN`],
+      ["Concrete f'c", `${form.fc} MPa`], ['Steel fy', `${form.fy} MPa`],
+      ['Column width c', `${f0(colWidth)} mm (${form.position})`], ['Bar diameter db', `⌀${dbEff} mm`],
+      ['Allowable bearing qa', `${form.qAllow} kPa`], ['Clear cover', `${form.cover} mm`],
+      ['Unit weight, soil γs', `${form.gammaSoil} kN/m³`], ['Unit weight, concrete γc', `${form.gammaConc} kN/m³`],
+      ['Total depth H', `${f2(form.H)} m`], ['Surcharge', `${form.surcharge} kPa`],
+    ] as [string, string][],
+    steps: solutionSteps,
+    drawingTitle: 'Isolated Footing',
+  } : undefined
+
   return (
-    <div>
-      <PageHeader title="Isolated Footing" badges={['ACI 318-14', 'NSCP 2015']}
-        actions={
-          <button type="button" onClick={() =>
-            { const prev = document.title; document.title = `Foundation Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
-            className="inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover">
-            ⎙ Export report
-          </button>
-        } />
-        {/* PrintReport carries the letterhead card AND the export button in one; this
-          bare one is the fallback for when the design has not solved. */}
-      {!(view && solutionSteps) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
-        {view && solutionSteps && (
-          <PrintReport
-            docTitle="Isolated Footing" docCode="F-01" badges={['ACI 318-14', 'NSCP 2015']}
-            ok={allOK} governing={`Governing: ${governing} · ${globalThis.Math.max(punchRatio, beamRatio).toFixed(2)}`}
-            lh={lh} onLhChange={(patch) => setLh((v) => ({ ...v, ...patch }))}
-            stats={[
-              { label: 'Plan size', value: `${f2(view.Bx)} × ${f2(view.By)}`, unit: 'm' },
-              { label: 'Thickness Dc', value: f0(view.Dc), unit: 'mm' },
-              { label: view.type === 'square' ? 'Steel each way' : 'Steel — long', value: `${view.long.bars}-⌀${dbEff}`, unit: `@${f0(view.long.spacing)}` },
-            ]}
-            checks={[
-              { name: 'Two-way (punching) shear — d req/prov', ratio: punchRatio, ok: view.punchOK },
-              { name: 'One-way (beam) shear — d req/prov', ratio: beamRatio, ok: view.beamOK },
-              { name: `Min. depth over the mat — ${MIN_FOOTING_DEPTH}/d prov (§413.3.1.2)`, ratio: MIN_FOOTING_DEPTH / view.dProvided, ok: view.minDepthOK },
-              ...(view.offset ? [{
-                name: `Resultant in the kern — e/(B/6) · ${form.position} column`,
-                ratio: view.offset.kernRatio,
-                ok: view.offset.kernOK,
-              }] : []),
-            ]}
-            data={[
-              ['Service load P', `${f0(serviceLoad)} kN`], ['Ultimate load Pu', `${f0(ultimateLoad)} kN`],
-              ["Concrete f'c", `${form.fc} MPa`], ['Steel fy', `${form.fy} MPa`],
-              ['Column width c', `${f0(colWidth)} mm (${form.position})`], ['Bar diameter db', `⌀${dbEff} mm`],
-              ['Allowable bearing qa', `${form.qAllow} kPa`], ['Clear cover', `${form.cover} mm`],
-              ['Unit weight, soil γs', `${form.gammaSoil} kN/m³`], ['Unit weight, concrete γc', `${form.gammaConc} kN/m³`],
-              ['Total depth H', `${f2(form.H)} m`], ['Surcharge', `${form.surcharge} kPa`],
-            ]}
-            steps={solutionSteps}
-            drawingTitle="Isolated Footing"
-            drawing={<FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H}
-              position={form.position} d={view.dProvided} pressure={view.offset ?? view.ecc} />}
-          />
-        )}
-      {/* Same container as the letterhead — keeps the card aligned with the
-          rest of the page and out of the printed report. */}
-      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7">
-        <ModelMemberResults kind="footing" onLoad={loadSaved} />
-      </div>
-      <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
-      <div className="no-print"><ExcelImport onResult={setBatch} /></div>
-
-      {batch && (
-        <div className="no-print mt-4 overflow-hidden rounded-lg border border-hairline bg-sheet">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-hairline px-4 py-2.5">
-            <h2 className="text-[13.5px] font-bold text-ink">
-              Batch schedule <span className="text-sm font-normal text-muted">({batch.designed}/{batch.rows.length} designed)</span>
-            </h2>
-            <button type="button" onClick={() => setBatch(null)} className="no-print text-xs text-muted hover:text-ink-2 hover:underline">Clear</button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-sheet-2 text-left text-xs uppercase tracking-wide text-muted">
-                  <th className="px-4 py-2 font-semibold">Label</th>
-                  <th className="px-4 py-2 font-semibold">Type</th>
-                  <th className="px-4 py-2 font-semibold">Plan</th>
-                  <th className="px-4 py-2 font-semibold">Dc</th>
-                  <th className="px-4 py-2 font-semibold">Reinforcement</th>
-                  <th className="px-4 py-2 font-semibold">Note</th>
-                </tr>
-              </thead>
-              <tbody>
-                {batch.rows.map((r, i) => (
-                  <tr key={i} className={`border-t border-hairline-2 ${r.ok ? '' : 'bg-fail-tint/60'}`}>
-                    <td className="px-4 py-2 font-medium text-ink-2">{r.ok ? '✓' : '✗'} {r.label}</td>
-                    <td className="px-4 py-2 text-muted">{r.type}</td>
-                    <td className="px-4 py-2 text-ink">{r.size}</td>
-                    <td className="px-4 py-2 text-ink">{r.thickness}</td>
-                    <td className="px-4 py-2 text-ink">{r.steel}</td>
-                    <td className="px-4 py-2 text-xs text-muted">{r.note}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {batch.unknownHeaders.length > 0 && (
-            <p className="border-t border-hairline-2 px-4 py-2 text-xs text-muted">
-              Ignored headers: {batch.unknownHeaders.join(', ')}
-            </p>
-          )}
+    <WorkspacePage title="Isolated Footing" badges={['Foundations', 'ACI 318-14 · NSCP 2015']}
+      intro="A square, rectangular or eccentrically loaded spread footing: plan size from the net allowable bearing, depth from two-way and one-way shear, then the mat. Design mode sizes it; analysis mode checks a given B and Dc. A column at a free edge is checked for the resultant leaving the kern."
+      report={report}
+      inputs={<>
+        <div className="no-print space-y-3">
+          <ModelMemberResults kind="footing" onLoad={loadSaved} />
+          <ExcelImport onResult={setBatch} />
         </div>
-      )}
 
-      <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
-        {/* ── Inputs ── */}
-        <div className="space-y-3.5">
-          <Card title="Footing">
+          <InputGroup title="Footing">
             <Select label="Type" value={form.footingType} onChange={set('footingType')}
               options={[['square', 'Isolated Square'], ['rectangular', 'Isolated Rectangular']]} />
             <Select label="Loading" value={form.loadingType} onChange={set('loadingType')}
@@ -498,9 +417,9 @@ export default function FoundationDesign() {
             {ecc && (
               <p className="col-span-full text-xs text-muted">Eccentric is square-only in this pilot; the footing is sized to keep the load in the kern (no uplift).</p>
             )}
-          </Card>
+          </InputGroup>
 
-          <Card title="Loads & Column">
+          <InputGroup title="Loads & Column">
             <Select label="Load entry" value={form.loadInput} onChange={set('loadInput')}
               options={[['direct', 'Service & ultimate (P, Pu)'], ['individual', 'Individual loads (DL & LL)']]} />
             {individual ? (
@@ -549,9 +468,9 @@ export default function FoundationDesign() {
                 dimension (longer cantilever governs both ways on a square footing).
               </p>
             )}
-          </Card>
+          </InputGroup>
 
-          <Card title="Materials">
+          <InputGroup title="Materials">
             {(
               <label className="col-span-full flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-muted">
                 <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
@@ -565,117 +484,90 @@ export default function FoundationDesign() {
               disabled={!!matChoice}
               hint={matChoice ? (matChoice.db ? 'chosen by the optimiser' : 'no compliant mat — see the ranking') : undefined} />
             <NumField label="Clear cover" unit="mm" value={form.cover} onChange={set('cover')} />
-          </Card>
+          </InputGroup>
 
-          <Card title="Soil & Geometry">
+          <InputGroup title="Soil & Geometry">
             <NumField label={<Math tex="q_a" />} unit="kPa" value={form.qAllow} onChange={set('qAllow')} />
             <NumField label={<Math tex="\gamma_{soil}" />} unit="kN/m³" value={form.gammaSoil} onChange={set('gammaSoil')} />
             <NumField label={<Math tex="\gamma_{conc}" />} unit="kN/m³" value={form.gammaConc} onChange={set('gammaConc')} />
             <NumField label={<>Total depth <Math tex="H" /></>} unit="m" value={form.H} onChange={set('H')} />
             <NumField label="Surcharge" unit="kPa" value={form.surcharge} onChange={set('surcharge')} />
-          </Card>
-          {matChoice && (
-            <RebarRanking selection={matChoice.selection} title="Mat selection" name={nameMat} />
-          )}
-        </div>
-
-        {/* ── Verdict rail ── */}
-        <div className="space-y-3.5 lg:sticky lg:top-14 lg:self-start">
-          {view && (
-            <VerdictPanel
-              ok={allOK}
-              headline={allOK
-                ? (view.analysis === 'analyze' ? 'SECTION OK — all checks pass' : 'DESIGN OK — all checks pass')
-                : view.offset && !view.offset.kernOK
-                  ? 'CHECK FAILED — resultant outside the kern'
-                  : view.punchOK && view.beamOK && !view.minDepthOK
-                    ? `CHECK FAILED — d under the ${MIN_FOOTING_DEPTH} mm minimum`
-                    : 'CHECK FAILED — section inadequate'}
-              governing={`Governing: ${governing} · d req/prov ${globalThis.Math.max(punchRatio, beamRatio).toFixed(2)}`}
-              stats={[
-                { label: 'Plan size', value: view.type === 'square' ? `${f2(view.Bx)} × ${f2(view.By)}` : `${f2(view.Bx)} × ${f2(view.By)}`, unit: 'm' },
-                { label: 'Thickness Dc', value: f0(view.Dc), unit: 'mm' },
-                { label: view.type === 'square' ? 'Steel each way' : 'Steel — long', value: `${view.long.bars}-⌀${dbEff}`, unit: `@${f0(view.long.spacing)}` },
-              ]}
-              checks={[
-                { name: 'Punching shear (d req / prov)', ratio: punchRatio },
-                { name: 'Beam shear (d req / prov)', ratio: beamRatio },
-                { name: `Min. depth over the mat (${MIN_FOOTING_DEPTH} / d prov, §413.3.1.2)`, ratio: MIN_FOOTING_DEPTH / view.dProvided },
-                // VerdictCheck reads pass/fail off the ratio itself, so the
-                // kern check is stated as e/(B/6) — over 1.00 is uplift.
-                ...(view.offset ? [{
-                  name: `Resultant in the kern — e/(B/6) · ${form.position} column`,
-                  ratio: view.offset.kernRatio,
-                }] : []),
-              ]}
-              footnote={view.offset && !view.offset.kernOK
-                ? `Column flush with the ${form.position === 'corner' ? 'two free edges' : 'free edge'}: the load sits `
-                  + `${view.offset.e.toFixed(2)} m off the pad centroid — e_x/B + e_y/L is `
-                  + `${(view.offset.kernRatio / 6).toFixed(3)} against the 1/6 the kern allows, so part of the base lifts. `
-                  + `A pad cannot be sized out of this — the offset grows with B. Tie it to an interior footing `
-                  + `with a strap taking ${f0(view.offset.restraint)} kN·m, or use a combined footing.`
-                : view.long.usedMin
-                  ? `Flexure: minimum steel governs — ${view.long.minGoverning === 'slab'
-                      ? '§24.4.3.2 shrinkage on b·h' : '§9.6.1.2 flexural on b·d'}`
-                  : `Flexure: ρ = ${view.long.rho.toFixed(4)} — §24.4.3.2 satisfied`}
-            />
-          )}
-
-          <DrawingCard pdfDrawing title="Drawing" meta="plan · section">
-            {view ? (
-              <FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H}
-                position={form.position} d={view.dProvided} pressure={view.offset ?? view.ecc} />
-            ) : (
-              <p className="py-8 text-center text-sm text-faint">Enter valid inputs — net bearing must be positive.</p>
-            )}
-          </DrawingCard>
-
-          {view && (
-            <div className="rounded-lg border border-hairline bg-sheet p-4">
-              <h2 className="mb-2 text-[13.5px] font-bold text-ink">Results</h2>
-              {view.analysis === 'analyze' && (
-                <Row label="Adequacy" value={!(view.punchOK && view.beamOK) ? '✗ inadequate in shear' : view.minDepthOK ? '✓ section OK' : `✗ d < ${MIN_FOOTING_DEPTH} mm (§413.3.1.2)`}
-                  check={`punching ${view.punchOK ? '✓' : '✗'} · beam ${view.beamOK ? '✓' : '✗'} · min. depth ${view.minDepthOK ? '✓' : '✗'}`} />
-              )}
-              {view.analysis === 'design' && (
-                <Row label="Method" value={view.method === 'iteration' ? 'Iteration' : 'Approximate'} />
-              )}
-              <Row label={<Math tex="q_{net}" />} value={`${f3(view.qNet)} kPa`} />
-              <Row label="Footing size"
-                value={view.type === 'square' ? `B = ${f2(view.Bx)} m` : `${f2(view.Bx)} × ${f2(view.By)} m`} />
-              {view.ecc && (
-                <>
-                  <Row label={<>Eccentricity <Math tex="e = M/P" /></>} value={`${f3(view.ecc.e)} m`} check={`kern B/6 = ${f3(view.Bx / 6)} m`} />
-                  <Row label={<Math tex="q_{max}/q_{min}" />} value={`${f2(view.ecc.qMax)} / ${f2(view.ecc.qMin)} kPa`}
-                    check={view.ecc.kernOK ? '✓ no uplift, ≤ q_net' : '✗ check uplift'} />
-                </>
-              )}
-              <Row label={view.ecc ? <Math tex="q_{u,max}" /> : <Math tex="q_u" />} value={`${f3(view.qu)} kPa`} />
-              <Row label="Slab thickness Dc" value={`${f0(view.Dc)} mm`} />
-              <Row label="d — punching"
-                value={`${f0(view.dPunch)} mm`}
-                check={view.type === 'square' ? `beam ${f0(view.dBeamLong)} mm` : `beam x/y ${f0(view.dBeamLong)}/${f0(view.dBeamShort)} mm`} />
-              {view.type === 'square'
-                ? steelRow('Steel (each way)', view.long, dbEff)
-                : (
-                  <>
-                    {steelRow('Steel — long (x)', view.long, dbEff)}
-                    {view.short && steelRow('Steel — short (y)', view.short, dbEff)}
-                    {view.short && (
-                      <Row label="Central band (short)"
-                        value={`${view.short.bandBars} of ${view.short.bars} bars`}
-                        check={`band ≈ ${(view.short.bandFraction * 100).toFixed(0)}% in By`} />
-                    )}
-                  </>
-                )}
-            </div>
-          )}
-
-        </div>
-      </div>
-
-      <div className="no-print">{solutionSteps && <WorkedSolution steps={solutionSteps} title="Calculation report — worked solution" />}</div>
-      </div>
-    </div>
+          </InputGroup>
+              </>}
+      checks={view ? <>
+        <CheckCard title="Two-way shear" basis="d required ÷ d provided" status={view.punchOK ? 'pass' : 'fail'}
+          value={f0(view.dPunch)} unit="mm req." ratio={punchRatio} ratioLabel="d req ÷ d prov"
+          pairs={[{ label: 'd provided', value: `${f0(view.dProvided)} mm` }, { label: 'Dc', value: `${f0(view.Dc)} mm` }]} />
+        <CheckCard title="One-way shear" basis={view.type === 'square' ? 'each way' : 'long / short'} status={view.beamOK ? 'pass' : 'fail'}
+          value={view.type === 'square' ? f0(view.dBeamLong) : `${f0(view.dBeamLong)} / ${f0(view.dBeamShort)}`} unit="mm req." ratio={beamRatio} ratioLabel="d req ÷ d prov" />
+        <CheckCard title="Minimum depth" basis="§413.3.1.2" status={view.minDepthOK ? 'pass' : 'fail'}
+          value={f0(view.dProvided)} unit="mm" ratio={MIN_FOOTING_DEPTH / view.dProvided} ratioLabel={`${MIN_FOOTING_DEPTH} ÷ d`} />
+        {kern && <CheckCard title="Resultant in the kern" basis={`${form.position} column`} status={kern.kernOK ? 'pass' : 'fail'}
+          value={kern.e.toFixed(2)} unit="m off centroid" ratio={kern.kernRatio} ratioLabel="e ÷ (B/6)" />}
+        {view.ecc && <CheckCard title="Bearing (eccentric)" basis={`e = M/P = ${f3(view.ecc.e)} m`} status={view.ecc.kernOK ? 'pass' : 'fail'}
+          value={f2(view.ecc.qMax)} unit="kPa max" pairs={[{ label: 'q min', value: `${f2(view.ecc.qMin)} kPa` }, { label: 'q net', value: `${f3(view.qNet)} kPa` }]} />}
+        <CheckCard title="Mat" basis={view.type === 'square' ? 'each way' : 'long direction'} status="info"
+          value={`${view.long.bars} ⌀${dbEff} @ ${f0(view.long.spacing)}`} unit="mm"
+          pairs={[{ label: 'Plan', value: `${f2(view.Bx)} × ${f2(view.By)} m` }, { label: 'As', value: `${f0(view.long.As)} mm²` }]} />
+      </> : <p className="text-sm text-muted">Enter valid inputs — the net bearing must be positive.</p>}
+      summary={[
+        { label: 'Footing', value: `${rect ? 'rectangular' : 'square'}, ${ecc ? 'eccentric' : 'concentric'}, ${analyze ? 'analysis of given size' : 'design'}` },
+        { label: 'Loads', value: `P ${f0(serviceLoad)} kN, Pu ${f0(ultimateLoad)} kN${ecc ? `, M ${f0(form.serviceMoment)} / Mu ${f0(form.ultimateMoment)} kN·m` : ''}` },
+        { label: 'Column', value: `${f0(colWidth)}${rectCol ? ` × ${f0(colWidthY)}` : ''} mm ${form.columnShape}, ${form.position}` },
+        { label: 'Soil', value: `qa ${form.qAllow} kPa, H ${f2(form.H)} m, γs ${form.gammaSoil}, γc ${form.gammaConc} kN/m³` },
+        { label: 'Materials', value: `f′c ${form.fc}, fy ${form.fy} MPa, cover ${form.cover} mm` },
+      ]}
+      drawing={view ? { title: 'Plan and section', node: <div data-pdf-drawing>
+        <FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H}
+          position={form.position} d={view.dProvided} pressure={view.offset ?? view.ecc} />
+      </div> } : undefined}
+      resultsCaption={caption}
+      results={view ? [
+        ...(view.analysis === 'design' ? [{ check: 'Method', basis: 'depth by', demand: view.method === 'iteration' ? 'iteration' : 'approximate', status: 'info' as const }] : []),
+        { check: 'Net bearing', basis: 'qa − soil and concrete overburden − surcharge', demand: `${f3(view.qNet)} kPa`, status: 'info' as const },
+        { check: 'Plan size', basis: view.type === 'square' ? 'B' : 'Bx × By', demand: view.type === 'square' ? `${f2(view.Bx)} m` : `${f2(view.Bx)} × ${f2(view.By)} m`, status: 'info' as const },
+        ...(view.ecc ? [{ check: 'Service pressure', basis: `e ${f3(view.ecc.e)} m, kern B/6 ${f3(view.Bx / 6)} m`, demand: `${f2(view.ecc.qMax)} / ${f2(view.ecc.qMin)} kPa`, status: view.ecc.kernOK ? 'pass' as const : 'fail' as const }] : []),
+        { check: view.ecc ? 'Factored pressure (max)' : 'Factored pressure', basis: 'qu', demand: `${f3(view.qu)} kPa`, status: 'info' as const },
+        { check: 'Two-way shear', basis: 'd required', demand: `${f0(view.dPunch)} mm`, limit: `${f0(view.dProvided)} mm`, ratio: punchRatio, status: view.punchOK ? 'pass' as const : 'fail' as const },
+        { check: 'One-way shear', basis: view.type === 'square' ? 'd required' : 'd required, long / short', demand: view.type === 'square' ? `${f0(view.dBeamLong)} mm` : `${f0(view.dBeamLong)} / ${f0(view.dBeamShort)} mm`, limit: `${f0(view.dProvided)} mm`, ratio: beamRatio, status: view.beamOK ? 'pass' as const : 'fail' as const },
+        { check: 'Thickness', basis: `Dc, d ≥ ${MIN_FOOTING_DEPTH} mm (§413.3.1.2)`, demand: `${f0(view.Dc)} mm`, status: view.minDepthOK ? 'pass' as const : 'fail' as const },
+        steelRow(view.type === 'square' ? 'Steel each way' : 'Steel — long (x)', view.long),
+        ...(view.short ? [steelRow('Steel — short (y)', view.short), { check: 'Central band (short)', basis: `≈ ${(view.short.bandFraction * 100).toFixed(0)}% in By`, demand: `${view.short.bandBars} of ${view.short.bars} bars`, status: 'info' as const }] : []),
+      ] : []}
+      extraSections={[
+        ...(matChoice ? [{ title: 'Mat selection', node: <RebarRanking selection={matChoice.selection} title="Mat selection" name={nameMat} /> }] : []),
+        ...(batch ? [{ title: `Batch schedule (${batch.designed}/${batch.rows.length} designed)`, node: (
+          <div className="overflow-x-auto">
+            <div className="mb-2 text-right"><button type="button" onClick={() => setBatch(null)} className="no-print text-xs text-muted hover:text-ink-2 hover:underline">Clear</button></div>
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-sheet-2 text-left text-xs uppercase tracking-wide text-muted">
+                  {['Label', 'Type', 'Plan', 'Dc', 'Reinforcement', 'Note'].map((h) => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {batch.rows.map((r, i) => (
+                  <tr key={i} className={`border-t border-hairline-2 ${r.ok ? '' : 'bg-fail-tint/60'}`}>
+                    <td className="px-3 py-2 font-medium text-ink-2">{r.ok ? '✓' : '✗'} {r.label}</td>
+                    <td className="px-3 py-2 text-muted">{r.type}</td>
+                    <td className="px-3 py-2 text-ink">{r.size}</td>
+                    <td className="px-3 py-2 text-ink">{r.thickness}</td>
+                    <td className="px-3 py-2 text-ink">{r.steel}</td>
+                    <td className="px-3 py-2 text-xs text-muted">{r.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {batch.unknownHeaders.length > 0 && <p className="mt-2 text-xs text-muted">Ignored headers: {batch.unknownHeaders.join(', ')}</p>}
+          </div>
+        ) }] : []),
+      ]}
+      steps={solutionSteps ?? []}
+      references={[
+        { topic: 'Footing design', basis: 'net bearing, shear, flexure', source: 'ACI 318-14 Ch. 13 · NSCP 2015 §413' },
+        { topic: 'Two-way and one-way shear', basis: 'critical sections at d/2 and d', source: 'ACI 318-14 §22.5, §22.6' },
+        { topic: 'Minimum steel', basis: 'slab §24.4.3.2 or beam §9.6.1.2', source: 'ACI 318-14 §13.3.2.1' },
+      ]}
+    />
   )
 }

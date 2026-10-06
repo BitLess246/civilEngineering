@@ -1,11 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { clampTo } from '../lib/clamp'
 import { designPileCap, pileCapSolution, type PileArrangement, type PileCapInput } from '../engine/pileCap'
-import { WorkedSolution } from '../components/WorkedSolution'
 import { PileCapSchematic } from '../components/PileCapSchematic'
-import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
-import { Card } from '../components/qty'
-import { initialLetterhead } from '../lib/letterhead'
+import { InputGroup, CheckCard, ResultsTable, type ResultRow } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { Math as KTex } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -91,43 +89,8 @@ function SelectField<T extends string | number>({ label, value, onChange, option
 
 /** Result row. `check` is a third column the shared `Row` calls `sub`; the name
  *  differs but the palette must not — this matches `components/qty`. */
-function Row({ label, value, check }: { label: ReactNode; value: ReactNode; check?: ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-hairline-2 py-1.5 last:border-0">
-      <span className="text-[12px] text-muted">{label}</span>
-      <span className="text-right font-mono text-[12.5px] font-semibold text-ink">{value}</span>
-      {check ? <span className="w-32 text-right text-[10.5px] text-faint">{check}</span> : null}
-    </div>
-  )
-}
-
-function CheckRow({ label, Vu, phiVc, ok }: { label: ReactNode; Vu: number; phiVc: number; ok: boolean }) {
-  return (
-    <Row
-      label={label}
-      value={`${f2(Vu)} kN`}
-      check={
-        <span className={ok ? 'text-ok' : 'text-fail'}>
-          φVc = {f2(phiVc)} kN {ok ? '✓' : '✗'}
-        </span>
-      }
-    />
-  )
-}
-
-function steelRow(label: ReactNode, s: { bars: number; spacing: number; As: number; usedMin: boolean; rho: number }, db: number) {
-  return (
-    <Row
-      label={label}
-      value={`${s.bars} ⌀${db} mm @ ${f0(s.spacing)} mm`}
-      check={`As=${f0(s.As)} mm² · ${s.usedMin ? 'ρ_min' : `ρ=${s.rho.toFixed(4)}`}`}
-    />
-  )
-}
-
 export default function PileCapDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
-  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead('PC-01 · Rev A'))
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm(s => ({ ...s, [k]: v }))
 
   const valid = Object.values(form).every(v => typeof v === 'string' || Number.isFinite(v as number))
@@ -163,59 +126,70 @@ export default function PileCapDesign() {
   const allOK = result && result.capacityOK && result.punchColOK && result.punchPileOK
     && result.beamXOK && result.beamYOK && result.ldOK
 
-  return (
-    <div>
-      <PageHeader title="Pile Cap" badges={['ACI 318-14', 'NSCP 2015']} />
-      {/* PrintReport carries the letterhead card AND the export button in one; this
-          bare one is the fallback for when the design has not solved. */}
-      {!(result) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
-      {result && (
-        <PrintReport
-          docTitle="Pile Cap" docCode="PC-01" badges={['ACI 318-14', 'NSCP 2015']}
-          ok={!!allOK}
-          governing={`Governing ratio ${globalThis.Math.max(
-            result.VuPunchCol / result.phiVcPunchCol, result.VuPunchPile / result.phiVcPunchPile,
-            result.VuBeamX / result.phiVcBeamX, result.VuBeamY / result.phiVcBeamY).toFixed(2)} across punching / beam shear`}
-          lh={lh} onLhChange={(patch) => setLh((v) => ({ ...v, ...patch }))}
-          stats={[
-            { label: 'Cap plan', value: `${f2(result.capBx)} × ${f2(result.capBy)}`, unit: 'm' },
-            { label: 'Thickness Dc', value: f0(result.Dc), unit: 'mm' },
-            { label: 'Piles', value: `${form.nPiles}-⌀${form.pileDia}`, unit: 'mm' },
-          ]}
-          checks={[
-            { name: 'Column punching Vu/φVc', ratio: result.VuPunchCol / result.phiVcPunchCol, ok: result.punchColOK },
-            { name: 'Pile punching Vu/φVc', ratio: result.VuPunchPile / result.phiVcPunchPile, ok: result.punchPileOK },
-            { name: 'One-way shear X Vu/φVc', ratio: result.VuBeamX / result.phiVcBeamX, ok: result.beamXOK },
-            { name: 'One-way shear Y Vu/φVc', ratio: result.VuBeamY / result.phiVcBeamY, ok: result.beamYOK },
-            { name: 'Development ld,req/avail', ratio: result.ldRequired / globalThis.Math.max(result.ldAvailable, 1e-9), ok: result.ldOK },
-          ]}
-          data={[
-            ['Service / ultimate load', `${form.serviceLoad} / ${form.ultimateLoad} kN`],
-            ['Moments MuX / MuY', `${result.MuX.toFixed(1)} / ${result.MuY.toFixed(1)} kN·m`],
-            ['Pile capacity', `${form.pileCapacity} kN`], ['Pile spacing / edge', `${form.spacing} / ${form.edgeDist} mm`],
-            ['Column', `${form.colX} × ${form.colY} mm`], ["Concrete f'c / fy", `${form.fc} / ${form.fy} MPa`],
-            ['Effective depth d', `${result.d.toFixed(0)} mm`],
-          ]}
-          drawingTitle="Pile Cap Plan"
-          drawing={<PileCapSchematic d={result.d} capBx={result.capBx} capBy={result.capBy} coords={result.coords}
-            pileDia={form.pileDia} colX={form.colX} colY={form.colY} reactions={result.reactions} />}
-        />
-      )}
-      <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
+  const r = result
+  const maxR = r ? globalThis.Math.max(...r.reactions) : 0
+  const ratios = r ? {
+    cap: maxR / form.pileCapacity,
+    pc: r.VuPunchCol / r.phiVcPunchCol, pp: r.VuPunchPile / r.phiVcPunchPile,
+    bx: r.VuBeamX / r.phiVcBeamX, by: r.VuBeamY / r.phiVcBeamY,
+    ld: r.ldRequired / globalThis.Math.max(r.ldAvailable, 1e-9),
+  } : null
+  const plan = r ? `${f2(r.capBx / 1000)} × ${f2(r.capBy / 1000)}` : ''
+  const report = r && ratios ? {
+    docCode: 'PC-01',
+    ok: !!allOK,
+    governing: `Governing ratio ${globalThis.Math.max(ratios.pc, ratios.pp, ratios.bx, ratios.by).toFixed(2)} across punching / beam shear · pile reaction ${f2(maxR)} / ${form.pileCapacity} kN`,
+    stats: [
+      // capBx / capBy are mm — the report used to print them as metres
+      { label: 'Cap plan', value: plan, unit: 'm' },
+      { label: 'Thickness Dc', value: f0(r.Dc), unit: 'mm' },
+      { label: 'Piles', value: `${form.nPiles}-⌀${form.pileDia}`, unit: 'mm' },
+    ],
+    checks: [
+      { name: 'Pile reaction R,max / capacity', ratio: ratios.cap, ok: r.capacityOK },
+      { name: 'Column punching Vu/φVc', ratio: ratios.pc, ok: r.punchColOK },
+      { name: 'Pile punching Vu/φVc', ratio: ratios.pp, ok: r.punchPileOK },
+      { name: 'One-way shear X Vu/φVc', ratio: ratios.bx, ok: r.beamXOK },
+      { name: 'One-way shear Y Vu/φVc', ratio: ratios.by, ok: r.beamYOK },
+      { name: 'Development ld,req/avail', ratio: ratios.ld, ok: r.ldOK },
+    ],
+    data: [
+      ['Service / ultimate load', `${form.serviceLoad} / ${form.ultimateLoad} kN`],
+      ['Moments MuX / MuY', `${r.MuX.toFixed(1)} / ${r.MuY.toFixed(1)} kN·m`],
+      ['Pile capacity', `${form.pileCapacity} kN`], ['Pile spacing / edge', `${form.spacing} / ${form.edgeDist} mm`],
+      ['Column', `${form.colX} × ${form.colY} mm`], ["Concrete f'c / fy", `${form.fc} / ${form.fy} MPa`],
+      ['Effective depth d', `${r.d.toFixed(0)} mm`],
+    ] as [string, string][],
+    steps: pileCapSolution(solverInput, r),
+    drawingTitle: 'Pile Cap Plan',
+  } : undefined
+  const steel = (label: string, st: { bars: number; spacing: number; As: number; usedMin: boolean; rho: number }): ResultRow => ({
+    check: label, basis: st.usedMin ? 'minimum steel' : `ρ ${st.rho.toFixed(4)}`, demand: `As ${f0(st.As)} mm²`,
+    limit: `${st.bars} ⌀${form.barDia} @ ${f0(st.spacing)} mm`, status: 'info',
+  })
+  const reactionRows: ResultRow[] = r ? r.reactions.map((R, i) => ({
+    check: `Pile ${i + 1}`, basis: `(${(r.coords[i].x / 1000).toFixed(2)}, ${(r.coords[i].y / 1000).toFixed(2)}) m`,
+    demand: `${f2(R)} kN`, limit: `${form.pileCapacity} kN`, ratio: R / form.pileCapacity,
+    status: R <= form.pileCapacity ? 'pass' : 'fail',
+  })) : []
+  const shear = (ok: boolean) => (ok ? 'pass' as const : 'fail' as const)
 
-      <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
-        {/* ── Inputs ── */}
-        <div className="space-y-5">
-          <Card title="Column Loads">
+  return (
+    <WorkspacePage title="Pile Cap" badges={['Foundations', 'ACI 318-14 · NSCP 2015']}
+      intro="A rigid pile cap under axial load and biaxial moment. Pile reactions by R = P/N ± M·y/Σy² ± M·x/Σx²; the depth is the least that passes column punching, pile punching and one-way shear each way; then bottom steel each way and its development past the column face."
+      report={report}
+      inputs={<>
+
+          <InputGroup title="Column Loads">
             <NumField label={<>Service <KTex tex="P" /></>} unit="kN" value={form.serviceLoad} onChange={set('serviceLoad')} />
             <NumField label={<>Service <KTex tex="M_x" /></>} unit="kN·m" value={form.serviceMomX} onChange={set('serviceMomX')} />
             <NumField label={<>Service <KTex tex="M_y" /></>} unit="kN·m" value={form.serviceMomY} onChange={set('serviceMomY')} />
             <NumField label={<>Factored <KTex tex="P_u" /></>} unit="kN" value={form.ultimateLoad} onChange={set('ultimateLoad')} />
             <NumField label={<>Factored <KTex tex="M_{ux}" /></>} unit="kN·m" value={form.ultimateMomX} onChange={set('ultimateMomX')} />
             <NumField label={<>Factored <KTex tex="M_{uy}" /></>} unit="kN·m" value={form.ultimateMomY} onChange={set('ultimateMomY')} />
-          </Card>
+          </InputGroup>
 
-          <Card title="Pile & Cap Geometry">
+          <InputGroup title="Pile & Cap Geometry">
             <SelectField<PileArrangement>
               label="Number of piles"
               value={form.nPiles}
@@ -233,132 +207,64 @@ export default function PileCapDesign() {
             <NumField label="Pile spacing (c/c)" unit="mm" value={form.spacing} onChange={set('spacing')} step="50" min={1} />
             <NumField label="Edge distance" unit="mm" value={form.edgeDist} onChange={set('edgeDist')} step="25" min={1} />
             <NumField label="Pile embedment" unit="mm" value={form.pileEmbed} onChange={set('pileEmbed')} step="25" min={0} />
-          </Card>
+          </InputGroup>
 
-          <Card title="Column">
+          <InputGroup title="Column">
             <NumField label={<>Width <KTex tex="c_x" /></>} unit="mm" value={form.colX} onChange={set('colX')} step="25" min={1} />
             <NumField label={<>Width <KTex tex="c_y" /></>} unit="mm" value={form.colY} onChange={set('colY')} step="25" min={1} />
-          </Card>
+          </InputGroup>
 
-          <Card title="Materials & Detailing">
+          <InputGroup title="Materials & Detailing">
             <NumField label={<KTex tex="f'_c" />} unit="MPa" value={form.fc} onChange={set('fc')} min={1} />
             <NumField label={<KTex tex="f_y" />} unit="MPa" value={form.fy} onChange={set('fy')} min={1} />
             <NumField label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={form.barDia} onChange={set('barDia')} min={1} />
             <NumField label="Clear cover" unit="mm" value={form.cover} onChange={set('cover')} min={0} />
-          </Card>
-        </div>
-
-        {/* ── Results ── */}
-        <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
-          {/* Schematic */}
-          <div data-pdf-drawing className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-            <h2 className="mb-2 text-[13.5px] font-bold text-ink">Cap plan</h2>
-            {result ? (
-              <PileCapSchematic d={result.d}
-                capBx={result.capBx}
-                capBy={result.capBy}
-                coords={result.coords}
-                pileDia={form.pileDia}
-                colX={form.colX}
-                colY={form.colY}
-                reactions={result.reactions}
-              />
-            ) : (
-              <p className="py-8 text-center text-sm text-muted">Enter valid inputs to preview.</p>
-            )}
-          </div>
-
-          {result && (
-            <>
-              {/* Summary banner */}
-              <div className={`rounded-lg border p-3 text-center text-[12.5px] font-semibold ${
-                allOK ? 'border-ok-line bg-ok-tint text-ok' : 'border-fail-line bg-fail-tint text-fail'
-              }`}>
-                {allOK ? '✓ All checks pass' : '✗ One or more checks fail — review results below'}
-              </div>
-
-              {/* Cap geometry */}
-              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-                <h2 className="mb-2 text-[13.5px] font-bold text-ink">Cap geometry</h2>
-                <Row label="Plan (Bx × By)"
-                  value={`${f2(result.capBx / 1000)} × ${f2(result.capBy / 1000)} m`} />
-                <Row label={<>Thickness <KTex tex="D_c" /></>} value={`${f0(result.Dc)} mm`} />
-                <Row label={<>Effective depth <KTex tex="d" /></>} value={`${f0(result.d)} mm`} />
-              </div>
-
-              {/* Pile reactions */}
-              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-                <h2 className="mb-2 text-[13.5px] font-bold text-ink">Pile reactions (service)</h2>
-                {result.reactions.map((r, i) => (
-                  <Row key={i}
-                    label={`Pile ${i + 1} (${(result.coords[i].x / 1000).toFixed(2)}, ${(result.coords[i].y / 1000).toFixed(2)}) m`}
-                    value={`${f2(r)} kN`}
-                    check={
-                      <span className={r <= form.pileCapacity ? 'text-ok' : 'text-fail'}>
-                        ≤ {form.pileCapacity} kN {r <= form.pileCapacity ? '✓' : '✗'}
-                      </span>
-                    }
-                  />
-                ))}
-              </div>
-
-              {/* Shear checks */}
-              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-                <h2 className="mb-2 text-[13.5px] font-bold text-ink">Shear checks (factored)</h2>
-                <CheckRow label="Column punching" Vu={result.VuPunchCol} phiVc={result.phiVcPunchCol} ok={result.punchColOK} />
-                <CheckRow label="Pile punching (worst)" Vu={result.VuPunchPile} phiVc={result.phiVcPunchPile} ok={result.punchPileOK} />
-                <CheckRow label={<>Beam shear — <KTex tex="x" /></>} Vu={result.VuBeamX} phiVc={result.phiVcBeamX} ok={result.beamXOK} />
-                <CheckRow label={<>Beam shear — <KTex tex="y" /></>} Vu={result.VuBeamY} phiVc={result.phiVcBeamY} ok={result.beamYOK} />
-              </div>
-
-              {/* Flexure & steel */}
-              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-                <h2 className="mb-2 text-[13.5px] font-bold text-ink">Flexure & reinforcement</h2>
-                <Row label={<>Design moment <KTex tex="M_{u,x}" /></>} value={`${f3(result.MuX)} kN·m`} />
-                <Row label={<>Design moment <KTex tex="M_{u,y}" /></>} value={`${f3(result.MuY)} kN·m`} />
-                {steelRow(<>Bars — <KTex tex="x" />-direction (bottom)</>, result.steelX, form.barDia)}
-                {steelRow(<>Bars — <KTex tex="y" />-direction (bottom)</>, result.steelY, form.barDia)}
-              </div>
-
-              {/* Development length */}
-              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-                <h2 className="mb-2 text-[13.5px] font-bold text-ink">Development length</h2>
-                <Row
-                  label={<>Required <KTex tex="\ell_d" /></>}
-                  value={`${f0(result.ldRequired)} mm`}
-                />
-                <Row
-                  label="Available (column face to bar end)"
-                  value={`${f0(result.ldAvailable)} mm`}
-                  check={
-                    <span className={result.ldOK ? 'text-ok' : 'text-fail'}>
-                      {result.ldOK ? '✓ OK' : '✗ Hooks required'}
-                    </span>
-                  }
-                />
-              </div>
-
-              {/* Basis */}
-              <div className="rail-card rounded-lg border border-hairline bg-sheet p-4 text-sm text-muted">
-                <h2 className="mb-1 text-[13.5px] font-bold text-ink">Basis</h2>
-                <KTex block tex={String.raw`R_i = \frac{P}{N} + \frac{M_x \cdot y_i}{\sum y_i^2} + \frac{M_y \cdot x_i}{\sum x_i^2}`} />
-                <p className="mt-1 text-xs text-muted">
-                  NSCP 2015 / ACI 318-14. φ_v = 0.75, φ_f = 0.90.
-                  Column punching at d/2 from column face; pile punching at d/2 from pile perimeter (§13.4.6).
-                  One-way shear critical section at d from column face.
-                  Development length per §25.5.1 (straight bar, no Ktr).
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* The rail shows WHAT the checks came to; this shows HOW — and it is the
-          part that prints, so a reviewer can follow the depth back to whichever
-          of the four shear checks actually sized it. */}
-      {result && <WorkedSolution steps={pileCapSolution(solverInput, result)} />}
-      </div>
-    </div>
+          </InputGroup>
+              </>}
+      checks={r && ratios ? <>
+        <CheckCard title="Pile reactions" basis="service, rigid cap" status={r.capacityOK ? 'pass' : 'fail'}
+          value={f2(maxR)} unit="kN max" ratio={ratios.cap} ratioLabel="R ÷ capacity"
+          pairs={[{ label: 'Capacity', value: `${form.pileCapacity} kN` }, { label: 'Piles', value: `${form.nPiles} × ⌀${form.pileDia}` }]} />
+        <CheckCard title="Punching" basis="column and worst pile, d/2" status={r.punchColOK && r.punchPileOK ? 'pass' : 'fail'}
+          value={f0(r.Dc)} unit="mm thick" ratio={globalThis.Math.max(ratios.pc, ratios.pp)} ratioLabel="worst Vu ÷ φVc"
+          pairs={[{ label: 'Column', value: `${f0(r.VuPunchCol)} / ${f0(r.phiVcPunchCol)} kN` }, { label: 'Pile', value: `${f0(r.VuPunchPile)} / ${f0(r.phiVcPunchPile)} kN` }]} />
+        <CheckCard title="One-way shear" basis="at d from the column face" status={r.beamXOK && r.beamYOK ? 'pass' : 'fail'}
+          value={f0(r.d)} unit="mm d" ratio={globalThis.Math.max(ratios.bx, ratios.by)} ratioLabel="worst Vu ÷ φVc"
+          pairs={[{ label: 'x', value: `${f0(r.VuBeamX)} / ${f0(r.phiVcBeamX)} kN` }, { label: 'y', value: `${f0(r.VuBeamY)} / ${f0(r.phiVcBeamY)} kN` }]} />
+        <CheckCard title="Development" basis="straight bar past the column face" status={r.ldOK ? 'pass' : 'fail'}
+          value={f0(r.ldRequired)} unit="mm req." ratio={ratios.ld} ratioLabel="ld ÷ available"
+          pairs={[{ label: 'Available', value: `${f0(r.ldAvailable)} mm` }, { label: 'If short', value: 'hook the bars' }]} />
+      </> : <p className="text-sm text-muted">Enter valid inputs to see results.</p>}
+      summary={[
+        { label: 'Column', value: `${form.colX} × ${form.colY} mm, P ${form.serviceLoad} / Pu ${form.ultimateLoad} kN` },
+        { label: 'Moments', value: `service ${form.serviceMomX} / ${form.serviceMomY}, factored ${form.ultimateMomX} / ${form.ultimateMomY} kN·m` },
+        { label: 'Piles', value: `${form.nPiles} × ⌀${form.pileDia} mm at ${form.spacing} mm, edge ${form.edgeDist} mm, ${form.pileCapacity} kN each` },
+        { label: 'Materials', value: `f′c ${form.fc}, fy ${form.fy} MPa, ⌀${form.barDia}, cover ${form.cover} mm` },
+      ]}
+      drawing={r ? { title: 'Cap plan', node: <div data-pdf-drawing>
+        <PileCapSchematic d={r.d} capBx={r.capBx} capBy={r.capBy} coords={r.coords}
+          pileDia={form.pileDia} colX={form.colX} colY={form.colY} reactions={r.reactions} />
+      </div> } : undefined}
+      resultsCaption="φv = 0.75, φf = 0.90. Column punching at d/2 from the column face; pile punching at d/2 from the pile perimeter; one-way shear at d from the column face; development length as a straight bar with no Ktr."
+      results={r && ratios ? [
+        { check: 'Cap plan', basis: 'Bx × By', demand: `${plan} m`, status: 'info' },
+        { check: 'Thickness / effective depth', basis: 'Dc / d', demand: `${f0(r.Dc)} / ${f0(r.d)} mm`, status: 'info' },
+        { check: 'Column punching', basis: 'two-way, d/2', demand: `${f0(r.VuPunchCol)} kN`, limit: `${f0(r.phiVcPunchCol)} kN`, ratio: ratios.pc, status: shear(r.punchColOK) },
+        { check: 'Pile punching (worst)', basis: 'two-way, d/2', demand: `${f0(r.VuPunchPile)} kN`, limit: `${f0(r.phiVcPunchPile)} kN`, ratio: ratios.pp, status: shear(r.punchPileOK) },
+        { check: 'One-way shear — x', basis: 'at d from face', demand: `${f0(r.VuBeamX)} kN`, limit: `${f0(r.phiVcBeamX)} kN`, ratio: ratios.bx, status: shear(r.beamXOK) },
+        { check: 'One-way shear — y', basis: 'at d from face', demand: `${f0(r.VuBeamY)} kN`, limit: `${f0(r.phiVcBeamY)} kN`, ratio: ratios.by, status: shear(r.beamYOK) },
+        { check: 'Design moments', basis: 'Mu,x / Mu,y', demand: `${f3(r.MuX)} / ${f3(r.MuY)} kN·m`, status: 'info' },
+        steel('Bars — x (bottom)', r.steelX),
+        steel('Bars — y (bottom)', r.steelY),
+        { check: 'Development', basis: 'column face to bar end', demand: `${f0(r.ldRequired)} mm`, limit: `${f0(r.ldAvailable)} mm`, ratio: ratios.ld, status: r.ldOK ? 'pass' : 'fail' },
+      ] : []}
+      extraSections={r ? [{ title: 'Pile reactions (service)', node: <ResultsTable rows={reactionRows} /> }] : []}
+      steps={report?.steps ?? []}
+      references={[
+        { topic: 'Pile reactions', basis: 'R = P/N + M·y/Σy² + M·x/Σx²', source: 'rigid-cap assumption; Bowles, Foundation Analysis and Design' },
+        { topic: 'Pile caps', basis: 'punching around column and piles; one-way shear', source: 'ACI 318-14 §13.4.6, §22.5, §22.6 · NSCP 2015 §413' },
+        { topic: 'Development length', basis: 'straight bars in tension', source: 'ACI 318-14 §25.4.2' },
+      ]}
+    />
   )
 }

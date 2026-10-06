@@ -73,6 +73,7 @@ export function PileCapSchematic({ capBx, capBy, coords, pileDia, colX, colY, re
 
         {/* Piles */}
         {coords.map((p, i) => {
+          const label = (k: number) => `${reactions[k].toFixed(0)} kN`
           const px = cx + p.x * s
           const py = cy - p.y * s  // SVG y-down → invert y
           // The reaction is carried by the LABEL, not by a fill: a shade of blue
@@ -81,8 +82,10 @@ export function PileCapSchematic({ capBx, capBy, coords, pileDia, colX, colY, re
             <g key={i}>
               <circle cx={px} cy={py} r={pr} fill="none" stroke={BLUE} strokeWidth={1.3}
                 strokeDasharray="5 3" />
-              <text x={px} y={py + pr + 9} fontSize={8} fill={STEEL} textAnchor="middle"
-                paintOrder="stroke" stroke="#fff" strokeWidth={2}>
+              {/* inside the pile it names when it fits; below it, clear of the
+                  dashed outline, when the pile is drawn too small */}
+              <text x={px} y={2 * pr > label(i).length * 4.6 + 4 ? py + 3 : py + pr + 11} fontSize={8} fill={STEEL} textAnchor="middle"
+                paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2}>
                 {reactions[i].toFixed(0)} kN
               </text>
             </g>

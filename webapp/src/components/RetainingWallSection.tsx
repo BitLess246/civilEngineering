@@ -208,6 +208,11 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
 
         {/* ── dimensions ──────────────────────────────────────────────────── */}
         <g stroke={DIM} fill={DIM}>
+          {/* extension lines off the stem top, the base top and the base
+              soffit — the two heights used to float 80–110 px off the wall */}
+          <line x1={xStemL - 4} y1={yTop} x2={x0 - 113} y2={yTop} strokeWidth={0.6} />
+          <line x1={x0 - 4} y1={yBase} x2={x0 - 87} y2={yBase} strokeWidth={0.6} />
+          <line x1={x0 - 4} y1={yBot} x2={x0 - 113} y2={yBot} strokeWidth={0.6} />
           <VDim x={x0 - 82} y1={yTop} y2={yBase} label={`Hs = ${(Hs / 1000).toFixed(2)} m`} />
           <VDim x={x0 - 108} y1={yTop} y2={yBot} label={`H = ${H.toFixed(2)} m`} />
           {/* A long heel squeezes bt and ts to a few pixels each, and their
