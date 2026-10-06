@@ -217,3 +217,75 @@ export function WeirViews({ shape, H, L, angle, n = 2, Leff }: {
     </DrawingFrame>
   )
 }
+
+/** Longitudinal profile of a culvert under its embankment. Vertical
+ *  quantities (D, HW, TW and the invert drop S·L) share one scale;
+ *  the length is compressed and the exaggeration is stated on the sheet.
+ *  HW is measured from the inlet invert, TW from the outlet invert. */
+export function CulvertProfile({ D, L, S, HW, TW, control, velocityDepth, V }: {
+  D: number; L: number; S: number; HW: number; TW: number
+  control: 'inlet' | 'outlet'; velocityDepth: number; V: number
+}) {
+  const W = 660, Ht = 330
+  const xIn = 200, xOut = 470                       // barrel ends
+  const drop = S * L
+  const road = Math.max(HW, D) + 0.35 * Math.max(D, 0.5)   // embankment crest, schematic
+  const span = road + drop
+  const baseY = 270                                 // outlet invert on the sheet
+  const ky = Math.min(190 / Math.max(span, 1e-6), 240 / Math.max(D, 1e-6))
+  const Y = (elev: number) => baseY - (elev + drop) * ky   // elevations measured from the inlet invert
+  const invIn = Y(0), invOut = Y(-drop)
+  const exag = ky / ((xOut - xIn) / L)
+  const crown = (y: number) => y - D * ky
+  // water in the barrel: full under outlet control, a falling profile under inlet control
+  const dIn = control === 'outlet' ? D : Math.min(D, 0.85 * D)
+  const dOut = control === 'outlet' ? D : Math.min(D, velocityDepth)
+  const hwY = Y(HW), twY = Y(-drop + TW)
+  // the embankment sits on the barrel: its faces rise from the crown at each
+  // headwall to the road, so the pool stands against the inlet face
+  const roadY = Y(road)
+  const runIn = Math.max(20, (crown(invIn) - roadY) * 0.9), runOut = Math.max(20, (crown(invOut) - roadY) * 0.9)
+  const pondEdge = HW <= D ? xIn : xIn + runIn * Math.min(1, (HW - D) / Math.max(road - D, 1e-6))
+  const hwX = Math.min(130, pondEdge - 16)
+  const tailEdge = TW <= D ? xOut : xOut - runOut * Math.min(1, (TW - D) / Math.max(road + drop - D, 1e-6))
+  return (
+    <DrawingFrame label="Culvert longitudinal profile">
+      <svg viewBox={`0 0 ${W} ${Ht}`} className="w-full" role="img" aria-label="Culvert longitudinal profile">
+        {/* stream bed: upstream at the inlet invert, downstream at the outlet invert */}
+        <line x1={20} x2={xIn} y1={invIn} y2={invIn} stroke={INK} strokeWidth="1.4" />
+        <line x1={xOut} x2={W - 20} y1={invOut} y2={invOut} stroke={INK} strokeWidth="1.4" />
+        {/* headwater pool and tailwater */}
+        <path d={`M 20 ${hwY} L ${pondEdge} ${hwY} L ${xIn} ${Math.max(hwY, crown(invIn))} L ${xIn} ${invIn} L 20 ${invIn} Z`} fill="rgba(15,76,146,0.2)" stroke="none" />
+        <line x1={20} x2={pondEdge} y1={hwY} y2={hwY} stroke={WATER} strokeWidth="1.6" />
+        <SurfaceMark x={70} y={hwY} />
+        {TW > 0 && <>
+          <path d={`M ${tailEdge} ${twY} L ${W - 20} ${twY} L ${W - 20} ${invOut} L ${xOut} ${invOut} L ${xOut} ${Math.max(twY, crown(invOut))} Z`} fill="rgba(15,76,146,0.2)" stroke="none" />
+          <line x1={tailEdge} x2={W - 20} y1={twY} y2={twY} stroke={WATER} strokeWidth="1.6" />
+          <SurfaceMark x={W - 70} y={twY} />
+        </>}
+        {/* embankment over the barrel */}
+        <path d={`M ${xIn} ${crown(invIn)} L ${xIn + runIn} ${roadY} L ${xOut - runOut} ${roadY} L ${xOut} ${crown(invOut)} Z`}
+          fill="rgba(140,120,90,0.16)" stroke={INK} strokeWidth="1.3" />
+        {/* headwalls */}
+        <line x1={xIn} x2={xIn} y1={invIn} y2={crown(invIn) - 10} stroke={INK} strokeWidth="3" />
+        <line x1={xOut} x2={xOut} y1={invOut} y2={crown(invOut) - 10} stroke={INK} strokeWidth="3" />
+        <text x={(xIn + xOut) / 2} y={roadY - 8} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily={mono}>road embankment (schematic)</text>
+        {/* barrel: invert and crown at slope S, water inside */}
+        <path d={`M ${xIn} ${invIn} L ${xOut} ${invOut} L ${xOut} ${invOut - dOut * ky} L ${xIn} ${invIn - dIn * ky} Z`} fill="rgba(15,76,146,0.28)" stroke="none" />
+        <line x1={xIn} x2={xOut} y1={invIn} y2={invOut} stroke={INK} strokeWidth="2" />
+        <line x1={xIn} x2={xOut} y1={crown(invIn)} y2={crown(invOut)} stroke={INK} strokeWidth="2" />
+        <text x={(xIn + xOut) / 2} y={(invIn + invOut) / 2 + 16} textAnchor="middle" fontSize="10" fill={INK} fontFamily={mono} {...halo}>barrel L = {f2(L)} m · S = {f2(S * 100)}%</text>
+        {/* dimensions, each end on a drawn line */}
+        {/* HW sits in the pool, left of where the headwater meets the slope */}
+        <VDim x={hwX} a={hwY} b={invIn} label={`HW = ${f3(HW)} m`} color={INK} side={hwX > 110 ? 'left' : 'right'} />
+        <VDim x={xIn + 14} a={crown(invIn)} b={invIn} label={`D = ${f2(D)} m`} color={MUTED} />
+        {TW > 0 && <VDim x={W - 40} a={twY} b={invOut} label={`TW = ${f3(TW)} m`} color={INK} side="left" />}
+        {/* outlet velocity */}
+        <line x1={xOut + 6} x2={xOut + 46} y1={invOut - (dOut * ky) / 2} y2={invOut - (dOut * ky) / 2} stroke={WATER} strokeWidth="1.6" />
+        <path d={`M ${xOut + 46} ${invOut - (dOut * ky) / 2 - 4} l 7 4 l -7 4 z`} fill={WATER} />
+        <text x={xOut + 8} y={invOut + 16} fontSize="10" fill={WATER} fontFamily={mono}>V = {f2(V)} m/s</text>
+        <text x={20} y={Ht - 8} fontSize="9.5" fill={MUTED} fontFamily={mono}>{control} control · heights to one scale, length compressed (vertical ×{f2(exag)})</text>
+      </svg>
+    </DrawingFrame>
+  )
+}
