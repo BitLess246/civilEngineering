@@ -1,42 +1,13 @@
 import { useState } from 'react'
-import { clampTo } from '../lib/clamp'
 import { designCircularTank } from '../engine/waterTank'
-import { ReportControls } from '../components/ReportControls'
 import { buildWaterTankSolution } from '../lib/waterTankSolution'
 import { TankSection } from '../components/TankSection'
-import { WorkedSolution } from '../components/WorkedSolution'
-import { PageHeader } from '../components/calc'
+import { Num } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 
-function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
 const f0 = (n: number) => (Number.isFinite(n) ? Math.round(n).toString() : '—')
-
-function Field({ label, value, onChange, unit, step = 'any', min, max }: {
-  label: string; value: number; onChange: (v: number) => void; unit?: string; step?: string
-  /** Bounds enforced on the VALUE, not only the spinner — the attributes
-   *  alone are advisory and a typed or pasted number goes straight through
-   *  them. Same `clampTo` the shared `Num` uses; this page carries its own
-   *  field, which predates it. */
-  min?: number; max?: number
-}) {
-  return (
-    <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
-      <input type="number" step={step} min={min} max={max} value={value}
-        onChange={(e) => onChange(clampTo(num(e.target.value), min, max))}
-        className="rounded-md border border-field-line px-2.5 py-1.5" />
-    </label>
-  )
-}
-
-function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
-  return (
-    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
-      <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
-    </div>
-  )
-}
 
 export default function WaterTank() {
   const [H, setH] = useState(4)
@@ -85,63 +56,66 @@ export default function WaterTank() {
     steps: solution,
   }
 
+  const fctRatio = sigmaCt > 0 ? r.fct / sigmaCt : undefined
   return (
-        <div>
-      <PageHeader title="Circular RC water tank — wall" badges={['IS 3370', 'ACI 350']} />
-      <div className="mx-auto max-w-3xl px-5 py-6">
-      <ReportControls title="Circular Water Tank" badges={['IS 3370', 'ACI 350']} report={report} />
-      <p className="mt-2 text-sm text-muted">
-        Permissible-stress (working-stress) wall design for a circular liquid-retaining tank, following the
-        crack-control philosophy of IS 3370 / ACI 350. Hoop (ring) tension governs the horizontal steel;
-        the base cantilever moment governs the vertical steel; the wall is checked against concrete cracking.
-      </p>
-
-      <section className="mt-6 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Geometry</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Water depth H" unit="m" value={H} onChange={setH} min={0.1} />
-          <Field label="Diameter D" unit="m" value={D} onChange={setD} min={0.1} />
-          <Field label="Wall thickness t" unit="mm" value={t} onChange={setT} min={1} />
-          <Field label="Freeboard" unit="m" value={freeboard} onChange={setFreeboard} step="0.05" min={0} />
-        </div>
-        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-brand">Materials &amp; permissible stresses</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="f′c" unit="MPa" value={fc} onChange={setFc} min={1} />
-          <Field label="σst (steel)" unit="MPa" value={sigmaSt} onChange={setSigmaSt} min={1} />
-          <Field label="σct (concrete)" unit="MPa" value={sigmaCt} onChange={setSigmaCt} step="0.1" min={0.1} />
-          <Field label="Bar Ø" unit="mm" value={barDia} onChange={setBarDia} min={1} />
-          <Field label="Cover" unit="mm" value={cover} onChange={setCover} min={0} />
-        </div>
-      </section>
-
-      <section data-pdf-drawing className="mt-5 rounded-xl border border-hairline bg-sheet p-5 shadow-sm
-        [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-brand">Wall section &amp; ring plan</h2>
+    <WorkspacePage title="Circular Water Tank" badges={['Concrete', 'IS 3370 · ACI 350']}
+      intro="Working-stress design of a circular liquid-retaining wall, following the crack-control approach of IS 3370 and ACI 350. Ring tension sets the horizontal steel, the base cantilever moment the vertical steel, and the wall is checked so that uncracked concrete can carry the ring tension."
+      report={report}
+      inputs={<>
+        <InputGroup title="Geometry">
+          <Num label="Water depth H" unit="m" value={H} onChange={setH} min={0.1} />
+          <Num label="Internal diameter D" unit="m" value={D} onChange={setD} min={0.1} />
+          <Num label="Wall thickness t" unit="mm" value={t} onChange={setT} min={1} />
+          <Num label="Freeboard" unit="m" value={freeboard} onChange={setFreeboard} step="0.05" min={0} />
+        </InputGroup>
+        <InputGroup title="Materials and permissible stresses" hint="σst of about 115–150 MPa controls crack width.">
+          <Num label="f′c" unit="MPa" value={fc} onChange={setFc} min={1} />
+          <Num label="σst (steel)" unit="MPa" value={sigmaSt} onChange={setSigmaSt} min={1} />
+          <Num label="σct (concrete)" unit="MPa" value={sigmaCt} onChange={setSigmaCt} step="0.1" min={0.1} />
+          <Num label="Bar ⌀" unit="mm" value={barDia} onChange={setBarDia} min={1} />
+          <Num label="Cover" unit="mm" value={cover} onChange={setCover} min={0} />
+        </InputGroup>
+      </>}
+      checks={<>
+        <CheckCard title="Wall thickness" basis="fct = T / (Ac + (n − 1)As) ≤ σct" status={r.thicknessOK ? 'pass' : 'fail'}
+          value={f2(r.fct)} unit="MPa" ratio={fctRatio} ratioLabel="fct ÷ σct"
+          pairs={[{ label: 'σct', value: `${f2(sigmaCt)} MPa` }, { label: 'T at base', value: `${f2(r.T)} kN/m` }]} />
+        <CheckCard title="Ring steel" basis="As = T / σst" status="info"
+          value={`⌀${barDia} @ ${f0(r.hoopSpacing)}`} unit="mm"
+          pairs={[{ label: 'As', value: `${f0(r.hoopAs)} mm²/m` }, { label: 'Placed', value: 'total, both faces' }]} />
+        <CheckCard title="Vertical steel" basis="As = M / (σst·j·d)" status="info"
+          value={`⌀${barDia} @ ${f0(r.vertSpacing)}`} unit="mm"
+          pairs={[{ label: 'M at base', value: `${f2(r.M)} kN·m/m` }, { label: 'As', value: `${f0(r.vertAs)} mm²/m` }]} />
+        <CheckCard title="Freeboard" basis="≥ 300 mm" status={r.freeboardOK ? 'pass' : 'warn'}
+          value={f2(freeboard)} unit="m" />
+      </>}
+      summary={[
+        { label: 'Tank', value: `⌀${f2(D)} m internal, ${f2(H)} m water, ${f2(freeboard)} m freeboard` },
+        { label: 'Wall', value: `${t} mm, cover ${cover} mm, ⌀${barDia} bars` },
+        { label: 'Stresses', value: `σst ${sigmaSt} MPa, σct ${f2(sigmaCt)} MPa, f′c ${fc} MPa` },
+      ]}
+      drawing={{ title: 'Wall section and ring plan', node: <div data-pdf-drawing>
         <TankSection H={H} D={D} t={t} freeboard={freeboard} T={r.T}
-          hoopBars={`⌀${barDia} @ ${f0(r.hoopSpacing)} mm`}
+          hoopBars={`⌀${barDia} @ ${f0(r.hoopSpacing)} mm (total)`}
           vertBars={`⌀${barDia} @ ${f0(r.vertSpacing)} mm`} />
-      </section>
-
-      <section className="mt-5 rounded-xl border border-hairline bg-sheet p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-brand">Results</h2>
-        <Out label="Max hoop tension T = γw·H·D/2" value={`${f2(r.T)} kN/m`} />
-        <Out label="Ring (hoop) steel As" value={`${f0(r.hoopAs)} mm²/m — ⌀${barDia} @ ${f0(r.hoopSpacing)} mm (each face)`} />
-        <Out label="Base cantilever moment M = γw·H³/6" value={`${f2(r.M)} kN·m/m`} />
-        <Out label="Vertical steel As" value={`${f0(r.vertAs)} mm²/m — ⌀${barDia} @ ${f0(r.vertSpacing)} mm`} />
-        <Out label={`Concrete tension fct (≤ ${f2(sigmaCt)})`} value={`${f2(r.fct)} MPa`} ok={r.thicknessOK} />
-        <Out label="Freeboard ≥ 300 mm" value={`${f2(freeboard)} m`} ok={r.freeboardOK} />
-        <p className="mt-2 text-[10px] text-muted">
-          Provide ring steel on both faces near the base where hoop tension peaks; reduce up the wall as
-          T = γw·z·D/2 falls. σst ≈ 115–150 MPa controls crack width (IS 3370 / ACI 350). Base slab, roof,
-          and the wall-base joint (fixed vs hinged) are designed separately.
-        </p>
-      </section>
-
-      {/* The step-by-step already existed and only ever reached the PDF. */}
-      <div className="mt-5">
-        <WorkedSolution steps={solution} title="Calculation report — worked solution" />
-      </div>
-    </div>
-    </div>
+      </div> }}
+      resultsCaption={[
+        ...r.inputNotes,
+        'The ring-steel spacing carries the WHOLE As = T/σst; split between the two faces, each face is at twice that spacing. Ring steel may be reduced up the wall as T = γw·z·D/2 falls. The base slab, roof and wall–base joint are designed separately.',
+      ].join(' ')}
+      results={[
+        { check: 'Ring tension at base', basis: 'T = γw·H·D/2', demand: `${f2(r.T)} kN/m`, status: 'info' as const },
+        { check: 'Ring steel', basis: `T/σst · ⌀${barDia}`, demand: `${f0(r.hoopAs)} mm²/m`, limit: `@ ${f0(r.hoopSpacing)} mm total`, status: 'info' as const },
+        { check: 'Base cantilever moment', basis: 'M = γw·H³/6', demand: `${f2(r.M)} kN·m/m`, status: 'info' as const },
+        { check: 'Vertical steel', basis: `M/(σst·j·d), d ${f0(r.d)} mm`, demand: `${f0(r.vertAs)} mm²/m`, limit: `@ ${f0(r.vertSpacing)} mm`, status: 'info' as const },
+        { check: 'Concrete tension', basis: 'uncracked ring', demand: `${f2(r.fct)} MPa`, limit: `${f2(sigmaCt)} MPa`, ratio: fctRatio, status: r.thicknessOK ? 'pass' as const : 'fail' as const },
+        { check: 'Freeboard', basis: '≥ 0.30 m', demand: `${f2(freeboard)} m`, limit: '0.30 m', status: r.freeboardOK ? 'pass' as const : 'warn' as const },
+      ]}
+      steps={solution}
+      references={[
+        { topic: 'Liquid-retaining structures', basis: 'working stress, crack control', source: 'IS 3370-2 · ACI 350' },
+        { topic: 'Ring tension', basis: 'membrane hoop force γw·z·D/2', source: 'Timoshenko, Theory of Plates and Shells' },
+      ]}
+    />
   )
 }
