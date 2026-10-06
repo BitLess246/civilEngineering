@@ -147,7 +147,7 @@ export function RoutedHydrographs({ inflow, outflow, dt }: { inflow: number[]; o
       <text x={X(tI) - 6} y={Y(qI) - 6} textAnchor="end" fontSize="10" fill={INK} fontFamily={mono} {...halo}>inflow peak {f2(qI)}</text>
       <text x={X(tO) + 34} y={Y(qO) + 14} fontSize="10" fill={INK} fontFamily={mono} {...halo}>outflow peak {f2(qO)}</text>
       {oP > iP && <HDim y={lagY} a={X(tI)} b={X(tO)} label={`lag ${f2(tO - tI)} h`} color={INK} />}
-      <VDim x={X(tO) + 24} a={Y(qI)} b={Y(qO)} label={`attenuation ${f2(qI - qO)}`} color={INK} />
+      <VDim x={X(tO) + 24} a={Y(qI)} b={Y(qO)} label={`attenuation ${f2(qI - qO)} m³/s`} color={INK} />
       <text x={box.x0 + 8} y={box.top - 26} fontSize="9.5" fill={MUTED} fontFamily={mono}>dashed = inflow · solid = routed outflow</text>
     </Chart>
   )
