@@ -7,12 +7,12 @@
  * draw, drag elements to move them, pinch to zoom, two-finger drag to pan.
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useLayoutEffect } from 'react'
 import { Drafting3DViewport } from '../components/Drafting3DViewport'
 import { FloorPlanCanvas, type PlanTool } from '../components/FloorPlanCanvas'
 import { useDraftProject } from '../lib/drafting3dSession'
 import type { DraftProject } from '../engine/drafting3d'
-import { addLevel, SLAB_MATERIALS, CEILING_MATERIALS, finishMaterial } from '../engine/drafting3d'
+import { addLevel, SLAB_MATERIALS, CEILING_MATERIALS, finishMaterial, DEFAULT_SECTION_FOR, sectionRole, type DraftSectionRole } from '../engine/drafting3d'
 
 /** The ribbon, grouped the way Revit groups its tools. */
 const TOOL_GROUPS: Array<{ label: string; tools: PlanTool[] }> = [
@@ -35,10 +35,35 @@ const TOOL_HINTS: Record<PlanTool, string> = {
   grid: 'Tap anywhere to add grid lines through that point',
 }
 
+const ROLE_LABEL: Record<DraftSectionRole, string> = { wall: 'Walls', beam: 'Beams', column: 'Columns', slab: 'Slabs' }
+const ROLES: DraftSectionRole[] = ['wall', 'beam', 'column', 'slab']
+const isRole = (t: PlanTool): t is DraftSectionRole => (ROLES as string[]).includes(t)
+
+/** Fill the window below wherever the page starts — the app shell's top bar
+ *  and any banner above it vary, and `h-screen` under them pushed the
+ *  viewport's bottom off the page. */
+function useFillHeight() {
+  const [el, setEl] = useState<HTMLDivElement | null>(null)
+  const [height, setHeight] = useState<number>()
+  useLayoutEffect(() => {
+    if (!el) return
+    const fit = () => setHeight(Math.max(420, window.innerHeight - (el.getBoundingClientRect().top + window.scrollY)))
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [el])
+  return [setEl, height] as const
+}
+
 export default function Drafting3D() {
   const { project, setProject, exportToModelSpace } = useDraftProject()
   const [activeTool, setActiveTool] = useState<PlanTool>('select')
-  const [activeSectionId, setActiveSectionId] = useState('col-400x400')
+  // One section PER ROLE — a single active section stamped the 400×400
+  // column on every slab and wall drawn before the panel was opened.
+  const [sectionByRole, setSectionByRole] = useState<Record<DraftSectionRole, string>>({ ...DEFAULT_SECTION_FOR })
+  const activeSectionId = isRole(activeTool) ? sectionByRole[activeTool]
+    : activeTool === 'ceiling' ? sectionByRole.slab : DEFAULT_SECTION_FOR.beam
+  const [fillRef, fillHeight] = useFillHeight()
   // Revit's type selector: the finish applied to NEW slabs / ceilings. One per
   // catalog, since the two lists serve different tools.
   const [slabMaterialId, setSlabMaterialId] = useState(SLAB_MATERIALS[0].id)
@@ -140,7 +165,7 @@ export default function Drafting3D() {
   }
 
   return (
-    <div className="h-screen w-full flex flex-col bg-sheet">
+    <div ref={fillRef} className="h-[calc(100dvh-7rem)] w-full flex flex-col bg-sheet" style={fillHeight ? { height: fillHeight } : undefined}>
       {/* Top Toolbar */}
       <header className="bg-white border-b border-hairline shadow-sm z-10">
         <div className="mx-auto max-w-full px-4 py-3 flex flex-wrap items-center gap-4">
@@ -212,9 +237,6 @@ export default function Drafting3D() {
             </div>
           </div>
         </div>
-
-        {/* Status hint — what the active tool does with the next tap/drag */}
-        <div className="mx-auto max-w-full px-4 pb-2 text-xs text-muted">{TOOL_HINTS[activeTool]}</div>
       </header>
 
       {/* Side Panels */}
@@ -224,20 +246,28 @@ export default function Drafting3D() {
             <h3 className="font-semibold text-ink">Sections</h3>
             <button onClick={() => setShowSectionPanel(false)} className="text-muted hover:text-ink">×</button>
           </div>
-          <div className="p-4 space-y-3 max-h-[calc(100vh-100px)] overflow-auto">
-            {sections.map(sec => (
-              <button
-                key={sec.id}
-                onClick={() => setActiveSectionId(sec.id)}
-                className={`w-full text-left p-3 rounded-lg border transition ${
-                  activeSectionId === sec.id
-                    ? 'bg-brand-tint border-brand'
-                    : 'border-hairline hover:bg-brand-tint hover:border-brand'
-                }`}
-              >
-                <div className="font-medium text-ink">{sec.name}</div>
-                <div className="text-sm text-muted">{sec.b}×{sec.h} mm</div>
-              </button>
+          <div className="p-4 space-y-4 max-h-[calc(100vh-100px)] overflow-auto">
+            <p className="text-xs text-muted">Each tool draws with its own section. The highlighted one in each group is what that tool places next.</p>
+            {ROLES.map(role => (
+              <div key={role} className="space-y-2">
+                <div className={`text-xs font-semibold uppercase tracking-wide ${role === activeTool ? 'text-brand' : 'text-muted'}`}>
+                  {ROLE_LABEL[role]}{role === activeTool ? ' · active tool' : ''}
+                </div>
+                {sections.filter(sec => sectionRole(sec) === role).map(sec => (
+                  <button
+                    key={sec.id}
+                    onClick={() => setSectionByRole(prev => ({ ...prev, [role]: sec.id }))}
+                    className={`w-full text-left p-3 rounded-lg border transition ${
+                      sectionByRole[role] === sec.id
+                        ? 'bg-brand-tint border-brand'
+                        : 'border-hairline hover:bg-brand-tint hover:border-brand'
+                    }`}
+                  >
+                    <div className="font-medium text-ink">{sec.name}</div>
+                    <div className="text-sm text-muted">{role === 'slab' || role === 'wall' ? `${sec.h} mm thick` : `${sec.b}×${sec.h} mm`}</div>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         </div>
@@ -274,34 +304,11 @@ export default function Drafting3D() {
         </div>
       )}
 
-      {/* Material picker — Revit's type selector for the active tool */}
-      {(activeTool === 'slab' || activeTool === 'ceiling') && (
-        <div className="bg-white border-b border-hairline px-4 py-2 flex items-center gap-3 overflow-x-auto">
-          <span className="text-xs font-semibold text-muted whitespace-nowrap">
-            {activeTool === 'ceiling' ? 'Ceiling finish' : 'Slab material'}
-          </span>
-          {(activeTool === 'ceiling' ? CEILING_MATERIALS : SLAB_MATERIALS).map(m => (
-            <button
-              key={m.id}
-              onClick={() => setMaterial(m.id)}
-              title={`${m.note} · ${m.load} kN/m²`}
-              className={`flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg border text-sm transition whitespace-nowrap ${
-                (activeTool === 'ceiling' ? ceilingMaterialId : slabMaterialId) === m.id
-                  ? 'border-brand bg-brand-tint text-ink'
-                  : 'border-hairline text-muted hover:border-brand hover:text-ink'
-              }`}
-            >
-              <span className="w-4 h-4 rounded-sm border border-hairline inline-block" style={{ background: m.color }} />
-              {m.name}
-              {m.load > 0 && <span className="text-xs text-muted">{m.load} kN/m²</span>}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Selected door/window property editor — width, height, sill, swing */}
-      {selectedOpening && (
-        <div className="bg-white border-b border-hairline px-4 py-2 flex items-center gap-4 overflow-x-auto">
+      {/* Context row — ONE fixed-height row for the tool hint, the material
+          picker or the selected opening's editor. Inserting and removing those
+          as separate rows moved the canvas up and down under the pointer. */}
+      <div className="h-12 shrink-0 bg-white border-b border-hairline px-4 flex items-center gap-3 overflow-x-auto">
+        {selectedOpening ? (<>
           <span className="text-xs font-semibold text-muted whitespace-nowrap">
             {selectedOpening.type === 'door' ? 'Door' : 'Window'} · {selectedOpening.width?.toFixed(2)}×{selectedOpening.height?.toFixed(2)} m
           </span>
@@ -347,8 +354,34 @@ export default function Drafting3D() {
               </select>
             </label>
           )}
-        </div>
-      )}
+        </>) : (activeTool === 'slab' || activeTool === 'ceiling') ? (<>
+          <span className="text-xs font-semibold text-muted whitespace-nowrap">
+            {activeTool === 'ceiling' ? 'Ceiling finish' : 'Slab material'}
+          </span>
+          {(activeTool === 'ceiling' ? CEILING_MATERIALS : SLAB_MATERIALS).map(m => (
+            <button
+              key={m.id}
+              onClick={() => setMaterial(m.id)}
+              title={`${m.note} · ${m.load} kN/m²`}
+              className={`flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg border text-sm transition whitespace-nowrap ${
+                (activeTool === 'ceiling' ? ceilingMaterialId : slabMaterialId) === m.id
+                  ? 'border-brand bg-brand-tint text-ink'
+                  : 'border-hairline text-muted hover:border-brand hover:text-ink'
+              }`}
+            >
+              <span className="w-4 h-4 rounded-sm border border-hairline inline-block" style={{ background: m.color }} />
+              {m.name}
+              {m.load > 0 && <span className="text-xs text-muted">{m.load} kN/m²</span>}
+            </button>
+          ))}
+          <span className="text-xs text-muted whitespace-nowrap">
+            {finishMaterial(activeTool === 'ceiling' ? CEILING_MATERIALS : SLAB_MATERIALS,
+              activeTool === 'ceiling' ? ceilingMaterialId : slabMaterialId).note}
+          </span>
+        </>) : (
+          <span className="text-xs text-muted">{TOOL_HINTS[activeTool]}</span>
+        )}
+      </div>
 
       {/* Main Viewport */}
       <main className="flex-1 overflow-hidden relative">
@@ -384,13 +417,6 @@ export default function Drafting3D() {
         )}
       </main>
 
-      {/* Catalog footnote — what the picker's colours and loads mean */}
-      {(activeTool === 'slab' || activeTool === 'ceiling') && (
-        <div className="bg-sheet border-t border-hairline px-4 py-1.5 text-xs text-muted">
-          {finishMaterial(activeTool === 'ceiling' ? CEILING_MATERIALS : SLAB_MATERIALS,
-            activeTool === 'ceiling' ? ceilingMaterialId : slabMaterialId).note}
-        </div>
-      )}
     </div>
   )
 }

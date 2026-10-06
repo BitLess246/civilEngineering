@@ -187,6 +187,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/dev-length', name: 'Dev & Splice', sub: 'ACI 318-14 §25.4–25.5', group: 'Concrete' },
   { route: '/punching-shear', name: 'Punching Shear', sub: 'Two-way §22.6 · ACI 318', group: 'Concrete' },
   { route: '/model', name: '3D Model Space', sub: 'BIM-lite viewer', group: 'Analysis' },
+  { route: '/drafting3d', name: 'Drafting3D', sub: 'Floor plans → 3D → ModelSpace', group: 'Analysis' },
   { route: '/frame', name: 'Frame Analysis', sub: '2D stiffness method', group: 'Analysis' },
   { route: '/beam-analysis', name: 'Beam Analysis', sub: 'FEM multi-span', group: 'Analysis' },
   { route: '/truss', name: 'Truss Space', sub: 'Plane truss solver', group: 'Analysis' },
@@ -282,7 +283,6 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/impulse-momentum', name: 'Impulse–Momentum', sub: 'I = m(v₂ − v₁) = F·t', group: 'Mathematics' },
   { route: '/friction', name: 'Friction', sub: 'Block on an incline · holds or slides', group: 'Mathematics' },
   { route: '/belt-friction', name: 'Belt Friction', sub: 'Capstan T₁ = T₂e^(μβ)', group: 'Mathematics' },
-  { route: '/drafting3d', name: 'Drafting3D', sub: 'Floor plans → 3D → ModelSpace', group: 'Mathematics' },
 ]
 
 /** The refusal the model is instructed to give off-topic questions, verbatim. */
