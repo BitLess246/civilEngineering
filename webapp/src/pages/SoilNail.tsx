@@ -1,34 +1,12 @@
 import { useState } from 'react'
 import { designSoilNail } from '../engine/soilNail'
-import { ReportControls } from '../components/ReportControls'
 import { buildSoilNailSolution } from '../lib/geotechSolutions'
-import { WorkedSolution } from '../components/WorkedSolution'
-import { PageHeader, CalcBody } from '../components/calc'
-import { Card, ResultCard } from '../components/qty'
+import { Num } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { SoilNailDrawing } from '../components/groundSupportSketches'
 
-function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
-
-function Field({ label, value, onChange, unit, step = 'any' }: {
-  label: string; value: number; onChange: (v: number) => void; unit?: string; step?: string
-}) {
-  return (
-    <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
-      <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-field-line px-2.5 py-1.5" />
-    </label>
-  )
-}
-
-function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
-  return (
-    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
-      <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
-    </div>
-  )
-}
 
 export default function SoilNail() {
   const [z, setZ] = useState(6)
@@ -53,84 +31,55 @@ export default function SoilNail() {
   // ≤ 1 exactly when the design passes, matching every other check in the app.
   const solution = buildSoilNailSolution({ z, Sh, Sv, gamma, phiDeg: phi, surcharge: q, barDia, fy, drillDia, bondLength, qu, FSpullout: 2.0, FStensile: 1.8 }, r)
 
-  const report = {
-    docCode: 'G-SN',
-    ok: r.tensileOK && r.pulloutOK,
-    governing: `Tmax = ${f2(r.Tmax)} kN · FS pullout ${f2(r.fsPullout)} · FS tensile ${f2(r.fsTensile)}`,
-    stats: [
-      { label: 'Nail force Tmax', value: f2(r.Tmax), unit: 'kN' },
-      { label: 'Allowable bond Qall', value: f2(r.Qall), unit: 'kN' },
-      { label: 'Bond length required', value: f2(r.bondLengthReq), unit: 'm' },
-    ],
-    checks: [
-      { name: 'Bar tensile (FS 1.8)', ratio: r.fsTensile > 0 ? 1.8 / r.fsTensile : 0, ok: r.tensileOK },
-      { name: 'Grout pullout (FS 2.0)', ratio: r.fsPullout > 0 ? 2.0 / r.fsPullout : 0, ok: r.pulloutOK },
-    ],
-    data: [
-      ['Depth z', `${f2(z)} m`],
-      ['Spacing Sh × Sv', `${f2(Sh)} × ${f2(Sv)} m`],
-      ['Unit weight γ', `${f2(gamma)} kN/m³`],
-      ['Friction angle φ', `${f2(phi)}°`],
-      ['Surcharge q', `${f2(q)} kPa`],
-      ['Bar ⌀ / fy', `${barDia} mm / ${fy} MPa`],
-      ['Drill ⌀', `${f2(drillDia)} m`],
-      ['Bond length provided', `${f2(bondLength)} m`],
-      ['Bond strength qu', `${f2(qu)} kPa`],
-      ['Active coefficient Ka', f2(r.Ka)],
-      ['Nominal bar strength Tn', `${f2(r.Tn)} kN`],
-      ['Allowable bar strength Tall', `${f2(r.Tall)} kN`],
-      ['Ultimate pullout Qult', `${f2(r.Qult)} kN`],
-    ] as [string, string][],
-    steps: solution,
-  }
-
+  const lenOK = bondLength >= r.bondLengthReq
   return (
-        <div>
-      <PageHeader title="Soil-nail wall — per-nail check" badges={['FHWA GEC-7']} />
-      <ReportControls title="Soil-Nail Wall" badges={['FHWA GEC-7']} report={report} />
-      <CalcBody>
-        <div className="space-y-5">
-          <p className="text-[13px] text-muted">
-            Preliminary FHWA GEC-7 checks for a single nail: tributary active demand vs bar-tensile and
-            grout-ground pullout capacities. Global (slip-surface) stability is separate — use the{' '}
-            <a href="/slope" className="text-brand underline">slope-stability tool</a>.
-          </p>
-
-          <Card title="Geometry & soil">
-            <Field label="Nail depth z" unit="m" value={z} onChange={setZ} />
-            <Field label="Horiz. spacing Sh" unit="m" value={Sh} onChange={setSh} />
-            <Field label="Vert. spacing Sv" unit="m" value={Sv} onChange={setSv} />
-            <Field label="γ" unit="kN/m³" value={gamma} onChange={setGamma} />
-            <Field label="φ" unit="°" value={phi} onChange={setPhi} />
-            <Field label="Surcharge q" unit="kPa" value={q} onChange={setQ} />
-          </Card>
-
-          <Card title="Nail & grout">
-            <Field label="Bar Ø" unit="mm" value={barDia} onChange={setBarDia} />
-            <Field label="fy" unit="MPa" value={fy} onChange={setFy} />
-            <Field label="Drill hole DDH" unit="m" value={drillDia} onChange={setDrillDia} step="0.01" />
-            <Field label="Bond length Le" unit="m" value={bondLength} onChange={setBondLength} />
-            <Field label="Bond strength qu" unit="kPa" value={qu} onChange={setQu} />
-          </Card>
-
-          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
-        </div>
-
-        <ResultCard title="Results">
-          <Out label="Ka (Rankine)" value={f2(r.Ka)} />
-          <Out label="Demand Tmax = Ka·(γz+q)·Sh·Sv" value={`${f2(r.Tmax)} kN`} />
-          <Out label="Bar tensile Tn = Ab·fy" value={`${f2(r.Tn)} kN`} />
-          <Out label="FS tensile (Tn / Tmax ≥ 1.8)" value={f2(r.fsTensile)} ok={r.tensileOK} />
-          <Out label="Pullout Qult = π·DDH·Le·qu" value={`${f2(r.Qult)} kN`} />
-          <Out label="FS pullout (Qult / Tmax ≥ 2.0)" value={f2(r.fsPullout)} ok={r.pulloutOK} />
-          <Out label="Bond length for FS = 2.0" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
-          <p className="mt-2 text-[10px] text-faint">
-            FHWA GEC-7. Tmax is the tributary active load on one nail at depth z. Allowable bar load Tn/1.8,
-            allowable pullout Qult/2.0. Provide Le ≥ the required bond length beyond the slip surface.
-            This is a preliminary component check — verify global stability separately.
-          </p>
-        </ResultCard>
-      </CalcBody>
-    </div>
+    <WorkspacePage title="Soil Nail" badges={['Geotechnical', 'FHWA GEC-7']}
+      intro="Preliminary FHWA GEC-7 checks for a single nail: the tributary active demand against the bar's tensile and the grout-to-ground pullout capacities. Global (slip-surface) stability is separate — use the slope-stability tool."
+      inputs={<>
+        <InputGroup title="Geometry and soil">
+          <Num label="Nail depth z" unit="m" value={z} onChange={setZ} />
+          <Num label="Surcharge q" unit="kPa" value={q} onChange={setQ} />
+          <Num label="Spacing Sh" unit="m" value={Sh} onChange={setSh} />
+          <Num label="Spacing Sv" unit="m" value={Sv} onChange={setSv} />
+          <Num label="Unit weight γ" unit="kN/m³" value={gamma} onChange={setGamma} />
+          <Num label="Friction φ" unit="°" value={phi} onChange={setPhi} />
+        </InputGroup>
+        <InputGroup title="Nail and grout">
+          <Num label="Bar ⌀" unit="mm" value={barDia} onChange={setBarDia} />
+          <Num label="Bar fy" unit="MPa" value={fy} onChange={setFy} />
+          <Num label="Drill hole DDH" unit="m" value={drillDia} onChange={setDrillDia} step="0.01" />
+          <Num label="Bond length Le" unit="m" value={bondLength} onChange={setBondLength} />
+          <Num label="Bond strength qu" unit="kPa" value={qu} onChange={setQu} />
+        </InputGroup>
+      </>}
+      checks={<>
+        <CheckCard title="Bar tensile" basis="FS ≥ 1.8" status={r.tensileOK ? 'pass' : 'fail'} value={f2(r.fsTensile)} unit="FS"
+          formula="Tn = Ab fy" ratio={r.fsTensile > 0 ? 1.8 / r.fsTensile : undefined} ratioLabel="Required 1.8 ÷ FS"
+          pairs={[{ label: 'Tn', value: `${f2(r.Tn)} kN` }, { label: 'Tmax', value: `${f2(r.Tmax)} kN` }]} />
+        <CheckCard title="Pullout" basis="FS ≥ 2.0" status={r.pulloutOK ? 'pass' : 'fail'} value={f2(r.fsPullout)} unit="FS"
+          formula="Qult = π DDH Le qu" ratio={r.fsPullout > 0 ? 2 / r.fsPullout : undefined} ratioLabel="Required 2.0 ÷ FS"
+          pairs={[{ label: 'Qult', value: `${f2(r.Qult)} kN` }, { label: 'Le required', value: `${f2(r.bondLengthReq)} m` }]} />
+      </>}
+      summary={[
+        { label: 'Nail', value: `z ${f2(z)} m, ${f2(Sh)} × ${f2(Sv)} m grid` },
+        { label: 'Soil', value: `γ ${f2(gamma)} kN/m³, φ ${f2(phi)}°, q ${f2(q)} kPa` },
+        { label: 'Bar', value: `⌀${barDia} mm, fy ${fy} MPa` },
+        { label: 'Grout', value: `DDH ${f2(drillDia)} m, Le ${f2(bondLength)} m, qu ${f2(qu)} kPa` },
+      ]}
+      drawing={{ title: 'Nail tributary area and section', node: <div data-pdf-drawing><SoilNailDrawing z={z} Sh={Sh} Sv={Sv} bondLength={bondLength} drillDia={drillDia} Ka={r.Ka} gamma={gamma} q={q} Tmax={r.Tmax} /></div> }}
+      resultsCaption="Tmax is the tributary active load on one nail at depth z. Provide Le beyond the slip surface; this is a preliminary component check — verify global stability separately."
+      results={[
+        { check: 'Active coefficient', basis: 'Rankine', demand: f2(r.Ka), status: 'info' as const },
+        { check: 'Nail demand Tmax', basis: 'Ka (γz + q) Sh Sv', demand: `${f2(r.Tmax)} kN`, status: 'info' as const },
+        { check: 'Bar tensile', basis: 'Tn / Tmax ≥ 1.8', demand: `${f2(r.Tmax)} kN`, limit: `${f2(r.Tn / 1.8)} kN`, ratio: r.fsTensile > 0 ? 1.8 / r.fsTensile : undefined, status: r.tensileOK ? 'pass' as const : 'fail' as const },
+        { check: 'Pullout', basis: 'Qult / Tmax ≥ 2.0', demand: `${f2(r.Tmax)} kN`, limit: `${f2(r.Qult / 2)} kN`, ratio: r.fsPullout > 0 ? 2 / r.fsPullout : undefined, status: r.pulloutOK ? 'pass' as const : 'fail' as const },
+        { check: 'Bond length', basis: 'for FS 2.0', demand: `${f2(r.bondLengthReq)} m`, limit: `${f2(bondLength)} m`, status: lenOK ? 'pass' as const : 'fail' as const },
+      ]}
+      steps={solution}
+      references={[
+        { topic: 'Soil nail walls', basis: 'nail tensile and pullout checks, FS 1.8 and 2.0', source: 'FHWA-NHI-14-007, GEC No. 7 Soil Nail Walls' },
+        { topic: 'Bond strength', basis: 'qu by soil type and drilling method', source: 'FHWA GEC-7' },
+      ]}
+    />
   )
 }
