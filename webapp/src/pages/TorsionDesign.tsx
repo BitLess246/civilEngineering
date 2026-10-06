@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react'
 import { designTorsion, type TorsionInput } from '../engine/torsionDesign'
-import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
-import { ReportControls } from '../components/ReportControls'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { buildTorsionSolution } from '../lib/torsionSolution'
 import { TorsionSection } from '../components/TorsionSection'
-import { WorkedSolution } from '../components/WorkedSolution'
 import { f1, f2, f3 } from '../lib/format'
-import { PageHeader } from '../components/calc'
 
 interface FormState extends Omit<TorsionInput, 'legs' | 'lambda'> {
   legs: 2 | 4
@@ -78,129 +77,85 @@ export default function TorsionDesign() {
     steps: solution ?? undefined,
   } : undefined
 
+  const ratio = r && r.rhs > 0 ? r.lhs / r.rhs : undefined
+  const stirrup = r ? `closed ⌀${f.stirrupDia} @ ${Math.round(r.sAdopt)} mm` : '—'
   return (
-        <div>
-      <PageHeader title="Torsion Design" badges={['ACI 318-14 §22.7', 'NSCP 2015']} />
-      <div className="mx-auto max-w-[1500px] p-6">
-      <p className="no-print mt-1 text-muted">
-        Rectangular RC section — ACI 318-14 §22.7 combined shear + torsion. SI units (mm, kN, MPa).
-      </p>
-      <ReportControls title="Torsion Design" badges={['ACI 318-14 §22.7', 'NSCP 2015']} report={report} />
-
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
-        {/* ── INPUTS ── */}
-        <div className="flex flex-col gap-6">
-          <Card title="Section">
-            <Num label="Width b" unit="mm"    value={f.b}    onChange={set('b')} min={1} />
-            <Num label="Height h" unit="mm"   value={f.h}    onChange={set('h')} min={1} />
-            <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} min={0} />
-            <Num label="Stirrup ⌀ dₛ" unit="mm" value={f.stirrupDia} onChange={set('stirrupDia')} min={1} />
-            <Num label="Main bar ⌀ db" unit="mm" value={f.barDia}    onChange={set('barDia')} min={1} />
-            <Pick label="Stirrup legs" value={String(f.legs) as '2'|'4'}
-              onChange={(v) => set('legs')(Number(v) as 2 | 4)}
-              options={[['2', '2 legs'], ['4', '4 legs']]} />
-          </Card>
-
-          <Card title="Materials">
-            <Num label="f'c" unit="MPa" value={f.fc}  onChange={set('fc')} min={1} />
-            <Num label="fy (main)"  unit="MPa" value={f.fy}  onChange={set('fy')} min={1} />
-            <Num label="fyt (stirrup)" unit="MPa" value={f.fyt} onChange={set('fyt')} min={1} />
-            <Pick label="λ (lightweight)" value={String(f.lambda) as '1'|'0.75'}
-              onChange={(v) => set('lambda')(Number(v) as 1 | 0.75)}
-              options={[['1', '1.0 (normal weight)'], ['0.75', '0.75 (lightweight)']]} />
-          </Card>
-
-          <Card title="Demands">
-            <Num label="Tu (factored torsion)" unit="kN·m" value={f.Tu} onChange={set('Tu')} min={0} />
-            <Num label="Vu (factored shear)"  unit="kN"   value={f.Vu}  onChange={set('Vu')} min={0} />
-          </Card>
-        </div>
-
-        {/* ── RESULTS ── */}
-        {r ? (
-          <div className="flex flex-col gap-6">
-            <section data-pdf-drawing className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm
-              [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
-              <h2 className="mb-2 text-[1.02rem] font-bold text-brand">Section — torsion tube</h2>
-              <TorsionSection b={f.b} h={f.h} x1={r.x1} y1={r.y1} barDia={f.barDia}
-                stirrupDia={f.stirrupDia} Aoh={r.Aoh} ph={r.ph} Ao={r.Ao} Al={r.Al_design}
-                stirrupNote={`closed ⌀${f.stirrupDia} @ ${Math.round(r.sAdopt)} mm`} />
-            </section>
-
-            <ResultCard title="Section Geometry">
-              <Row label="Effective depth d"          value={`${f1(r.d)} mm`} />
-              <Row label="Gross area Acp"             value={`${f1(r.Acp)} mm²`}   sub={`pcp = ${f1(r.pcp)} mm`} />
-              <Row label="Cover to stirrup CL cSt"   value={`${f1(r.cSt)} mm`} />
-              <Row label="Inner dims x₁ × y₁"        value={`${f1(r.x1)} × ${f1(r.y1)} mm`} />
-              <Row label="Aoh (enclosed area)"        value={`${f1(r.Aoh)} mm²`} />
-              <Row label="ph (perimeter Aoh)"         value={`${f1(r.ph)} mm`} />
-              <Row label="Ao = 0.85·Aoh"             value={`${f1(r.Ao)} mm²`} />
-            </ResultCard>
-
-            <ResultCard title="Torsion Thresholds §22.7">
-              <Row label="Threshold Tu,th"
-                value={`${f2(r.Tu_th)} kN·m`}
-                sub={`Tu = ${f2(f.Tu)} kN·m`}
-                alert={!r.torsionNeeded && false} />
-              <Row label="Cracking Tcr"               value={`${f2(r.Tcr)} kN·m`} />
-              <Row label="Torsion reinforcement"
-                value={r.torsionNeeded ? 'Required' : 'Not required'}
-                alert={!r.torsionNeeded} />
-            </ResultCard>
-
-            <ResultCard title="Shear Capacity">
-              <Row label="φVc"  value={`${f1(r.phiVc)} kN`} sub={`Vc = ${f1(r.Vc)} kN`} />
-              <Row label="Vs required" value={`${f1(r.Vs)} kN`} />
-            </ResultCard>
-
-            <ResultCard title="Section Interaction §22.7.7.1">
-              <Row label="LHS √[(Vu/bwd)² + (Tu·ph/1.7Aoh²)²]"
-                value={`${f3(r.lhs)} MPa`} />
-              <Row label="RHS φ·(Vc/bwd + ⅔√f'c)"
-                value={`${f3(r.rhs)} MPa`} />
-              <Row label="Interaction check"
-                value={r.interactionOK ? 'OK ✓' : 'FAIL ✗'}
-                alert={!r.interactionOK} />
-            </ResultCard>
-
-            <ResultCard title="Transverse Steel At/s §22.7.6.1">
-              <Row label="At/s (torsion)"          value={`${f3(r.AtPerS)} mm²/mm`} />
-              <Row label="At/s minimum"            value={`${f3(r.AtPerS_min)} mm²/mm`} />
-              <Row label="At/s design"             value={`${f3(r.AtPerS_design)} mm²/mm`} />
-            </ResultCard>
-
-            <ResultCard title="Longitudinal Steel Al §22.7.5">
-              <Row label="Al (formula)"            value={`${f1(r.Al)} mm²`} />
-              <Row label="Al minimum"              value={`${f1(r.Al_min)} mm²`} />
-              <Row label="Al design"               value={`${f1(r.Al_design)} mm²`} />
-            </ResultCard>
-
-            <ResultCard title="Combined Stirrup Design">
-              <Row label="Av/s (shear legs)"       value={`${f3(r.AvPerS)} mm²/mm`} />
-              <Row label="(Av+2At)/s required"     value={`${f3(r.AvPlus2At)} mm²/mm`} />
-              <Row label="(Av+2At)/s minimum"      value={`${f3(r.AvPlus2At_min)} mm²/mm`} />
-              <Row label="s required"              value={`${f1(r.sReq)} mm`} />
-              <Row label="s max (§9.7.6)"          value={`${f1(r.sMax)} mm`}
-                sub={`ph/8=${f1(r.ph/8)} · d/2=${f1(r.d/2)}`} />
-              <Row label="s adopted"
-                value={`${f1(r.sAdopt)} mm`}
-                alert={!r.interactionOK} />
-            </ResultCard>
-          </div>
-        ) : (
-          <p className="self-start rounded-xl border border-hairline bg-sheet p-6 text-sm text-muted">
-            Fill in all inputs to see results.
-          </p>
-        )}
-      </div>
-
-      {/* The step-by-step already existed and only ever reached the PDF. */}
-      {solution && solution.length > 0 && (
-        <div className="mt-5">
-          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
-        </div>
-      )}
-    </div>
-    </div>
+    <WorkspacePage title="Torsion Design" badges={['Concrete', 'ACI 318-14 §22.7 · NSCP 2015']}
+      intro="Combined shear and torsion on a rectangular RC section. §22.7 treats the solid section as a thin-walled tube bounded by the closed stirrup: below the threshold torque it is ignored, above it the stirrups carry At/s on every leg and longitudinal steel Al is spread around the stirrup perimeter."
+      report={report}
+      inputs={<>
+        <InputGroup title="Section">
+          <Num label="Width b" unit="mm" value={f.b} onChange={set('b')} min={1} />
+          <Num label="Height h" unit="mm" value={f.h} onChange={set('h')} min={1} />
+          <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} min={0} />
+          <Pick label="Stirrup legs" value={String(f.legs) as '2' | '4'}
+            onChange={(v) => set('legs')(Number(v) as 2 | 4)}
+            options={[['2', '2 legs'], ['4', '4 legs']]} />
+          <Num label="Stirrup ⌀ dₛ" unit="mm" value={f.stirrupDia} onChange={set('stirrupDia')} min={1} />
+          <Num label="Main bar ⌀ db" unit="mm" value={f.barDia} onChange={set('barDia')} min={1} />
+        </InputGroup>
+        <InputGroup title="Materials">
+          <Num label="f′c" unit="MPa" value={f.fc} onChange={set('fc')} min={1} />
+          <Pick label="λ (lightweight)" value={String(f.lambda) as '1' | '0.75'}
+            onChange={(v) => set('lambda')(Number(v) as 1 | 0.75)}
+            options={[['1', '1.0 normal weight'], ['0.75', '0.75 lightweight']]} />
+          <Num label="fy (main)" unit="MPa" value={f.fy} onChange={set('fy')} min={1} />
+          <Num label="fyt (stirrup)" unit="MPa" value={f.fyt} onChange={set('fyt')} min={1} />
+        </InputGroup>
+        <InputGroup title="Factored demands">
+          <Num label="Torsion Tu" unit="kN·m" value={f.Tu} onChange={set('Tu')} min={0} />
+          <Num label="Shear Vu" unit="kN" value={f.Vu} onChange={set('Vu')} min={0} />
+        </InputGroup>
+      </>}
+      checks={r ? <>
+        <CheckCard title="Threshold torsion" basis="§22.7.4.1" status="info"
+          pillLabel={r.torsionNeeded ? 'REQUIRED' : 'NEGLIGIBLE'} value={f2(r.Tu_th)} unit="kN·m"
+          pairs={[{ label: 'Tu', value: `${f2(f.Tu)} kN·m` }, { label: 'Tcr', value: `${f2(r.Tcr)} kN·m` }]} />
+        <CheckCard title="Section interaction" basis="§22.7.7.1" status={r.interactionOK ? 'pass' : 'fail'}
+          value={f3(r.lhs)} unit="MPa" ratio={ratio} ratioLabel="Stress ÷ limit"
+          formula="√[(Vu/bw·d)² + (Tu·ph/1.7Aoh²)²] ≤ φ(Vc/bw·d + ⅔√f′c)"
+          pairs={[{ label: 'Limit', value: `${f3(r.rhs)} MPa` }, { label: 'φVc', value: `${f1(r.phiVc)} kN` }]} />
+        <CheckCard title="Closed stirrups" basis="(Av + 2At)/s" status={r.interactionOK ? 'pass' : 'fail'}
+          value={`⌀${f.stirrupDia} @ ${Math.round(r.sAdopt)}`} unit="mm"
+          pairs={[{ label: 'Required', value: Number.isFinite(r.sReq) ? `${f1(r.sReq)} mm` : 'none' }, { label: 'Max', value: `${f1(r.sMax)} mm` }]} />
+        <CheckCard title="Longitudinal steel" basis="§22.7.5" status="info"
+          value={f1(r.Al_design)} unit="mm²"
+          pairs={[{ label: 'Al formula', value: `${f1(r.Al)} mm²` }, { label: 'Al min', value: `${f1(r.Al_min)} mm²` }]} />
+      </> : <p className="text-sm text-muted">Fill in all inputs to see results.</p>}
+      summary={[
+        { label: 'Section', value: `${f.b} × ${f.h} mm, cover ${f.cover} mm` },
+        { label: 'Bars', value: `⌀${f.barDia} main, ⌀${f.stirrupDia} × ${f.legs}-leg stirrups` },
+        { label: 'Materials', value: `f′c ${f.fc}, fy ${f.fy}, fyt ${f.fyt} MPa, λ ${f.lambda}` },
+        { label: 'Demands', value: `Tu ${f1(f.Tu)} kN·m, Vu ${f1(f.Vu)} kN` },
+      ]}
+      drawing={r ? { title: 'Section — the torsion tube', node: <div data-pdf-drawing>
+        <TorsionSection b={f.b} h={f.h} x1={r.x1} y1={r.y1} barDia={f.barDia}
+          stirrupDia={f.stirrupDia} Aoh={r.Aoh} ph={r.ph} Ao={r.Ao} Al={r.Al_design}
+          stirrupNote={stirrup} />
+      </div> } : undefined}
+      resultsCaption={r ? [
+        ...r.inputNotes,
+        r.torsionNeeded ? '' : 'Tu is below the threshold, so §22.7.1.1 lets torsion be neglected; the stirrups shown are for shear alone.',
+      ].filter(Boolean).join(' ') || undefined : undefined}
+      results={r ? [
+        { check: 'Effective depth', basis: 'single layer', demand: `${f1(r.d)} mm`, status: 'info' as const },
+        { check: 'Gross section', basis: 'Acp / pcp', demand: `${f1(r.Acp)} mm² / ${f1(r.pcp)} mm`, status: 'info' as const },
+        { check: 'Stirrup centreline', basis: 'x₁ × y₁ · Aoh / ph', demand: `${f1(r.x1)} × ${f1(r.y1)} · ${f1(r.Aoh)} mm² / ${f1(r.ph)} mm`, status: 'info' as const },
+        { check: 'Shear-flow area', basis: 'Ao = 0.85·Aoh', demand: `${f1(r.Ao)} mm²`, status: 'info' as const },
+        { check: 'Threshold torsion', basis: '§22.7.4.1', demand: `${f2(f.Tu)} kN·m`, limit: `${f2(r.Tu_th)} kN·m`, status: 'info' as const },
+        { check: 'Shear', basis: 'φVc · Vs required', demand: `${f1(r.Vs)} kN`, limit: `φVc ${f1(r.phiVc)} kN`, status: 'info' as const },
+        { check: 'Section interaction', basis: '§22.7.7.1', demand: `${f3(r.lhs)} MPa`, limit: `${f3(r.rhs)} MPa`, ratio, status: r.interactionOK ? 'pass' as const : 'fail' as const },
+        { check: 'At/s per leg', basis: '§22.7.6.1 · min', demand: `${f3(r.AtPerS)} mm²/mm`, limit: `min ${f3(r.AtPerS_min)} · design ${f3(r.AtPerS_design)}`, status: 'info' as const },
+        { check: '(Av + 2At)/s', basis: '§9.6.4.2 minimum', demand: `${f3(r.AvPlus2At)} mm²/mm`, limit: `min ${f3(r.AvPlus2At_min)}`, status: 'info' as const },
+        { check: 'Stirrup spacing', basis: 'min(ph/8, 300, d/2)', demand: Number.isFinite(r.sReq) ? `${f1(r.sReq)} mm req.` : 'none req.', limit: `${f1(r.sMax)} mm`, status: 'info' as const },
+        { check: 'Longitudinal Al', basis: '§22.7.5 · §9.6.4.3', demand: `${f1(r.Al)} mm²`, limit: `min ${f1(r.Al_min)} · design ${f1(r.Al_design)} mm²`, status: 'info' as const },
+      ] : []}
+      steps={solution ?? []}
+      references={[
+        { topic: 'Threshold and cracking torsion', basis: 'φλ√f′c·Acp²/12pcp', source: 'ACI 318-14 §22.7.4 · NSCP 2015 §422.7' },
+        { topic: 'Section limit', basis: 'combined shear and torsion stress', source: 'ACI 318-14 §22.7.7.1' },
+        { topic: 'Torsional reinforcement', basis: 'At/s, Al and their minimums; spacing', source: 'ACI 318-14 §22.7.6, §9.6.4, §9.7.5–9.7.6' },
+      ]}
+    />
   )
 }
