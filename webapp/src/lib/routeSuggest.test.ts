@@ -68,7 +68,7 @@ describe('the routes PUBLIC_ROUTES promises', () => {
     const known = new Set([
       '/', '/signin', '/signup', '/forgot-password', '/reset-password',
       '/terms', '/privacy', '/refunds', '/contact', '/profile',
-      '/steel', '/geotech', '/hydrostatics',
+      '/steel', '/geotech', '/hydrostatics', '/dynamics',
     ])
     for (const r of PUBLIC_ROUTES) {
       expect(tools.has(r) || known.has(r), `PUBLIC_ROUTES promises ${r}, which is neither a tool nor a known page`).toBe(true)

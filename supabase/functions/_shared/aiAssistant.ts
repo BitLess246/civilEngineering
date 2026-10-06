@@ -264,7 +264,14 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/relative-equilibrium', name: 'Accelerating & Rotating Vessels', sub: 'Surface tilt · paraboloid', group: 'Water' },
   { route: '/bernoulli', name: 'Energy Equation', sub: 'Bernoulli · pumps · turbines · losses', group: 'Water' },
   { route: '/jet-on-vane', name: 'Jet on a Vane', sub: 'Impulse–momentum · power · efficiency', group: 'Water' },
-  { route: '/dynamics', name: 'Dynamics', sub: 'Kinematics · kinetics · work-energy · impulse', group: 'Mathematics' },
+  { route: '/rectilinear-motion', name: 'Rectilinear Motion', sub: 'Constant acceleration · any three of u, a, t, v, s', group: 'Mathematics' },
+  { route: '/projectile-motion', name: 'Projectile Motion', sub: 'Range · height · time of flight', group: 'Mathematics' },
+  { route: '/curvilinear-motion', name: 'Curvilinear Motion', sub: 'Normal & tangential acceleration', group: 'Mathematics' },
+  { route: '/kinetics', name: 'Kinetics', sub: 'ΣF = ma · velocity · displacement', group: 'Mathematics' },
+  { route: '/work-energy', name: 'Work–Energy', sub: 'ΔKE = W + Wnc − ΔPE', group: 'Mathematics' },
+  { route: '/impulse-momentum', name: 'Impulse–Momentum', sub: 'I = m(v₂ − v₁) = F·t', group: 'Mathematics' },
+  { route: '/friction', name: 'Friction', sub: 'Block on an incline · holds or slides', group: 'Mathematics' },
+  { route: '/belt-friction', name: 'Belt Friction', sub: 'Capstan T₁ = T₂e^(μβ)', group: 'Mathematics' },
   { route: '/drafting3d', name: 'Drafting3D', sub: 'Floor plans → 3D → ModelSpace', group: 'Mathematics' },
 ]
 
