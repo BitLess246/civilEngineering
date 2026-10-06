@@ -14,6 +14,10 @@ import {
   withColumnPartners,
   mergeCoincidentNodes,
   panelCorners,
+  renameLevel,
+  setLevelHeight,
+  canDeleteLevel,
+  deleteLevel,
   type DraftProject,
   type DraftLevel,
   type DraftNode,
@@ -372,5 +376,40 @@ describe('audit fixes — panels', () => {
     const slab = l1.elements.get('es1')!
     expect(panelCorners(l1, slab)).toEqual([{ x: 0, y: 0 }, { x: 6, y: 0 }, { x: 6, y: 6 }, { x: 0, y: 6 }])
     expect(panelCorners(l1, { ...slab, corners: ['a', 'b', 'c', 'zz'] })).toBeNull()
+  })
+})
+
+describe('level management', () => {
+  it('renames, ignoring a blank name', () => {
+    const p = sampleProject()
+    expect(renameLevel(p, 'L1', '  Ground floor ').levels.get('L1')!.name).toBe('Ground floor')
+    expect(renameLevel(p, 'L1', '   ')).toBe(p)
+  })
+
+  it('a taller storey lifts its column tops and every level above, so they still meet', () => {
+    const p = setLevelHeight(sampleProject(), 'L1', 4.2)
+    const l1 = p.levels.get('L1')!, l2 = p.levels.get('L2')!
+    expect(l1.height).toBe(4.2)
+    expect(l1.nodes.get('a2')!.z).toBeCloseTo(4.2, 9)   // column top
+    expect(l1.nodes.get('a')!.z).toBe(0)               // floor joints stay
+    expect(l2.elevation).toBeCloseTo(4.2, 9)
+    expect(l2.nodes.get('e')!.z).toBeCloseTo(4.2, 9)
+    expect(l2.nodes.get('e2')!.z).toBeCloseTo(7.7, 9)
+    // the L1 column top and the L2 column base are still one model joint
+    const m = draftToStructuralModel(p)
+    const c1 = m.members.find(mm => mm.id === 'ec1')!, c2 = m.members.find(mm => mm.id === 'ec2')!
+    expect(c1.j).toBe(c2.i)
+    // under 2 m is refused
+    expect(setLevelHeight(p, 'L1', 1.5)).toBe(p)
+  })
+
+  it('deletes only the top level and hands the active level down', () => {
+    const p = { ...sampleProject(), activeLevelId: 'L2' }
+    expect(canDeleteLevel(p, 'L1')).toBe(false)
+    expect(canDeleteLevel(p, 'L2')).toBe(true)
+    const q = deleteLevel(p, 'L2')
+    expect(q.levels.has('L2')).toBe(false)
+    expect(q.activeLevelId).toBe('L1')
+    expect(deleteLevel(q, 'L1')).toBe(q)                 // never the last level
   })
 })

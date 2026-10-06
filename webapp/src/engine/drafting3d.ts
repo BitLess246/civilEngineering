@@ -799,3 +799,66 @@ export function panelCorners(level: DraftLevel, el: DraftElement): Array<{ x: nu
   if (pts.some(p => !p)) return null
   return (pts as DraftNode[]).map(p => ({ x: p.x, y: p.y }))
 }
+
+// --- Level management --------------------------------------------------------
+
+/** Rename a level. Returns a new project; a blank name keeps the old one. */
+export function renameLevel(project: DraftProject, levelId: string, name: string): DraftProject {
+  const lvl = project.levels.get(levelId)
+  const clean = name.trim()
+  if (!lvl || !clean || clean === lvl.name) return project
+  const levels = new Map(project.levels)
+  levels.set(levelId, { ...lvl, name: clean })
+  return { ...project, levels }
+}
+
+/** Change a storey's floor-to-floor height and RESTACK what stands on it:
+ *  this level's own top joints (column tops, at elevation + height) and every
+ *  level above — elevation and every joint — move by the change, so columns
+ *  keep meeting the next floor exactly. Heights below 2 m are refused (the
+ *  project comes back unchanged). Pure. */
+export function setLevelHeight(project: DraftProject, levelId: string, height: number): DraftProject {
+  const lvl = project.levels.get(levelId)
+  if (!lvl || !Number.isFinite(height) || height < 2) return project
+  const delta = height - lvl.height
+  if (Math.abs(delta) < 1e-9) return project
+  const topZ = lvl.elevation + lvl.height
+  const shift = (nodes: Map<string, DraftNode>, pick: (n: DraftNode) => boolean) => {
+    const out = new Map(nodes)
+    for (const [id, n] of nodes) if (pick(n)) out.set(id, { ...n, z: n.z + delta })
+    return out
+  }
+  const levels = new Map<string, DraftLevel>()
+  for (const [id, l] of project.levels) {
+    if (id === levelId) {
+      levels.set(id, { ...l, height, nodes: shift(l.nodes, n => Math.abs(n.z - topZ) < 1e-6) })
+    } else if (l.elevation > lvl.elevation + 1e-9) {
+      levels.set(id, { ...l, elevation: l.elevation + delta, nodes: shift(l.nodes, () => true) })
+    } else {
+      levels.set(id, l)
+    }
+  }
+  return { ...project, levels }
+}
+
+/** Only the TOP level can be deleted (and never the last one left): removing
+ *  a storey from the middle would have to drop everything above it. */
+export function canDeleteLevel(project: DraftProject, levelId: string): boolean {
+  if (project.levels.size < 2 || !project.levels.has(levelId)) return false
+  const top = Array.from(project.levels.values()).reduce((a, b) => (b.elevation > a.elevation ? b : a))
+  return top.id === levelId
+}
+
+/** Delete the top level with everything drawn on it; the level below becomes
+ *  active if the deleted one was. Returns the project unchanged when
+ *  `canDeleteLevel` says no. */
+export function deleteLevel(project: DraftProject, levelId: string): DraftProject {
+  if (!canDeleteLevel(project, levelId)) return project
+  const levels = new Map(project.levels)
+  levels.delete(levelId)
+  let activeLevelId = project.activeLevelId
+  if (activeLevelId === levelId) {
+    activeLevelId = Array.from(levels.values()).reduce((a, b) => (b.elevation > a.elevation ? b : a)).id
+  }
+  return { ...project, levels, activeLevelId }
+}

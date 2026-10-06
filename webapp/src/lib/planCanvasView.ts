@@ -48,3 +48,24 @@ export function anchoredZoom(
     },
   }
 }
+
+/** The view that frames a plan rectangle (metres) in a canvas of `size` px
+ *  with `margin` px clear on every side — the Fit button. A degenerate box
+ *  (one point, empty plan) is framed as a 6 m square around it. Pure. */
+export function fitView(
+  box: { minX: number; minY: number; maxX: number; maxY: number },
+  size: { w: number; h: number },
+  margin = 56,
+): { zoom: number; pan: { x: number; y: number } } {
+  const cx = (box.minX + box.maxX) / 2
+  const cy = (box.minY + box.maxY) / 2
+  const bw = Math.max(box.maxX - box.minX, 6)
+  const bh = Math.max(box.maxY - box.minY, 6)
+  const zx = Math.max(1, size.w - 2 * margin) / (bw * CANVAS_SCALE)
+  const zy = Math.max(1, size.h - 2 * margin) / (bh * CANVAS_SCALE)
+  const zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min(zx, zy)))
+  return {
+    zoom,
+    pan: { x: size.w / 2 - cx * zoom * CANVAS_SCALE, y: size.h / 2 - cy * zoom * CANVAS_SCALE },
+  }
+}
