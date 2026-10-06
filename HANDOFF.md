@@ -76,6 +76,45 @@ The deploy job is gone (Sept 2026). Deleting it stops future publishes; it does
 **not** unpublish what is already served. That is *Settings → Pages → Source:
 None*, and it has to be done by hand in the repository settings.
 
+## Calculator workspace layout + Drafting3D overhaul (PRs #886–#896, Oct 2026)
+
+**Workspace layout — every calculator migrated.** All standalone calculators now
+render through `components/WorkspacePage.tsx` (inputs rail · check cards ·
+drawing sheet with numbered sections · Calculations tab · References tab · PDF
+report). The last batches were #891 (beam analysis, section properties, load
+combinations, load path), #892 (bridge loading/rating, wood slab, plumbing) and
+#893 (the five `/estimate/*` pages; `QtyPage` deleted). Not migrated, on
+purpose: the app shells (Model Space, Frame, Truss, Seismic wizard, Schedule
+pages, Influence Lines, Soil Investigation).
+- Drawings follow the user's sheet rules: one scale per drawing (exaggeration
+  stated), datums on drops, labels on what they name, dimension lines that end
+  on drawn or extension lines, ▽ on water/liquid surfaces. New sketch modules:
+  `woodSketches`, `plumbingSketches`, `estimateSketches` (6 m stock cutting).
+- Estimates get worked steps from `lib/estimateSolution.ts` (tested against the
+  engine); a tie longer than the stock bar now shows CHECK INPUT, not a silent 0.
+- `/estimate/*` routes are members-only: browser-verify them on a second dev
+  server started with `VITE_SUPABASE_URL= VITE_SUPABASE_ANON_KEY=` (the gate
+  steps aside when Supabase is unconfigured).
+
+**Drafting3D (`/drafting3d`)** — audit #894, then #895/#896:
+- Fixed: one active section stamped a 400×400 column on slabs/walls (now per
+  role, `DEFAULT_SECTION_FOR`; saved projects repaired by
+  `normalizeDraftSections`); `addLevel` ignored the storey below's height;
+  export emitted free joints and doubled beams under walls; supports only at
+  EL 0; ceilings rendered zero-deep; dragging a column base leaned the column;
+  Delete fired while typing; the canvas jumped when the context row changed.
+- Added: **Open in Model Space** (writes `lib/modelSpaceSession` and navigates
+  — the old export was a JSON Model Space could not import), undo/redo
+  (`lib/undoHistory`), touch Delete, level switcher / rename / storey height
+  (restacks levels above) / delete top / duplicate up, Fit, live length +
+  bearing readout, retype the selection from the Sections panel.
+
+**Open, flagged not fixed:** bridge rating applies (1+IM) to the lane load
+(AASHTO §3.6.2 — conservative); box-culvert rings counted as if offcuts splice
+end to end (under-counts); Model Space hangs a wall from the beam at its top,
+so a ground-floor wall loads the beam above (convention — needs a decision);
+BeamAnalysis checks L/360 on the factored combo; 25 Dependabot alerts.
+
 ## What this is
 `civilEngineering` — a React 19 + TypeScript + Vite app (Tailwind v4, KaTeX,
 react-three-fiber) of structural-design tools and material take-off estimators
