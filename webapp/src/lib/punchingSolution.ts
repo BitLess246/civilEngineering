@@ -53,9 +53,9 @@ export function buildPunchingSolution(i: PunchingInput, r: PunchingResult): Solu
       title: 'Concrete shear strength — three equations',
       clause: 'ACI 318-14 §22.6.5.2 (a)(b)(c)',
       lines: [
-        txt('The code gives three expressions and the smallest governs. (a) penalises elongated columns, (b) penalises a thick slab against a small perimeter, and (c) is the plain upper bound.'),
-        eq(String.raw`V_{c1} = \left(0.17 + \tfrac{0.33}{\beta_c}\right)\lambda\sqrt{f'_c}\,b_0 d = \left(0.17 + \tfrac{0.33}{${sn2(r.betac)}}\right)(${sn2(lambda)})(${sn3(sq)})(${sn0(b0d)})/10^3 = ${sn1(r.Vc1)}\ \text{kN}`),
-        eq(String.raw`V_{c2} = \left(\tfrac{0.083\,\alpha_s d}{b_0} + 0.17\right)\lambda\sqrt{f'_c}\,b_0 d = \left(\tfrac{0.083(${sn0(r.alphaS)})(${sn0(d)})}{${sn0(r.b0)}} + 0.17\right)(${sn2(lambda)})(${sn3(sq)})(${sn0(b0d)})/10^3 = ${sn1(r.Vc2)}\ \text{kN}`),
+        txt('The code gives three expressions and the smallest governs: (a) is the plain upper bound, (b) penalises an elongated column, and (c) penalises a perimeter that is long against the depth d.'),
+        eq(String.raw`V_{c1} = 0.17\left(1 + \tfrac{2}{\beta_c}\right)\lambda\sqrt{f'_c}\,b_0 d = 0.17\left(1 + \tfrac{2}{${sn2(r.betac)}}\right)(${sn2(lambda)})(${sn3(sq)})(${sn0(b0d)})/10^3 = ${sn1(r.Vc1)}\ \text{kN}`),
+        eq(String.raw`V_{c2} = 0.083\left(2 + \tfrac{\alpha_s d}{b_0}\right)\lambda\sqrt{f'_c}\,b_0 d = 0.083\left(2 + \tfrac{(${sn0(r.alphaS)})(${sn0(d)})}{${sn0(r.b0)}}\right)(${sn2(lambda)})(${sn3(sq)})(${sn0(b0d)})/10^3 = ${sn1(r.Vc2)}\ \text{kN}`),
         eq(String.raw`V_{c3} = 0.33\,\lambda\sqrt{f'_c}\,b_0 d = 0.33(${sn2(lambda)})(${sn3(sq)})(${sn0(b0d)})/10^3 = ${sn1(r.Vc3)}\ \text{kN}`),
         eq(String.raw`V_c = \min(V_{c1},V_{c2},V_{c3}) = \mathbf{${sn1(r.Vc)}}\ \text{kN}`),
       ],
@@ -77,7 +77,9 @@ export function buildPunchingSolution(i: PunchingInput, r: PunchingResult): Solu
 /** Which of the three equations governed, and what that means physically. */
 function governingNote(r: PunchingResult): string {
   const m = Math.min(r.Vc1, r.Vc2, r.Vc3)
-  if (m === r.Vc1) return 'Eq. (a) governs — the column aspect ratio is what limits the strength.'
-  if (m === r.Vc2) return 'Eq. (b) governs — the slab is thick relative to the critical perimeter.'
-  return 'Eq. (c) governs — the plain upper bound controls, the usual case for a squarish interior column.'
+  // Letters as Table 22.6.5.2 prints them: (a) 0.33, (b) the βc term, (c) the
+  // αs term. They used to be assigned in this module's own Vc1-2-3 order.
+  if (m === r.Vc3) return 'Eq. (a) governs — the plain upper bound controls, the usual case for a squarish interior column.'
+  if (m === r.Vc1) return 'Eq. (b) governs — the column aspect ratio is what limits the strength.'
+  return 'Eq. (c) governs — the critical perimeter is long relative to the depth d (a large column, or an edge or corner one on a thin slab).'
 }

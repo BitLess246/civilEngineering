@@ -55,7 +55,7 @@ pass.
 |----|--------|----------|---------|----------|
 | F001 | Centered Footing | Hand Calc | ✅ | `isolatedFooting.test.ts` (sizing, one-way & two-way shear, flexure); `validation.ts` `footing-area` |
 | F002 | Eccentric Footing | Hand Calc | ✅ | `eccentricFooting.test.ts` (pressure blocks + worked-solution steps) |
-| F003 | Punching Shear | Manual | ✅ | `punchingShear.test.ts` — critical perimeter b0, aspect-ratio & αs branches, all three §22.6.5.2 Vc equations, φVc vs demand |
+| F003 | Punching Shear | Manual | ✅ | `punchingShear.test.ts` — critical perimeter b0, aspect-ratio & αs branches, all three Table 22.6.5.2 Vc equations with the coefficients as printed (0.17(1 + 2/β), 0.083(2 + αs·d/b0)) hand-checked, and cross-checked equal to the shared `twoWayVc` the footings use, φVc vs demand |
 | F004 | Combined Footing | Textbook | ✅ | `combinedFooting.test.ts` "rectangular (CRF)" + `combinedFootingSolution.test.ts` (printable worked solution) |
 | F005 | Trapezoidal Footing | Textbook | ✅ | `combinedFooting.test.ts` "trapezoidal (CTF)" + column-containment checks |
 
