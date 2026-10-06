@@ -1,4 +1,4 @@
-import { Card, Num, Pick } from '../components/qty'
+import { Num, Pick } from '../components/qty'
 import { InputGroup } from '../components/workspace'
 import { DrawingFrame } from '../components/DrawingFrame'
 import { geomAt, specificEnergy, G, type ChannelShape, type JumpResult } from '../engine/openChannel'
@@ -39,34 +39,6 @@ export function ShapeGroup({ shape, onChange, hint }: {
         <Num label="Diameter D" unit="m" value={parseFloat(shape.D) || 0} onChange={(v) => onChange({ D: String(v) })} min={0.1} max={10} step="0.1" />
       )}
     </InputGroup>
-  )
-}
-
-/** The section picker as a classic Card, for pages not yet on the workspace layout (GVF). */
-export function ShapeCard({ shape, onChange, hint }: {
-  shape: ShapeState
-  onChange: (patch: Partial<ShapeState>) => void
-  hint: string
-}) {
-  return (
-    <Card title="Channel section" hint={hint}>
-      <Pick label="Shape" value={shape.kind} onChange={(v) => onChange({ kind: v as ShapeKind })}
-        options={[
-          ['trap', 'Trapezoidal — b, side slope z'],
-          ['rect', 'Rectangular — b'],
-          ['tri', 'Triangular — side slope z'],
-          ['circle', 'Circular pipe — D'],
-        ]} />
-      {(shape.kind === 'rect' || shape.kind === 'trap') && (
-        <Num label="Bottom width b" unit="m" value={parseFloat(shape.b) || 0} onChange={(v) => onChange({ b: String(v) })} min={0.05} max={50} step="0.1" />
-      )}
-      {(shape.kind === 'trap' || shape.kind === 'tri') && (
-        <Num label="Side slope z (zH : 1V)" value={parseFloat(shape.z) || 0} onChange={(v) => onChange({ z: String(v) })} min={0} max={10} step="0.25" />
-      )}
-      {shape.kind === 'circle' && (
-        <Num label="Diameter D" unit="m" value={parseFloat(shape.D) || 0} onChange={(v) => onChange({ D: String(v) })} min={0.1} max={10} step="0.1" />
-      )}
-    </Card>
   )
 }
 
