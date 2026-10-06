@@ -1,45 +1,25 @@
 import { useMemo, useState } from 'react'
-import { scrollTop } from '../lib/useScrollTop'
 import { FIXTURE_LIST, type FixtureCount, type Occupancy, totalWSFU, totalDFU } from '../engine/plumbingFixtures'
 import { GuidedTour } from '../components/GuidedTour'
 import { TourButton } from '../components/TourButton'
 import { PLUMBING_STEPS } from '../lib/plumbingTour'
 import { useTour } from '../lib/useTour'
-import { designWaterSupply, waterSupplySolution, HAZEN_C, type HunterSystem, type WaterSupplyInput } from '../engine/waterSupply'
+import { designWaterSupply, waterSupplySolution, HAZEN_C, V_MAX, type HunterSystem, type WaterSupplyInput } from '../engine/waterSupply'
 import { designDrainage, drainageSolution } from '../engine/drainage'
-import { designSepticTank, septicSolution } from '../engine/septicTank'
-import { WorkedSolution } from '../components/WorkedSolution'
-import { ReportControls } from '../components/ReportControls'
-import { PageHeader, CalcBody } from '../components/calc'
+import { designSepticTank, septicSolution, FREEBOARD_M } from '../engine/septicTank'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard, type ResultRow } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { PressureBudget, DwvDiagram, SepticSection } from '../components/plumbingSketches'
 
-function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
 const f1 = (n: number) => (Number.isFinite(n) ? n.toFixed(1) : '—')
 const f0 = (n: number) => (Number.isFinite(n) ? Math.round(n).toString() : '—')
-
-function Field({ label, value, onChange, unit, step = 'any', hint }: {
-  label: string; value: number; onChange: (v: number) => void; unit?: string; step?: string; hint?: string
-}) {
-  return (
-    <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
-      <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-field-line px-2.5 py-1.5" />
-      {hint && <span className="mt-0.5 text-[10px] text-faint">{hint}</span>}
-    </label>
-  )
-}
-
-function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
-  return (
-    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
-      <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
-    </div>
-  )
-}
+const st = (ok: boolean) => (ok ? 'pass' as const : 'fail' as const)
+const PSI = 6.89476
 
 type Tab = 'supply' | 'drainage' | 'septic'
+const TABS: [Tab, string][] = [['supply', 'Water Supply'], ['drainage', 'Drainage (DWV)'], ['septic', 'Septic Tank']]
 
 export default function PlumbingDesign() {
   const [tab, setTab] = useState<Tab>('supply')
@@ -52,14 +32,14 @@ export default function PlumbingDesign() {
   const [counts, setCounts] = useState<Record<string, number>>({
     'water-closet': 2, 'shower': 2, 'lavatory': 2, 'hose-bibb': 4, 'kitchen-sink': 1,
   })
-  const setCount = (id: string, v: number) => setCounts((c) => ({ ...c, [id]: Math.max(0, Math.round(v)) }))
+  const setCount = (id: string, v: number) => setCounts((c) => ({ ...c, [id]: Math.max(0, Math.round(v || 0)) }))
   const items: FixtureCount[] = useMemo(
     () => FIXTURE_LIST.map((f) => ({ id: f.id, count: counts[f.id] ?? 0 })).filter((i) => i.count > 0),
     [counts])
   const wsfu = totalWSFU(items, occ)
   const dfu = totalDFU(items, occ)
 
-  // Water-supply tab inputs (defaults = Module 2 design problem).
+  // Water-supply inputs (defaults = Module 2 design problem).
   const [Lpipe, setLpipe] = useState(21)
   const [fittingLength, setFittingLength] = useState(0)
   const [riseZ, setRiseZ] = useState(5)
@@ -70,7 +50,7 @@ export default function PlumbingDesign() {
   const [flowOverride, setFlowOverride] = useState(0)   // L/s; 0 ⇒ use Hunter's curve
   const [material, setMaterial] = useState<keyof typeof HAZEN_C>('copper')
 
-  // memoized so the two solves below don't re-run on every unrelated render
+  // memoized so the solves below don't re-run on every unrelated render
   const supplyInput: WaterSupplyInput = useMemo(() => ({
     items, occupancy: occ, hunterSystem, designFlowLps: flowOverride > 0 ? flowOverride : undefined,
     Lpipe, fittingLength, riseZ, pMainKPa: pMain, pMeterKPa: pMeter, pFixtureKPa: pFixture, material,
@@ -78,188 +58,222 @@ export default function PlumbingDesign() {
   const supply = useMemo(() => designWaterSupply(supplyInput), [supplyInput])
   const supplySteps = useMemo(() => waterSupplySolution(supplyInput, supply), [supplyInput, supply])
 
-  // Drainage (DWV) tab inputs.
+  // Drainage (DWV) inputs.
   const [slopePct, setSlopePct] = useState(2)
   const drainage = useMemo(() => designDrainage({ items, occupancy: occ, slopePct }), [items, occ, slopePct])
   const drainageSteps = useMemo(() => drainageSolution({ items, occupancy: occ }, drainage), [items, occ, drainage])
 
-  // Septic tank (OSST) tab inputs.
+  // Septic tank (OSST) inputs.
   const [tankWidth, setTankWidth] = useState(2.0)
   const [liquidDepth, setLiquidDepth] = useState(1.2)
   const septic = useMemo(() => designSepticTank({ dfu, width: tankWidth, liquidDepth }), [dfu, tankWidth, liquidDepth])
   const septicSteps = useMemo(() => septicSolution(septic), [septic])
 
-  const tabBtn = (id: Tab, label: string) => (
-    <button type="button" onClick={() => { setTab(id); scrollTop() }}
-      className={`border-b-2 px-1 pb-1.5 text-sm font-semibold ${tab === id ? 'border-brand text-brand' : 'border-transparent text-faint hover:text-muted'}`}>
-      {label}
-    </button>
+  const pipeLabel = supply.pipe.size ? `${supply.pipe.size.label} (${f1(supply.pipe.size.idMm)} mm ID)` : '—'
+  const avail = Math.max(supply.availableForFriction, 0)
+  const septicReqM3 = septic.capacityL / 1000
+  const drainWcOK = drainage.wcCount === 0 || drainage.drainMm >= 75
+
+  const report = {
+    docCode: 'P-01',
+    ok: supply.ok && drainage.ok && septic.ok,
+    governing: `${f0(wsfu)} WSFU → ${pipeLabel} · ${f0(dfu)} DFU → drain ⌀${f0(drainage.drainMm)} · tank ${f2(septic.width)} × ${f2(septic.length)} m`,
+    stats: [
+      { label: 'Supply pipe', value: supply.pipe.size?.label ?? '—', unit: material },
+      { label: 'Drain / vent', value: `${f0(drainage.drainMm)} / ${f0(drainage.ventMm)}`, unit: 'mm' },
+      { label: 'Septic capacity', value: f2(septicReqM3), unit: 'm³' },
+    ],
+    checks: [
+      { name: 'Supply friction / available', ratio: avail > 0 ? supply.pipe.frictionDrop / avail : Infinity, ok: supply.pipe.frictionOK },
+      { name: `Supply velocity / ${V_MAX} m/s`, ratio: supply.pipe.velocity / V_MAX, ok: supply.pipe.velocityOK },
+      { name: 'Septic required / provided volume', ratio: septic.providedVol > 0 ? septicReqM3 / septic.providedVol : Infinity, ok: septic.capacityOK },
+    ],
+    data: [
+      ['Occupancy', occ],
+      ['Fixtures', items.map((i) => `${i.count} ${FIXTURE_LIST.find((f) => f.id === i.id)?.label ?? i.id}`).join(', ') || '—'],
+      ['Supply / drainage units', `${f0(wsfu)} WSFU / ${f0(dfu)} DFU`],
+      ['Pipe length + fittings', `${f1(Lpipe)} + ${f1(fittingLength)} m`],
+      ['Rise to highest fixture Z', `${f1(riseZ)} m`],
+      ['Main / meter / residual', `${f1(pMain)} / ${f1(pMeter)} / ${f1(pFixture)} kPa`],
+      ['Design flow', `${f2(supply.designFlowLps)} L/s (${supply.flowSource === 'override' ? 'override' : "Hunter's curve"})`],
+      ['Supply pipe', `${pipeLabel}, v = ${f2(supply.pipe.velocity)} m/s`],
+      ['Building drain', `⌀${f0(drainage.drainMm)} mm at ${slopePct}%, vent ⌀${f0(drainage.ventMm)} mm`],
+      ['Septic tank (internal)', `${f2(septic.width)} × ${f2(septic.length)} × ${f2(septic.totalHeight)} m, liquid ${f2(septic.liquidDepth)} m`],
+    ] as [string, string][],
+    steps: [...supplySteps, ...drainageSteps, ...septicSteps],
+  }
+
+  const actions = (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-0.5 rounded-md border border-field-line bg-field p-0.5" role="tablist" aria-label="Design">
+        {TABS.map(([v, t]) => (
+          <button key={v} type="button" role="tab" aria-selected={tab === v} onClick={() => setTab(v)}
+            className={`rounded px-3 py-1.5 text-[11.5px] font-semibold ${tab === v ? 'bg-brand text-on-solid' : 'text-muted hover:text-ink'}`}>
+            {t}
+          </button>
+        ))}
+      </div>
+      <TourButton onClick={tour.start} label="Guide" />
+    </div>
   )
 
-  return (
-        <div>
-      <PageHeader title="Plumbing System Design" badges={['RNPCP 2000']} />
-      <CalcBody wide>
-        <div className="space-y-5">
-      <ReportControls title="Plumbing Design Report" badges={['RNPCP 2000']} />
-      <p className="mt-2 text-sm text-muted">
-        Water supply, sanitary drainage (DWV) and on-site sewage treatment to the Revised National Plumbing Code
-        of the Philippines (RNPCP 2000). Set the fixture schedule once; every tab reads from it.
-      </p>
+  const fixtureGroup = (
+    <div data-tour="fixture-schedule">
+      <InputGroup title="Fixture schedule" hint={`Feeds every tab · ${f0(wsfu)} WSFU · ${f0(dfu)} DFU`}>
+        <div className="col-span-2">
+          <Pick label="Occupancy" value={occ} onChange={setOcc} options={[['private', 'Private'], ['public', 'Public']]} />
+        </div>
+        {FIXTURE_LIST.map((f) => (
+          <Num key={f.id} label={f.label} value={counts[f.id] ?? 0} onChange={(v) => setCount(f.id, v)} step="1" min={0}
+            hint={`WSFU ${f.wsfu[occ]} · DFU ${f.dfu[occ]}`} />
+        ))}
+      </InputGroup>
+    </div>
+  )
 
-      {/* Shared fixture schedule */}
-      <section className="rail-card rounded-lg border border-hairline bg-sheet p-4" data-tour="fixture-schedule">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[13.5px] font-bold text-ink">Fixture schedule</h2>
-          <label className="flex items-center gap-2 text-sm">
-            <span className="font-medium text-muted">Occupancy</span>
-            <select value={occ} onChange={(e) => setOcc(e.target.value as Occupancy)}
-              className="rounded-md border border-field-line px-2 py-1">
-              <option value="private">Private</option>
-              <option value="public">Public</option>
-            </select>
-          </label>
-        </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
-          {FIXTURE_LIST.map((f) => (
-            <label key={f.id} className="flex items-center justify-between gap-2 text-sm">
-              <span className="text-muted" title={`WSFU ${f.wsfu[occ]} · DFU ${f.dfu[occ]}`}>{f.label}</span>
-              <input type="number" min={0} step={1} value={counts[f.id] ?? 0}
-                onChange={(e) => setCount(f.id, num(e.target.value))}
-                className="w-16 rounded-md border border-field-line px-2 py-1 text-right" />
-            </label>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 border-t border-hairline-2 pt-2 text-sm">
-          <span className="text-muted">Total supply units <b className="font-mono text-ink">{f0(wsfu)} WSFU</b></span>
-          <span className="text-muted">Total drainage units <b className="font-mono text-ink">{f0(dfu)} DFU</b></span>
-        </div>
-      </section>
-
-      {/* Tabs */}
-      <div className="mt-6 flex items-center gap-5 border-b border-hairline">
-        {tabBtn('supply', 'Water Supply')}
-        {tabBtn('drainage', 'Drainage (DWV)')}
-        {tabBtn('septic', 'Septic Tank')}
-        <span className="ml-auto pb-1"><TourButton onClick={tour.start} label="Guide" /></span>
+  const supplyInputs = (
+      <div data-tour="supply-panel">
+        <InputGroup title="Supply run and pressures">
+          <Num label="Pipe length" unit="m" value={Lpipe} onChange={setLpipe} min={0} />
+          <Num label="Fittings (equiv. L)" unit="m" value={fittingLength} onChange={setFittingLength} min={0} hint="Table A-2" />
+          <Num label="Highest fixture rise Z" unit="m" value={riseZ} onChange={setRiseZ} />
+          <Pick label="System (Chart A-2/A-3)" value={hunterSystem} onChange={setHunterSystem}
+            options={[['tank', 'Flush tanks (A-2)'], ['valve', 'Flush valves (A-3)']]} />
+          <Num label="Design flow override" unit="L/s" value={flowOverride} onChange={setFlowOverride} step="0.01" min={0} hint="0 = use Hunter's curve" />
+          <Pick label="Pipe material" value={material} onChange={setMaterial}
+            options={(Object.keys(HAZEN_C) as (keyof typeof HAZEN_C)[]).map((m) => [m, `${m} (C = ${HAZEN_C[m]})`])} />
+          <Num label="Main pressure" unit="kPa" value={pMain} onChange={setPMain} min={0} hint={`${f0(pMain / PSI)} psi`} />
+          <Num label="Meter drop" unit="kPa" value={pMeter} onChange={setPMeter} min={0} hint="Chart A-1" />
+          <Num label="Residual (fixture)" unit="kPa" value={pFixture} onChange={setPFixture} min={0} hint={`${f0(pFixture / PSI)} psi`} />
+        </InputGroup>
       </div>
+  )
+  const drainageInputs = (
+      <div data-tour="drainage-panel">
+        <InputGroup title="Drainage run">
+          <div className="col-span-2">
+            <Pick label="Sewer slope" value={String(slopePct)} onChange={(v) => setSlopePct(parseFloat(v))}
+              options={[['2', '2% (21 mm/m)'], ['1', '1% (10.5 mm/m)'], ['0.5', '0.5% (5.3 mm/m)']]} />
+          </div>
+        </InputGroup>
+      </div>
+  )
+  const septicInputs = (
+      <div data-tour="septic-panel">
+        <InputGroup title="Tank geometry">
+          <Num label="Plan width" unit="m" value={tankWidth} onChange={setTankWidth} step="0.1" min={0.1} hint="≥ 0.9 m" />
+          <Num label="Liquid depth" unit="m" value={liquidDepth} onChange={setLiquidDepth} step="0.1" min={0.1} hint="0.6–1.8 m" />
+        </InputGroup>
+      </div>
+  )
 
-      {tab === 'supply' && (
-        <>
-          <section className="rail-card rounded-lg border border-hairline bg-sheet p-4" data-tour="supply-panel">
-            <h2 className="mb-3 text-[13.5px] font-bold text-ink">Supply run &amp; pressures</h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Field label="Pipe length" unit="m" value={Lpipe} onChange={setLpipe} />
-              <Field label="Fittings (equiv. L)" unit="m" value={fittingLength} onChange={setFittingLength} hint="Table A-2" />
-              <Field label="Highest fixture rise Z" unit="m" value={riseZ} onChange={setRiseZ} />
-              <label className="flex flex-col text-sm">
-                <span className="mb-1 font-medium text-muted">System (Chart A-2/A-3)</span>
-                <select value={hunterSystem} onChange={(e) => setHunterSystem(e.target.value as HunterSystem)}
-                  className="rounded-md border border-field-line px-2.5 py-1.5">
-                  <option value="tank">Flush tanks (A-2)</option>
-                  <option value="valve">Flush valves (A-3)</option>
-                </select>
-              </label>
-              <Field label="Design flow override" unit="L/s" value={flowOverride} onChange={setFlowOverride} step="0.01" hint="0 = use Hunter's curve" />
-              <Field label="Main pressure" unit="kPa" value={pMain} onChange={setPMain} hint={`${f0(pMain / 6.89476)} psi`} />
-              <Field label="Meter drop" unit="kPa" value={pMeter} onChange={setPMeter} hint="Chart A-1" />
-              <Field label="Residual (fixture)" unit="kPa" value={pFixture} onChange={setPFixture} hint={`${f0(pFixture / 6.89476)} psi`} />
-              <label className="flex flex-col text-sm">
-                <span className="mb-1 font-medium text-muted">Pipe material</span>
-                <select value={material} onChange={(e) => setMaterial(e.target.value as keyof typeof HAZEN_C)}
-                  className="rounded-md border border-field-line px-2.5 py-1.5">
-                  {Object.keys(HAZEN_C).map((m) => <option key={m} value={m}>{m} (C = {HAZEN_C[m]})</option>)}
-                </select>
-              </label>
-            </div>
-          </section>
+  const view = tab === 'supply' ? {
+    checks: <>
+      <CheckCard title="Supply pipe" basis={`smallest size ≥ 19 mm meeting both limits · ${supply.pipe.governedBy}`} status={st(supply.ok)}
+        value={supply.pipe.size?.label ?? '—'}
+        pairs={[{ label: 'Design flow', value: `${f2(supply.designFlowLps)} L/s` }, { label: 'ID', value: supply.pipe.size ? `${f1(supply.pipe.size.idMm)} mm` : '—' }]} />
+      <CheckCard title="Friction" basis="Hazen-Williams over the developed length" status={st(supply.pipe.frictionOK)}
+        value={f1(supply.pipe.frictionDrop)} unit="kPa" ratio={avail > 0 ? supply.pipe.frictionDrop / avail : undefined} ratioLabel="drop ÷ available"
+        pairs={[{ label: 'Available', value: `${f1(supply.availableForFriction)} kPa` }, { label: 'Length', value: `${f1(supply.developedLength)} m` }]} />
+      <CheckCard title="Velocity" basis={`v ≤ ${V_MAX} m/s`} status={st(supply.pipe.velocityOK)}
+        value={f2(supply.pipe.velocity)} unit="m/s" ratio={supply.pipe.velocity / V_MAX} ratioLabel={`v ÷ ${V_MAX}`} />
+    </>,
+    drawing: { title: 'Pressure budget', node: <div data-pdf-drawing>
+      <PressureBudget pMain={pMain} pMeter={pMeter} pStatic={supply.staticKPa} pResidual={pFixture}
+        friction={supply.pipe.frictionDrop} pipeLabel={pipeLabel} />
+    </div> },
+    caption: "Design flow from Hunter's curve (Charts A-2/A-3) — override with a chart-read flow if needed. Friction by Hazen-Williams, the physics behind Charts A-4…A-7. Minimum service pipe 19 mm (¾\"); velocity capped at 3 m/s.",
+    results: [
+      { check: 'Maximum demand', basis: 'ΣFU × 8', demand: `${f2(supply.demand.maxLps)} L/s`, status: 'info' as const },
+      { check: 'Design flow', basis: supply.flowSource === 'override' ? 'chart-read override' : "Hunter's curve", demand: `${f2(supply.designFlowLps)} L/s`, status: 'info' as const },
+      { check: 'Static head', basis: 'γw·Z', demand: `${f1(supply.staticKPa)} kPa`, status: 'info' as const },
+      { check: 'Available for friction', basis: 'main − meter − static − residual', demand: `${f1(supply.availableForFriction)} kPa`, status: st(supply.availableForFriction > 0) },
+      { check: 'Allowable gradient', basis: 'per 30.4 m of developed length', demand: `${f1(supply.allowablePer30m)} kPa`, status: 'info' as const },
+      { check: 'Friction at size', basis: pipeLabel, demand: `${f1(supply.pipe.frictionDrop)} kPa`, limit: `${f1(avail)} kPa`, ratio: avail > 0 ? supply.pipe.frictionDrop / avail : undefined, status: st(supply.pipe.frictionOK) },
+      { check: 'Velocity at size', basis: pipeLabel, demand: `${f2(supply.pipe.velocity)} m/s`, limit: `${V_MAX} m/s`, ratio: supply.pipe.velocity / V_MAX, status: st(supply.pipe.velocityOK) },
+    ] as ResultRow[],
+    steps: supplySteps,
+  } : tab === 'drainage' ? {
+    checks: <>
+      <CheckCard title="Drain" basis="Table 7-5 · no WC into a drain < 75 mm" status={st(drainWcOK)}
+        value={`⌀${f0(drainage.drainMm)}`} unit="mm"
+        pairs={[{ label: 'DFU', value: slopePct <= 1 ? `${f0(drainage.dfu)} → ${f1(drainage.effectiveDfu)}` : f0(drainage.dfu) }, { label: 'Max length', value: `${f0(drainage.maxDrainM)} m` }]} />
+      <CheckCard title="Vent" basis="≥ 32 mm and ≥ ½ the drain" status={st(drainage.ventOK)}
+        value={`⌀${f0(drainage.ventMm)}`} unit="mm" pairs={[{ label: 'Max length', value: `${f0(drainage.maxVentM)} m` }]} />
+      <CheckCard title="Water closets per stack" basis="max 4 on one stack" status={drainage.wcStackWarn ? 'warn' : 'pass'}
+        value={f0(drainage.wcCount)} pairs={[{ label: 'Sewer min slope', value: `${f1(drainage.sewer.minPct)}%` }]} />
+    </>,
+    drawing: { title: 'Drainage and vent', node: <div data-pdf-drawing>
+      <DwvDiagram drainMm={drainage.drainMm} ventMm={drainage.ventMm} slopePct={slopePct} dfu={drainage.dfu} wcCount={drainage.wcCount} />
+    </div> },
+    caption: 'Drain/vent size and maximum developed length from Table 7-5; a vent is ≥ 32 mm and ≥ ½ the drain. No water closet into a drain < 75 mm. Building-sewer slope per §1206. On a 1% run the table capacity is ×0.8.',
+    results: [
+      { check: 'Drainage fixture units', basis: slopePct <= 1 ? '1% run: DFU ÷ 0.8' : 'Σ DFU', demand: f1(drainage.effectiveDfu), status: 'info' as const },
+      { check: 'Drain (horizontal and vertical)', basis: 'Table 7-5', demand: `⌀${f0(drainage.drainMm)} mm`, limit: drainage.wcCount ? '≥ 75 mm with a WC' : undefined, status: st(drainWcOK) },
+      { check: 'Vent', basis: '≥ max(32, drain/2)', demand: `⌀${f0(drainage.ventMm)} mm`, status: st(drainage.ventOK) },
+      { check: 'Max developed length', basis: 'Table 7-5', demand: `drain ${f0(drainage.maxDrainM)} m · vent ${f0(drainage.maxVentM)} m`, status: 'info' as const },
+      { check: 'Building-sewer min slope', basis: '§1206', demand: `${f1(drainage.sewer.minPct)}% (${f1(drainage.sewer.mmPerM)} mm/m)`, status: st(slopePct >= drainage.sewer.minPct) },
+      ...(drainage.wcStackWarn ? [{ check: 'Water closets on one stack', basis: 'max 4 — split the stack', demand: f0(drainage.wcCount), limit: '4', status: 'warn' as const }] : []),
+    ] as ResultRow[],
+    steps: drainageSteps,
+  } : {
+    checks: <>
+      <CheckCard title="Capacity" basis="Table B-2 by DFU" status={st(septic.capacityOK)}
+        value={f2(septic.providedVol)} unit="m³" ratio={septic.providedVol > 0 ? septicReqM3 / septic.providedVol : undefined} ratioLabel="required ÷ provided"
+        pairs={[{ label: 'Required', value: `${f0(septic.capacityL)} L` }, { label: 'Length', value: `${f2(septic.length)} m` }]} />
+      <CheckCard title="Liquid depth" basis="0.6 – 1.8 m" status={st(septic.depthOK)} value={f2(septic.liquidDepth)} unit="m"
+        pairs={[{ label: 'Freeboard', value: `${f0(FREEBOARD_M * 1000)} mm` }, { label: 'Height', value: `${f2(septic.totalHeight)} m` }]} />
+      <CheckCard title="Chambers" basis="digestive ≥ 2 m³, ≥ 2/3 · leaching ≥ 1 m³" status={st(septic.inletVolOK && septic.inletDimOK && septic.outletVolOK)}
+        value={`${f2(septic.inletVol)} + ${f2(septic.outletVol)}`} unit="m³"
+        pairs={[{ label: 'Digestive L', value: `${f2(septic.inletLength)} m` }, { label: 'Leaching L', value: `${f2(septic.outletLength)} m` }]} />
+    </>,
+    drawing: { title: 'Septic tank section', node: <div data-pdf-drawing>
+      <SepticSection length={septic.length} inletLength={septic.inletLength} outletLength={septic.outletLength}
+        liquidDepth={septic.liquidDepth} totalHeight={septic.totalHeight} width={septic.width} />
+    </div> },
+    caption: 'Capacity from Table B-2 (by DFU). L = V/(w·d); digestive chamber 2/3 (≥ 2 m³ and ≥ 2/3 of the total), leaching 1/3 (≥ 1 m³). Liquid depth 0.6–1.8 m; side walls 228.6 mm above the liquid. Two 508 mm manholes required.',
+    results: [
+      { check: 'Drainage fixture units', basis: 'Σ DFU', demand: f0(septic.dfu), status: 'info' as const },
+      { check: 'Minimum capacity', basis: 'Table B-2', demand: `${f0(septic.capacityL)} L`, status: 'info' as const },
+      { check: 'Plan length', basis: 'V / (w·d), up to 0.1 m', demand: `${f2(septic.length)} m`, status: st(septic.capacityOK) },
+      { check: 'Overall height', basis: `liquid + ${FREEBOARD_M * 1000} mm`, demand: `${f2(septic.totalHeight)} m`, status: st(septic.depthOK) },
+      { check: 'Digestive chamber', basis: '≥ 2 m³, ≥ 2/3 total', demand: `${f2(septic.inletVol)} m³`, limit: '2.00 m³', status: st(septic.inletVolOK && septic.inletDimOK) },
+      { check: 'Leaching chamber', basis: '≥ 1 m³', demand: `${f2(septic.outletVol)} m³`, limit: '1.00 m³', status: st(septic.outletVolOK) },
+      { check: 'Provided liquid volume', basis: 'w·L·d', demand: `${f2(septic.providedVol)} m³`, limit: `${f2(septicReqM3)} m³`, ratio: septic.providedVol > 0 ? septicReqM3 / septic.providedVol : undefined, status: st(septic.capacityOK) },
+    ] as ResultRow[],
+    steps: septicSteps,
+  }
 
-          <section className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-            <h2 className="mb-2 text-[13.5px] font-bold text-ink">Results</h2>
-            <Out label="Maximum demand (ΣFU×8)" value={`${f1(supply.demand.maxGpm)} gpm · ${f2(supply.demand.maxLps)} L/s`} />
-            <Out label={`Design flow (${supply.flowSource === 'override' ? 'chart' : "Hunter's curve"})`} value={`${f1(supply.designFlowGpm)} gpm · ${f2(supply.designFlowLps)} L/s`} />
-            <Out label="Static head (γw·Z)" value={`${f1(supply.staticKPa)} kPa`} />
-            <Out label="Available for friction" value={`${f1(supply.availableForFriction)} kPa`} ok={supply.availableForFriction > 0} />
-            <Out label="Developed length" value={`${f1(supply.developedLength)} m · allow ≈ ${f1(supply.allowablePer30m)} kPa/30.4 m`} />
-            <Out label="Recommended pipe" value={supply.pipe.size ? `${supply.pipe.size.label} (${f1(supply.pipe.size.idMm)} mm ID)` : '—'} ok={!!supply.pipe.size && supply.ok} />
-            <Out label="Velocity at size" value={`${f2(supply.pipe.velocity)} m/s`} ok={supply.pipe.velocityOK} />
-            <Out label="Friction at size" value={`${f1(supply.pipe.frictionDrop)} kPa`} ok={supply.pipe.frictionOK} />
-            <p className="mt-2 text-[10px] text-muted">
-              Design flow from Hunter's curve (Charts A-2/A-3) — override with a chart-read flow if needed.
-              Friction by Hazen-Williams (the physics behind Charts A-4…A-7). Minimum service pipe 19 mm (¾");
-              velocity capped at 3 m/s.
-            </p>
-          </section>
-
-          <div className="no-print">{supplySteps.length > 0 && <WorkedSolution steps={supplySteps} />}</div>
-        </>
-      )}
-
-      {tab === 'drainage' && (
-        <>
-          <section className="rail-card rounded-lg border border-hairline bg-sheet p-4" data-tour="drainage-panel">
-            <h2 className="mb-3 text-[13.5px] font-bold text-ink">Drainage run</h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <label className="flex flex-col text-sm">
-                <span className="mb-1 font-medium text-muted">Sewer slope</span>
-                <select value={slopePct} onChange={(e) => setSlopePct(num(e.target.value))}
-                  className="rounded-md border border-field-line px-2.5 py-1.5">
-                  <option value={2}>2% (21 mm/m)</option>
-                  <option value={1}>1% (10.5 mm/m)</option>
-                  <option value={0.5}>0.5% (5.3 mm/m)</option>
-                </select>
-              </label>
-            </div>
-          </section>
-          <section className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-            <h2 className="mb-2 text-[13.5px] font-bold text-ink">Results</h2>
-            <Out label="Drainage fixture units" value={`${f0(drainage.dfu)} DFU${slopePct <= 1 ? ` · design ${f1(drainage.effectiveDfu)} (1% ×1.25)` : ''}`} />
-            <Out label="Drain (horizontal & vertical)" value={`${f0(drainage.drainMm)} mm`} ok={drainage.wcCount === 0 || drainage.drainMm >= 75} />
-            <Out label="Vent" value={`${f0(drainage.ventMm)} mm`} ok={drainage.ventOK} />
-            <Out label="Max developed length" value={`drain ${f0(drainage.maxDrainM)} m · vent ${f0(drainage.maxVentM)} m`} />
-            <Out label="Building-sewer min slope" value={`${f1(drainage.sewer.minPct)}% (${f1(drainage.sewer.mmPerM)} mm/m)`} />
-            {drainage.wcStackWarn && <p className="mt-1 text-[11px] text-warn">⚠ {drainage.wcCount} water closets on one stack — the code allows max 4 per stack; split the stack.</p>}
-            <p className="mt-2 text-[10px] text-muted">
-              Drain/vent size &amp; max length from Table 7-5; a vent is ≥ 32 mm and ≥ ½ the drain. No water closet
-              into a drain &lt; 75 mm. Slope per §1206. Set the fixture schedule above.
-            </p>
-          </section>
-          <div className="no-print">{drainageSteps.length > 0 && <WorkedSolution steps={drainageSteps} />}</div>
-        </>
-      )}
-      {tab === 'septic' && (
-        <>
-          <section className="rail-card rounded-lg border border-hairline bg-sheet p-4" data-tour="septic-panel">
-            <h2 className="mb-3 text-[13.5px] font-bold text-ink">Tank geometry</h2>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Field label="Plan width" unit="m" value={tankWidth} onChange={setTankWidth} step="0.1" hint="≥ 0.9 m" />
-              <Field label="Liquid depth" unit="m" value={liquidDepth} onChange={setLiquidDepth} step="0.1" hint="0.6–1.8 m" />
-            </div>
-          </section>
-          <section className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-            <h2 className="mb-2 text-[13.5px] font-bold text-ink">Results</h2>
-            <Out label="Drainage fixture units" value={`${f0(septic.dfu)} DFU`} />
-            <Out label="Min capacity (Table B-2)" value={`${f0(septic.capacityL)} L · ${f2(septic.capacityL / 1000)} m³`} />
-            <Out label="Plan length" value={`${f2(septic.length)} m`} ok={septic.capacityOK} />
-            <Out label="Overall height" value={`${f2(septic.totalHeight)} m (liquid ${f1(septic.liquidDepth)} + 0.23 freeboard)`} ok={septic.depthOK} />
-            <Out label="Digestive chamber (2/3)" value={`${f2(tankWidth)} × ${f2(septic.inletLength)} × ${f2(septic.totalHeight)} m · ${f2(septic.inletVol)} m³`} ok={septic.inletVolOK && septic.inletDimOK} />
-            <Out label="Leaching chamber (1/3)" value={`${f2(tankWidth)} × ${f2(septic.outletLength)} × ${f2(septic.totalHeight)} m · ${f2(septic.outletVol)} m³`} ok={septic.outletVolOK} />
-            <Out label="Provided liquid volume" value={`${f2(septic.providedVol)} m³`} ok={septic.capacityOK} />
-            <p className="mt-2 text-[10px] text-muted">
-              Capacity from Table B-2 (by DFU). L = V/(w·d); inlet 2/3 (≥ 2 m³ &amp; ≥ 2/3 total), secondary 1/3
-              (≥ 1 m³). Liquid depth 0.6–1.8 m; side walls 228.6 mm above liquid. Two 508 mm manholes required.
-            </p>
-          </section>
-          <div className="no-print">{septicSteps.length > 0 && <WorkedSolution steps={septicSteps} />}</div>
-        </>
-      )}
-
+  return (
+    <>
+      <WorkspacePage title="Plumbing System" badges={['Plumbing', 'RNPCP 2000']}
+        intro="Water supply, sanitary drainage (DWV) and on-site sewage treatment to the Revised National Plumbing Code of the Philippines (RNPCP 2000). Set the fixture schedule once; every tab reads from it."
+        actions={actions}
+        report={report}
+        inputs={<>{fixtureGroup}{tab === 'supply' && supplyInputs}{tab === 'drainage' && drainageInputs}{tab === 'septic' && septicInputs}</>}
+        checks={view.checks}
+        summary={[
+          { label: 'Occupancy', value: occ },
+          { label: 'Fixture units', value: `${f0(wsfu)} WSFU · ${f0(dfu)} DFU` },
+          { label: 'Supply run', value: `${f1(Lpipe)} m + ${f1(fittingLength)} m fittings, rise ${f1(riseZ)} m` },
+          { label: 'Pressures', value: `main ${f1(pMain)}, meter ${f1(pMeter)}, residual ${f1(pFixture)} kPa` },
+        ]}
+        drawing={view.drawing}
+        resultsCaption={view.caption}
+        results={view.results}
+        steps={view.steps}
+        references={[
+          { topic: 'Fixture units', basis: 'WSFU and DFU by fixture and occupancy', source: 'RNPCP 2000 fixture-unit tables' },
+          { topic: 'Supply sizing', basis: "Hunter's curve, Method 1 pressure budget", source: 'RNPCP 2000 §609, Appendix A' },
+          { topic: 'Drain and vent sizing', basis: 'size and developed length by DFU', source: 'RNPCP 2000 Table 7-5' },
+          { topic: 'Building sewer', basis: 'minimum slope by diameter', source: 'RNPCP 2000 §1206' },
+          { topic: 'Septic tank', basis: 'capacity by DFU, two compartments', source: 'RNPCP 2000 Appendix B, Table B-2' },
+        ]}
+      />
       {tour.on && (
         <GuidedTour step={tour.step} index={tour.at} total={tour.total}
           onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
       )}
-        </div>
-      </CalcBody>
-    </div>
+    </>
   )
 }

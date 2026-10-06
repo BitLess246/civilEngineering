@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import 'katex/dist/katex.min.css'
 import {
-  bridgeRating,
+  bridgeRating, GAMMA_DC, GAMMA_DW, GAMMA_LL_INVENTORY,
   type RatingResult,
 } from '../engine/bridgeRating'
-import { Card, Num, Pick, ResultCard, Row } from '../components/qty'
-import { DrawingCard } from '../components/calc'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { DimBelow } from '../components/dims'
 import type { SolutionStep } from '../lib/solution'
 import { INK, MUTED, f2, f3 } from '../lib/influenceStyle'
 
@@ -88,143 +88,152 @@ export default function BridgeRating() {
     { title: 'Verdict', lines: [{ text: r.verdict }, ...r.notes.map((nt) => ({ text: nt }))] },
   ] : []
 
+  const loadSample = () => { setL(30); setS(2.4); setGirder('interior'); setDF(0); setDC(12); setDW(2); setMn(6000); setVn(1400); setIM(33); setLLMode('hl93') }
+  const st = (rf: number) => (rf >= 1 ? 'pass' as const : 'fail' as const)
+  const report = r ? {
+    docCode: 'BR-02',
+    ok: r.flexure.RF_inventory >= 1 && r.shear.RF_inventory >= 1,
+    governing: `${r.governing} governs · ${r.verdict}`,
+    stats: [
+      { label: 'Flexure RF inv.', value: f3(r.flexure.RF_inventory), unit: '' },
+      { label: 'Shear RF inv.', value: f3(r.shear.RF_inventory), unit: '' },
+      { label: 'DF', value: f2(r.DF), unit: DF > 0 ? 'override' : 'lever rule' },
+    ],
+    checks: [
+      { name: 'Flexure RF inventory ≥ 1', ratio: r.flexure.RF_inventory > 0 ? 1 / r.flexure.RF_inventory : null, ok: r.flexure.RF_inventory >= 1 },
+      { name: 'Flexure RF operating ≥ 1', ratio: r.flexure.RF_operating > 0 ? 1 / r.flexure.RF_operating : null, ok: r.flexure.RF_operating >= 1 },
+      { name: 'Shear RF inventory ≥ 1', ratio: r.shear.RF_inventory > 0 ? 1 / r.shear.RF_inventory : null, ok: r.shear.RF_inventory >= 1 },
+      { name: 'Shear RF operating ≥ 1', ratio: r.shear.RF_operating > 0 ? 1 / r.shear.RF_operating : null, ok: r.shear.RF_operating >= 1 },
+    ],
+    data: [
+      ['Span L', `${f2(L)} m`], ['Girder', `${girder}, S ${f2(S)} m`],
+      ['DC / DW per girder', `${f2(DC)} / ${f2(DW)} kN/m`], ['Mn / Vn', `${f2(Mn)} kN·m / ${f2(Vn)} kN`],
+      ['IM', `${f2(IM)} %`], ['Live load', llMode === 'hl93' ? 'HL-93 span walk' : `static ${f2(LLm)} kN·m / ${f2(LLv)} kN`],
+    ] as [string, string][],
+    steps,
+  } : undefined
+
   return (
-    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <ReportControls title="Bridge Rating Report" badges={['MBE design-load · HL-93']} />
-      <p className="mt-2 max-w-3xl text-sm text-muted">
-        AASHTO MBE design-load rating of a simple span: the HL-93 live load from the
-        wave-3 influence-line machinery (lever-rule distribution, truck/tandem walk,
-        lane load) rated against the girder's nominal flexural and shear resistances
-        at inventory (γLL = 1.75) and operating (γLL = 1.35) levels. Supply your own
-        static live-load effects when an FE model is available.
-      </p>
-
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <Card title="Span and deck">
-            <div className="sm:col-span-2 lg:col-span-3">
-              <button type="button"
-                onClick={() => { setL(30); setS(2.4); setGirder('interior'); setDF(0); setDC(12); setDW(2); setMn(6000); setVn(1400); setIM(33); setLLMode('hl93') }}
-                className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                Load the sample — 30 m span, interior girders at 2.4 m
-              </button>
-            </div>
-            <Num label="Span L" unit="m" value={L} onChange={setL} min={3} max={80} step="1" />
-            <Pick label="Girder row" value={girder} onChange={(v) => setGirder(v as 'interior' | 'exterior')}
-              options={[['interior', 'Interior girder'], ['exterior', 'Exterior girder']]} />
-            <Num label="Girder spacing S" unit="m" value={S} onChange={setS} min={1} max={6} step="0.1" />
-            {girder === 'exterior' && (
-              <Num label="Overhang d (edge → girder)" unit="m" value={overhang} onChange={setOverhang} min={0} max={2.5} step="0.05" />
-            )}
-            <Num label="DF override (0 = lever rule)" value={DF} onChange={setDF} min={0} max={3} step="0.05" />
-          </Card>
-
-          <Card title="Loads and resistances">
-            <Num label="DC per girder" unit="kN/m" value={DC} onChange={setDC} min={0} max={200} step="0.5" />
-            <Num label="DW per girder" unit="kN/m" value={DW} onChange={setDW} min={0} max={100} step="0.5" />
-            <Num label="Nominal Mn" unit="kN·m" value={Mn} onChange={setMn} min={10} max={100000} step="10" />
-            <Num label="Nominal Vn" unit="kN" value={Vn} onChange={setVn} min={10} max={20000} step="10" />
-            <Num label="Dynamic allowance IM" unit="%" value={IM} onChange={setIM} min={0} max={50} step="1" />
-            <Pick label="Live load" value={llMode} onChange={(v) => setLLMode(v as LLMode)}
-              options={[['hl93', 'HL-93 span walk'], ['override', 'Static LL from FE']]} />
-            {llMode === 'override' && (
-              <>
-                <Num label="LL moment (static)" unit="kN·m" value={LLm} onChange={setLLm} min={1} max={100000} step="10" />
-                <Num label="LL shear (static)" unit="kN" value={LLv} onChange={setLLv} min={1} max={20000} step="5" />
-              </>
-            )}
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          {r ? (
-            <>
-              <ResultCard title="Rating factors (governing)">
-                <Row label="Flexure RF" value={f3(r.flexure.RF_inventory)}
-                  sub={`inventory · operating ${f3(r.flexure.RF_operating)}`} />
-                <Row label="Shear RF" value={f3(r.shear.RF_inventory)}
-                  sub={`inventory · operating ${f3(r.shear.RF_operating)}`} />
-                <Row label="Governing effect" value={r.governing} sub={r.verdict} />
-              </ResultCard>
-
-              <ResultCard title="Load breakdown per girder">
-                <Row label="LL with IM — moment" value={`${f3(r.flexure.LLwithIM)} kN·m`}
-                  sub={`static ${f3(r.flexure.LLstatic)} · DF ${f2(r.DF)}`} />
-                <Row label="LL with IM — shear" value={`${f3(r.shear.LLwithIM)} kN`}
-                  sub={`static ${f3(r.shear.LLstatic)}`} />
-                <Row label="M DC + DW" value={`${f2(r.Mdc)} + ${f2(r.Mdw)} kN·m`} sub="wL²/8 each" />
-                <Row label="V DC + DW" value={`${f2(r.Vdc)} + ${f2(r.Vdw)} kN`} sub="wL/2 each" />
-              </ResultCard>
-
-              <DrawingCard title="Moment envelope vs capacity" meta="HL-93 per girder against φMn">
-                <DrawingFrame label="Rating envelope">
-                  <RatingEnvelope r={r} Mn={Mn} />
-                </DrawingFrame>
-              </DrawingCard>
-
-              <DrawingCard title="Rating bars" meta="RF at both levels — 1.0 is the pass line">
-                <DrawingFrame label="Rating factors">
-                  <RatingBars flex={r.flexure} shear={r.shear} />
-                </DrawingFrame>
-              </DrawingCard>
-
-              <WorkedSolution steps={steps} title="MBE rating — step by step" />
-            </>
-          ) : (
-            <ResultCard title="Check the inputs">
-              <p className="text-sm text-fail">
-                Give a positive span, non-negative dead loads and positive nominal
-                resistances. The exterior lever rule needs the deck overhang.
-              </p>
-            </ResultCard>
+    <WorkspacePage title="Bridge Rating" badges={['Bridges', 'AASHTO MBE design-load · HL-93']}
+      intro="AASHTO MBE design-load rating of a simple span: the HL-93 live load (lever-rule distribution, truck / tandem walk, lane load) rated against the girder's nominal flexural and shear resistances at inventory (γLL = 1.75) and operating (γLL = 1.35). Supply static live-load effects from an FE model when one is available."
+      report={report}
+      actions={<button type="button" onClick={loadSample}
+        className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
+        Load the 30 m sample
+      </button>}
+      inputs={<>
+        <InputGroup title="Span and deck">
+          <Num label="Span L" unit="m" value={L} onChange={setL} min={3} max={80} step="1" />
+          <Pick label="Girder row" value={girder} onChange={(v) => setGirder(v as 'interior' | 'exterior')}
+            options={[['interior', 'Interior girder'], ['exterior', 'Exterior girder']]} />
+          <Num label="Girder spacing S" unit="m" value={S} onChange={setS} min={1} max={6} step="0.1" />
+          {girder === 'exterior' && (
+            <Num label="Overhang d" unit="m" value={overhang} onChange={setOverhang} min={0} max={2.5} step="0.05" />
           )}
-        </div>
-      </div>
-    </div>
+          <Num label="DF override" value={DF} onChange={setDF} min={0} max={3} step="0.05" hint="0 uses the lever rule" />
+        </InputGroup>
+        <InputGroup title="Loads and resistances">
+          <Num label="DC per girder" unit="kN/m" value={DC} onChange={setDC} min={0} max={200} step="0.5" />
+          <Num label="DW per girder" unit="kN/m" value={DW} onChange={setDW} min={0} max={100} step="0.5" />
+          <Num label="Nominal Mn" unit="kN·m" value={Mn} onChange={setMn} min={10} max={100000} step="10" />
+          <Num label="Nominal Vn" unit="kN" value={Vn} onChange={setVn} min={10} max={20000} step="10" />
+          <Num label="Dynamic allowance IM" unit="%" value={IM} onChange={setIM} min={0} max={50} step="1" />
+          <Pick label="Live load" value={llMode} onChange={(v) => setLLMode(v as LLMode)}
+            options={[['hl93', 'HL-93 span walk'], ['override', 'Static LL from FE']]} />
+          {llMode === 'override' && (<>
+            <Num label="LL moment (static)" unit="kN·m" value={LLm} onChange={setLLm} min={1} max={100000} step="10" />
+            <Num label="LL shear (static)" unit="kN" value={LLv} onChange={setLLv} min={1} max={20000} step="5" />
+          </>)}
+        </InputGroup>
+      </>}
+      checks={r ? <>
+        <CheckCard title="Flexure" basis="RF at inventory" status={st(r.flexure.RF_inventory)} value={f3(r.flexure.RF_inventory)}
+          ratio={r.flexure.RF_inventory > 0 ? 1 / r.flexure.RF_inventory : undefined} ratioLabel="1 ÷ RF"
+          pairs={[{ label: 'Operating', value: f3(r.flexure.RF_operating) }, { label: 'LL + IM', value: `${f3(r.flexure.LLwithIM)} kN·m` }]} />
+        <CheckCard title="Shear" basis="RF at inventory" status={st(r.shear.RF_inventory)} value={f3(r.shear.RF_inventory)}
+          ratio={r.shear.RF_inventory > 0 ? 1 / r.shear.RF_inventory : undefined} ratioLabel="1 ÷ RF"
+          pairs={[{ label: 'Operating', value: f3(r.shear.RF_operating) }, { label: 'LL + IM', value: `${f3(r.shear.LLwithIM)} kN` }]} />
+        <CheckCard title="Governing" basis={r.governing} status="info" value={r.verdict} />
+      </> : <p className="text-sm text-fail">Give a positive span, non-negative dead loads and positive nominal resistances. The exterior lever rule needs the deck overhang.</p>}
+      summary={[
+        { label: 'Span', value: `${f2(L)} m, ${girder} girder at ${f2(S)} m` },
+        { label: 'Dead', value: `DC ${f2(DC)}, DW ${f2(DW)} kN/m` },
+        { label: 'Resistance', value: `Mn ${f2(Mn)} kN·m, Vn ${f2(Vn)} kN` },
+      ]}
+      drawing={r ? { title: 'Factored moment against capacity', node: <div className="space-y-4">
+        <div data-pdf-drawing><DrawingFrame label="Rating envelope"><RatingEnvelope r={r} /></DrawingFrame></div>
+        <DrawingFrame label="Rating factors"><RatingBars flex={r.flexure} shear={r.shear} /></DrawingFrame>
+      </div> } : undefined}
+      resultsCaption={r && r.notes.length ? r.notes.join(' ') : undefined}
+      results={r ? [
+        { check: 'Dead-load moment', basis: 'wL²/8 each', demand: `${f2(r.Mdc)} + ${f2(r.Mdw)} kN·m`, status: 'info' as const },
+        { check: 'Dead-load shear', basis: 'wL/2 each', demand: `${f2(r.Vdc)} + ${f2(r.Vdw)} kN`, status: 'info' as const },
+        { check: 'LL moment', basis: `static ${f3(r.flexure.LLstatic)} · DF ${f2(r.DF)}`, demand: `${f3(r.flexure.LLwithIM)} kN·m with IM`, status: 'info' as const },
+        { check: 'LL shear', basis: `static ${f3(r.shear.LLstatic)}`, demand: `${f3(r.shear.LLwithIM)} kN with IM`, status: 'info' as const },
+        { check: 'Flexure RF', basis: 'inventory · operating', demand: `${f3(r.flexure.RF_inventory)} · ${f3(r.flexure.RF_operating)}`, limit: '≥ 1.0', status: st(r.flexure.RF_inventory) },
+        { check: 'Shear RF', basis: 'inventory · operating', demand: `${f3(r.shear.RF_inventory)} · ${f3(r.shear.RF_operating)}`, limit: '≥ 1.0', status: st(r.shear.RF_inventory) },
+      ] : []}
+      steps={steps}
+      references={[
+        { topic: 'Rating equation', basis: 'RF = (φRn − γDC·DC − γDW·DW) / (γLL(1+IM)LL)', source: 'AASHTO MBE §6A.4.2.1' },
+        { topic: 'Load factors', basis: 'γDC 1.25, γDW 1.50; γLL 1.75 / 1.35', source: 'AASHTO LRFD Table 3.4.1-2 · MBE Table 6A.4.3.2.1-1' },
+        { topic: 'HL-93 and distribution', basis: 'truck / tandem walk; lever rule', source: 'AASHTO LRFD §3.6.1, §4.6.2.2' },
+      ]}
+    />
   )
 }
 
 // ── envelope drawing ─────────────────────────────────────────────────────
 
-function RatingEnvelope({ r, Mn }: { r: RatingResult; Mn: number }) {
-  const W = 640, Hh = 280
+function RatingEnvelope({ r }: { r: RatingResult }) {
+  // What the rating actually weighs, at INVENTORY: the factored dead-load
+  // moment γDC·MDC + γDW·MDW along the span, with γLL·(1+IM)·LL stacked on
+  // top, against φMn. Where the stack meets the capacity line, RF = 1. The
+  // drawing used to set the live-load envelope alone against φMn, which
+  // left out the dead load the rating subtracts first.
+  const W = 640, Hh = 300
   const x0 = 56, x1 = W - 40
-  const baseY = Hh - 46
-  const topY = 40
-  const Mmax = Math.max(r.hl.moment.value, 1)
-  const cap = 1.0 * Mn
-  const yPix = Math.min(baseY - topY - 30, 170)
-  const scale = yPix / Math.max(Mmax, cap)
-  const px = (x: number) => x0 + ((x1 - x0) * x) / r.L
+  const baseY = Hh - 66
+  const topY = 34
+  const L = r.L
+  const wD = GAMMA_DC * (r.Mdc * 8 / (L * L)) + GAMMA_DW * (r.Mdw * 8 / (L * L))    // kN/m, factored
+  const dead = (x: number) => (wD * x * (L - x)) / 2
+  // envelope SHAPE from the HL-93 walk, MAGNITUDE scaled to the rated LL
+  const k = r.hl.moment.value > 0 ? r.flexure.LLwithIM / r.hl.moment.value : 0
+  const pts = r.hl.envelope.map((e) => ({ x: e.x, d: dead(e.x), l: GAMMA_LL_INVENTORY * k * e.M }))
+  const cap = r.flexure.phiRn
+  const top = Math.max(cap, ...pts.map((p) => p.d + p.l), 1)
+  const scale = (baseY - topY) / (top * 1.08)
+  const px = (x: number) => x0 + ((x1 - x0) * x) / L
   const py = (M: number) => baseY - M * scale
-
-  const path = r.hl.envelope.map((e, i) => `${i === 0 ? 'M' : 'L'} ${px(e.x).toFixed(1)} ${py(e.M).toFixed(1)}`).join(' ')
-  const capY = py(cap)
-  const govX = px(r.hl.moment.section)
-
+  const deadPoly = `${px(0)},${baseY} ${pts.map((p) => `${px(p.x)},${py(p.d)}`).join(' ')} ${px(L)},${baseY}`
+  const stackTop = pts.map((p) => `${px(p.x)},${py(p.d + p.l)}`).join(' ')
+  const stackPoly = `${stackTop} ${[...pts].reverse().map((p) => `${px(p.x)},${py(p.d)}`).join(' ')}`
+  const gov = r.hl.moment.section
+  const govTot = dead(gov) + GAMMA_LL_INVENTORY * k * r.hl.moment.value
   return (
-    <svg viewBox={`0 0 ${W} ${Hh}`} className="w-full" role="img" aria-label="Moment envelope vs capacity">
-      {/* span outline */}
-      <line x1={x0} x2={x1} y1={baseY} y2={baseY} stroke={INK} strokeWidth="1.2" />
-      <circle cx={x0} cy={baseY} r={3} fill={INK} />
-      <circle cx={x1} cy={baseY} r={3} fill={INK} />
-      {/* capacity */}
-      <line x1={x0} x2={x1} y1={capY} y2={capY} stroke="#b45309" strokeWidth="1.6" strokeDasharray="7 4" />
-      <text x={x1} y={capY - 6} textAnchor="end" fontSize="10" fill="#b45309" fontFamily="var(--font-mono, monospace)">
-        φMn = {f3(cap)} kN·m
+    <svg viewBox={`0 0 ${W} ${Hh}`} className="w-full" role="img" aria-label="Factored moment against capacity">
+      <line x1={x0} x2={x1} y1={baseY} y2={baseY} stroke={INK} strokeWidth="1.4" />
+      <path d={`M ${x0} ${baseY} l -6 11 h 12 z`} fill={INK} />
+      <circle cx={x1} cy={baseY + 5.5} r={5.5} fill="none" stroke={INK} strokeWidth="1.3" />
+      <polygon points={deadPoly} fill="rgba(120,113,108,0.28)" stroke="none" />
+      <polygon points={stackPoly} fill="rgba(15,76,146,0.22)" stroke="none" />
+      <polyline points={stackTop} fill="none" stroke="rgba(15,76,146,0.9)" strokeWidth="1.8" />
+      <line x1={x0} x2={x1} y1={py(cap)} y2={py(cap)} stroke="#b45309" strokeWidth="1.6" strokeDasharray="7 4" />
+      <text x={x1} y={py(cap) - 6} textAnchor="end" fontSize="10" fill="#b45309" fontFamily="var(--font-mono, monospace)">φMn = {f3(cap)} kN·m</text>
+      <line x1={px(gov)} x2={px(gov)} y1={baseY} y2={py(govTot)} stroke={MUTED} strokeWidth="1" strokeDasharray="3 3" />
+      <text x={px(gov)} y={py(govTot) - 6} textAnchor="middle" fontSize="10" fill="rgba(15,76,146,0.95)" fontFamily="var(--font-mono, monospace)"
+        paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{f3(govTot)} kN·m at {f2(gov)} m</text>
+      <g fontSize="9.5" fontFamily="var(--font-mono, monospace)">
+        <rect x={x0} y={12} width={10} height={8} fill="rgba(120,113,108,0.28)" />
+        <text x={x0 + 14} y={19} fill={INK}>γDC·MDC + γDW·MDW</text>
+        <rect x={x0 + 170} y={12} width={10} height={8} fill="rgba(15,76,146,0.22)" />
+        <text x={x0 + 184} y={19} fill={INK}>+ γLL·(1+IM)·LL, inventory</text>
+      </g>
+      <DimBelow xA={x0} xB={x1} featY={baseY + 12} dY={baseY + 34} label={`L = ${f2(L)} m`} />
+      <text x={W / 2} y={Hh - 6} textAnchor="middle" fontSize="9" fill={MUTED} fontFamily="var(--font-mono, monospace)">
+        sagging drawn up · live-load shape from the HL-93 walk, scaled to the rated LL · where the stack meets φMn, RF = 1
       </text>
-      {/* envelope */}
-      <path d={path} fill="none" stroke="rgba(15,76,146,0.9)" strokeWidth="2" />
-      <text x={x0 + 8} y={py(Mmax) + 14} fontSize="10" fill="rgba(15,76,146,0.9)" fontFamily="var(--font-mono, monospace)">
-        HL-93 per girder · γ-side LL+IM = {f3(Mmax)} kN·m at {f2(r.hl.moment.section)} m
-      </text>
-      {/* governing section marker */}
-      <line x1={govX} x2={govX} y1={baseY} y2={py(Mmax)} stroke={MUTED} strokeWidth="1" strokeDasharray="3 3" />
-      <text x={govX + 6} y={baseY - 6} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-        section {f2(r.hl.moment.section)} m
-      </text>
-      <text x={x0} y={baseY + 18} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">x = 0</text>
-      <text x={x1} y={baseY + 18} textAnchor="end" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">x = {f2(r.L)} m</text>
     </svg>
   )
 }
