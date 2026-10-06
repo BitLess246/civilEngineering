@@ -2,13 +2,13 @@ import { useState, useMemo } from 'react'
 import {
   generalBearingCapacity, compareMethods, BEARING_METHOD_LABEL, type BearingMethod,
 } from '../engine/bearingGeneral'
-import { ReportControls } from '../components/ReportControls'
 import { SoilLayerPicker } from '../components/SoilLayerPicker'
-import { WorkedSolution } from '../components/WorkedSolution'
 import { buildBearingSolution } from '../lib/geotechPageSolutions'
-import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { FootingSection } from '../components/geotechSketches'
 import { f1, f2, f3 } from '../lib/format'
-import { PageHeader } from '../components/calc'
 
 // Split out of the old combined "Geotechnical toolkit" page. Bearing capacity
 // is reached from foundation design, earth pressure from retaining walls —
@@ -53,108 +53,80 @@ export default function BearingCapacity() {
   const r = solved.r
 
   return (
-        <div>
-      <PageHeader title="Bearing Capacity" badges={['Meyerhof', 'Hansen', 'Vesić']} />
-      <div className="mx-auto max-w-[1400px] px-5 py-6 sm:px-7">
-      <p className="no-print mt-1 max-w-3xl text-sm text-muted">
-        Shallow-foundation bearing capacity by the general equation, with shape, depth and
-        inclination factors and Meyerhof&rsquo;s effective area for eccentric load. Nq and Nc are
-        Prandtl/Reissner in all three methods; only Nγ and the shape/depth factors differ — so the
-        method is an explicit input and the result records which one produced it.
-      </p>
-      <ReportControls title="Bearing Capacity" badges={['Meyerhof', 'Hansen', 'Vesić']} />
-
-      <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
-        <div className="flex flex-col gap-5">
-          <Card title="Soil">
-            <div className="col-span-full">
-              <SoilLayerPicker want={['c', 'phiDeg', 'gamma', 'gammaSat']} onApply={(f) => {
-                if (f.c != null) setC(f.c)
-                if (f.phiDeg != null) setPhi(f.phiDeg)
-                if (f.gamma != null) setGamma(f.gamma)
-                if (f.gammaSat != null) setGammaSat(f.gammaSat)
-              }} />
-            </div>
-            <Num label="Cohesion c" unit="kPa" value={c} onChange={setC} />
-            <Num label="φ" unit="°" value={phi} onChange={setPhi} />
-            <Num label="γ (moist)" unit="kN/m³" value={gamma} onChange={setGamma} />
-            <Num label="γsat" unit="kN/m³" value={gammaSat} onChange={setGammaSat} />
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 text-[11.5px] font-semibold text-muted">Water table depth (m)</span>
-              <input type="number" step="0.5" value={dw} placeholder="none"
-                onChange={(e) => setDw(e.target.value === '' ? '' : parseFloat(e.target.value))}
-                className="rounded-md border border-field-line bg-field px-2.5 py-1.5 text-[13px]" />
-            </label>
-          </Card>
-
-          <Card title="Footing">
-            <Num label="Width B" unit="m" value={B} onChange={setB} />
-            {!strip && <Num label="Length L" unit="m" value={L} onChange={setL} />}
-            <Num label="Founding depth Df" unit="m" value={Df} onChange={setDf} />
-            <Num label="Eccentricity eB" unit="m" value={eB} onChange={setEB} />
-            <Num label="Load inclination β" unit="°" value={incl} onChange={setIncl} />
-            <label className="col-span-full flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={strip} onChange={(e) => setStrip(e.target.checked)} />
-              <span>Strip footing (L → ∞)</span>
-            </label>
-          </Card>
-
-          <Card title="Method &amp; safety">
-            <Pick label="Method" value={method} onChange={(v) => setMethod(v as BearingMethod)}
-              options={METHODS.map((m) => [m, BEARING_METHOD_LABEL[m]])} />
-            <Num label="Factor of safety" value={FS} onChange={setFS} step="0.5" />
-          </Card>
-        </div>
-
-        <div className="flex flex-col gap-5">
-          {solved.error && (
-            <p className="rounded-md border border-fail-line bg-fail-tint px-3 py-2 text-[12px] text-fail">{solved.error}</p>
-          )}
-          {r && (
-            <>
-              <ResultCard title="Capacity">
-                <Row label="Ultimate qult" value={`${f2(r.qult)} kPa`} />
-                <Row label="Net ultimate qnet" value={`${f2(r.qnet)} kPa`} />
-                <Row label={`Allowable NET (FS ${f1(FS)})`} value={`${f2(r.qallowNet)} kPa`}
-                  sub="compare a footing pressure to this" />
-                <Row label="Allowable gross" value={`${f2(r.qallowGross)} kPa`} />
-              </ResultCard>
-
-              <ResultCard title="Factors">
-                <Row label="Nc / Nq / Nγ" value={`${f2(r.Nc)} / ${f2(r.Nq)} / ${f2(r.Ngamma)}`} />
-                <Row label="Shape sc / sq / sγ" value={`${f3(r.sc)} / ${f3(r.sq)} / ${f3(r.sgamma)}`} />
-                <Row label="Depth dc / dq / dγ" value={`${f3(r.dc)} / ${f3(r.dq)} / ${f3(r.dgamma)}`} />
-                <Row label="Inclination ic / iq / iγ" value={`${f3(r.ic)} / ${f3(r.iq)} / ${f3(r.igamma)}`} />
-                <Row label="Effective B′" value={`${f2(r.effectiveB)} m`} />
-                <Row label="Surcharge q" value={`${f2(r.surcharge)} kPa`} />
-                <Row label="γ in the Nγ term" value={`${f2(r.gammaEffective)} kN/m³`} />
-              </ResultCard>
-
-              {all && (
-                <ResultCard title="All three methods, same footing">
-                  {METHODS.map((m) => (
-                    <Row key={m} label={BEARING_METHOD_LABEL[m]} value={`${f2(all[m].qult)} kPa`}
-                      sub={m === method ? 'selected' : undefined} />
-                  ))}
-                  <p className="mt-2 text-[10.5px] text-muted">
-                    They disagree by design. A bearing pressure quoted without naming its method is
-                    not reproducible.
-                  </p>
-                </ResultCard>
-              )}
-
-              {r.notes.length > 0 && (
-                <ul className="space-y-1 rounded-lg border border-warn-line bg-warn-tint p-3">
-                  {r.notes.map((n, k) => <li key={k} className="text-[11px] text-warn">{n}</li>)}
-                </ul>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {steps.length > 0 && <WorkedSolution steps={steps} />}
-    </div>
-    </div>
+    <WorkspacePage title="Bearing Capacity" badges={['Geotechnical', 'Meyerhof · Hansen · Vesić']}
+      intro="Shallow-foundation bearing capacity by the general equation, with shape, depth and inclination factors and Meyerhof's effective area for an eccentric load. Nq and Nc are Prandtl/Reissner in all three methods; only Nγ and the shape and depth factors differ, so the method is an explicit input and the result records which one produced it."
+      inputs={<>
+        <InputGroup title="Soil">
+          <div className="col-span-2">
+            <SoilLayerPicker want={['c', 'phiDeg', 'gamma', 'gammaSat']} onApply={(f) => {
+              if (f.c != null) setC(f.c)
+              if (f.phiDeg != null) setPhi(f.phiDeg)
+              if (f.gamma != null) setGamma(f.gamma)
+              if (f.gammaSat != null) setGammaSat(f.gammaSat)
+            }} />
+          </div>
+          <Num label="Cohesion c" unit="kPa" value={c} onChange={setC} />
+          <Num label="Friction φ" unit="°" value={phi} onChange={setPhi} />
+          <Num label="γ moist" unit="kN/m³" value={gamma} onChange={setGamma} />
+          <Num label="γ saturated" unit="kN/m³" value={gammaSat} onChange={setGammaSat} />
+          <label className="col-span-2 flex flex-col gap-1 text-[12.5px] font-semibold text-ink">
+            Water table depth (m, blank = none)
+            <input type="number" step="0.5" value={dw} placeholder="none"
+              onChange={(e) => setDw(e.target.value === '' ? '' : parseFloat(e.target.value))}
+              className="w-full rounded-md border border-field-line bg-surface px-2.5 py-1.5 text-sm font-normal" />
+          </label>
+        </InputGroup>
+        <InputGroup title="Footing">
+          <Num label="Width B" unit="m" value={B} onChange={setB} />
+          {!strip ? <Num label="Length L" unit="m" value={L} onChange={setL} /> : <div />}
+          <Num label="Founding depth Df" unit="m" value={Df} onChange={setDf} />
+          <Num label="Eccentricity eB" unit="m" value={eB} onChange={setEB} />
+          <Num label="Load inclination β" unit="°" value={incl} onChange={setIncl} />
+          <label className="col-span-2 flex items-center gap-2 text-[12.5px] font-semibold text-ink">
+            <input type="checkbox" checked={strip} onChange={(e) => setStrip(e.target.checked)} className="accent-brand" />
+            Strip footing (L → ∞)
+          </label>
+        </InputGroup>
+        <InputGroup title="Method and safety">
+          <div className="col-span-2">
+            <Pick label="Method" value={method} onChange={(v) => setMethod(v as BearingMethod)} options={METHODS.map((m) => [m, BEARING_METHOD_LABEL[m]])} />
+          </div>
+          <Num label="Factor of safety" value={FS} onChange={setFS} step="0.5" />
+        </InputGroup>
+      </>}
+      checks={r ? <>
+        <CheckCard title="Allowable net pressure" basis={`${BEARING_METHOD_LABEL[method]}, FS ${f1(FS)}`} status="info" value={f2(r.qallowNet)} unit="kPa"
+          formula="q_a,net = (q_ult − q) / FS"
+          pairs={[{ label: 'Ultimate', value: `${f2(r.qult)} kPa` }, { label: 'Allowable gross', value: `${f2(r.qallowGross)} kPa` }]} />
+        {all && <CheckCard title="Three methods" basis="same footing, q_ult" status="info" value={f2(all[method].qult)} unit="kPa selected"
+          pairs={METHODS.filter((m) => m !== method).map((m) => ({ label: BEARING_METHOD_LABEL[m], value: `${f2(all[m].qult)} kPa` }))} />}
+        <CheckCard title="Bearing factors" basis="Nc · Nq · Nγ" status="info" value={`${f2(r.Nc)} · ${f2(r.Nq)} · ${f2(r.Ngamma)}`}
+          pairs={[{ label: 'Effective B′', value: `${f2(r.effectiveB)} m` }, { label: 'γ in Nγ term', value: `${f2(r.gammaEffective)} kN/m³` }]} />
+      </> : (
+        <CheckCard title="Check the inputs" basis="bearing capacity" status="warn" pillLabel="CHECK" value="—" formula={solved.error ?? 'Check the inputs.'} />
+      )}
+      summary={[
+        { label: 'Soil', value: `c ${f2(c)} kPa, φ ${f2(phi)}°, γ ${f2(gamma)} kN/m³` },
+        { label: 'Footing', value: strip ? `strip, B ${f2(B)} m` : `${f2(B)} × ${f2(L)} m` },
+        { label: 'Founding depth', value: `${f2(Df)} m` },
+        { label: 'Water table', value: dw === '' ? 'none' : `${f2(dw)} m` },
+      ]}
+      drawing={r ? { title: 'Footing section', node: <div data-pdf-drawing><FootingSection B={B} Df={Df} dw={dw === '' ? undefined : dw} eB={eB} incl={incl} effectiveB={r.effectiveB} surcharge={r.surcharge} strip={strip} /></div> } : undefined}
+      resultsCaption={r && r.notes.length ? r.notes.join(' ') : undefined}
+      results={r ? [
+        { check: 'Ultimate q_ult', basis: BEARING_METHOD_LABEL[method], demand: `${f2(r.qult)} kPa`, status: 'info' as const },
+        { check: 'Net ultimate', basis: 'q_ult − q', demand: `${f2(r.qnet)} kPa`, status: 'info' as const },
+        { check: 'Allowable net', basis: `÷ FS ${f1(FS)}`, demand: `${f2(r.qallowNet)} kPa`, status: 'info' as const },
+        { check: 'Shape factors', basis: 'sc · sq · sγ', demand: `${f3(r.sc)} · ${f3(r.sq)} · ${f3(r.sgamma)}`, status: 'info' as const },
+        { check: 'Depth factors', basis: 'dc · dq · dγ', demand: `${f3(r.dc)} · ${f3(r.dq)} · ${f3(r.dgamma)}`, status: 'info' as const },
+        { check: 'Inclination factors', basis: 'ic · iq · iγ', demand: `${f3(r.ic)} · ${f3(r.iq)} · ${f3(r.igamma)}`, status: 'info' as const },
+      ] : [{ check: 'Capacity', basis: solved.error ?? 'invalid input', demand: '—', status: 'warn' as const }]}
+      steps={steps.length ? steps : [{ title: 'Check the inputs', lines: [{ text: solved.error ?? 'Check the inputs.' }] }]}
+      references={[
+        { topic: 'General bearing equation', basis: 'c Nc sc dc ic + q Nq sq dq iq + ½ γ B′ Nγ sγ dγ iγ', source: 'Meyerhof (1963); Hansen (1970); Vesić (1973)' },
+        { topic: 'Effective area', basis: 'B′ = B − 2e', source: 'Meyerhof (1953)' },
+        { topic: 'Water-table correction', basis: 'three cases on dw against Df and Df + B', source: 'Das, Principles of Foundation Engineering, Ch. 4' },
+      ]}
+    />
   )
 }
