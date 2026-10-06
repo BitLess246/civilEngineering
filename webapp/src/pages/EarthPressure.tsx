@@ -1,13 +1,13 @@
 import { useState, useMemo } from 'react'
 import { activeThrust, passiveThrust } from '../engine/geotech'
 import { coulombActiveThrust, coulombPassiveThrust, mononobeOkabe } from '../engine/coulomb'
-import { ReportControls } from '../components/ReportControls'
 import { SoilLayerPicker } from '../components/SoilLayerPicker'
-import { WorkedSolution } from '../components/WorkedSolution'
 import { buildEarthPressureSolution } from '../lib/geotechPageSolutions'
-import { Num, Card, ResultCard, Row } from '../components/qty'
+import { Num } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { WallPressure } from '../components/geotechSketches'
 import { f1, f2, f3 } from '../lib/format'
-import { PageHeader } from '../components/calc'
 
 // Split out of the old combined "Geotechnical toolkit" page, which stacked
 // earth pressure, bearing capacity and slope stability on one screen. They
@@ -62,95 +62,68 @@ export default function EarthPressure() {
 
   const notes = [...(coulomb.active?.notes ?? []), ...(coulomb.passive?.notes ?? []), ...(seismic.r?.notes ?? [])]
 
+  const act = coulomb.active
+  const errors = [coulomb.error, seismic.error].filter((e): e is string => !!e)
   return (
-        <div>
-      <PageHeader title="Lateral Earth Pressure" badges={['Rankine', 'Coulomb', 'NSCP 2015']} />
-      <div className="mx-auto max-w-[1400px] px-5 py-6 sm:px-7">
-      <p className="no-print mt-1 max-w-3xl text-sm text-muted">
-        Rankine and Coulomb active and passive thrust, with the Mononobe–Okabe seismic case.
-        Rankine needs a smooth vertical wall and level fill; Coulomb carries wall friction, an
-        inclined back face and a sloping backfill, and reduces exactly to Rankine when all three are zero.
-      </p>
-      <ReportControls title="Lateral Earth Pressure" badges={['Rankine', 'Coulomb', 'NSCP 2015']} />
-
-      <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
-        <div className="flex flex-col gap-5">
-          <Card title="Soil &amp; wall">
-            <div className="col-span-full">
-              <SoilLayerPicker want={['phiDeg', 'gamma']} onApply={(f) => {
-                if (f.phiDeg != null) setPhi(f.phiDeg)
-                if (f.gamma != null) setGamma(f.gamma)
-              }} />
-            </div>
-            <Num label="γ — unit weight" unit="kN/m³" value={gamma} onChange={setGamma} />
-            <Num label="φ — friction angle" unit="°" value={phi} onChange={setPhi} />
-            <Num label="Wall height H" unit="m" value={H} onChange={setH} />
-            <Num label="Surcharge q" unit="kPa" value={q} onChange={setQ} />
-          </Card>
-
-          <Card title="Coulomb geometry" hint="all zero → Rankine">
-            <Num label="Wall friction δ" unit="°" value={delta} onChange={setDelta} />
-            <Num label="Back face θ from vertical" unit="°" value={theta} onChange={setTheta} />
-            <Num label="Backfill slope β" unit="°" value={beta} onChange={setBeta} />
-          </Card>
-
-          <Card title="Seismic (Mononobe–Okabe)" hint="kh = 0 disables">
-            <Num label="Horizontal kh" value={kh} onChange={setKh} step="0.05" />
-            <Num label="Vertical kv" value={kv} onChange={setKv} step="0.05" />
-          </Card>
-        </div>
-
-        <div className="flex flex-col gap-5">
-          <ResultCard title="Rankine">
-            <Row label="Ka" value={f3(rankA.K)} />
-            <Row label="Active thrust Pa" value={`${f2(rankA.P)} kN/m`}
-              sub={`acts ${f2(rankA.lineOfAction)} m above base`} />
-            <Row label="Pressure at base" value={`${f2(rankA.basePressure)} kPa`} />
-            <Row label="Kp" value={f3(rankP.K)} />
-            <Row label="Passive thrust Pp" value={`${f2(rankP.P)} kN/m`} />
-          </ResultCard>
-
-          {coulomb.error && (
-            <p className="rounded-md border border-fail-line bg-fail-tint px-3 py-2 text-[12px] text-fail">{coulomb.error}</p>
-          )}
-          {coulomb.active && (
-            <ResultCard title="Coulomb">
-              <Row label="Ka" value={f3(coulomb.active.K)} sub={`Rankine ${f3(rankA.K)}`} />
-              <Row label="Active thrust Pa" value={`${f2(coulomb.active.P)} kN/m`}
-                sub={`${f1(coulomb.active.inclinationDeg)}° from horizontal`} />
-              <Row label="Horizontal / vertical"
-                value={`${f2(coulomb.active.horizontal)} / ${f2(coulomb.active.vertical)} kN/m`} />
-              <Row label="Acts at" value={`${f2(coulomb.active.lineOfAction)} m above base`} />
-              {coulomb.passive && <Row label="Kp" value={f3(coulomb.passive.K)} />}
-              {coulomb.passive && <Row label="Passive thrust Pp" value={`${f2(coulomb.passive.P)} kN/m`} />}
-            </ResultCard>
-          )}
-
-          {seismic.error && (
-            <p className="rounded-md border border-fail-line bg-fail-tint px-3 py-2 text-[12px] text-fail">{seismic.error}</p>
-          )}
-          {seismic.r && (
-            <ResultCard title="Mononobe–Okabe (seismic)">
-              <Row label="ψ — inertia angle" value={`${f2(seismic.r.psiDeg)}°`} />
-              <Row label="Kae" value={f3(seismic.r.K)} />
-              <Row label="Total Pae" value={`${f2(seismic.r.P)} kN/m`} />
-              <Row label="Static Pa" value={`${f2(seismic.r.staticP)} kN/m`} />
-              <Row label="Increment ΔPae" value={`${f2(seismic.r.increment)} kN/m`}
-                sub={`at ${f2(seismic.r.incrementLineOfAction)} m`} />
-              <Row label="Combined line of action" value={`${f2(seismic.r.lineOfAction)} m`} />
-            </ResultCard>
-          )}
-
-          {notes.length > 0 && (
-            <ul className="space-y-1 rounded-lg border border-warn-line bg-warn-tint p-3">
-              {notes.map((n, k) => <li key={k} className="text-[11px] text-warn">{n}</li>)}
-            </ul>
-          )}
-        </div>
-      </div>
-
-      <WorkedSolution steps={steps} />
-    </div>
-    </div>
+    <WorkspacePage title="Lateral Earth Pressure" badges={['Geotechnical', 'Rankine · Coulomb · M–O']}
+      intro="Rankine and Coulomb active and passive thrust, with the Mononobe–Okabe seismic case. Rankine needs a smooth vertical wall and level fill; Coulomb carries wall friction, an inclined back face and a sloping backfill, and reduces exactly to Rankine when all three are zero."
+      inputs={<>
+        <InputGroup title="Soil and wall">
+          <div className="col-span-2">
+            <SoilLayerPicker want={['phiDeg', 'gamma']} onApply={(f) => {
+              if (f.phiDeg != null) setPhi(f.phiDeg)
+              if (f.gamma != null) setGamma(f.gamma)
+            }} />
+          </div>
+          <Num label="Unit weight γ" unit="kN/m³" value={gamma} onChange={setGamma} />
+          <Num label="Friction φ" unit="°" value={phi} onChange={setPhi} />
+          <Num label="Wall height H" unit="m" value={H} onChange={setH} />
+          <Num label="Surcharge q" unit="kPa" value={q} onChange={setQ} />
+        </InputGroup>
+        <InputGroup title="Coulomb geometry" hint="All zero reduces Coulomb to Rankine.">
+          <Num label="Wall friction δ" unit="°" value={delta} onChange={setDelta} />
+          <Num label="Back face θ" unit="°" value={theta} onChange={setTheta} />
+          <Num label="Backfill slope β" unit="°" value={beta} onChange={setBeta} />
+        </InputGroup>
+        <InputGroup title="Seismic (Mononobe–Okabe)" hint="kh = 0 disables the seismic case.">
+          <Num label="Horizontal kh" value={kh} onChange={setKh} step="0.05" />
+          <Num label="Vertical kv" value={kv} onChange={setKv} step="0.05" />
+        </InputGroup>
+      </>}
+      checks={<>
+        <CheckCard title="Active thrust" basis={act ? 'Coulomb' : 'Rankine'} status="info" value={f2(act?.P ?? rankA.P)} unit="kN/m"
+          formula={act ? 'Pa = ½ Ka γ H² + Ka q H, at (δ + θ)' : 'Pa = ½ Ka γ H² + Ka q H'}
+          pairs={[{ label: 'Ka', value: f3(act?.K ?? rankA.K) }, { label: 'Acts at', value: `${f2(act?.lineOfAction ?? rankA.lineOfAction)} m above base` }]} />
+        <CheckCard title="Passive thrust" basis={coulomb.passive ? 'Coulomb' : 'Rankine'} status="info" value={f2(coulomb.passive?.P ?? rankP.P)} unit="kN/m"
+          pairs={[{ label: 'Kp', value: f3(coulomb.passive?.K ?? rankP.K) }, { label: 'Rankine Kp', value: f3(rankP.K) }]} />
+        {seismic.r && <CheckCard title="Seismic thrust" basis="Mononobe–Okabe" status="info" value={f2(seismic.r.P)} unit="kN/m"
+          formula="ψ = arctan[kh / (1 − kv)]"
+          pairs={[{ label: 'Increment ΔPae', value: `${f2(seismic.r.increment)} kN/m` }, { label: 'Kae', value: f3(seismic.r.K) }]} />}
+        {errors.map((e) => <CheckCard key={e} title="Geometry" basis="Coulomb wedge" status="fail" pillLabel="NO WEDGE" value="—" formula={e} />)}
+      </>}
+      summary={[
+        { label: 'Soil', value: `γ ${f2(gamma)} kN/m³, φ ${f2(phi)}°` },
+        { label: 'Wall', value: `H ${f2(H)} m, q ${f2(q)} kPa` },
+        { label: 'Coulomb', value: `δ ${f2(delta)}°, θ ${f2(theta)}°, β ${f2(beta)}°` },
+        { label: 'Seismic', value: kh > 0 ? `kh ${f2(kh)}, kv ${f2(kv)}` : 'off' },
+      ]}
+      drawing={{ title: 'Wall and active pressure', node: <div data-pdf-drawing><WallPressure H={H} thetaDeg={act ? theta : 0} betaDeg={act ? beta : 0} q={q} gamma={gamma}
+        K={act?.K ?? rankA.K} P={act?.P ?? rankA.P} lineOfAction={act?.lineOfAction ?? rankA.lineOfAction} inclinationDeg={act?.inclinationDeg ?? 0}
+        seismic={seismic.r ? { increment: seismic.r.increment, at: seismic.r.incrementLineOfAction } : null} /></div> }}
+      resultsCaption={notes.length ? notes.join(' ') : undefined}
+      results={[
+        { check: 'Rankine Ka · Pa', basis: `acts ${f2(rankA.lineOfAction)} m above base`, demand: `${f3(rankA.K)} · ${f2(rankA.P)} kN/m`, status: 'info' as const },
+        { check: 'Rankine Kp · Pp', basis: 'full height', demand: `${f3(rankP.K)} · ${f2(rankP.P)} kN/m`, status: 'info' as const },
+        ...(act ? [{ check: 'Coulomb Ka · Pa', basis: `${f1(act.inclinationDeg)}° from horizontal`, demand: `${f3(act.K)} · ${f2(act.P)} kN/m`, status: 'info' as const },
+          { check: 'Coulomb components', basis: 'horizontal / vertical', demand: `${f2(act.horizontal)} / ${f2(act.vertical)} kN/m`, status: 'info' as const }] : []),
+        ...(seismic.r ? [{ check: 'Mononobe–Okabe Pae', basis: `ψ ${f2(seismic.r.psiDeg)}°, at ${f2(seismic.r.lineOfAction)} m`, demand: `${f2(seismic.r.P)} kN/m`, status: 'info' as const }] : []),
+      ]}
+      steps={steps}
+      references={[
+        { topic: 'Rankine', basis: 'Ka = tan²(45 − φ/2), Kp = tan²(45 + φ/2)', source: 'Rankine (1857); Das, Principles of Geotechnical Engineering' },
+        { topic: 'Coulomb', basis: 'wall friction, inclined back face, sloping fill', source: 'Coulomb (1776); Das' },
+        { topic: 'Seismic', basis: 'Mononobe–Okabe pseudo-static wedge', source: 'Mononobe & Matsuo (1929); Okabe (1926)' },
+      ]}
+    />
   )
 }
