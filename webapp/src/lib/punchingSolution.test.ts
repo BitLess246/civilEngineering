@@ -57,20 +57,25 @@ describe('buildPunchingSolution', () => {
     }
   })
 
-  it('names the equation that actually governed', () => {
-    // A slab thick against a short perimeter should be driven by eq. (b);
-    // a squarish interior column by the plain bound (c).
+  it('names the equation that governed, lettered as Table 22.6.5.2 prints them', () => {
+    // (a) is the 0.33 bound, (b) the βc term, (c) the αs term. The letters
+    // used to follow this module's Vc1-2-3 order instead, so a squarish
+    // interior column — the 0.33 bound, the code's (a) — was reported as (c).
     const square = designPunchingShear(base)
+    expect(square.Vc).toBe(square.Vc3)
     const noteSquare = buildPunchingSolution(base, square).find((s) => s.note)!.note!
-    expect(noteSquare).toMatch(/\(c\)/)
+    expect(noteSquare).toMatch(/^Eq\. \(a\)/)
 
-    const elongated = { ...base, c1: 1200, c2: 250 }
+    const elongated = { ...base, c1: 1200, c2: 250 }            // βc 4.8
     const rE = designPunchingShear(elongated)
-    const noteE = buildPunchingSolution(elongated, rE).find((s) => s.note)!.note!
-    // whichever it is, the note must name the equation the engine minimised to
-    const govern = Math.min(rE.Vc1, rE.Vc2, rE.Vc3)
-    const letter = govern === rE.Vc1 ? '(a)' : govern === rE.Vc2 ? '(b)' : '(c)'
-    expect(noteE).toContain(letter)
+    expect(rE.Vc).toBe(rE.Vc1)
+    expect(buildPunchingSolution(elongated, rE).find((s) => s.note)!.note!).toMatch(/^Eq\. \(b\)/)
+
+    // a big square column on a thin slab: b0/d large, so the αs term governs
+    const wide = { ...base, c1: 1500, c2: 1500, d: 120 }
+    const rW = designPunchingShear(wide)
+    expect(rW.Vc).toBe(rW.Vc2)
+    expect(buildPunchingSolution(wide, rW).find((s) => s.note)!.note!).toMatch(/^Eq\. \(c\)/)
   })
 
   it('writes the right perimeter formula for each column position', () => {
