@@ -299,7 +299,7 @@ export default function Dynamics() {
         {
           title: "Net work",
           lines: [
-            { tex: `W_{\\text{net}} = \\Delta KE - W_{\\text{nc}} - \\Delta PE = ${f3(r.deltaKE)} - ${f2(Wnc)} - ${f2(dPE)} = ${f3(r.Wnet)}\\,\\text{J}` },
+            { tex: `W_{\\text{net}} = \\Delta KE - W_{\\text{nc}} + \\Delta PE = ${f3(r.deltaKE)} - ${f2(Wnc)} + ${f2(dPE)} = ${f3(r.Wnet)}\\,\\text{J}` },
             { text: "Net work accounting for non-conservative forces and potential energy change." },
           ],
         },
@@ -603,7 +603,7 @@ export default function Dynamics() {
           <div className="space-y-4">
             <h2 className="text-xl font-semibold text-ink">Work–Energy Theorem</h2>
             <p className="text-sm text-muted">
-              W_net = ΔKE = ½m(v₂² - v₁²). With non-conservative work: W_nc + ΔPE = ΔKE.
+              ΔKE = ½m(v₂² − v₁²) = W_net + W_nc − ΔPE. With no other applied force: W_nc = ΔKE + ΔPE.
             </p>
 
             <div className="grid gap-3 sm:grid-cols-2">

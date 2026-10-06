@@ -520,3 +520,44 @@ describe('validateMesh — shell mesh quality', () => {
     expect(flat(24, 5).shellElements).toBeUndefined()
   })
 })
+
+describe('Wall.openings (Drafting3D doors and windows)', () => {
+  // a 6 m wall, 3 m high, hung under the first x-direction beam of the frame
+  const withWall = (openings: NonNullable<StructuralModel['walls']>[number]['openings'], shearWall = false) => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })
+    const beam = m.members.find((x) => {
+      if (x.role === 'column') return false
+      const a = m.nodes.find((n) => n.id === x.i)!, b = m.nodes.find((n) => n.id === x.j)!
+      return Math.abs(Math.hypot(b.x - a.x, b.z - a.z) - 6) < 1e-9
+    })!
+    m.walls = [{ id: 'W1', member: beam.id, height: 3, thickness: 150, shearWall, openings }]
+    return m
+  }
+  const door = { kind: 'door' as const, t: 1.5, w: 0.9, h: 2.1, sill: 0 }
+  const win = { kind: 'window' as const, t: 4, w: 1.2, h: 1.2, sill: 0.9 }
+
+  it('a door and a window that fit the wall raise nothing', () => {
+    const c = codes(withWall([door, win]))
+    for (const k of ['WALL_OPENING_SIZE', 'WALL_OPENING_OUTSIDE', 'WALL_OPENING_OVERLAP', 'SHEAR_WALL_OPENING']) expect(c.has(k)).toBe(false)
+  })
+
+  it('past either end of the wall, or through its top, is an error', () => {
+    expect(codes(withWall([{ ...door, t: 0.3 }])).has('WALL_OPENING_OUTSIDE')).toBe(true)     // 0.3 − 0.45 < 0
+    expect(codes(withWall([{ ...win, t: 5.5 }])).has('WALL_OPENING_OUTSIDE')).toBe(true)      // 5.5 + 0.6 > 6
+    expect(codes(withWall([{ ...win, sill: 2 }])).has('WALL_OPENING_OUTSIDE')).toBe(true)     // 2 + 1.2 > 3
+    expect(hasMeshErrors(validateMesh(withWall([{ ...door, w: 0 }])))).toBe(true)
+  })
+
+  it('two openings that overlap in elevation are an error; one above the other is not', () => {
+    expect(codes(withWall([door, { ...win, t: 2 }])).has('WALL_OPENING_OVERLAP')).toBe(true)
+    // a high window over a door at the same t: along-overlap, but no vertical overlap
+    expect(codes(withWall([door, { ...win, t: 1.5, sill: 2.2, h: 0.6 }])).has('WALL_OPENING_OVERLAP')).toBe(false)
+  })
+
+  it('a shear wall with an opening warns that it is designed as solid — unconservative', () => {
+    const issues = validateMesh(withWall([door], true))
+    const w = issues.find((i) => i.code === 'SHEAR_WALL_OPENING')!
+    expect(w.severity).toBe('warning')
+    expect(w.message).toMatch(/overstated/)
+  })
+})

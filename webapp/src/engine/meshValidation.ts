@@ -366,6 +366,49 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
     }
   }
 
+  // ── Wall openings (L1 rule for Wall.openings — Drafting3D doors/windows) ──
+  //
+  // `t` is the opening's centre measured from the carrying member's i-end, so
+  // that member's length bounds it; `sill + h` is bounded by the wall height.
+  // The panel solve and `shearWallDesign` both treat the wall as SOLID (the
+  // field is geometry metadata), which is conservative for a gravity wall's
+  // self-weight but NOT for a shear wall: a door cuts its length lw, and
+  // capacity designed on the full length is overstated.
+  for (const w of model.walls ?? []) {
+    if (!w.openings?.length) continue
+    const mem = model.members.find((m) => m.id === w.member)
+    const a = mem && nodeById.get(mem.i), b = mem && nodeById.get(mem.j)
+    const L = a && b ? Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) : null
+    w.openings.forEach((o, k) => {
+      const name = `wall ${w.id}, ${o.kind} ${k + 1}`
+      if (!(o.w > 0 && o.h > 0 && o.sill >= 0)) {
+        issues.push({ severity: 'error', code: 'WALL_OPENING_SIZE', refs: [w.id], message: `${name}: width and height must be positive and the sill not negative` })
+        return
+      }
+      const tol = 1e-6
+      if ((L !== null && (o.t - o.w / 2 < -tol || o.t + o.w / 2 > L + tol)) || o.sill + o.h > w.height + tol) {
+        issues.push({ severity: 'error', code: 'WALL_OPENING_OUTSIDE', refs: [w.id],
+          message: `${name}: extends outside the wall (${L !== null ? `${L.toFixed(2)} m long, ` : ''}${w.height.toFixed(2)} m high)` })
+      }
+    })
+    const os = w.openings
+    for (let i = 0; i < os.length; i++) {
+      for (let j = i + 1; j < os.length; j++) {
+        const A = os[i]!, B = os[j]!
+        const alongOverlap = Math.abs(A.t - B.t) < (A.w + B.w) / 2 - 1e-6
+        const upOverlap = A.sill < B.sill + B.h - 1e-6 && B.sill < A.sill + A.h - 1e-6
+        if (alongOverlap && upOverlap) {
+          issues.push({ severity: 'error', code: 'WALL_OPENING_OVERLAP', refs: [w.id],
+            message: `wall ${w.id}: ${A.kind} ${i + 1} and ${B.kind} ${j + 1} overlap — merge them into one` })
+        }
+      }
+    }
+    if (w.shearWall) {
+      issues.push({ severity: 'warning', code: 'SHEAR_WALL_OPENING', refs: [w.id],
+        message: `wall ${w.id}: a shear wall with ${os.length} opening(s) is designed as SOLID on its full length — the capacity is overstated; split it into piers at the openings` })
+    }
+  }
+
   // ── Shell mesh quality (L1 rules for the n×n plate mesh) ─────────────────
   //
   // These are geometry rules, so they apply whether or not `shellElements` is
