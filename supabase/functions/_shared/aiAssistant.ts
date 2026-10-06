@@ -21,60 +21,139 @@
 export const UPSTREAM_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 /**
- * Free models ONLY, most capable first. Anything not on this list is refused
- * with `model` before any upstream call is made, so a paid model id can never
- * ride this key.
+ * Preferred free models, in the order they START. Free endpoints come and go
+ * by the week — between Oct 1 and Oct 6 2026 two of the five then on this list
+ * started answering 404 and the assistant went dark for everyone — so this is
+ * no longer the allowlist itself. The allowlist is the LIVE catalogue
+ * (`selectFreeModels` over OpenRouter's /api/v1/models): anything free there
+ * is usable, these go first when they are present, and when the catalogue
+ * cannot be fetched this list is the fallback.
  *
- * Every id below was verified 0/0 pricing with `tools` in
- * `supported_parameters` on /api/v1/models — extend ONLY the same way, plus a
- * test row — AND answered a code question correctly through the live function.
- *
- * Order is MEASURED, not assumed (Oct 2026, through the deployed function):
- * the first two answer correctly in ~16 s and ~26 s; Lightning answers but
- * times out about half the time; Qwen and Gemma are capable but were
- * rate-limited (429) on every probe, so they sit behind the ones that answer.
- * The rotation is hedged (`callWithRotation`), so order decides who STARTS
- * first, not who is waited on.
- *
- * Removed, and why:
- *   inclusionai/ling-3.0-flash-fin:free — gone from OpenRouter (404).
- *   liquid/lfm-2.5-2.6b:free — a 2.6 B model that answered "minimum cover for
- *     a cast-in-place beam" with 4 in (102 mm) under a clause that does not say
- *     so. A confidently wrong code value is worse than no answer.
+ * A paid model still can never ride the key: an id is used only when it is
+ * literally free in the catalogue (`:free` suffix AND 0/0 pricing), or it is
+ * one of these, each of which was verified that way.
  */
 export const FREE_CHAT_MODELS = [
-  'stealth/space-bunny-alpha',
   'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'thinkingmachines/inkling:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
   'nvidia/nemotron-3.5-lightning:free',
-  'qwen/qwen3.8-27b:free',
   'google/gemma-4-31b-it:free',
 ] as const
 
-export type FreeChatModel = (typeof FREE_CHAT_MODELS)[number]
-export type FreeModel = FreeChatModel
+/** An OpenRouter model id that the catalogue (or the list above) says is free. */
+export type FreeModel = string
 
-/** Every model the rotation may offer. The widget no longer names one. */
+/** The fallback rotation when the live catalogue is unavailable. */
 export const FREE_MODELS: readonly FreeModel[] = [...FREE_CHAT_MODELS]
 
+/** The shape of a free id: `vendor/name:free`. Membership is decided by the catalogue. */
 export const isFreeModel = (m: unknown): m is FreeModel =>
-  typeof m === 'string' && (FREE_CHAT_MODELS as readonly string[]).includes(m)
+  typeof m === 'string' && /^[a-z0-9][\w.-]*\/[\w.:-]+:free$/i.test(m) && m.length <= 120
 
 /**
- * Context window per model, tokens. A long conversation can genuinely exceed
- * the small models, so rotation skips an entry that cannot fit the request —
- * capability routing by measurement, not by guessing strengths.
+ * Free models that are not general chat models, or that were measured giving
+ * wrong engineering answers. Pattern-matched so a new version of the same
+ * family stays out too.
+ *   lfm-2.5-2.6b — a 2.6 B model that answered "minimum cover for a
+ *     cast-in-place beam" with 4 in (102 mm) under a clause that does not say
+ *     so. A confidently wrong code value is worse than no answer.
+ *   content-safety — a classifier, not a chat model.
+ *   north-mini-code, laguna — code models.
  */
-const MODEL_CONTEXT_TOKENS: Readonly<Record<FreeModel, number>> = {
-  'stealth/space-bunny-alpha': 1000000,
+export const EXCLUDED_MODEL_PATTERNS: readonly RegExp[] = [/\/lfm-/i, /content-safety/i, /north-mini-code/i, /\/laguna-/i]
+
+/** Context window of a fallback entry, tokens, for when the catalogue is unavailable. */
+const FALLBACK_CONTEXT_TOKENS: Readonly<Record<string, number>> = {
   'nvidia/nemotron-3-ultra-550b-a55b:free': 1000000,
+  'thinkingmachines/inkling:free': 1048576,
+  'nvidia/nemotron-3-super-120b-a12b:free': 262144,
   'nvidia/nemotron-3.5-lightning:free': 1000000,
-  'qwen/qwen3.8-27b:free': 262144,
   'google/gemma-4-31b-it:free': 262144,
 }
 
+/** One row of OpenRouter's /api/v1/models, as far as selection reads it. */
+export interface CatalogModel {
+  id: string
+  context_length?: number | null
+  pricing?: { prompt?: string; completion?: string; request?: string } | null
+  supported_parameters?: string[] | null
+  expiration_date?: string | null
+  created?: number
+}
+
+/** Rotation candidates from the live catalogue, and each one's context window. */
+export interface FreeModelSelection { models: FreeModel[]; context: Record<string, number> }
+
+/** Most candidates one request will walk. */
+export const MAX_CANDIDATES = 8
+
+const isZero = (v: string | undefined) => v === undefined || Number(v) === 0
+
+/**
+ * The rotation, from the live catalogue: every model that is free (`:free`
+ * id AND zero prompt/completion/request price), takes tools, has not expired
+ * and is not excluded — the preferred list first in its own order, then the
+ * rest by context window and recency. Pure, so the rule is unit-tested.
+ */
+export function selectFreeModels(
+  catalog: readonly CatalogModel[], preferred: readonly string[] = FREE_CHAT_MODELS, now = Date.now(),
+): FreeModelSelection {
+  const ok = catalog.filter((m) =>
+    typeof m?.id === 'string' && m.id.endsWith(':free') && isFreeModel(m.id)
+    && !!m.pricing && isZero(m.pricing.prompt) && isZero(m.pricing.completion) && isZero(m.pricing.request)
+    && (m.pricing.prompt !== undefined && m.pricing.completion !== undefined)
+    && (m.supported_parameters ?? []).includes('tools')
+    && !(m.expiration_date && Date.parse(m.expiration_date) <= now)
+    && !EXCLUDED_MODEL_PATTERNS.some((re) => re.test(m.id)))
+  const rank = (id: string) => { const i = preferred.indexOf(id); return i < 0 ? Infinity : i }
+  ok.sort((a, b) => rank(a.id) - rank(b.id)
+    || (b.context_length ?? 0) - (a.context_length ?? 0) || (b.created ?? 0) - (a.created ?? 0))
+  const models = ok.slice(0, MAX_CANDIDATES)
+  return { models: models.map((m) => m.id), context: Object.fromEntries(models.map((m) => [m.id, m.context_length ?? 0])) }
+}
+
+/** The fallback selection: the preferred list with its recorded windows. */
+export const FALLBACK_SELECTION: FreeModelSelection = { models: [...FREE_CHAT_MODELS], context: { ...FALLBACK_CONTEXT_TOKENS } }
+
+/** OpenRouter's public model catalogue — no key needed, so nothing secret goes with it. */
+export const CATALOG_URL = 'https://openrouter.ai/api/v1/models'
+/** How long one isolate trusts a fetched catalogue. */
+export const CATALOG_TTL_MS = 30 * 60_000
+/** A catalogue slower than this is skipped for this request; the last one (or the fallback) serves. */
+export const CATALOG_TIMEOUT_MS = 4000
+
+export type CatalogFetch = (url: string, init: { signal: AbortSignal }) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
+export type FreeModelSource = 'live' | 'cached' | 'stale' | 'fallback'
+
+/**
+ * The live free-model selection, cached per isolate for `CATALOG_TTL_MS`.
+ * A failed or empty fetch never takes the assistant down: the last good
+ * selection keeps serving ('stale'), and with none the preferred list does
+ * ('fallback'). A failed fetch is retried on the next request, not after a TTL.
+ */
+export function createFreeModelSource(fetchImpl: CatalogFetch, now: () => number = () => Date.now()) {
+  let last: { at: number; sel: FreeModelSelection } | null = null
+  return async (): Promise<FreeModelSelection & { source: FreeModelSource }> => {
+    if (last && now() - last.at < CATALOG_TTL_MS) return { ...last.sel, source: 'cached' }
+    try {
+      const res = await fetchImpl(CATALOG_URL, { signal: AbortSignal.timeout(CATALOG_TIMEOUT_MS) })
+      if (res.ok) {
+        const data = (await res.json() as { data?: unknown } | null)?.data
+        const sel = Array.isArray(data) ? selectFreeModels(data as CatalogModel[], FREE_CHAT_MODELS, now()) : null
+        if (sel && sel.models.length) {
+          last = { at: now(), sel }
+          return { ...sel, source: 'live' }
+        }
+      }
+    } catch { /* fall through: stale, then fallback */ }
+    return last ? { ...last.sel, source: 'stale' } : { ...FALLBACK_SELECTION, source: 'fallback' }
+  }
+}
+
 /** Rough chars-per-token headroom: skip a model the estimate cannot fit. */
-export function fitsContext(model: FreeModel, chars: number): boolean {
-  return chars <= (MODEL_CONTEXT_TOKENS[model] ?? 0) * 3
+export function fitsContext(model: FreeModel, chars: number, context: Readonly<Record<string, number>> = FALLBACK_CONTEXT_TOKENS): boolean {
+  return chars <= (context[model] ?? 0) * 3
 }
 
 /** A calculator the assistant may reference or open. Mirrors `ALL_TOOLS`. */
@@ -278,9 +357,9 @@ export function cleanPageContext(v: unknown): string | null {
 
 export function validateAssistantRequest(body: unknown): {
   ok: true
-  /** A client-named model is honoured ONLY when allowlisted (old widget
-   *  during the deploy window); otherwise the rotation picks. Never trusted
-   *  for anything but membership in the list below. */
+  /** A client-named model, shape-checked here (`vendor/name:free`). The
+   *  function honours it ONLY if the live selection contains it; otherwise
+   *  the rotation picks. Never trusted for anything but that membership. */
   model: FreeModel | null
   messages: AssistantChatMessage[]
   page: string | null
@@ -423,6 +502,8 @@ export interface RotationOptions {
   now?: () => number
   /** Whether a 200 body is an answer; one that is not hands over like a 5xx. */
   accept?: (json: unknown) => boolean
+  /** Context window per model, tokens (the live catalogue's); defaults to the fallback table. */
+  context?: Readonly<Record<string, number>>
 }
 
 /** Free endpoints answer in 15–30 s when they answer at all (measured Oct 2026). */
@@ -470,7 +551,7 @@ export function callWithRotation(
   const maxParallel = Math.max(1, opts.maxParallel ?? MAX_PARALLEL)
   const deadlineMs = opts.deadlineMs ?? ROTATION_DEADLINE_MS
   const now = opts.now ?? (() => Date.now())
-  const queue = models.filter((m) => fitsContext(m, chars))
+  const queue = models.filter((m) => fitsContext(m, chars, opts.context))
   const controllers: AbortController[] = []
   let lastStatus: number | null = null
 
@@ -478,28 +559,37 @@ export function callWithRotation(
     for (const withTools of [true, false]) {
       const t0 = now()
       let res: UpstreamResponse
+      const timeout = AbortSignal.timeout(timeoutMs)
+      // why a fetch or a body read stopped: we cancelled it, it ran out of time, or the wire broke
+      const failure = (e: unknown) =>
+        ctl.signal.aborted ? 'aborted' as const : timeout.aborted || (e as Error)?.name === 'TimeoutError' ? 'timeout' as const : 'transport' as const
       try {
         const call = buildCall(model, withTools)
         res = await fetchImpl(call.url, {
           method: call.method, headers: call.headers, body: call.body,
-          signal: AbortSignal.any([ctl.signal, AbortSignal.timeout(timeoutMs)]),
+          signal: AbortSignal.any([ctl.signal, timeout]),
         })
       } catch (e) {
-        const status = ctl.signal.aborted ? 'aborted' : (e as Error)?.name === 'TimeoutError' ? 'timeout' : 'transport'
-        opts.log?.({ model, withTools, status, ms: now() - t0 })
+        opts.log?.({ model, withTools, status: failure(e), ms: now() - t0 })
         return { kind: 'next', status: null } // tools are not the suspect
       }
       if (res.ok) {
         let json: unknown
         try {
           json = await res.json()
-        } catch {
-          opts.log?.({ model, withTools, status: 'empty', ms: now() - t0 })
-          return { kind: 'next', status: null } // unparseable body
+        } catch (e) {
+          // a body that stopped arriving is a timeout, not an empty answer
+          const f = failure(e)
+          opts.log?.({ model, withTools, status: f === 'transport' ? 'empty' : f, ms: now() - t0 })
+          return { kind: 'next', status: null }
         }
+        // OpenRouter can report a provider failure INSIDE a 200: { error: { code } }.
+        // The code is a number, never content, so it is what gets logged.
+        const code = (json as { error?: { code?: unknown } } | null)?.error?.code
         const usable = opts.accept ? opts.accept(json) : true
-        opts.log?.({ model, withTools, status: usable ? res.status : 'empty', ms: now() - t0 })
-        return usable ? { kind: 'ok', json } : { kind: 'next', status: null }
+        opts.log?.({ model, withTools, status: usable ? res.status : typeof code === 'number' ? code : 'empty', ms: now() - t0 })
+        if (usable) return { kind: 'ok', json }
+        return { kind: 'next', status: typeof code === 'number' && code >= 400 ? code : null }
       }
       opts.log?.({ model, withTools, status: res.status, ms: now() - t0 })
       if (res.status === 400 && withTools) continue // downgrade: same model, no tools
