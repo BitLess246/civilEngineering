@@ -77,7 +77,10 @@ const AxleLoads = lazy(() => import('./pages/AxleLoads'))
 const StormSewer = lazy(() => import('./pages/StormSewer'))
 const PumpStation = lazy(() => import('./pages/PumpStation'))
 const WaterDemand = lazy(() => import('./pages/WaterDemand'))
-const EngEconomy = lazy(() => import('./pages/EngEconomy'))
+const InterestFactors = lazy(() => import('./pages/InterestFactors'))
+const CashFlowAnalysis = lazy(() => import('./pages/CashFlowAnalysis'))
+const Depreciation = lazy(() => import('./pages/Depreciation'))
+const BreakEven = lazy(() => import('./pages/BreakEven'))
 const HydrostaticForce = lazy(() => import('./pages/HydrostaticForce'))
 const CurvedGate = lazy(() => import('./pages/CurvedGate'))
 const Buoyancy = lazy(() => import('./pages/Buoyancy'))
@@ -312,9 +315,13 @@ export default function App() {
         <Route path="/storm-sewer" element={<StormSewer />} />
         <Route path="/pump-station" element={<PumpStation />} />
         <Route path="/water-demand" element={<WaterDemand />} />
-        {/* mathematics: engineering economy (board-exam money mathematics) */}
-        <Route path="/eng-economy" element={<EngEconomy />} />
-        {/* fluid statics: hydrostatic force, gates, buoyancy, vessels */}
+        {/* engineering economy — one calculator per page; /eng-economy was the
+            combined page and now lands on the first of them */}
+        <Route path="/eng-economy" element={<Navigate to="/interest-factors" replace />} />
+        <Route path="/interest-factors" element={<InterestFactors />} />
+        <Route path="/cash-flow-analysis" element={<CashFlowAnalysis />} />
+        <Route path="/depreciation" element={<Depreciation />} />
+        <Route path="/break-even" element={<BreakEven />} />
         {/* fluid statics and hydraulics — one calculator per page; /hydrostatics was
             the combined page and now lands on the first of them */}
         <Route path="/hydrostatics" element={<Navigate to="/hydrostatic-force" replace />} />

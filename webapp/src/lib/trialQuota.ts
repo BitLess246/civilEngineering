@@ -58,7 +58,7 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   // wave six: rigid pavement, roundabouts, ESALs, storm sewers, pumping, water demand
   '/rigid-pavement', '/roundabout', '/esal', '/storm-sewer', '/pump-station', '/water-demand',
   // mathematics: engineering economy
-  '/eng-economy',
+  '/interest-factors', '/cash-flow-analysis', '/depreciation', '/break-even',
   // fluid statics and hydraulics — one calculator per page
   '/hydrostatic-force', '/curved-gate', '/buoyancy', '/manometer', '/relative-equilibrium', '/bernoulli', '/jet-on-vane',
   // mechanics: dynamics — one calculator per page
@@ -99,6 +99,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
   // the Surveying Toolbox and Geometric Design shells, now stubs landing on
   // /leveling and /sight-distance
   '/surveying', '/geometric-design',
+  // the combined Engineering Economy page, now a stub landing on /interest-factors
+  '/eng-economy',
   '/signin', '/signup', '/forgot-password', '/reset-password',
   // Policy and contact pages. A customer must be able to read the terms and
   // find a way to complain WITHOUT an account — and a payment provider
