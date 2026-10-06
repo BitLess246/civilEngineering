@@ -78,7 +78,14 @@ const Manometer = lazy(() => import('./pages/Manometer'))
 const RelativeEquilibrium = lazy(() => import('./pages/RelativeEquilibrium'))
 const EnergyEquation = lazy(() => import('./pages/EnergyEquation'))
 const JetOnVane = lazy(() => import('./pages/JetOnVane'))
-const Dynamics = lazy(() => import('./pages/Dynamics'))
+const RectilinearMotion = lazy(() => import('./pages/RectilinearMotion'))
+const ProjectileMotion = lazy(() => import('./pages/ProjectileMotion'))
+const CurvilinearMotion = lazy(() => import('./pages/CurvilinearMotion'))
+const Kinetics = lazy(() => import('./pages/Kinetics'))
+const WorkEnergy = lazy(() => import('./pages/WorkEnergy'))
+const ImpulseMomentum = lazy(() => import('./pages/ImpulseMomentum'))
+const Friction = lazy(() => import('./pages/Friction'))
+const BeltFriction = lazy(() => import('./pages/BeltFriction'))
 const Drafting3D = lazy(() => import('./pages/Drafting3D'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const Validation = lazy(() => import('./pages/Validation'))
@@ -299,7 +306,17 @@ export default function App() {
         <Route path="/bernoulli" element={<EnergyEquation />} />
         <Route path="/jet-on-vane" element={<JetOnVane />} />
         {/* mechanics: kinematics, kinetics, work-energy, impulse-momentum */}
-        <Route path="/dynamics" element={<Dynamics />} />
+        {/* dynamics — one calculator per page; /dynamics was the tabbed page and
+            now lands on the first of them */}
+        <Route path="/dynamics" element={<Navigate to="/rectilinear-motion" replace />} />
+        <Route path="/rectilinear-motion" element={<RectilinearMotion />} />
+        <Route path="/projectile-motion" element={<ProjectileMotion />} />
+        <Route path="/curvilinear-motion" element={<CurvilinearMotion />} />
+        <Route path="/kinetics" element={<Kinetics />} />
+        <Route path="/work-energy" element={<WorkEnergy />} />
+        <Route path="/impulse-momentum" element={<ImpulseMomentum />} />
+        <Route path="/friction" element={<Friction />} />
+        <Route path="/belt-friction" element={<BeltFriction />} />
         {/* drafting: 2D floor plans → 3D viewport → ModelSpace export */}
         <Route path="/drafting3d" element={<Drafting3D />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected

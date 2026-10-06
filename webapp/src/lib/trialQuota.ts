@@ -61,8 +61,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/eng-economy',
   // fluid statics and hydraulics — one calculator per page
   '/hydrostatic-force', '/curved-gate', '/buoyancy', '/manometer', '/relative-equilibrium', '/bernoulli', '/jet-on-vane',
-  // mechanics: dynamics
-  '/dynamics',
+  // mechanics: dynamics — one calculator per page
+  '/rectilinear-motion', '/projectile-motion', '/curvilinear-motion', '/kinetics', '/work-energy', '/impulse-momentum', '/friction', '/belt-friction',
   // drafting: 2D floor plans → 3D
   '/drafting3d',
 ]
@@ -94,6 +94,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
   '/steel', '/geotech',
   // the combined Hydrostatics page, now a stub landing on /hydrostatic-force
   '/hydrostatics',
+  // the tabbed Dynamics page, now a stub landing on /rectilinear-motion
+  '/dynamics',
   '/signin', '/signup', '/forgot-password', '/reset-password',
   // Policy and contact pages. A customer must be able to read the terms and
   // find a way to complain WITHOUT an account — and a payment provider
