@@ -70,27 +70,38 @@ export function LintelElevation({
     <DrawingFrame label="lintel elevation">
       <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block h-auto w-full"
         style={{ fontFamily: 'Arial, sans-serif' }}>
-        {/* the wall over the lintel */}
-        <rect x={X(0)} y={Y(hL + wallTop)} width={worldW * S} height={wallTop * S}
-          fill={WALL} stroke={INK} strokeWidth={1.2} />
-        {cut && (
-          // The wall carries on above: a break line rather than a solid top edge
-          // that would read as the top of the wall.
-          <g>
-            <rect x={X(0) - 1} y={Y(hL + wallTop) - 5} width={worldW * S + 2} height={10} fill={SHEET} />
-            <path d={`M${X(0)} ${Y(hL + wallTop)} ${Array.from({ length: 9 }, (_, k) =>
-              `L${X(0) + ((k + 1) * worldW * S) / 9} ${Y(hL + wallTop) + (k % 2 ? 4 : -4)}`).join(' ')}`}
-              fill="none" stroke={INK} strokeWidth={1.2} />
-            <text x={X(worldW) - 2} y={Y(hL + wallTop) - 8} fontSize={7.5} fill={FAINT} textAnchor="end">
-              wall continues to {wallHeightAbove.toFixed(2)} m
-            </text>
-          </g>
-        )}
-        {/* the jambs below it */}
-        {[[0, jamb], [jamb + opening, jamb]].map(([x0, w], i) => (
-          <rect key={i} x={X(x0)} y={Y(0)} width={w * S} height={stub * S}
-            fill={WALL} stroke={INK} strokeWidth={1.2} />
-        ))}
+        {/* The masonry as ONE outline: the wall over the lintel runs down
+            beside the lintel ends into the jambs — the lintel sits in a pocket
+            of the wall, on the jambs, not on a separate block. Every edge that
+            is not a real end of the wall is a break line: the top where the
+            wall carries on (when it is cut) and the jamb feet. */}
+        {(() => {
+          const zig = (x0: number, x1: number, y: number, n: number, amp: number) =>
+            Array.from({ length: n }, (_, k) => `L${X(x0) + ((k + 1) * (X(x1) - X(x0))) / n} ${y + (k === n - 1 ? 0 : k % 2 ? amp : -amp)}`).join(' ')
+          const yTop = Y(hL + wallTop), yFoot = Y(-stub)
+          const d = [
+            `M${X(0)} ${yFoot}`,
+            `L${X(0)} ${yTop}`,
+            cut ? zig(0, worldW, yTop, 10, 4) : `L${X(worldW)} ${yTop}`,
+            `L${X(worldW)} ${yFoot}`,
+            zig(worldW, oR, yFoot, 4, 3),
+            `L${X(oR)} ${Y(0)} L${X(oR + bear)} ${Y(0)} L${X(oR + bear)} ${Y(hL)}`,
+            `L${X(oL - bear)} ${Y(hL)} L${X(oL - bear)} ${Y(0)} L${X(oL)} ${Y(0)}`,
+            `L${X(oL)} ${yFoot}`,
+            zig(oL, 0, yFoot, 4, 3),
+            'Z',
+          ].join(' ')
+          return (
+            <g>
+              <path d={d} fill={WALL} stroke={INK} strokeWidth={1.2} strokeLinejoin="round" />
+              {cut && (
+                <text x={X(worldW) - 2} y={yTop - 8} fontSize={7.5} fill={FAINT} textAnchor="end">
+                  wall continues to {wallHeightAbove.toFixed(2)} m
+                </text>
+              )}
+            </g>
+          )
+        })()}
 
         {/* what the lintel carries — the whole point of the drawing */}
         {arching ? (

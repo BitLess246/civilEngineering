@@ -5,6 +5,7 @@ import { Num, Pick } from '../components/qty'
 import { InputGroup, CheckCard } from '../components/workspace'
 import { WorkspacePage } from '../components/WorkspacePage'
 import { StairFlight } from '../components/stairSketches'
+import { calcDevLength } from '../engine/devLength'
 
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
 const f0 = (n: number) => (Number.isFinite(n) ? Math.round(n).toString() : '—')
@@ -32,6 +33,9 @@ export default function StairDesign() {
   const r = designStair(input)
   const solution = buildStairSolution(input, r)
   const tRatio = t > 0 ? r.tMin / t : 0
+  // ℓd of the main bar (§25.4.2.3), for the junction detail: bottom bars, no
+  // epoxy, normal weight; confinement from the cover alone (no Ktr)
+  const ld = calcDevLength({ db: barDia, fc, fy, topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: (cover + barDia / 2) / barDia }).ld
 
   const report = {
     docCode: 'S-ST',
@@ -111,7 +115,7 @@ export default function StairDesign() {
       ]}
       drawing={{ title: 'Longitudinal section', node: <div data-pdf-drawing>
         <StairFlight span={span} t={t} R={R} G={G} cover={cover} barDia={barDia} distDia={distBarDia}
-          mainSpacing={r.mainSpacing} distSpacing={r.distSpacing} support={support} />
+          mainSpacing={r.mainSpacing} distSpacing={r.distSpacing} support={support} ld={ld} />
       </div> }}
       resultsCaption={[
         ...r.inputNotes,
