@@ -66,14 +66,18 @@ export function CombinedFootingSchematic({
             column-centre offsets below the slab */}
         <DimBelow xA={fx} xB={fx + fW} featY={cy + Math.max(wL, wR) / 2} dY={cy + Math.max(wL, wR) / 2 + 30}
           label={`Bx = ${Bx.toFixed(2)} m`} />
-        <DimBelow xA={fx} xB={c1.cx} featY={cy + Math.max(wL, wR) / 2} dY={cy + Math.max(wL, wR) / 2 + 14}
-          label={`x₁ = ${x1.toFixed(2)}`} />
+        {/* x₁ is usually a few pixels wide, so its label sits outside the
+            chain to the left instead of printing over its own ticks */}
+        <DimBelow xA={fx} xB={c1.cx} featY={cy + Math.max(wL, wR) / 2} dY={cy + Math.max(wL, wR) / 2 + 14} label="" />
+        <text x={fx - 7} y={cy + Math.max(wL, wR) / 2 + 17} fontSize={9.5} fill="#1f77b4" textAnchor="end"
+          paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>x₁ = {x1.toFixed(2)}</text>
         <DimBelow xA={c1.cx} xB={c2.cx} featY={cy + Math.max(wL, wR) / 2} dY={cy + Math.max(wL, wR) / 2 + 14}
           label={`s = ${(x2 - x1).toFixed(2)}`} />
         <DimSide yA={cy - wL / 2} yB={cy + wL / 2} featX={fx} dX={fx - 12}
           label={`${trap ? 'By₁' : 'By'} = ${(trap ? By1 : By).toFixed(2)} m`} side="left" />
-        <DimSide yA={cy - wR / 2} yB={cy + wR / 2} featX={fx + fW} dX={fx + fW + 12}
-          label={`${trap ? 'By₂' : 'By'} = ${(trap ? By2 : By).toFixed(2)} m`} side="right" />
+        {/* a rectangle has one width — dimension it once */}
+        {trap && <DimSide yA={cy - wR / 2} yB={cy + wR / 2} featX={fx + fW} dX={fx + fW + 12}
+          label={`By₂ = ${By2.toFixed(2)} m`} side="right" />}
       </svg>
     </DrawingFrame>
   )
