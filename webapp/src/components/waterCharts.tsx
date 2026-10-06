@@ -15,13 +15,15 @@ import { niceStep, tickLabel, axesMap } from '../lib/chartScale'
 const mono = 'var(--font-mono, monospace)'
 const halo = { paintOrder: 'stroke' as const, stroke: 'var(--sheet)', strokeWidth: 3 }
 
+/** Numbered axes for a plot box. A bar chart passes xMax = 0 to keep the
+ *  value axis only (its categories label themselves). */
 export function Axes({ box, xMax, yMax, xLabel, yLabel }: {
   box: { x0: number; x1: number; top: number; base: number }; xMax: number; yMax: number; xLabel: string; yLabel: string
 }) {
   const { X, Y } = axesMap(box, xMax, yMax)
   const xs = niceStep(xMax, 6), ys = niceStep(yMax, 4)
   const xt: number[] = [], yt: number[] = []
-  for (let v = 0; v <= xMax * 1.0001; v += xs) xt.push(v)
+  if (xMax > 0) for (let v = 0; v <= xMax * 1.0001; v += xs) xt.push(v)
   for (let v = 0; v <= yMax * 1.0001; v += ys) yt.push(v)
   return (
     <g>
@@ -189,6 +191,248 @@ export function DetentionCharts({ inflow, outflows, stages, dtMin, peakIn, peakO
       <path d={`M ${B.X(0)} ${B.Y(0)} ${stages.map((s, i) => `L ${B.X(i * dtMin).toFixed(2)} ${B.Y(s).toFixed(2)}`).join(' ')}`} fill="none" stroke={WATER} strokeWidth="2" />
       <circle cx={B.X(tS)} cy={B.Y(peakStage)} r="3.5" fill={over ? 'rgba(200,60,60,0.95)' : WATER} />
       <text x={B.X(tS) + 7} y={B.Y(peakStage) - 9} fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>peak stage {f3(peakStage)} m{over ? ' — overtops' : ''}</text>
+    </Chart>
+  )
+}
+
+// ── Streeter–Phelps oxygen sag ───────────────────────────────────────────
+
+/** DO and remaining BOD are both mg/L but of very different size, so each
+ *  gets its own panel over ONE travel-time axis. The deficits D₀ and Dc are
+ *  dimensioned down from the saturation line; the BOD exerted by tc is
+ *  dimensioned down from L₀, carried across as an extension line. */
+export function SagCharts({ curve, DOsat, DOmix, L0, kd, tc, DOcrit, anoxic }: {
+  curve: { t: number; DO: number; BOD: number }[]; DOsat: number; DOmix: number; L0: number; kd: number
+  tc: number | null; DOcrit: number | null; anoxic: boolean
+}) {
+  const W = 640, H = 500
+  const tEnd = curve[curve.length - 1].t
+  const top = { x0: 66, x1: W - 40, top: 56, base: 246 }
+  const bot = { x0: 66, x1: W - 40, top: 330, base: H - 50 }
+  const doMax = Math.max(DOsat, ...curve.map((p) => p.DO)) * 1.25
+  const bodMax = Math.max(L0, 1e-6) * 1.25
+  const A = axesMap(top, tEnd, doMax), B = axesMap(bot, tEnd, bodMax)
+  const doLine = curve.map((p, i) => `${i ? 'L' : 'M'} ${A.X(p.t).toFixed(2)} ${A.Y(Math.max(p.DO, 0)).toFixed(2)}`).join(' ')
+  const bodLine = curve.map((p, i) => `${i ? 'L' : 'M'} ${B.X(p.t).toFixed(2)} ${B.Y(p.BOD).toFixed(2)}`).join(' ')
+  const red = 'rgba(200,60,60,0.9)'
+  const crit = tc !== null && DOcrit !== null ? { x: A.X(tc), y: A.Y(Math.max(DOcrit, 0)), L: L0 * Math.exp(-kd * tc) } : null
+  return (
+    <Chart label="Streeter–Phelps oxygen sag — DO and BOD" W={W} H={H}>
+      <Axes box={top} xMax={tEnd} yMax={doMax} xLabel="t (d)" yLabel="DO (mg/L)" />
+      <line x1={top.x0} x2={top.x1} y1={A.Y(DOsat)} y2={A.Y(DOsat)} stroke={MUTED} strokeWidth="1" strokeDasharray="6 4" />
+      <text x={top.x1 - 4} y={A.Y(DOsat) - 5} textAnchor="end" fontSize="9.5" fill={MUTED} fontFamily={mono} {...halo}>saturation {f2(DOsat)}</text>
+      <line x1={top.x0} x2={top.x1} y1={A.Y(2)} y2={A.Y(2)} stroke={red} strokeWidth="1" strokeDasharray="3 3" />
+      <text x={top.x1 - 4} y={A.Y(2) - 5} textAnchor="end" fontSize="9.5" fill={red} fontFamily={mono} {...halo}>2 mg/L stress line</text>
+      <path d={`${doLine} L ${A.X(tEnd)} ${top.base} L ${A.X(0)} ${top.base} Z`} fill="rgba(15,76,146,0.12)" />
+      <path d={doLine} fill="none" stroke={WATER} strokeWidth="2.2" />
+      {/* D₀ at the outfall: from the saturation line down to the mixed DO */}
+      {DOsat - DOmix > 0.05 && <>
+        <line x1={top.x0} x2={top.x0 + 26} y1={A.Y(DOmix)} y2={A.Y(DOmix)} stroke={MUTED} strokeWidth="0.8" />
+        <VDim x={top.x0 + 20} a={A.Y(DOsat)} b={A.Y(DOmix)} label={`D₀ ${f2(DOsat - DOmix)}`} color={INK} />
+      </>}
+      {crit && DOcrit !== null && <>
+        <VDim x={crit.x} a={A.Y(DOsat)} b={crit.y} label={`Dc ${f2(DOsat - DOcrit)}`} color={INK} />
+        <circle cx={crit.x} cy={crit.y} r="3.5" fill={anoxic ? red : WATER} />
+        <text x={crit.x + 7} y={Math.min(crit.y + 16, top.base - 6)} fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>
+          {anoxic ? 'anoxic' : `DOmin ${f2(DOcrit)}`} at tc = {f2(tc ?? 0)} d
+        </text>
+        {/* the same instant carried down to the BOD panel */}
+        <line x1={crit.x} x2={crit.x} y1={crit.y} y2={B.Y(crit.L)} stroke={MUTED} strokeWidth="0.8" strokeDasharray="3 3" />
+      </>}
+
+      <Axes box={bot} xMax={tEnd} yMax={bodMax} xLabel="t (d)" yLabel="BOD (mg/L)" />
+      <path d={`${bodLine} L ${B.X(tEnd)} ${bot.base} L ${B.X(0)} ${bot.base} Z`} fill="rgba(15,76,146,0.12)" />
+      <path d={bodLine} fill="none" stroke={WATER} strokeWidth="2" />
+      <text x={bot.x0 + 8} y={B.Y(L0) - 7} fontSize="10" fill={INK} fontFamily={mono} {...halo}>L₀ {f2(L0)} mg/L</text>
+      {crit && <>
+        <line x1={bot.x0} x2={crit.x + 6} y1={B.Y(L0)} y2={B.Y(L0)} stroke={MUTED} strokeWidth="0.8" />
+        <circle cx={crit.x} cy={B.Y(crit.L)} r="3" fill={WATER} />
+        <VDim x={crit.x} a={B.Y(L0)} b={B.Y(crit.L)} label={`exerted by tc ${f2(L0 - crit.L)}`} color={INK} />
+      </>}
+    </Chart>
+  )
+}
+
+// ── Storm sewer longitudinal profile ─────────────────────────────────────
+
+/** The ladder drawn as a sewer profile: each run's invert and crown at its
+ *  own grade between manholes, crowns matched where the pipe grows, invert
+ *  levels at every manhole and the run lengths dimensioned between manhole
+ *  centrelines. Levels are relative to the head invert; the vertical scale
+ *  is exaggerated and says by how much. */
+export function SewerProfile({ runs }: {
+  runs: { name: string; dn: number; slopePct: number; Q: number; p: { chainU: number; chainD: number; invU: number; invD: number; D: number } }[]
+}) {
+  const W = 680, H = 390
+  const box = { x0: 96, x1: W - 44, top: 56, base: 244 }
+  const Ltot = runs[runs.length - 1].p.chainD
+  const zTop = Math.max(...runs.map((r) => r.p.invU + r.p.D)) + 0.3
+  const zBot = Math.min(...runs.map((r) => r.p.invD)) - 0.25
+  const kx = (box.x1 - box.x0) / Math.max(Ltot, 1e-9), ky = (box.base - box.top) / (zTop - zBot)
+  const X = (c: number) => box.x0 + c * kx
+  const Y = (z: number) => box.top + (zTop - z) * ky
+  const mh = 6 // manhole half-width, px
+  // one manhole per node: the incoming and outgoing inverts and the highest crown
+  const nodes = Array.from({ length: runs.length + 1 }, (_, j) => {
+    const inn = runs[j - 1]?.p, out = runs[j]?.p
+    const ils = [inn?.invD, out?.invU].filter((v): v is number => v !== undefined)
+    const crowns = [inn && inn.invD + inn.D, out && out.invU + out.D].filter((v): v is number => v !== undefined)
+    return { x: X(out ? out.chainU : inn!.chainD), inn: inn?.invD, out: out?.invU, bottom: Math.min(...ils) - 0.12, top: Math.max(...crowns) + 0.2 }
+  })
+  const zs = niceStep(zTop - zBot, 6)
+  const ticks: number[] = []
+  for (let z = Math.ceil(zBot / zs) * zs; z <= zTop + 1e-9; z += zs) ticks.push(z)
+  const ax = box.x0 - 34
+  const lvl = (z: number) => (Math.abs(z) < 5e-4 ? '0.000' : z.toFixed(3))
+  return (
+    <Chart label="Storm sewer longitudinal profile" W={W} H={H}>
+      {/* level scale */}
+      <line x1={ax} x2={ax} y1={Y(zTop)} y2={Y(zBot)} stroke={INK} strokeWidth="1.1" />
+      {ticks.map((z) => (
+        <g key={z}>
+          <line x1={ax - 4} x2={ax} y1={Y(z)} y2={Y(z)} stroke={INK} strokeWidth="1" />
+          <text x={ax - 7} y={Y(z) + 3.5} textAnchor="end" fontSize="9.5" fill={MUTED} fontFamily={mono}>{tickLabel(z, zs)}</text>
+        </g>
+      ))}
+      <text x={ax + 8} y={Y(zTop) - 10} textAnchor="end" fontSize="10" fill={MUTED} fontFamily={mono}>level (m)</text>
+      {runs.map((r, i) => {
+        const a = X(r.p.chainU) + mh, b = X(r.p.chainD) - mh
+        const at = (x: number) => r.p.invU + (r.p.invD - r.p.invU) * ((x - X(r.p.chainU)) / Math.max(X(r.p.chainD) - X(r.p.chainU), 1e-9))
+        const mid = (a + b) / 2
+        // the label clears the crown at its high (upstream) end
+        const yLab = Y(at(Math.max(a, mid - 60)) + r.p.D)
+        return (
+          <g key={i}>
+            <polygon points={`${a},${Y(at(a))} ${b},${Y(at(b))} ${b},${Y(at(b) + r.p.D)} ${a},${Y(at(a) + r.p.D)}`} fill="rgba(15,76,146,0.14)" stroke="none" />
+            <line x1={a} x2={b} y1={Y(at(a))} y2={Y(at(b))} stroke={INK} strokeWidth="1.5" />
+            <line x1={a} x2={b} y1={Y(at(a) + r.p.D)} y2={Y(at(b) + r.p.D)} stroke={INK} strokeWidth="1.5" />
+            <text x={mid} y={yLab - 20} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>DN {r.dn} @ {f2(r.slopePct)} %</text>
+            <text x={mid} y={yLab - 8} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily={mono} {...halo}>Q {f3(r.Q)} m³/s</text>
+            <HDim y={box.base + 96} a={X(r.p.chainU)} b={X(r.p.chainD)} label={`${f2(r.p.chainD - r.p.chainU)} m`} />
+          </g>
+        )
+      })}
+      {nodes.map((n, j) => {
+        const last = j === nodes.length - 1
+        // invert levels read up the manhole centreline: in on the left, out on the right
+        const il = (x: number, txt: string) => <text x={x} y={box.base + 86} transform={`rotate(-90 ${x} ${box.base + 86})`} fontSize="9.5" fill={INK} fontFamily={mono}>{txt}</text>
+        return (
+          <g key={`mh${j}`}>
+            <rect x={n.x - mh} y={Y(n.top)} width={2 * mh} height={Y(n.bottom) - Y(n.top)} fill="var(--sheet)" stroke={INK} strokeWidth="1.3" />
+            {/* the centreline carries down to the chainage dimension */}
+            <line x1={n.x} x2={n.x} y1={Y(n.bottom)} y2={box.base + 100} stroke={MUTED} strokeWidth="0.8" />
+            <text x={n.x} y={Y(n.top) - 6} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>{last ? 'Outfall' : `MH${j + 1}`}</text>
+            {n.inn !== undefined && il(n.x - 4, `IL in ${lvl(n.inn)}`)}
+            {n.out !== undefined && il(n.x + 12, `IL out ${lvl(n.out)}`)}
+          </g>
+        )
+      })}
+      <text x={box.x0 - 40} y={H - 12} fontSize="9.5" fill={MUTED} fontFamily={mono}>
+        levels relative to the head invert (0.000) · crowns matched where the pipe grows · vertical ×{Math.round(ky / kx)}
+      </text>
+    </Chart>
+  )
+}
+
+// ── Pump and system curves ───────────────────────────────────────────────
+
+/** Pump and system curves on numbered axes. The duty point is read on both
+ *  axes (Q* under the flow axis, H* along the head leader), each curve is
+ *  labelled on itself, and the head lost to friction and fittings at duty
+ *  is dimensioned between the static line and the duty point. */
+export function PumpCurves({ pump, system, Hstatic, H0, Q, H }: {
+  pump: { Q: number; H: number }[]; system: { Q: number; H: number }[]; Hstatic: number; H0: number; Q: number; H: number
+}) {
+  const W = 640, H_ = 360
+  const box = { x0: 66, x1: W - 40, top: 52, base: H_ - 70 }
+  const qMax = system[system.length - 1].Q
+  const hMax = Math.max(H0, ...system.map((p) => p.H)) * 1.1
+  const { X, Y } = axesMap(box, qMax, hMax)
+  const pts = (ps: { Q: number; H: number }[]) => ps.filter((p) => p.H >= 0 && p.H <= hMax).map((p) => `${X(p.Q).toFixed(2)},${Y(p.H).toFixed(2)}`).join(' ')
+  const sysLab = system[Math.round(system.length * 0.8)]
+  const red = 'rgba(200,60,60,0.95)'
+  // the losses dimension stands where the band between the static line and
+  // H* is empty: past the flow at which the pump curve drops below static
+  const qClear = pump.find((p) => p.Q > Q && p.H < Hstatic)?.Q
+  const xd = qClear !== undefined && X(qClear) + 140 < box.x1 ? X(qClear) + 26 : X(Q) + 18
+  return (
+    <Chart label="Pump and system curves" W={W} H={H_}>
+      <Axes box={box} xMax={qMax} yMax={hMax} xLabel="Q (m³/s)" yLabel="H (m)" />
+      <line x1={box.x0} x2={box.x1} y1={Y(Hstatic)} y2={Y(Hstatic)} stroke={MUTED} strokeWidth="1" strokeDasharray="5 3" />
+      <text x={box.x0 + 6} y={Y(Hstatic) + 14} fontSize="9.5" fill={MUTED} fontFamily={mono} {...halo}>static head {f2(Hstatic)} m</text>
+      <polyline points={pts(system)} fill="none" stroke={MUTED} strokeWidth="2" />
+      <text x={X(sysLab.Q) - 8} y={Y(sysLab.H) - 8} textAnchor="end" fontSize="10" fill={INK} fontFamily={mono} {...halo}>system curve</text>
+      <polyline points={pts(pump)} fill="none" stroke={WATER} strokeWidth="2.2" />
+      <circle cx={box.x0} cy={Y(H0)} r="3" fill={WATER} />
+      <text x={box.x0 + 8} y={Y(H0) - 7} fontSize="10" fill={INK} fontFamily={mono} {...halo}>pump curve · shutoff H₀ {f2(H0)} m</text>
+      {/* the duty point read on both axes */}
+      <line x1={X(Q)} x2={X(Q)} y1={Y(H)} y2={box.base + 22} stroke={red} strokeWidth="0.9" strokeDasharray="4 3" />
+      <line x1={box.x0} x2={xd + 6} y1={Y(H)} y2={Y(H)} stroke={red} strokeWidth="0.9" strokeDasharray="4 3" />
+      <text x={X(Q)} y={box.base + 34} textAnchor="middle" fontSize="10" fontWeight="700" fill={red} fontFamily={mono}>Q* {f3(Q)}</text>
+      <text x={box.x0 + 6} y={Y(H) - 5} fontSize="10" fontWeight="700" fill={red} fontFamily={mono} {...halo}>H* {f2(H)}</text>
+      <circle cx={X(Q)} cy={Y(H)} r="4.5" fill={red} />
+      <VDim x={xd} a={Y(H)} b={Y(Hstatic)} label={`losses ${f2(H - Hstatic)} m`} color={INK} />
+    </Chart>
+  )
+}
+
+// ── Water demand and storage ─────────────────────────────────────────────
+
+/** Demand is a rate (m³/day) and storage a volume (m³), so they stand in two
+ *  panels on two numbered axes. The demand bars carry the peaking factors
+ *  actually entered; the reservoir stack dimensions each share and the
+ *  total between its segment edges. */
+export function DemandCharts({ ADD, MDD, PHD, fDay, fHour, operating, fire, emergency }: {
+  ADD: number; MDD: number; PHD: number; fDay: number; fHour: number; operating: number; fire: number; emergency: number
+}) {
+  const W = 660, H = 360
+  const L = { x0: 70, x1: 318, top: 56, base: H - 70 }
+  const R = { x0: 384, x1: 434, top: 56, base: H - 70 }
+  const dMax = Math.max(PHD, MDD, ADD, 1e-6) * 1.18
+  const total = operating + fire + emergency
+  const sMax = Math.max(total, 1e-6) * 1.18
+  const A = axesMap(L, 1, dMax), B = axesMap(R, 1, sMax)
+  const bw = 52, step = (L.x1 - L.x0) / 3
+  const bars = [
+    { name: 'ADD', sub: 'average day', v: ADD, fill: 'rgba(15,76,146,0.22)' },
+    { name: 'MDD', sub: `${f2(fDay)} × ADD`, v: MDD, fill: 'rgba(15,76,146,0.45)' },
+    { name: 'PHD', sub: `${f2(fHour)} × ADD`, v: PHD, fill: 'rgba(15,76,146,0.7)' },
+  ]
+  // the reservoir stack from the floor up: operating, fire, emergency
+  const segs = [
+    { name: 'operating', v: operating, fill: 'rgba(15,76,146,0.3)' },
+    { name: 'fire', v: fire, fill: 'rgba(200,60,60,0.45)' },
+    { name: 'emergency', v: emergency, fill: 'rgba(115,109,94,0.4)' },
+  ].map((sg, i, all) => ({ ...sg, z0: all.slice(0, i).reduce((t, x) => t + x.v, 0) }))
+  const n0 = (v: number) => Math.round(v).toLocaleString('en-US')
+  return (
+    <Chart label="Design demands and reservoir storage" W={W} H={H}>
+      <Axes box={L} xMax={0} yMax={dMax} xLabel="" yLabel="demand (m³/day)" />
+      {bars.map((b, i) => {
+        const x = L.x0 + step * (i + 0.5) - bw / 2
+        return (
+          <g key={b.name}>
+            <rect x={x} y={A.Y(b.v)} width={bw} height={L.base - A.Y(b.v)} fill={b.fill} stroke={INK} strokeWidth="1" />
+            <text x={x + bw / 2} y={A.Y(b.v) - 6} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>{n0(b.v)}</text>
+            <text x={x + bw / 2} y={L.base + 16} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono}>{b.name}</text>
+            <text x={x + bw / 2} y={L.base + 30} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily={mono}>{b.sub}</text>
+          </g>
+        )
+      })}
+
+      <Axes box={R} xMax={0} yMax={sMax} xLabel="" yLabel="storage (m³)" />
+      {segs.map((sg) => (
+        <g key={sg.name}>
+          <rect x={R.x0 + 8} y={B.Y(sg.z0 + sg.v)} width={R.x1 - R.x0 - 16} height={B.Y(sg.z0) - B.Y(sg.z0 + sg.v)} fill={sg.fill} stroke={INK} strokeWidth="1" />
+          {/* each segment edge carried out to its dimension */}
+          <line x1={R.x1 - 8} x2={R.x1 + 22} y1={B.Y(sg.z0 + sg.v)} y2={B.Y(sg.z0 + sg.v)} stroke={MUTED} strokeWidth="0.8" />
+          {sg.v > 0 && <VDim x={R.x1 + 16} a={B.Y(sg.z0 + sg.v)} b={B.Y(sg.z0)} label={`${sg.name} ${n0(sg.v)}`} color={INK} />}
+        </g>
+      ))}
+      <line x1={R.x1 + 22} x2={R.x1 + 140} y1={B.Y(total)} y2={B.Y(total)} stroke={MUTED} strokeWidth="0.8" />
+      <line x1={R.x1} x2={R.x1 + 140} y1={R.base} y2={R.base} stroke={MUTED} strokeWidth="0.8" />
+      <VDim x={R.x1 + 134} a={B.Y(total)} b={R.base} label={`total ${n0(total)}`} color={INK} />
+      <text x={(R.x0 + R.x1) / 2} y={R.base + 16} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono}>reservoir</text>
     </Chart>
   )
 }

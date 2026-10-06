@@ -1,15 +1,13 @@
 import { useState } from 'react'
-import 'katex/dist/katex.min.css'
 import {
   operatingPoint, npsh, affinity, systemHead, pumpHead, hwFriction, minorLoss, PATM_HEAD, type SystemInput, type PumpSpec, type OperatingPoint, type NpshResult,
 } from '../engine/pumpStation'
-import { Card, Num, ResultCard, Row, Pick } from '../components/qty'
-import { DrawingCard } from '../components/calc'
-import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { PumpCurves } from '../components/waterCharts'
 import type { SolutionStep } from '../lib/solution'
-import { INK, MUTED, BRAND, FAIL, f2, f3 } from '../lib/influenceStyle'
+import { f2, f3 } from '../lib/influenceStyle'
 
 // Pump Station — system curve vs pump curve operating point, NPSH margin
 // and the power chain, for one pumping circuit.
@@ -48,16 +46,16 @@ export default function PumpStation() {
   }
   const pump: PumpSpec = { H0, Qd, Hd, eta, motorEta }
 
-  let op: OperatingPoint | null = null
-  let nps: NpshResult | null = null
-  let err: string | null = null
-  try {
-    op = operatingPoint(sys, pump)
-    const hfSuction = op.Q > 0
-      ? hwFriction(sL, op.Q, sC, sD) + minorLoss(op.Q, sD, sK)
-      : 0
-    nps = npsh({ patmHead: PATM_HEAD, vapourHead, zSuction, hfSuction, npshRequired })
-  } catch (e) { err = e instanceof Error ? e.message : 'Check the inputs' }
+  const out: { op: OperatingPoint | null; nps: NpshResult | null; err: string | null } = (() => {
+    try {
+      const o = operatingPoint(sys, pump)
+      const hfSuction = o.Q > 0 ? hwFriction(sL, o.Q, sC, sD) + minorLoss(o.Q, sD, sK) : 0
+      return { op: o, nps: npsh({ patmHead: PATM_HEAD, vapourHead, zSuction, hfSuction, npshRequired }), err: null }
+    } catch (e) {
+      return { op: null, nps: null, err: e instanceof Error ? e.message : 'Check the inputs' }
+    }
+  })()
+  const { op, nps, err } = out
 
   const r115 = op ? affinity(op.Q, op.H, op.Pshaft, 1.15) : null
 
@@ -101,119 +99,87 @@ export default function PumpStation() {
           : 'The suction side fails the +30 % margin: lower the pump, flood the suction, shorten the suction run or fit a larger suction diameter.' },
       ],
     }] : []),
-  ] : []
+  ] : [{ title: 'Check the inputs', lines: [{ text: err ?? 'Check the inputs.' }] }]
 
+  // both curves sampled to 2.2 × the duty flow for the chart
+  const curves = op ? Array.from({ length: 81 }, (_, i) => {
+    const q = (i / 80) * op.Q * 2.2
+    return { sys: { Q: q, H: systemHead(sys, q) }, pump: { Q: q, H: pumpHead(q, H0, Qd, Hd) } }
+  }) : []
+  const loadSample = () => { setStaticLift(20); setPressureHead(0); setSL(50); setSD(0.3); setSC(120); setSK(2); setDL(300); setDD(0.3); setDC(120); setDK(5); setH0(30); setQd(0.12); setHd(24); setEta(0.7); setMotorEta(0.9) }
   return (
-    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <ReportControls title="Pump Station Report" badges={[op ? `${f3(op.Q)} m³/s @ ${f2(op.H)} m` : 'System × pump']} />
-      <p className="mt-2 max-w-3xl text-sm text-muted">
-        One pumping circuit, end to end: the system curve the pipework demands, the
-        pump curve the impeller gives, their intersection as the duty point, the
-        power chain down to the motor, and the NPSH margin that keeps the impeller
-        off cavitation.
-      </p>
-
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <Card title="System (pipework)">
-            <div className="sm:col-span-2 lg:col-span-3">
-              <button type="button" onClick={() => { setStaticLift(20); setPressureHead(0); setSL(50); setSD(0.3); setSC(120); setSK(2); setDL(300); setDD(0.3); setDC(120); setDK(5); setH0(30); setQd(0.12); setHd(24); setEta(0.7); setMotorEta(0.9) }}
-                className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                Load the sample — 20 m lift · DN 300 · pump 30/24
-              </button>
-            </div>
-            <Num label="Static lift" unit="m" value={staticLift} onChange={setStaticLift} min={0} step="0.5" />
-            <Num label="Delivery pressure head" unit="m" value={pressureHead} onChange={setPressureHead} min={0} step="1" />
-            <Num label="Suction length" unit="m" value={sL} onChange={setSL} min={1} step="5" />
-            <Num label="Suction diameter" unit="m" value={sD} onChange={setSD} min={0.05} max={1.5} step="0.05" />
-            <Num label="Suction C" unit="—" value={sC} onChange={setSC} min={60} max={150} step="5" />
-            <Num label="Suction ΣK" unit="—" value={sK} onChange={setSK} min={0} step="0.5" />
-            <Num label="Discharge length" unit="m" value={dL} onChange={setDL} min={1} step="10" />
-            <Num label="Discharge diameter" unit="m" value={dD} onChange={setDD} min={0.05} max={1.5} step="0.05" />
-            <Num label="Discharge C" unit="—" value={dC} onChange={setDC} min={60} max={150} step="5" />
-            <Num label="Discharge ΣK" unit="—" value={dK} onChange={setDK} min={0} step="0.5" />
-          </Card>
-
-          <Card title="Pump & suction">
-            <Num label="Shutoff head H0" unit="m" value={H0} onChange={setH0} min={1} step="1" />
-            <Num label="Rated flow Qd" unit="m³/s" value={Qd} onChange={setQd} min={0.001} step="0.01" />
-            <Num label="Rated head Hd" unit="m" value={Hd} onChange={setHd} min={0.5} step="0.5" />
-            <Num label="Pump efficiency" unit="—" value={eta} onChange={setEta} min={0.2} max={0.95} step="0.01" />
-            <Num label="Motor efficiency" unit="—" value={motorEta} onChange={setMotorEta} min={0.5} max={1} step="0.01" />
-            <Num label="Vapour pressure head" unit="m" value={vapourHead} onChange={setVapourHead} min={0} max={3} step="0.02" />
-            <Pick label="Suction arrangement" value={String(zSuction)} onChange={(v) => setZSuction(Number(v))}
+    <WorkspacePage title="Pump Station" badges={['Water supply', 'Duty point · NPSH']}
+      intro="One pumping circuit end to end: the system curve the pipework demands, the pump curve the impeller gives, their crossing as the duty point, the power chain down to the motor, and the NPSH margin that keeps the impeller off cavitation."
+      inputs={<>
+        <InputGroup title="Lift">
+          <Num label="Static lift" unit="m" value={staticLift} onChange={setStaticLift} min={0} step="0.5" />
+          <Num label="Delivery pressure" unit="m" value={pressureHead} onChange={setPressureHead} min={0} step="1" />
+        </InputGroup>
+        <InputGroup title="Suction leg" hint="Hazen–Williams C and the fittings' ΣK.">
+          <Num label="Length" unit="m" value={sL} onChange={setSL} min={1} step="5" />
+          <Num label="Diameter" unit="m" value={sD} onChange={setSD} min={0.05} max={1.5} step="0.05" />
+          <Num label="C" value={sC} onChange={setSC} min={60} max={150} step="5" />
+          <Num label="ΣK" value={sK} onChange={setSK} min={0} step="0.5" />
+        </InputGroup>
+        <InputGroup title="Discharge leg">
+          <Num label="Length" unit="m" value={dL} onChange={setDL} min={1} step="10" />
+          <Num label="Diameter" unit="m" value={dD} onChange={setDD} min={0.05} max={1.5} step="0.05" />
+          <Num label="C" value={dC} onChange={setDC} min={60} max={150} step="5" />
+          <Num label="ΣK" value={dK} onChange={setDK} min={0} step="0.5" />
+        </InputGroup>
+        <InputGroup title="Pump" hint="Curve pinned on shutoff and the rated point.">
+          <Num label="Shutoff head H₀" unit="m" value={H0} onChange={setH0} min={1} step="1" />
+          <Num label="Rated head Hd" unit="m" value={Hd} onChange={setHd} min={0.5} step="0.5" />
+          <Num label="Rated flow Qd" unit="m³/s" value={Qd} onChange={setQd} min={0.001} step="0.01" />
+          <Num label="Pump η" value={eta} onChange={setEta} min={0.2} max={0.95} step="0.01" />
+          <Num label="Motor η" value={motorEta} onChange={setMotorEta} min={0.5} max={1} step="0.01" />
+        </InputGroup>
+        <InputGroup title="Suction conditions">
+          <div className="col-span-2">
+            <Pick label="Arrangement" value={String(zSuction)} onChange={(v) => setZSuction(Number(v))}
               options={[['2', 'Flooded +2 m'], ['0', 'Level with the impeller'], ['-3', 'Lift −3 m'], ['-6', 'Lift −6 m']]} />
-            <Num label="NPSH required (datasheet)" unit="m" value={npshRequired} onChange={setNpshRequired} min={0.5} step="0.5" />
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          {op && nps ? (
-            <>
-              <ResultCard title="Duty point">
-                <Row label="Operating flow Q*" value={`${f3(op.Q)} m³/s`} sub={`${f2(op.Q * 1000)} L/s`} />
-                <Row label="Operating head H*" value={`${f2(op.H)} m`} sub="system head the duty must develop" />
-                <Row label="Shaft / motor power" value={`${f2(op.Pshaft)} / ${f2(op.Pmotor)} kW`} sub={`water power ${f2(op.Pwater)} kW · ${f2(op.kwhPerM3)} kWh/m³`} />
-                <Row label="NPSH margin" value={`${f2(nps.margin)} m`} alert={!nps.ok}
-                  sub={`NPSHa ${f2(nps.npshAvailable)} vs 1.3×NPSHr ${f2(nps.npshRequired)} m`} />
-              </ResultCard>
-
-              <DrawingCard title="System × pump curves" meta="the crossing is the duty point">
-                <DrawingFrame label="Pump and system curves">
-                  <Curves sys={sys} pump={pump} op={op} />
-                </DrawingFrame>
-              </DrawingCard>
-
-              <WorkedSolution steps={steps} title="Pump duty — step by step" />
-            </>
-          ) : (
-            <ResultCard title="Check the inputs">
-              <p className="text-sm text-fail">{err}</p>
-            </ResultCard>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Curves({ sys, pump, op }: { sys: SystemInput; pump: PumpSpec; op: OperatingPoint }) {
-  const W = 640, Hh = 320
-  const x0 = 64, x1 = W - 46
-  const baseY = Hh - 48, topY = 32
-  const Qmax = op.Q * 2.2
-  const Hmax = Math.max(pump.H0, systemHead(sys, Qmax)) * 1.12
-  const xOf = (Q: number) => x0 + (Q / Qmax) * (x1 - x0)
-  const yOf = (H: number) => baseY - (H / Hmax) * (baseY - topY)
-  const sysPts: string[] = [], pumpPts: string[] = []
-  for (let i = 0; i <= 80; i++) {
-    const Q = (i / 80) * Qmax
-    sysPts.push(`${xOf(Q)},${yOf(systemHead(sys, Q))}`)
-    const hp = pumpHead(Q, pump.H0, pump.Qd, pump.Hd)
-    if (hp > 0) pumpPts.push(`${xOf(Q)},${yOf(hp)}`)
-  }
-  return (
-    <svg viewBox={`0 0 ${W} ${Hh}`} className="w-full" role="img" aria-label="System and pump curves">
-      <line x1={x0} x2={x1} y1={baseY} y2={baseY} stroke={INK} strokeWidth="1.2" />
-      <line x1={x0} x2={x0} y1={topY - 8} y2={baseY} stroke={INK} strokeWidth="1.2" />
-      {/* static head line */}
-      <line x1={x0} x2={x1} y1={yOf(sys.staticLift + sys.pressureHead)} y2={yOf(sys.staticLift + sys.pressureHead)} stroke={MUTED} strokeWidth="1" strokeDasharray="4 3" />
-      <text x={x0 + 6} y={yOf(sys.staticLift + sys.pressureHead) - 5} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-        static {f2(sys.staticLift + sys.pressureHead)} m
-      </text>
-      <polyline points={sysPts.join(' ')} fill="none" stroke={MUTED} strokeWidth="2" />
-      <polyline points={pumpPts.join(' ')} fill="none" stroke={BRAND} strokeWidth="2.2" />
-      {/* duty point */}
-      <circle cx={xOf(op.Q)} cy={yOf(op.H)} r="4.5" fill={FAIL} />
-      <line x1={xOf(op.Q)} x2={xOf(op.Q)} y1={yOf(op.H)} y2={baseY} stroke={FAIL} strokeWidth="1" strokeDasharray="4 3" />
-      <line x1={x0} x2={xOf(op.Q)} y1={yOf(op.H)} y2={yOf(op.H)} stroke={FAIL} strokeWidth="1" strokeDasharray="4 3" />
-      <text x={xOf(op.Q) + 8} y={yOf(op.H) - 8} fontSize="11" fill={FAIL} fontFamily="var(--font-mono, monospace)">
-        {f3(op.Q)} m³/s @ {f2(op.H)} m
-      </text>
-      <text x={x1} y={baseY + 16} textAnchor="end" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">Q (m³/s)</text>
-      <text x={x0 - 6} y={topY} textAnchor="end" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">H (m)</text>
-      <text x={x1 - 6} y={topY + 14} textAnchor="end" fontSize="10.5" fill={BRAND} fontFamily="var(--font-mono, monospace)">pump H0 = {f2(pump.H0)} m</text>
-      <text x={x1 - 6} y={topY + 30} textAnchor="end" fontSize="10.5" fill={MUTED} fontFamily="var(--font-mono, monospace)">system: static + friction</text>
-    </svg>
+          </div>
+          <Num label="Vapour head" unit="m" value={vapourHead} onChange={setVapourHead} min={0} max={3} step="0.02" />
+          <Num label="NPSHr" unit="m" value={npshRequired} onChange={setNpshRequired} min={0.5} step="0.5" />
+          <div className="col-span-2">
+            <button type="button" onClick={loadSample}
+              className="rounded-md border border-field-line px-2 py-0.5 text-[11px] font-semibold text-brand hover:bg-brand-tint">Sample: 20 m lift, DN 300, pump 30/24</button>
+          </div>
+        </InputGroup>
+      </>}
+      checks={op && nps ? <>
+        <CheckCard title="Duty point" basis="pump curve = system curve" status="info" value={f3(op.Q)} unit="m³/s"
+          formula="H₀ − (H₀ − Hd)(Q/Qd)² = Hsys(Q)"
+          pairs={[{ label: 'Head H*', value: `${f2(op.H)} m` }, { label: 'Flow', value: `${f2(op.Q * 1000)} L/s` }]} />
+        <CheckCard title="NPSH" basis="NPSHa ≥ 1.3 NPSHr" status={nps.ok ? 'pass' : 'fail'} value={f2(nps.npshAvailable)} unit="m available"
+          formula="NPSHa = (Patm − Pv)/γ + z − hf,s" ratio={nps.npshAvailable > 0 ? nps.npshRequired / nps.npshAvailable : undefined} ratioLabel="1.3 NPSHr ÷ NPSHa"
+          pairs={[{ label: 'Required ×1.3', value: `${f2(nps.npshRequired)} m` }, { label: 'Margin', value: `${f2(nps.margin)} m` }]} />
+        <CheckCard title="Power" basis="γQH / η" status="info" value={f2(op.Pmotor)} unit="kW motor"
+          formula="P = 9.81 Q H / (η_pump η_motor)"
+          pairs={[{ label: 'Shaft', value: `${f2(op.Pshaft)} kW` }, { label: 'Energy', value: `${f2(op.kwhPerM3)} kWh/m³` }]} />
+      </> : (
+        <CheckCard title="Check the inputs" basis="pump station" status="warn" pillLabel="CHECK" value="—" formula={err ?? 'Check the inputs.'} />
+      )}
+      summary={[
+        { label: 'Static lift', value: `${f2(staticLift + pressureHead)} m` },
+        { label: 'Suction', value: `${f2(sL)} m × ${f2(sD)} m, C ${f2(sC)}` },
+        { label: 'Discharge', value: `${f2(dL)} m × ${f2(dD)} m, C ${f2(dC)}` },
+        { label: 'Pump', value: `H₀ ${f2(H0)} m, ${f3(Qd)} m³/s at ${f2(Hd)} m` },
+      ]}
+      drawing={op ? { title: 'Pump and system curves', node: <div data-pdf-drawing><PumpCurves pump={curves.map((c) => c.pump)} system={curves.map((c) => c.sys)} Hstatic={staticLift + pressureHead} H0={H0} Q={op.Q} H={op.H} /></div> } : undefined}
+      results={op && nps ? [
+        { check: 'Duty flow Q*', basis: 'curve crossing', demand: `${f3(op.Q)} m³/s`, status: 'info' as const },
+        { check: 'Duty head H*', basis: `static ${f2(staticLift + pressureHead)} m + losses`, demand: `${f2(op.H)} m`, status: 'info' as const },
+        { check: 'Motor power', basis: `η ${f2(eta)} × ${f2(motorEta)}`, demand: `${f2(op.Pmotor)} kW`, status: 'info' as const },
+        { check: 'NPSH available', basis: '≥ 1.3 × NPSHr', demand: `${f2(nps.npshAvailable)} m`, limit: `${f2(nps.npshRequired)} m`, ratio: nps.npshAvailable > 0 ? nps.npshRequired / nps.npshAvailable : undefined, status: nps.ok ? 'pass' as const : 'fail' as const },
+      ] : [{ check: 'Duty', basis: err ?? 'invalid input', demand: '—', status: 'warn' as const }]}
+      steps={steps}
+      references={[
+        { topic: 'Friction loss', basis: 'Hazen–Williams, SI form 10.67 L Q^1.852 / (C^1.852 D^4.8704)', source: 'AWWA M32; Mays, Water Resources Engineering' },
+        { topic: 'Duty point', basis: 'crossing of pump and system curves', source: 'Hydraulic Institute ANSI/HI 9.6.3' },
+        { topic: 'NPSH margin', basis: 'NPSHa ≥ 1.3 NPSHr', source: 'ANSI/HI 9.6.1 (margin ratio guidance)' },
+        { topic: 'Affinity laws', basis: 'Q ∝ N, H ∝ N², P ∝ N³', source: 'Karassik, Pump Handbook' },
+      ]}
+    />
   )
 }

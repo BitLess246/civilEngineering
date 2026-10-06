@@ -1,17 +1,16 @@
 import { useState } from 'react'
-import 'katex/dist/katex.min.css'
-import { designSewer, STD_DN, type RunRow, type SewerResult } from '../engine/stormSewer'
-import { Card, Num, ResultCard, Row } from '../components/qty'
-import { DrawingCard } from '../components/calc'
-import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { designSewer, sewerProfile, type RunRow, type SewerResult } from '../engine/stormSewer'
+import { Num } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { SewerProfile } from '../components/waterCharts'
 import type { SolutionStep } from '../lib/solution'
-import { INK, MUTED, BRAND, f2, f3 } from '../lib/influenceStyle'
+import { f2, f3 } from '../lib/influenceStyle'
 
 // Storm Sewer — a linear network sized by the Rational Method and Manning
 // full-flow capacity: per-run Q, standard diameter, part-full velocity,
-// travel time fed downstream into the tc chain, and warnings.
+// travel time fed downstream into the tc chain, and warnings — drawn as a
+// longitudinal profile with crowns matched at the manholes.
 
 interface UiRun {
   name: string
@@ -29,8 +28,6 @@ const SAMPLE: UiRun[] = [
   { name: 'Outfall line', L: 180, slopePct: 0.4, n: 0.013, areaHa: 1.5, C: 0.75, tcMin: 25 },
 ]
 
-const NO_SPIN = "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-
 export default function StormSewer() {
   const [runs, setRuns] = useState<UiRun[]>(SAMPLE)
   const [a, setA] = useState(800)
@@ -44,10 +41,14 @@ export default function StormSewer() {
     inlet: { name: `Inlet ${i + 1}`, areaHa: r.areaHa, C: r.C, tcMin: r.tcMin },
   }))
 
-  let res: SewerResult | null = null
-  let err: string | null = null
-  try { res = designSewer(rows, { a, b, c }, { Vmin, Vwarn }) }
-  catch (e) { err = e instanceof Error ? e.message : 'Check the inputs' }
+  const out: { res: SewerResult | null; err: string | null } = (() => {
+    try {
+      return { res: designSewer(rows, { a, b, c }, { Vmin, Vwarn }), err: null }
+    } catch (e) {
+      return { res: null, err: e instanceof Error ? e.message : 'Check the inputs' }
+    }
+  })()
+  const { res, err } = out
 
   const setRun = (i: number, patch: Partial<UiRun>) =>
     setRuns((rs) => rs.map((x, j) => (j === i ? { ...x, ...patch } : x)))
@@ -79,146 +80,88 @@ export default function StormSewer() {
       ],
     },
     ...res.runs.flatMap((r) => r.warnings.map((w) => ({ title: `${r.name} — check`, lines: [{ text: w }] }))),
-  ] : []
+  ] : [{ title: 'Check the inputs', lines: [{ text: err ?? 'Add at least one run.' }] }]
 
+  const profile = res ? sewerProfile(res.runs.map((r, i) => ({ L: runs[i].L, slopePct: r.slopePct, dn: r.dn }))) : []
+  const maxUtil = res ? Math.max(...res.runs.map((r) => r.utilization)) : 0
+  const minVpart = res ? Math.min(...res.runs.map((r) => r.Vpart)) : 0
+  const maxVfull = res ? Math.max(...res.runs.map((r) => r.Vfull)) : 0
+  const outfall = res ? res.runs[res.runs.length - 1] : null
+  const btn = 'rounded-md border border-field-line px-2 py-0.5 text-[11px] font-semibold text-brand hover:bg-brand-tint'
   return (
-    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <ReportControls title="Storm Sewer Report" badges={[res ? `${res.runs.length} runs` : 'Rational · Manning']} />
-      <p className="mt-2 max-w-3xl text-sm text-muted">
-        A linear storm-sewer ladder sized the classic way: Rational Method flows with
-        travel-time accumulation, Manning full-flow capacity against the commercial
-        diameter ladder, part-full velocity for self-cleansing, and the tc chain
-        carried downstream from inlet to outfall.
-      </p>
-
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,500px)_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <Card title="IDF & velocity policy">
-            <div className="sm:col-span-2 lg:col-span-3">
-              <button type="button"
-                onClick={() => { setRuns(SAMPLE.map((r) => ({ ...r }))); setA(800); setB(10); setC(0.75); setVmin(0.75); setVwarn(3) }}
-                className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                Load the sample — 3 runs · i = 800/(tc+10)^0.75
-              </button>
-            </div>
-            <Num label="IDF coefficient a" unit="—" value={a} onChange={setA} min={10} step="10" />
-            <Num label="IDF coefficient b" unit="min" value={b} onChange={setB} min={0} step="1" />
-            <Num label="IDF exponent c" unit="—" value={c} onChange={setC} min={0.2} max={1.2} step="0.05" />
-            <Num label="Self-cleansing velocity" unit="m/s" value={Vmin} onChange={setVmin} min={0.3} max={1.5} step="0.05" />
-            <Num label="Erosion check velocity" unit="m/s" value={Vwarn} onChange={setVwarn} min={1.5} max={6} step="0.5" />
-          </Card>
-
-          <Card title="Runs (head-first — each line feeds the next)">
-            <div className="grid grid-cols-[minmax(0,1fr)_58px_54px_62px_56px_54px_60px_28px] gap-2 sm:col-span-2 lg:col-span-3">
-              {['Run', 'L (m)', 'S (%)', 'n', 'A (ha)', 'C', 'tc (min)', ''].map((h, i) => (
-                <span key={i} className="text-[10.5px] font-semibold text-muted">{h}</span>
-              ))}
-            </div>
-            {runs.map((r, i) => (
-              <div key={i} className="grid grid-cols-[minmax(0,1fr)_58px_54px_62px_56px_54px_60px_28px] items-center gap-2 sm:col-span-2 lg:col-span-3">
-                <input value={r.name} onChange={(e) => setRun(i, { name: e.target.value })}
-                  className="w-full rounded-md border border-field-line bg-surface px-2 py-1.5 text-sm" aria-label={`Run ${i + 1} name`} />
-                <input type="number" value={r.L} min={5} step={10} onChange={(e) => setRun(i, { L: Number(e.target.value) })}
-                  className={`w-full rounded-md border border-field-line bg-surface px-1.5 py-1.5 text-sm ${NO_SPIN}`} aria-label={`Run ${i + 1} length`} />
-                <input type="number" value={r.slopePct} min={0.05} step={0.1} onChange={(e) => setRun(i, { slopePct: Number(e.target.value) })}
-                  className={`w-full rounded-md border border-field-line bg-surface px-1.5 py-1.5 text-sm ${NO_SPIN}`} aria-label={`Run ${i + 1} slope`} />
-                <input type="number" value={r.n} min={0.008} step={0.001} onChange={(e) => setRun(i, { n: Number(e.target.value) })}
-                  className={`w-full rounded-md border border-field-line bg-surface px-1.5 py-1.5 text-sm ${NO_SPIN}`} aria-label={`Run ${i + 1} n`} />
-                <input type="number" value={r.areaHa} min={0.1} step={0.5} onChange={(e) => setRun(i, { areaHa: Number(e.target.value) })}
-                  className={`w-full rounded-md border border-field-line bg-surface px-1.5 py-1.5 text-sm ${NO_SPIN}`} aria-label={`Run ${i + 1} area`} />
-                <input type="number" value={r.C} min={0.05} max={1} step={0.05} onChange={(e) => setRun(i, { C: Number(e.target.value) })}
-                  className={`w-full rounded-md border border-field-line bg-surface px-1.5 py-1.5 text-sm ${NO_SPIN}`} aria-label={`Run ${i + 1} C`} />
-                <input type="number" value={r.tcMin} min={1} step={1} onChange={(e) => setRun(i, { tcMin: Number(e.target.value) })}
-                  className={`w-full rounded-md border border-field-line bg-surface px-1.5 py-1.5 text-sm ${NO_SPIN}`} aria-label={`Run ${i + 1} inlet time`} />
-                <button type="button" aria-label={`Remove run ${i + 1}`}
-                  onClick={() => setRuns((rs) => rs.filter((_, j) => j !== i))}
-                  className="rounded-md border border-field-line px-1 py-1 text-xs text-muted hover:text-fail">✕</button>
+    <WorkspacePage title="Storm Sewer" badges={['Drainage', 'Rational · Manning']}
+      intro="A linear storm-sewer ladder sized the classic way: Rational Method flows with travel-time accumulation, Manning full-flow capacity against the commercial diameter ladder, part-full velocity for self-cleansing, and the tc chain carried from inlet to outfall."
+      inputs={<>
+        <InputGroup title="IDF curve" hint="i = a / (tc + b)^c, mm/h with tc in minutes.">
+          <Num label="Coefficient a" value={a} onChange={setA} min={10} step="10" />
+          <Num label="Coefficient b" unit="min" value={b} onChange={setB} min={0} step="1" />
+          <Num label="Exponent c" value={c} onChange={setC} min={0.2} max={1.2} step="0.05" />
+        </InputGroup>
+        <InputGroup title="Velocity policy">
+          <Num label="Self-cleansing" unit="m/s" value={Vmin} onChange={setVmin} min={0.3} max={1.5} step="0.05" />
+          <Num label="Erosion check" unit="m/s" value={Vwarn} onChange={setVwarn} min={1.5} max={6} step="0.5" />
+        </InputGroup>
+        {runs.map((r, i) => (
+          <InputGroup key={i} title={`Run ${i + 1}`} hint={i === 0 ? 'Head of the network.' : `Receives run ${i}.`}>
+            <label className="col-span-2 flex flex-col gap-1 text-[12.5px] font-semibold text-ink">
+              Name
+              <input value={r.name} onChange={(e) => setRun(i, { name: e.target.value })}
+                className="w-full rounded-md border border-field-line bg-surface px-2.5 py-1.5 text-sm font-normal" aria-label={`Run ${i + 1} name`} />
+            </label>
+            <Num label="Length L" unit="m" value={r.L} onChange={(v) => setRun(i, { L: v })} min={5} step="10" />
+            <Num label="Slope S" unit="%" value={r.slopePct} onChange={(v) => setRun(i, { slopePct: v })} min={0.05} step="0.1" />
+            <Num label="Manning n" value={r.n} onChange={(v) => setRun(i, { n: v })} min={0.008} step="0.001" />
+            <Num label="Inlet area A" unit="ha" value={r.areaHa} onChange={(v) => setRun(i, { areaHa: v })} min={0.1} step="0.5" />
+            <Num label="Runoff C" value={r.C} onChange={(v) => setRun(i, { C: v })} min={0.05} max={1} step="0.05" />
+            <Num label="Inlet time" unit="min" value={r.tcMin} onChange={(v) => setRun(i, { tcMin: v })} min={1} step="1" />
+            {runs.length > 1 && (
+              <div className="col-span-2">
+                <button type="button" onClick={() => setRuns((rs) => rs.filter((_, j) => j !== i))} className={btn}>Remove run {i + 1}</button>
               </div>
-            ))}
-            <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
-              <button type="button"
-                onClick={() => setRuns((rs) => [...rs, { name: `Line ${rs.length + 1}`, L: 150, slopePct: 0.5, n: 0.013, areaHa: 1, C: 0.6, tcMin: 20 }])}
-                className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                + Add run
-              </button>
-              <span className="self-center text-xs text-muted">each run connects upstream = the row above</span>
-            </div>
-          </Card>
+            )}
+          </InputGroup>
+        ))}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className={btn}
+            onClick={() => setRuns((rs) => [...rs, { name: `Line ${rs.length + 1}`, L: 150, slopePct: 0.5, n: 0.013, areaHa: 1, C: 0.6, tcMin: 20 }])}>+ Add run</button>
+          <button type="button" className={btn}
+            onClick={() => { setRuns(SAMPLE.map((r) => ({ ...r }))); setA(800); setB(10); setC(0.75); setVmin(0.75); setVwarn(3) }}>Sample: 3 runs, i = 800/(tc+10)^0.75</button>
         </div>
-
-        <div className="space-y-5">
-          {res ? (
-            <>
-              {res.runs.map((r, i) => (
-                <ResultCard key={i} title={`${r.name} — DN ${r.dn}`}>
-                  <Row label={`Design flow Q`} value={`${f3(r.Qdesign)} m³/s`}
-                    sub={`i = ${f2(r.iDesign)} mm/h at tc = ${f2(r.tcHead)} min · Ccomp ${f2(r.Ccomp)} · ${f2(r.areaHa)} ha`} />
-                  <Row label={`Capacity of DN ${r.dn}`} value={`${f3(r.Qfull)} m³/s`}
-                    sub={`V full ${f2(r.Vfull)} m/s · V part-full ${f2(r.Vpart)} m/s${r.meetsVelocity ? '' : ' — below cleansing floor'} · utilization ${Math.round(r.utilization * 100)} %`} />
-                  <Row label="Travel time" value={`${f2(r.travelMin)} min`}
-                    sub={r.upstreamNames.length > 0 ? `receives ${r.upstreamNames.join(', ')}` : 'head of the network'} alert={r.warnings.length > 0} />
-                  {r.warnings.map((w, j) => (
-                    <p key={j} className="text-xs text-fail">{w}</p>
-                  ))}
-                </ResultCard>
-              ))}
-
-              <DrawingCard title="Longitudinal profile" meta="invert grades and pipe sizes down the ladder">
-                <DrawingFrame label="Storm sewer profile">
-                  <Profile res={res} />
-                </DrawingFrame>
-              </DrawingCard>
-
-              <WorkedSolution steps={steps} title="Storm sewer — step by step" />
-            </>
-          ) : (
-            <ResultCard title="Check the inputs">
-              <p className="text-sm text-fail">{err}</p>
-            </ResultCard>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Profile({ res }: { res: SewerResult }) {
-  const W = 680, Hh = 280
-  const x0 = 56, x1 = W - 44
-  const topY = 40, baseY = Hh - 46
-  const runs = res.runs
-  const dnMin = 300, dnMax = 3000
-  const hOf = (dn: number) => 8 + (Math.log(dn / dnMin) / Math.log(dnMax / dnMin)) * 26
-  const w = (x1 - x0) / runs.length
-  const segs = runs.map((r, i) => ({ x0: x0 + i * w, x1: x0 + (i + 1) * w, r, i }))
-  return (
-    <svg viewBox={`0 0 ${W} ${Hh}`} className="w-full" role="img" aria-label="Storm sewer longitudinal profile">
-      {/* grade line */}
-      {segs.map(({ x0: sx, x1: ex, r }) => {
-        const yTop = topY + (r.slopePct > 0.6 ? 6 : 18) - Math.min(12, r.slopePct * 10)
-        const yBot = yTop + 12
-        return (
-          <g key={r.name}>
-            <rect x={sx + 8} y={yTop} width={ex - sx - 16} height={hOf(r.dn)} fill="rgba(15,76,146,0.14)" stroke={INK} strokeWidth="1.3" />
-            <line x1={sx} y1={yBot + 30} x2={ex} y2={yBot + 30 + Math.min(14, r.slopePct * 14)} stroke={MUTED} strokeWidth="1" strokeDasharray="4 3" />
-            <text x={(sx + ex) / 2} y={yTop - 7} textAnchor="middle" fontSize="10.5" fill={INK} fontFamily="var(--font-mono, monospace)">
-              DN {r.dn}
-            </text>
-            <text x={(sx + ex) / 2} y={yBot + 62} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-              Q {f3(r.Qdesign)} · V {f2(r.Vfull)}
-            </text>
-            <text x={(sx + ex) / 2} y={yBot + 75} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-              {r.name}
-            </text>
-          </g>
-        )
-      })}
-      {/* flow direction */}
-      <line x1={x0 + 4} y1={baseY + 8} x2={x1 - 4} y2={baseY + 8} stroke={BRAND} strokeWidth="1.4" />
-      <polygon points={`${x1 - 4},${baseY + 8} ${x1 - 16},${baseY + 4} ${x1 - 16},${baseY + 12}`} fill={BRAND} />
-      <text x={x1} y={baseY + 26} textAnchor="end" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-        to outfall · pipe sizes DN {STD_DN[0]}–{STD_DN[STD_DN.length - 1]}
-      </text>
-    </svg>
+      </>}
+      checks={res && outfall ? <>
+        <CheckCard title="Capacity" basis="Q ≤ Qfull in every run" status={maxUtil <= 1 ? 'pass' : 'fail'} value={`DN ${outfall.dn}`} unit="at the outfall"
+          formula="Qf = (1/n)(πD²/4)(D/4)^(2/3)√S" ratio={maxUtil} ratioLabel="Highest Q ÷ Qfull"
+          pairs={[{ label: 'Outfall Q', value: `${f3(outfall.Qdesign)} m³/s` }, { label: 'Outfall tc', value: `${f2(outfall.tcHead)} min` }]} />
+        <CheckCard title="Self-cleansing" basis={`part-full V ≥ ${f2(Vmin)} m/s`} status={minVpart >= Vmin - 1e-9 ? 'pass' : 'fail'} value={f2(minVpart)} unit="m/s lowest"
+          ratio={minVpart > 0 ? Vmin / minVpart : undefined} ratioLabel="Floor ÷ lowest V"
+          pairs={[{ label: 'Runs below', value: `${res.runs.filter((r) => !r.meetsVelocity).length}` }, { label: 'Fix', value: 'steepen, not upsize' }]} />
+        <CheckCard title="Erosion" basis={`full V ≤ ${f2(Vwarn)} m/s`} status={maxVfull <= Vwarn ? 'pass' : 'warn'} value={f2(maxVfull)} unit="m/s highest"
+          ratio={maxVfull / Vwarn} ratioLabel="Highest V ÷ check"
+          pairs={[{ label: 'Runs', value: `${res.runs.length}` }, { label: 'Total length', value: `${f2(profile[profile.length - 1]?.chainD ?? 0)} m` }]} />
+      </> : (
+        <CheckCard title="Check the inputs" basis="storm sewer" status="warn" pillLabel="CHECK" value="—" formula={err ?? 'Add at least one run.'} />
+      )}
+      summary={[
+        { label: 'IDF', value: `i = ${f2(a)}/(tc + ${f2(b)})^${f3(c)}` },
+        { label: 'Runs', value: `${runs.length}` },
+        { label: 'Self-cleansing', value: `${f2(Vmin)} m/s` },
+        { label: 'Erosion check', value: `${f2(Vwarn)} m/s` },
+      ]}
+      drawing={res ? { title: 'Longitudinal profile', node: <div data-pdf-drawing><SewerProfile runs={res.runs.map((r, i) => ({ name: r.name, dn: r.dn, slopePct: r.slopePct, Q: r.Qdesign, p: profile[i] }))} /></div> } : undefined}
+      resultsCaption={res ? res.runs.flatMap((r) => r.warnings.map((w) => `${r.name}: ${w}`)).join(' ') || undefined : undefined}
+      results={res ? res.runs.map((r) => ({
+        check: `${r.name} — DN ${r.dn}`,
+        basis: `i ${f2(r.iDesign)} mm/h at tc ${f2(r.tcHead)} min · V part ${f2(r.Vpart)} m/s`,
+        demand: `${f3(r.Qdesign)} m³/s`, limit: `${f3(r.Qfull)} m³/s`, ratio: r.utilization,
+        status: r.utilization > 1 || !r.meetsVelocity ? 'fail' as const : r.warnings.length ? 'warn' as const : 'pass' as const,
+      })) : [{ check: 'Sizing', basis: err ?? 'invalid input', demand: '—', status: 'warn' as const }]}
+      steps={steps}
+      references={[
+        { topic: 'Design flow', basis: 'Q = C·i·A/360 with tc = max(inlet, upstream arrival)', source: 'Rational Method; ASCE MOP 77, Design and Construction of Urban Stormwater Management Systems' },
+        { topic: 'Pipe capacity', basis: 'Manning, circular pipe running full', source: 'Chow, Open-Channel Hydraulics' },
+        { topic: 'Self-cleansing velocity', basis: '≥ 0.75 m/s part-full (typical; set above)', source: 'ASCE MOP 77' },
+        { topic: 'Profile', basis: 'crowns matched where the pipe grows', source: 'ASCE MOP 60 / WEF MOP FD-5' },
+      ]}
+    />
   )
 }
