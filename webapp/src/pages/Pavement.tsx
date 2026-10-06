@@ -1,16 +1,14 @@
 import { useState } from 'react'
-import 'katex/dist/katex.min.css'
 import {
   esals, requiredSN, layerSN, checkLayers, TYPICAL_A,
   type EsalsResult, type SnResult, type LayerRow,
 } from '../engine/pavement'
-import { Card, Num, Pick, ResultCard, Row } from '../components/qty'
-import { DrawingCard } from '../components/calc'
-import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { FlexibleSection } from '../components/pavementSketches'
 import type { SolutionStep } from '../lib/solution'
-import { INK, MUTED, f2, f3 } from '../lib/influenceStyle'
+import { f2, f3 } from '../lib/influenceStyle'
 
 // Flexible Pavement — AASHTO 1993: traffic as design ESALs, the required
 // structural number from the design equation, and the layer-thickness
@@ -97,111 +95,86 @@ export default function Pavement() {
       ],
     },
     ...snSteps(sn, reliability, S0, pt, layers, W18, dims),
-  ] : sn.res ? snSteps(sn, reliability, S0, pt, layers, W18, dims) : []
+  ] : sn.res ? snSteps(sn, reliability, S0, pt, layers, W18, dims) : [{ title: 'Check the inputs', lines: [{ text: 'Give a positive W18 (from traffic or directly), a subgrade resilient modulus, and keep ΔPSI positive (pt below 4.2).' }] }]
 
+  const loadSample = () => { setUseTraffic('calc'); setAdt(3000); setTruckPct(15); setTruckFactor(1.2); setDirectional(0.6); setLaneFactor(0.9); setGrowthPct(4); setYears(20); setMR(50); setReliability(90); setPt(2.2) }
+  const snOk = Number.isFinite(layers.sn) && layers.ok
+  const w18Text = Number.isFinite(W18) ? `${(W18 / 1e6).toFixed(3)} × 10⁶` : '—'
   return (
-    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <ReportControls title="Flexible Pavement Report" badges={['AASHTO 1993']} />
-      <p className="mt-2 max-w-3xl text-sm text-muted">
-        The AASHTO Guide for Design of Pavement Structures (1993) flexible workflow:
-        forecast the design-lane ESALs from AADT, truck percentage and truck factor,
-        solve the required structural number SN from the design equation, then close
-        the layer equation a1·D1 + a2·D2·m2 + a3·D3·m3 against it.
-      </p>
-
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <Card title="Traffic (design ESALs)">
-            <div className="sm:col-span-2 lg:col-span-3">
-              <button type="button"
-                onClick={() => { setUseTraffic('calc'); setAdt(3000); setTruckPct(15); setTruckFactor(1.2); setDirectional(0.6); setLaneFactor(0.9); setGrowthPct(4); setYears(20); setMR(50); setReliability(90); setPt(2.2) }}
-                className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                Load the sample — 3 000 AADT · 15 % trucks · 4 % growth · 20 yr
-              </button>
-            </div>
+    <WorkspacePage title="Flexible Pavement" badges={['Pavement', 'AASHTO 1993']}
+      intro="The AASHTO 1993 flexible workflow: forecast the design-lane ESALs from AADT, truck percentage and truck factor, solve the required structural number from the design equation, then close the layer equation a₁D₁ + a₂D₂m₂ + a₃D₃m₃ against it."
+      inputs={<>
+        <InputGroup title="Traffic (design ESALs)">
+          <div className="col-span-2">
             <Pick label="Design ESALs" value={useTraffic} onChange={(v) => setUseTraffic(v as 'calc' | 'direct')}
               options={[['calc', 'Forecast from traffic'], ['direct', 'Enter W18 directly']]} />
-            {useTraffic === 'calc' ? (
-              <>
-                <Num label="Two-way AADT" unit="veh/day" value={adt} onChange={setAdt} min={50} max={200000} step="50" />
-                <Num label="Trucks T" unit="%" value={truckPct} onChange={setTruckPct} min={0} max={100} step="0.5" />
-                <Num label="Truck factor TF" unit="ESAL/truck" value={truckFactor} onChange={setTruckFactor} min={0.05} max={10} step="0.05" />
-                <Num label="Directional split D" value={directional} onChange={setDirectional} min={0.1} max={0.9} step="0.05" />
-                <Num label="Design-lane factor L" value={laneFactor} onChange={setLaneFactor} min={0.5} max={1.0} step="0.05" />
-                <Num label="Growth r" unit="%/yr" value={growthPct} onChange={setGrowthPct} min={0} max={15} step="0.5" />
-                <Num label="Design period" unit="yr" value={years} onChange={setYears} min={1} max={50} step="1" />
-              </>
-            ) : (
-              <Num label="Design ESALs W18" value={W18direct} onChange={setW18direct} min={1000} max={1e9} step="100000" />
-            )}
-          </Card>
-
-          <Card title="Performance & subgrade">
-            <Num label="Reliability R" unit="%" value={reliability} onChange={setReliability} min={50} max={99.99} step="1" />
-            <Num label="Overall std dev S0" value={S0} onChange={setS0} min={0.3} max={0.55} step="0.01" />
-            <Num label="Terminal serviceability pt" value={pt} onChange={setPt} min={1.5} max={3.0} step="0.1" />
-            <Num label="Subgrade MR" unit="MPa" value={MR} onChange={setMR} min={10} max={300} step="5" />
-          </Card>
-
-          <Card title="Layer equation (SN check)">
-            <Pick label="Coefficient preset" value={preset} onChange={applyPreset} options={LAYER_PRESETS} />
-            <Num label="a1 (asphalt, per mm)" value={a1} onChange={setA1} min={0.001} max={0.05} step="0.0005" />
-            <Num label="D1 asphalt" unit="mm" value={D1} onChange={setD1} min={25} max={400} step="5" />
-            <Num label="a2 (base, per mm)" value={a2} onChange={setA2} min={0.001} max={0.03} step="0.0005" />
-            <Num label="D2 base" unit="mm" value={D2} onChange={setD2} min={0} max={600} step="10" />
-            <Num label="m2 drainage (base)" value={m2} onChange={setM2} min={0.8} max={1.5} step="0.05" />
-            <Num label="a3 (subbase, per mm)" value={a3} onChange={setA3} min={0.001} max={0.02} step="0.0005" />
-            <Num label="D3 subbase" unit="mm" value={D3} onChange={setD3} min={0} max={900} step="10" />
-            <Num label="m3 drainage (subbase)" value={m3} onChange={setM3} min={0.8} max={1.5} step="0.05" />
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          {es.res && useTraffic === 'calc' && (
-            <ResultCard title="Design ESALs">
-              <Row label="W18 (design lane)" value={`${(es.res.W18 / 1e6).toFixed(3)} × 10⁶`}
-                sub={`${f3(es.res.W18)} ESALs over ${years} years`} />
-              <Row label="Growth factor G" value={f3(es.res.growthFactor)} sub={`uniform ${f2(growthPct)} %/yr`} />
-              <Row label="First-year ESALs" value={f3(es.res.firstYear)} sub={`${f3(es.res.dailyTrucks)} trucks/day × TF`} />
-            </ResultCard>
+          </div>
+          {useTraffic === 'calc' ? <>
+            <Num label="Two-way AADT" unit="veh/day" value={adt} onChange={setAdt} min={50} max={200000} step="50" />
+            <Num label="Trucks T" unit="%" value={truckPct} onChange={setTruckPct} min={0} max={100} step="0.5" />
+            <Num label="Truck factor" unit="ESAL/truck" value={truckFactor} onChange={setTruckFactor} min={0.05} max={10} step="0.05" />
+            <Num label="Directional D" value={directional} onChange={setDirectional} min={0.1} max={0.9} step="0.05" />
+            <Num label="Lane factor L" value={laneFactor} onChange={setLaneFactor} min={0.5} max={1.0} step="0.05" />
+            <Num label="Growth r" unit="%/yr" value={growthPct} onChange={setGrowthPct} min={0} max={15} step="0.5" />
+            <Num label="Design period" unit="yr" value={years} onChange={setYears} min={1} max={50} step="1" />
+          </> : (
+            <div className="col-span-2"><Num label="Design ESALs W18" value={W18direct} onChange={setW18direct} min={1000} max={1e9} step="100000" /></div>
           )}
-
-          {sn.res ? (
-            <>
-              <ResultCard title="Required structural number">
-                <Row label="SN required" value={f2(sn.res.SN)}
-                  sub={`W18 = ${useTraffic === 'calc' ? (es.res ? f3(es.res.W18) : '—') : f3(W18direct)} · R = ${f2(reliability)} % · S0 = ${f2(S0)}`} />
-                <Row label="Standard normal deviate ZR" value={f3(sn.res.ZR)} sub="exact inverse normal CDF" />
-                <Row label="ΔPSI" value={f2(sn.res.dPSI)} sub={`4.2 → ${f2(pt)} (flexible)`} />
-                <Row label="Subgrade MR" value={`${f3(sn.res.MRpsi)} psi`} sub={`${f2(MR)} MPa`} />
-              </ResultCard>
-
-              <ResultCard title="Layer check">
-                <Row label="SN provided" value={f2(layers.sn)}
-                  sub={Number.isFinite(layers.sn) ? 'a1·D1 + a2·D2·m2 + a3·D3·m3' : ''} />
-                <Row label="Verdict" value={Number.isFinite(layers.sn) ? (layers.ok ? 'Section adequate' : `Short by ${f2(layers.shortfall)}`) : '—'}
-                  sub={Number.isFinite(layers.sn) ? (layers.ok ? 'SN provided ≥ SN required' : 'thicken a layer or raise a coefficient') : 'enter the layers above'} />
-              </ResultCard>
-
-              <DrawingCard title="Pavement cross-section" meta="thickness to scale · SN contributions labelled">
-                <DrawingFrame label="Flexible pavement section">
-                  <PavementSection rows={(layers.rows ?? []).map((r, i) => ({ ...r, D: [D1, D2, D3][i], m: r.m }))} />
-                </DrawingFrame>
-              </DrawingCard>
-
-              <WorkedSolution steps={steps} title="AASHTO 1993 — step by step" />
-            </>
-          ) : (
-            <ResultCard title="Check the inputs">
-              <p className="text-sm text-fail">
-                Give a positive W18 (from traffic or directly), a subgrade resilient modulus,
-                and keep ΔPSI positive (pt below 4.2).
-              </p>
-            </ResultCard>
-          )}
-        </div>
-      </div>
-    </div>
+        </InputGroup>
+        <InputGroup title="Performance and subgrade">
+          <Num label="Reliability R" unit="%" value={reliability} onChange={setReliability} min={50} max={99.99} step="1" />
+          <Num label="Std dev S₀" value={S0} onChange={setS0} min={0.3} max={0.55} step="0.01" />
+          <Num label="Terminal pt" value={pt} onChange={setPt} min={1.5} max={3.0} step="0.1" />
+          <Num label="Subgrade MR" unit="MPa" value={MR} onChange={setMR} min={10} max={300} step="5" />
+        </InputGroup>
+        <InputGroup title="Layers" hint="Coefficients per mm; m = drainage coefficient.">
+          <div className="col-span-2"><Pick label="Coefficient preset" value={preset} onChange={applyPreset} options={LAYER_PRESETS} /></div>
+          <Num label="Asphalt a₁" unit="/mm" value={a1} onChange={setA1} min={0.001} max={0.05} step="0.0005" />
+          <Num label="Asphalt D₁" unit="mm" value={D1} onChange={setD1} min={25} max={400} step="5" />
+          <Num label="Base a₂" unit="/mm" value={a2} onChange={setA2} min={0.001} max={0.03} step="0.0005" />
+          <Num label="Base D₂" unit="mm" value={D2} onChange={setD2} min={0} max={600} step="10" />
+          <Num label="Base m₂" value={m2} onChange={setM2} min={0.8} max={1.5} step="0.05" />
+          <Num label="Subbase a₃" unit="/mm" value={a3} onChange={setA3} min={0.001} max={0.02} step="0.0005" />
+          <Num label="Subbase D₃" unit="mm" value={D3} onChange={setD3} min={0} max={900} step="10" />
+          <Num label="Subbase m₃" value={m3} onChange={setM3} min={0.8} max={1.5} step="0.05" />
+          <div className="col-span-2">
+            <button type="button" onClick={loadSample}
+              className="rounded-md border border-field-line px-2 py-0.5 text-[11px] font-semibold text-brand hover:bg-brand-tint">Sample: 3 000 AADT, 15 % trucks, 4 %, 20 yr</button>
+          </div>
+        </InputGroup>
+      </>}
+      checks={sn.res ? <>
+        <CheckCard title="Structural number" basis="SN provided ≥ SN required" status={snOk ? 'pass' : 'fail'}
+          value={f2(layers.sn)} unit="provided" formula="SN = a₁D₁ + a₂D₂m₂ + a₃D₃m₃"
+          ratio={Number.isFinite(layers.sn) && layers.sn > 0 ? sn.res.SN / layers.sn : undefined} ratioLabel="Required ÷ provided"
+          pairs={[{ label: 'Required', value: f2(sn.res.SN) }, { label: snOk ? 'Margin' : 'Short by', value: f2(Math.abs(layers.sn - sn.res.SN)) }]} />
+        <CheckCard title="Design ESALs" basis={useTraffic === 'calc' ? `${years} yr at ${f2(growthPct)} %` : 'entered'} status="info" value={w18Text}
+          pairs={useTraffic === 'calc' && es.res ? [{ label: 'Growth G', value: f3(es.res.growthFactor) }, { label: 'First year', value: f2(es.res.firstYear) }] : [{ label: 'W18', value: f2(W18) }]} />
+        <CheckCard title="Design inputs" basis="AASHTO 1993" status="info" value={f3(sn.res.ZR)} unit="Z_R"
+          pairs={[{ label: 'ΔPSI', value: f2(sn.res.dPSI) }, { label: 'MR', value: `${f2(sn.res.MRpsi)} psi` }]} />
+      </> : (
+        <CheckCard title="Check the inputs" basis="AASHTO 1993" status="warn" pillLabel="CHECK" value="—" formula="Positive W18 and MR; pt below 4.2." />
+      )}
+      summary={[
+        { label: 'W18', value: w18Text },
+        { label: 'Reliability', value: `${f2(reliability)} %, S₀ ${f2(S0)}` },
+        { label: 'Serviceability', value: `4.2 → ${f2(pt)}` },
+        { label: 'Subgrade MR', value: `${f2(MR)} MPa` },
+      ]}
+      drawing={sn.res && layers.rows ? { title: 'Pavement section', node: <div data-pdf-drawing><FlexibleSection rows={layers.rows.map((r, i) => ({ name: r.name, D: [D1, D2, D3][i], contribution: r.contribution }))} MR={MR} SNreq={sn.res.SN} SNprov={layers.sn} /></div> } : undefined}
+      results={sn.res ? [
+        { check: 'Design ESALs W18', basis: useTraffic === 'calc' ? 'forecast' : 'entered', demand: w18Text, status: 'info' as const },
+        { check: 'Required SN', basis: `R ${f2(reliability)} %, ΔPSI ${f2(sn.res.dPSI)}`, demand: f2(sn.res.SN), status: 'info' as const },
+        ...(layers.rows ?? []).map((r, i) => ({ check: r.name, basis: `a ${f3(dims[i].a)}/mm × ${f2(dims[i].D)} mm × m ${f2(r.m)}`, demand: f3(r.contribution), status: 'info' as const })),
+        { check: 'SN provided', basis: '≥ required', demand: f2(layers.sn), limit: f2(sn.res.SN), ratio: layers.sn > 0 ? sn.res.SN / layers.sn : undefined, status: snOk ? 'pass' as const : 'fail' as const },
+      ] : [{ check: 'Design', basis: 'invalid input', demand: '—', status: 'warn' as const }]}
+      steps={steps}
+      references={[
+        { topic: 'Design equation', basis: 'flexible log W18 equation in SN', source: 'AASHTO Guide for Design of Pavement Structures (1993), Part II' },
+        { topic: 'Layer coefficients', basis: 'a₁, a₂, a₃ and drainage m', source: 'AASHTO 1993, Part II (material properties)' },
+        { topic: 'Traffic', basis: 'ESALs from AADT, truck %, truck factor, D and L', source: 'AASHTO 1993, Part II (traffic)' },
+      ]}
+    />
   )
 }
 
@@ -232,48 +205,3 @@ function snSteps(
   ]
 }
 
-// ── pavement section drawing ─────────────────────────────────────────────
-
-function PavementSection({ rows }: { rows: { name: string; contribution: number; D: number }[] }) {
-  const W = 640, Hh = 260
-  const x0 = 130, x1 = W - 70
-  const surfaceY = 64
-  const pixPerMm = 0.32
-  const fills = ['rgba(31,41,55,0.75)', 'rgba(146,120,80,0.45)', 'rgba(180,170,150,0.4)']
-  const heights = rows.map((r) => Math.max(10, r.D * pixPerMm))
-  const bands = rows.map((r, i) => ({
-    y: surfaceY + heights.slice(0, i).reduce((s, h) => s + h, 0),
-    h: heights[i],
-    fill: fills[i % fills.length],
-    r,
-  }))
-  const totalPix = heights.reduce((s, h) => s + h, 0)
-  const scale = totalPix > Hh - 110 ? (Hh - 110) / totalPix : 1
-
-  return (
-    <svg viewBox={`0 0 ${W} ${Hh}`} className="w-full" role="img" aria-label="Pavement section">
-      <rect x={x0} y={surfaceY - 14} width={x1 - x0} height={14} fill="rgba(120,113,108,0.25)" stroke={INK} strokeWidth="1" />
-      <text x={x1 - 8} y={surfaceY - 3} textAnchor="end" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">subgrade · MR</text>
-      {bands.map((b) => {
-        const h = b.h * scale
-        const yy = surfaceY + (b.y - surfaceY) * scale
-        return (
-          <g key={b.r.name}>
-            <rect x={x0} y={yy} width={x1 - x0} height={h} fill={b.fill} stroke={INK} strokeWidth="1.2" />
-            <text x={x0 + 12} y={yy + h / 2 + 4} fontSize="11" fill={INK} fontFamily="var(--font-mono, monospace)">
-              {b.r.name} {Math.round(b.r.D)} mm
-            </text>
-            <text x={x1 - 12} y={yy + h / 2 + 4} textAnchor="end" fontSize="11" fill={INK} fontFamily="var(--font-mono, monospace)">
-              a·D = {f2(b.r.contribution)}
-            </text>
-          </g>
-        )
-      })}
-      {/* SN bracket */}
-      <line x1={x0 - 18} x2={x0 - 18} y1={surfaceY} y2={surfaceY + totalPix * scale} stroke={INK} strokeWidth="1" />
-      <text x={x0 - 26} y={surfaceY + (totalPix * scale) / 2} textAnchor="end" fontSize="11" fill={INK} fontFamily="var(--font-mono, monospace)">
-        SN = {f2(bands.reduce((s, b) => s + b.r.contribution, 0))}
-      </text>
-    </svg>
-  )
-}

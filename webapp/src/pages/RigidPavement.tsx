@@ -1,15 +1,13 @@
 import { useState } from 'react'
-import 'katex/dist/katex.min.css'
 import {
   requiredD, J_OPTIONS, type RigidResult,
 } from '../engine/rigidPavement'
-import { Card, Num, ResultCard, Row, Pick } from '../components/qty'
-import { DrawingCard } from '../components/calc'
-import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { RigidJoint } from '../components/pavementSketches'
 import type { SolutionStep } from '../lib/solution'
-import { INK, MUTED, f2, f3 } from '../lib/influenceStyle'
+import { f2, f3 } from '../lib/influenceStyle'
 
 // Rigid Pavement — the AASHTO 1993 rigid design equation solved for the
 // PCC slab thickness D from the design ESALs, reliability, modulus of
@@ -31,10 +29,14 @@ export default function RigidPavement() {
   const [E, setE] = useState(SAMPLE.E_MPa)
   const [k, setK] = useState(SAMPLE.k_MNpm3)
 
-  let r: RigidResult | null = null
-  let err: string | null = null
-  try { r = requiredD({ W18, reliability, S0, pi: 4.5, pt, sc_MPa: sc, Cd, J, E_MPa: E, k_MNpm3: k }) }
-  catch (e) { err = e instanceof Error ? e.message : 'Check the inputs' }
+  const out: { r: RigidResult | null; err: string | null } = (() => {
+    try {
+      return { r: requiredD({ W18, reliability, S0, pi: 4.5, pt, sc_MPa: sc, Cd, J, E_MPa: E, k_MNpm3: k }), err: null }
+    } catch (e) {
+      return { r: null, err: e instanceof Error ? e.message : 'Check the inputs' }
+    }
+  })()
+  const { r, err } = out
 
   const steps: SolutionStep[] = r ? [
     {
@@ -60,100 +62,61 @@ export default function RigidPavement() {
         { text: 'Round UP to the next 10 mm for the construction surface — the equation is a minimum, and dowel/edge detailing follows the same Guide.' },
       ],
     },
-  ] : []
+  ] : [{ title: 'Check the inputs', lines: [{ text: err ?? 'Check the inputs.' }] }]
 
+  const loadSample = () => { setW18(SAMPLE.W18); setReliability(SAMPLE.reliability); setS0(SAMPLE.S0); setPt(SAMPLE.pt); setSc(SAMPLE.sc_MPa); setCd(SAMPLE.Cd); setJ(SAMPLE.J); setE(SAMPLE.E_MPa); setK(SAMPLE.k_MNpm3) }
+  const Dbuild = r ? Math.ceil(r.D / 10) * 10 : 0
   return (
-    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <ReportControls title="Rigid Pavement Report" badges={[r ? `D ${f2(r.D)} mm` : 'AASHTO 93 rigid']} />
-      <p className="mt-2 max-w-3xl text-sm text-muted">
-        The AASHTO 1993 rigid design equation: the PCC slab thickness D that carries the
-        design ESALs at the chosen reliability, modulus of rupture, load-transfer coefficient
-        and drainage condition. The twin of the /pavement flexible tool — same traffic,
-        different material model.
-      </p>
-
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <Card title="Traffic & reliability">
-            <div className="sm:col-span-2 lg:col-span-3">
-              <button type="button"
-                onClick={() => { setW18(SAMPLE.W18); setReliability(SAMPLE.reliability); setS0(SAMPLE.S0); setPt(SAMPLE.pt); setSc(SAMPLE.sc_MPa); setCd(SAMPLE.Cd); setJ(SAMPLE.J); setE(SAMPLE.E_MPa); setK(SAMPLE.k_MNpm3) }}
-                className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                Load the sample — 5 M ESALs · 90 % · J 3.2
-              </button>
-            </div>
-            <Num label="Design ESALs W18" unit="—" value={W18} onChange={setW18} min={1} step="1000" />
-            <Num label="Reliability R" unit="%" value={reliability} onChange={setReliability} min={50} max={99.9} step="1" />
-            <Num label="Std deviation S0" unit="—" value={S0} onChange={setS0} min={0.1} max={0.6} step="0.01" />
-            <Num label="Terminal serviceability pt" unit="—" value={pt} onChange={setPt} min={1.5} max={4} step="0.1" />
-          </Card>
-
-          <Card title="Concrete & load transfer">
-            <Num label="Modulus of rupture sc'" unit="MPa" value={sc} onChange={setSc} min={2} max={8} step="0.1" />
-            <Num label="Elastic modulus E" unit="MPa" value={E} onChange={setE} min={15000} max={50000} step="500" />
-            <Num label="Subgrade modulus k" unit="MN/m³" value={k} onChange={setK} min={5} max={150} step="1" />
-            <Num label="Drainage coefficient Cd" unit="—" value={Cd} onChange={setCd} min={0.7} max={1.25} step="0.05" />
-            <Pick label="Load-transfer coefficient J" value={String(J)} onChange={(v) => setJ(Number(v))}
-              options={J_OPTIONS.map((o) => [String(o.j), o.label])} />
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          {r ? (
-            <>
-              <ResultCard title="Required slab thickness">
-                <Row label="D (computed)" value={`${f2(r.D)} mm`} sub={`${f2(r.D_in)} inches — the Guide's native unit`} />
-                <Row label="Design ΔPSI" value={f2(r.dPSI)} sub={`p0 = 4.5 → pt = ${f2(pt)}`} />
-                <Row label="ZR at the reliability" value={f2(r.ZR)} sub={`S0 = ${f2(S0)} · equation check log₁₀W18 = ${f3(r.logW18)}`} />
-              </ResultCard>
-
-              <DrawingCard title="Slab cross-section" meta="PCC slab on granular base — dowelled transverse joints">
-                <DrawingFrame label="Rigid pavement section">
-                  <Section D={r.D} />
-                </DrawingFrame>
-              </DrawingCard>
-
-              <WorkedSolution steps={steps} title="AASHTO 93 rigid — step by step" />
-            </>
-          ) : (
-            <ResultCard title="Check the inputs">
-              <p className="text-sm text-fail">{err}</p>
-            </ResultCard>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Section({ D }: { D: number }) {
-  const W = 640, Hh = 260
-  const x0 = 90, x1 = W - 90
-  const scale = Math.max(0.35, Math.min(1.6, D / 200))
-  const t = D * scale
-  const slabY = 150
-  return (
-    <svg viewBox={`0 0 ${W} ${Hh}`} className="w-full" role="img" aria-label="Rigid pavement cross-section">
-      {/* slab */}
-      <rect x={x0} y={slabY} width={x1 - x0} height={t} fill="rgba(15,76,146,0.16)" stroke={INK} strokeWidth="1.4" />
-      {/* base */}
-      <rect x={x0} y={slabY + t} width={x1 - x0} height={26} fill="rgba(115,109,94,0.28)" stroke={MUTED} strokeWidth="1" />
-      {/* subgrade */}
-      <rect x={x0} y={slabY + t + 26} width={x1 - x0} height={30} fill="rgba(115,109,94,0.14)" stroke="none" />
-      {/* dowel bars */}
-      {[0.18, 0.38, 0.62, 0.82].map((f, i) => (
-        <circle key={i} cx={x0 + (x1 - x0) * f} cy={slabY + t / 2} r="3.4" fill="none" stroke={INK} strokeWidth="1.2" />
-      ))}
-      <text x={x0 - 10} y={slabY + t / 2 + 4} textAnchor="end" fontSize="10.5" fill={INK} fontFamily="var(--font-mono, monospace)">dowels</text>
-      {/* dimension line */}
-      <line x1={x1 + 14} x2={x1 + 14} y1={slabY} y2={slabY + t} stroke={MUTED} strokeWidth="1" />
-      <text x={x1 + 20} y={slabY + t / 2 + 4} fontSize="11" fill={INK} fontFamily="var(--font-mono, monospace)">
-        D = {f2(D)} mm
-      </text>
-      {/* layer labels */}
-      <text x={x0 + 8} y={slabY - 8} fontSize="10.5" fill={MUTED} fontFamily="var(--font-mono, monospace)">PCC slab — sc′, E, J load transfer</text>
-      <text x={x0 + 8} y={slabY + t + 17} fontSize="10.5" fill={MUTED} fontFamily="var(--font-mono, monospace)">granular base · Cd</text>
-      <text x={x0 + 8} y={slabY + t + 45} fontSize="10.5" fill={MUTED} fontFamily="var(--font-mono, monospace)">compacted subgrade</text>
-    </svg>
+    <WorkspacePage title="Rigid Pavement" badges={['Pavement', 'AASHTO 1993 rigid']}
+      intro="The AASHTO 1993 rigid design equation: the PCC slab thickness D that carries the design ESALs at the chosen reliability, modulus of rupture, load-transfer coefficient and drainage condition."
+      inputs={<>
+        <InputGroup title="Traffic and reliability">
+          <div className="col-span-2"><Num label="Design ESALs W18" value={W18} onChange={setW18} min={1} step="1000" /></div>
+          <Num label="Reliability R" unit="%" value={reliability} onChange={setReliability} min={50} max={99.9} step="1" />
+          <Num label="Std dev S₀" value={S0} onChange={setS0} min={0.1} max={0.6} step="0.01" />
+          <Num label="Terminal pt" value={pt} onChange={setPt} min={1.5} max={4} step="0.1" />
+        </InputGroup>
+        <InputGroup title="Concrete and support">
+          <Num label="Rupture sc'" unit="MPa" value={sc} onChange={setSc} min={2} max={8} step="0.1" />
+          <Num label="Modulus E" unit="MPa" value={E} onChange={setE} min={15000} max={50000} step="500" />
+          <Num label="Subgrade k" unit="MN/m³" value={k} onChange={setK} min={5} max={150} step="1" />
+          <Num label="Drainage Cd" value={Cd} onChange={setCd} min={0.7} max={1.25} step="0.05" />
+          <div className="col-span-2">
+            <Pick label="Load transfer J" value={String(J)} onChange={(v) => setJ(Number(v))} options={J_OPTIONS.map((o) => [String(o.j), o.label])} />
+          </div>
+          <div className="col-span-2">
+            <button type="button" onClick={loadSample}
+              className="rounded-md border border-field-line px-2 py-0.5 text-[11px] font-semibold text-brand hover:bg-brand-tint">Sample: 5 M ESALs, 90 %, J 3.2</button>
+          </div>
+        </InputGroup>
+      </>}
+      checks={r ? <>
+        <CheckCard title="Slab thickness" basis="AASHTO 1993 rigid equation" status="info" value={f2(r.D)} unit="mm"
+          formula="log W18 = Z_R S₀ + 7.35 log(D + 1) − 0.06 + …"
+          pairs={[{ label: 'Build (next 10 mm)', value: `${Dbuild} mm` }, { label: 'Inches', value: f2(r.D_in) }]} />
+        <CheckCard title="Design inputs" basis={`R ${f2(reliability)} %`} status="info" value={f2(r.ZR)} unit="Z_R"
+          pairs={[{ label: 'ΔPSI', value: f2(r.dPSI) }, { label: 'k', value: `${f2(r.kPci)} pci` }]} />
+      </> : (
+        <CheckCard title="Check the inputs" basis="AASHTO 1993 rigid" status="warn" pillLabel="CHECK" value="—" formula={err ?? 'Check the inputs.'} />
+      )}
+      summary={[
+        { label: 'W18', value: `${(W18 / 1e6).toFixed(2)} × 10⁶` },
+        { label: 'Reliability', value: `${f2(reliability)} %, S₀ ${f2(S0)}` },
+        { label: 'Concrete', value: `sc' ${f2(sc)} MPa, E ${f2(E)} MPa` },
+        { label: 'Support', value: `k ${f2(k)} MN/m³, Cd ${f2(Cd)}, J ${f2(J)}` },
+      ]}
+      drawing={r ? { title: 'Slab at a transverse joint', node: <div data-pdf-drawing><RigidJoint D={r.D} /></div> } : undefined}
+      results={r ? [
+        { check: 'Required slab D', basis: 'rigid design equation', demand: `${f2(r.D)} mm (${f2(r.D_in)} in)`, status: 'info' as const },
+        { check: 'Construction thickness', basis: 'rounded up to 10 mm', demand: `${Dbuild} mm`, status: 'info' as const },
+        { check: 'Equation check', basis: `log₁₀ W18 = ${f3(Math.log10(W18))}`, demand: f3(r.logW18), status: 'pass' as const },
+      ] : [{ check: 'Slab', basis: err ?? 'invalid input', demand: '—', status: 'warn' as const }]}
+      steps={steps}
+      references={[
+        { topic: 'Rigid design equation', basis: 'log W18 in D, sc′, Cd, J, E, k', source: 'AASHTO Guide for Design of Pavement Structures (1993), Part II' },
+        { topic: 'Load transfer J', basis: '2.8 tied PCC shoulder … 3.2 untied', source: 'AASHTO 1993, Part II (load transfer)' },
+        { topic: 'Dowel sizing', basis: 'diameter ≈ D/8 rule of thumb (drawing only)', source: 'common practice; not designed here' },
+      ]}
+    />
   )
 }
