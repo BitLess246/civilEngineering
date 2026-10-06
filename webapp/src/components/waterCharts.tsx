@@ -83,11 +83,8 @@ export function RationalBars({ res }: { res: RationalResult }) {
           {a.w > 70 && <text x={a.x + a.w / 2} y={rowA + bh / 2 + 4} textAnchor="middle" fontSize="9.5" fill={INK} fontFamily={mono}>{s.name || `#${i + 1}`} · {f2(s.a)} ha</text>}
           <rect x={c.x} y={rowC} width={Math.max(c.w, 0.5)} height={bh} fill={`rgba(15,76,146,${0.35 + 0.2 * (i % 2)})`} stroke={INK} strokeWidth="1" />
           {c.w > 70 && <text x={c.x + c.w / 2} y={rowC + bh / 2 + 4} textAnchor="middle" fontSize="9.5" fill={INK} fontFamily={mono}>C {f2(s.c)} × {f2(s.a)}</text>}
-          {/* each sub-area's effective part drops from its own area */}
-          <line x1={a.x} x2={c.x} y1={rowA + bh + gap + 6} y2={rowC} stroke={HAIR} strokeWidth="0.8" strokeDasharray="2 3" />
         </g>
       ))}
-      <line x1={x0 + res.A * k} x2={x0 + ca * k} y1={rowA + bh + gap + 6} y2={rowC} stroke={HAIR} strokeWidth="0.8" strokeDasharray="2 3" />
       {/* extension lines from the bar ends down to each dimension */}
       {[x0, x0 + res.A * k].map((x) => <line key={`ea${x}`} x1={x} x2={x} y1={rowA + bh + 3} y2={rowA + bh + gap + 4} stroke={MUTED} strokeWidth="0.8" />)}
       {[x0, x0 + ca * k].map((x) => <line key={`ec${x}`} x1={x} x2={x} y1={rowC + bh + 3} y2={rowC + bh + gap + 4} stroke={MUTED} strokeWidth="0.8" />)}
@@ -109,7 +106,8 @@ export function TriHydrograph({ tp, qp, tb, P, Q }: { tp: number; qp: number; tb
     <Chart label="Triangular unit hydrograph" W={W} H={H}>
       <Axes box={box} xMax={xMax} yMax={yMax} xLabel="t (h)" yLabel="Q (m³/s)" />
       <polygon points={`${X(0)},${Y(0)} ${X(tp)},${Y(qp)} ${X(tb)},${Y(0)}`} fill="rgba(15,76,146,0.14)" stroke={WATER} strokeWidth="1.8" />
-      <line x1={X(tp)} x2={X(tp)} y1={Y(qp)} y2={box.base + 50} stroke={MUTED} strokeWidth="0.8" strokeDasharray="4 3" />
+      <line x1={X(tp)} x2={X(tp)} y1={Y(qp)} y2={box.base} stroke={MUTED} strokeWidth="0.8" strokeDasharray="4 3" />
+      <line x1={X(tp)} x2={X(tp)} y1={box.base} y2={box.base + 50} stroke={MUTED} strokeWidth="0.8" />
       <line x1={X(tb)} x2={X(tb)} y1={box.base} y2={box.base + 76} stroke={MUTED} strokeWidth="0.8" />
       <line x1={X(0)} x2={X(0)} y1={box.base} y2={box.base + 76} stroke={MUTED} strokeWidth="0.8" />
       <text x={X(tp) + 7} y={Y(qp) - 4} fontSize="10.5" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>Qp = {f2(qp)} m³/s</text>
@@ -131,7 +129,9 @@ export function RoutedHydrographs({ inflow, outflow, dt }: { inflow: number[]; o
   const line = (qs: number[]) => qs.map((q, i) => `${i ? 'L' : 'M'} ${X(i * dt).toFixed(2)} ${Y(q).toFixed(2)}`).join(' ')
   const iP = inflow.indexOf(Math.max(...inflow)), oP = outflow.indexOf(Math.max(...outflow))
   const tI = iP * dt, tO = oP * dt, qI = inflow[iP], qO = outflow[oP]
-  const lagY = Y(qO) + 22
+  // the lag runs under the lower of the two curves across it, clear of both
+  const qLow = Math.min(...inflow.slice(iP, oP + 1), ...outflow.slice(iP, oP + 1))
+  const lagY = Math.min(box.base - 12, Y(qLow) + 22)
   return (
     <Chart label="Muskingum routing — inflow and outflow hydrographs" W={W} H={H}>
       <Axes box={box} xMax={tEnd} yMax={yMax} xLabel="t (h)" yLabel="Q (m³/s)" />
@@ -179,7 +179,7 @@ export function DetentionCharts({ inflow, outflows, stages, dtMin, peakIn, peakO
       {/* the outflow peaks where it crosses the falling inflow; the same instant marks the peak stage below */}
       {iS === iO && <line x1={A.X(tO)} x2={A.X(tO)} y1={A.Y(peakOut)} y2={B.Y(peakStage)} stroke={MUTED} strokeWidth="0.8" strokeDasharray="3 3" />}
       <circle cx={A.X(tO)} cy={A.Y(peakOut)} r="3.5" fill={WATER} />
-      <text x={A.X(tO) + 7} y={A.Y(peakOut) - 7} fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>peak outflow {f2(peakOut)} m³/s</text>
+      <text x={A.X(tO) + 7} y={A.Y(peakOut) - 11} fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>peak outflow {f2(peakOut)} m³/s</text>
       <text x={top.x0 + 8} y={top.top - 26} fontSize="9.5" fill={MUTED} fontFamily={mono}>dashed = inflow (peak {f2(peakIn)}) · solid = outflow</text>
 
       <Axes box={bot} xMax={tEnd} yMax={hMax} xLabel="t (min)" yLabel="stage (m)" />
@@ -188,7 +188,7 @@ export function DetentionCharts({ inflow, outflows, stages, dtMin, peakIn, peakO
       <path d={`M ${B.X(0)} ${B.Y(0)} ${stages.map((s, i) => `L ${B.X(i * dtMin).toFixed(2)} ${B.Y(s).toFixed(2)}`).join(' ')} L ${B.X(tEnd)} ${bot.base} L ${B.X(0)} ${bot.base} Z`} fill="rgba(15,76,146,0.12)" />
       <path d={`M ${B.X(0)} ${B.Y(0)} ${stages.map((s, i) => `L ${B.X(i * dtMin).toFixed(2)} ${B.Y(s).toFixed(2)}`).join(' ')}`} fill="none" stroke={WATER} strokeWidth="2" />
       <circle cx={B.X(tS)} cy={B.Y(peakStage)} r="3.5" fill={over ? 'rgba(200,60,60,0.95)' : WATER} />
-      <text x={B.X(tS) + 7} y={B.Y(peakStage) + 15} fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>peak stage {f3(peakStage)} m{over ? ' — overtops' : ''}</text>
+      <text x={B.X(tS) + 7} y={B.Y(peakStage) - 9} fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>peak stage {f3(peakStage)} m{over ? ' — overtops' : ''}</text>
     </Chart>
   )
 }
