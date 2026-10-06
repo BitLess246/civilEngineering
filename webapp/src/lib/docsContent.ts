@@ -32,6 +32,9 @@ export const DOC_ROUTE_ALIASES: Record<string, string> = {
   '/hydrostatics': 'hydrostatic-force',
   // the tabbed Dynamics page split into eight; the old route lands on the first
   '/dynamics': 'rectilinear-motion',
+  // the Surveying Toolbox and Geometric Design shells split into one page per mode
+  '/surveying': 'leveling',
+  '/geometric-design': 'sight-distance',
   '/signup': 'account', '/forgot-password': 'account', '/reset-password': 'account',
   '/profile': 'account',
   // the four public policy pages share one docs entry

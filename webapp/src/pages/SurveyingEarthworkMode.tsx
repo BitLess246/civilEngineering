@@ -102,7 +102,7 @@ export function EarthworkMode() {
           borrow/waste question at a glance.
         </p>
 
-        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
           {/* ── inputs ── */}
           <div className="space-y-5">
             <Card title="Cross-sections" hint="areas in m²; middle areas feed the prismoidal check">
@@ -114,12 +114,12 @@ export function EarthworkMode() {
               </div>
               <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
                 {rows.map((r, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_2.6rem_2.6rem_2.6rem_2.6rem_1.4rem] items-end gap-1">
-                    <Num label={`STA ${i + 1}`} unit="m" value={parseFloat(r.station) || 0} onChange={(v) => setRow(i, { station: String(v) })} step="10" />
-                    <Num label="Cut" unit="m²" value={sNum(r.cut) ?? 0} onChange={(v) => setRow(i, { cut: String(v) })} step="0.5" />
-                    <Num label="Fill" unit="m²" value={sNum(r.fill) ?? 0} onChange={(v) => setRow(i, { fill: String(v) })} step="0.5" />
-                    <Num label="Mid C" unit="m²" value={sNum(r.midCut) ?? 0} onChange={(v) => setRow(i, { midCut: String(v) })} step="0.5" />
-                    <Num label="Mid F" unit="m²" value={sNum(r.midFill) ?? 0} onChange={(v) => setRow(i, { midFill: String(v) })} step="0.5" />
+                  <div key={i} className="grid grid-cols-[repeat(5,minmax(0,1fr))_1.4rem] items-end gap-1 [&_input]:!px-1.5">
+                    <Num label={`STA ${i + 1} (m)`} value={parseFloat(r.station) || 0} onChange={(v) => setRow(i, { station: String(v) })} step="10" />
+                    <Num label="Cut (m²)" value={sNum(r.cut) ?? 0} onChange={(v) => setRow(i, { cut: String(v) })} step="0.5" />
+                    <Num label="Fill (m²)" value={sNum(r.fill) ?? 0} onChange={(v) => setRow(i, { fill: String(v) })} step="0.5" />
+                    <Num label="Mid C (m²)" value={sNum(r.midCut) ?? 0} onChange={(v) => setRow(i, { midCut: String(v) })} step="0.5" />
+                    <Num label="Mid F (m²)" value={sNum(r.midFill) ?? 0} onChange={(v) => setRow(i, { midFill: String(v) })} step="0.5" />
                     <button type="button" onClick={() => delRow(i)} disabled={rows.length <= 2}
                       className="mb-1.5 text-muted hover:text-fail disabled:opacity-30">✕</button>
                   </div>

@@ -91,7 +91,7 @@ export function LevelingMode() {
           in proportion to the setups elapsed.
         </p>
 
-        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
           {/* ── inputs ── */}
           <div className="space-y-5">
             <Card title="Field book" hint="BS + FS on turning points; IFS alone = profile point">
@@ -103,14 +103,14 @@ export function LevelingMode() {
               </div>
               <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
                 {rows.map((r, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_3rem_3rem_3rem_1.4rem] items-end gap-1.5">
+                  <div key={i} className="grid grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,1fr))_1.4rem] items-end gap-1.5 [&_input]:!px-1.5">
                     <label className="flex flex-col text-sm">
                       <span className="mb-1 text-[11.5px] font-semibold text-muted">Station {i + 1}</span>
                       <input value={r.sta} onChange={(e) => setRow(i, { sta: e.target.value })} className="text-[13px]" />
                     </label>
-                    <Num label="BS" unit="m" value={r.bs === '' ? 0 : parseFloat(r.bs)} onChange={(v) => setRow(i, { bs: v === 0 ? '' : String(v) })} step="0.001" />
-                    <Num label="FS" unit="m" value={r.fs === '' ? 0 : parseFloat(r.fs)} onChange={(v) => setRow(i, { fs: v === 0 ? '' : String(v) })} step="0.001" />
-                    <Num label="IFS" unit="m" value={r.ifs === '' ? 0 : parseFloat(r.ifs)} onChange={(v) => setRow(i, { ifs: v === 0 ? '' : String(v) })} step="0.001" />
+                    <Num label="BS (m)" value={r.bs === '' ? 0 : parseFloat(r.bs)} onChange={(v) => setRow(i, { bs: v === 0 ? '' : String(v) })} step="0.001" />
+                    <Num label="FS (m)" value={r.fs === '' ? 0 : parseFloat(r.fs)} onChange={(v) => setRow(i, { fs: v === 0 ? '' : String(v) })} step="0.001" />
+                    <Num label="IFS (m)" value={r.ifs === '' ? 0 : parseFloat(r.ifs)} onChange={(v) => setRow(i, { ifs: v === 0 ? '' : String(v) })} step="0.001" />
                     <button type="button" onClick={() => delRow(i)} disabled={rows.length <= 2}
                       className="mb-1.5 text-muted hover:text-fail disabled:opacity-30">✕</button>
                   </div>

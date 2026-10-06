@@ -4,12 +4,12 @@ import type { DocTool } from './docsModel'
 
 export const FIELD_TOOLS: DocTool[] = [
   {
-    id: 'surveying',
-    name: 'Surveying Toolbox',
-    route: '/surveying',
+    id: 'leveling',
+    name: 'Differential Leveling',
+    route: '/leveling',
     group: 'Surveying',
-    summary: 'Four board-exam classics in one shell: differential leveling, traverse closure and area, simple circular curves, and earthwork with mass haul.',
-    basis: 'Plane surveying: HI and rise-and-fall book reduction, Bowditch/compass rule, DMD area, average end area with the prismoidal correction.',
+    summary: 'Reduces a level book by height of instrument and by rise and fall, then distributes the misclosure to a closing benchmark.',
+    basis: 'HI method and rise-and-fall with the page check ΣBS − ΣFS = Σrise − Σfall; misclosure against the 4√K / 8√K / 12√K order bands.',
     sections: [
       {
         id: 'surveying-leveling',
@@ -22,6 +22,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'Level book', what: 'Full reduction by HI and rise & fall side by side, with the page check ΣBS−ΣFS = Σrise−Σfall = Δelev.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'traverse',
+    name: 'Traverse',
+    route: '/traverse',
+    group: 'Surveying',
+    summary: 'Closes a traverse from its courses: latitudes and departures, the linear misclosure and precision, the adjustment and the enclosed area.',
+    basis: 'Bowditch (compass) or transit rule adjustment; area by double-meridian distances over the adjusted courses.',
+    sections: [
       {
         id: 'surveying-traverse',
         title: 'Traverse',
@@ -32,6 +42,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'Area', what: 'Area by double-meridian distances over the adjusted courses, in m² and hectares, with the polygon drawn.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'simple-curve',
+    name: 'Simple Curve',
+    route: '/simple-curve',
+    group: 'Surveying',
+    summary: 'Every element of a simple circular curve from its radius and central angle, with the deflection-angle staking table.',
+    basis: 'T = R·tan(Δ/2), L = πRΔ/180, E and M; deflection angles from the PC with sub-chords at each end, summing to Δ/2 at the PT.',
+    sections: [
       {
         id: 'surveying-curves',
         title: 'Curves',
@@ -43,6 +63,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'Staking table', what: 'Chords from the PC, incremental and total deflections — the total at the PT equals Δ/2, the field check.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'earthwork',
+    name: 'Earthwork',
+    route: '/earthwork',
+    group: 'Surveying',
+    summary: 'Cut and fill volumes between cross-sections with shrink and swell, and the mass-haul diagram that reads borrow and waste.',
+    basis: 'Average end area with the prismoidal correction where a middle section is known; mass ordinates accumulated after shrinkage and bulking.',
+    sections: [
       {
         id: 'surveying-earthwork',
         title: 'Earthwork',
@@ -179,11 +209,11 @@ export const FIELD_TOOLS: DocTool[] = [
   },
   {
     id: 'open-channel',
-    name: 'Open Channel Flow',
+    name: 'Normal Depth',
     route: '/open-channel',
     group: 'Water resources',
-    summary: 'Three hydraulics modes in one shell: Manning normal depth, critical depth with the specific-energy curve, and the hydraulic jump with its energy balance.',
-    basis: "Manning Q = (1/n)A·R^2/3·√S solved by bisection; critical condition Q²T/(gA³) = 1; sequent depths from the momentum function M = Q²/(gA) + A·ȳ; rectangular jump y₂ = (y₁/2)(√(1+8Fr₁²)−1).",
+    summary: 'Uniform-flow depth by Manning in a rectangular, trapezoidal, triangular or circular channel, with the velocity and Froude number.',
+    basis: 'Manning Q = (1/n)·A·R^2/3·√S solved for depth by bisection; Fr = V/√(gD) sets the flow state.',
     sections: [
       {
         id: 'open-channel-normal',
@@ -195,6 +225,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'yn, V, Fr', what: 'The depth Manning settles at, the velocity, and the Froude number with the flow state; a circular pipe that cannot carry Q reports its peak capacity near y/D = 0.938 instead of a fake root.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'critical-depth',
+    name: 'Critical Depth',
+    route: '/critical-depth',
+    group: 'Water resources',
+    summary: 'Critical depth and minimum specific energy for a discharge, with the E–y curve and the alternate depth of any probe depth.',
+    basis: 'Critical condition Q²T/(gA³) = 1 solved by bisection for every shape; E = y + V²/2g.',
+    sections: [
       {
         id: 'open-channel-critical',
         title: 'Critical depth & specific energy',
@@ -204,6 +244,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'E–y curve', what: 'Specific energy against depth with Emin, yc, the 45° asymptote and both limbs drawn — the picture every textbook sketches.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'hydraulic-jump',
+    name: 'Hydraulic Jump',
+    route: '/hydraulic-jump',
+    group: 'Water resources',
+    summary: 'The sequent depth of a hydraulic jump, the energy it destroys and the power dissipated, with the jump class from Fr₁.',
+    basis: 'Rectangular y₂ = (y₁/2)(√(1 + 8Fr₁²) − 1); other shapes by the momentum function M = Q²/(gA) + A·ȳ; ΔE = E₁ − E₂.',
+    sections: [
       {
         id: 'open-channel-jump',
         title: 'Hydraulic jump',
@@ -312,12 +362,12 @@ export const FIELD_TOOLS: DocTool[] = [
     ],
   },
   {
-    id: 'geometric-design',
-    name: 'Geometric Design',
-    route: '/geometric-design',
+    id: 'sight-distance',
+    name: 'Stopping Sight Distance',
+    route: '/sight-distance',
     group: 'Transportation',
-    summary: 'Highway alignment classics in one shell: stopping sight distance, parabolic vertical curves with crest/sag sight-distance checks, and the superelevation balance with minimum radius.',
-    basis: 'AASHTO Green Book forms: SSD = 0.278Vt + V²/254(f±G); crest L = AS²/658 (1.08 m eye, 0.60 m object); sag headlight L = AS²/(120+3.5S); comfort L ≥ AV²/395; e + f = V²/127R.',
+    summary: 'The distance a driver needs to perceive, react and brake to a stop, split into its reaction and braking pieces, on a grade.',
+    basis: 'AASHTO Green Book SSD = 0.278·V·t + V²/254(f ± G).',
     sections: [
       {
         id: 'geometric-ssd',
@@ -328,6 +378,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'SSD', what: 'Reaction and braking pieces reported separately with the composition drawn to scale.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'vertical-curves',
+    name: 'Vertical Curves',
+    route: '/vertical-curves',
+    group: 'Transportation',
+    summary: 'A parabolic crest or sag curve between two grades: its elevations, high or low point, and the sight-distance and comfort checks.',
+    basis: 'AASHTO crest L = AS²/658 (1.08 m eye, 0.60 m object); sag headlight L = AS²/(120 + 3.5S); comfort L ≥ AV²/395; e = AL/800.',
+    sections: [
       {
         id: 'geometric-curve',
         title: 'Vertical curves',
@@ -338,6 +398,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'Curve geometry', what: 'A, K, r, the PVI external offset e = A·L/800, and the high/low point station and elevation, with the profile drawn.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'superelevation',
+    name: 'Superelevation',
+    route: '/superelevation',
+    group: 'Transportation',
+    summary: 'Splits the lateral demand of a horizontal curve between banking and side friction and gives the minimum radius at the design limits.',
+    basis: 'e + f = V²/127R with friction taken first and e capped at eMax; Rmin = V²/127(eMax + fMax).',
+    sections: [
       {
         id: 'geometric-super',
         title: 'Superelevation',

@@ -46,11 +46,11 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   // standalone analysis helpers
   '/load-combinations', '/load-path', '/influence-lines', '/plumbing',
   // surveying, transportation and water resources — the easy calculators wave
-  '/surveying', '/traffic-volume', '/signal-timing', '/traffic-queue', '/rational-method',
+  '/leveling', '/traverse', '/simple-curve', '/earthwork', '/traffic-volume', '/signal-timing', '/traffic-queue', '/rational-method',
   // wave two: hydraulics, mix design, section properties
-  '/open-channel', '/pipe-flow', '/concrete-mix', '/section-properties',
+  '/open-channel', '/critical-depth', '/hydraulic-jump', '/pipe-flow', '/concrete-mix', '/section-properties',
   // wave three: highway geometry, weirs, piles, bridges
-  '/geometric-design', '/weir-flow', '/pile-capacity', '/bridge-loading',
+  '/sight-distance', '/vertical-curves', '/superelevation', '/weir-flow', '/pile-capacity', '/bridge-loading',
   // wave four: culverts, pavement, SCS runoff, bridge rating
   '/culvert', '/pavement', '/runoff', '/bridge-rating',
   // wave five: GVF profiles, Muskingum routing, detention ponds, DO sag
@@ -96,6 +96,9 @@ export const PUBLIC_ROUTES: readonly string[] = [
   '/hydrostatics',
   // the tabbed Dynamics page, now a stub landing on /rectilinear-motion
   '/dynamics',
+  // the Surveying Toolbox and Geometric Design shells, now stubs landing on
+  // /leveling and /sight-distance
+  '/surveying', '/geometric-design',
   '/signin', '/signup', '/forgot-password', '/reset-password',
   // Policy and contact pages. A customer must be able to read the terms and
   // find a way to complain WITHOUT an account — and a payment provider
