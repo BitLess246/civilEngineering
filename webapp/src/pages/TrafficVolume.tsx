@@ -1,11 +1,9 @@
 import { useState } from 'react'
-// Every page that renders worked-solution math carries its own KaTeX stylesheet
-// — it stays out of the pages that never show an equation.
-import 'katex/dist/katex.min.css'
 import { trafficVolumes, type TrafficVolumeResult } from '../engine/trafficVolume'
-import { Card, Num, ResultCard, Row } from '../components/qty'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { Num } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { GrowthCurve } from '../components/trafficSketches'
 import type { SolutionStep } from '../lib/solution'
 import { f2, f3 } from '../lib/influenceStyle'
 
@@ -61,85 +59,60 @@ export default function TrafficVolume() {
       title: 'Consistency notes',
       lines: res.warnings.map((w) => ({ item: w })),
     } satisfies SolutionStep] : []),
-  ] : []
+  ] : [{ title: 'Check the counts', lines: [{ text: 'Volumes must be positive, K between 0 and 1, D between 0.5 and 1, and the growth rate above −100 %.' }] }]
 
+  const phfNote = res ? (res.phf > 0.92 ? 'uniform peak' : res.phf > 0.8 ? 'typical urban peak' : 'sharp spike') : ''
   return (
-    <div>
-      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <ReportControls title="Traffic Volume Studies Report" badges={['PHF · DHV · AADT']} />
-        <p className="mt-2 max-w-3xl text-sm text-muted">
-          From counts to design volumes: the peak-hour factor and the 15-minute flow rate, the
-          design-hour and directional volumes from K and D, and the compound-growth projection that
-          carries today's AADT to the design year.
-        </p>
-
-        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-          {/* ── inputs ── */}
-          <div className="space-y-5">
-            <Card title="Peak hour">
-              <Num label="Peak-hour volume V" unit="veh/h" value={hourly} onChange={setHourly} min={1} max={50000} step="50" />
-              <Num label="Busiest 15 minutes V₁₅" unit="veh" value={peak15} onChange={setPeak15} min={1} max={50000} step="10" />
-              <p className="text-[10px] text-faint sm:col-span-2 lg:col-span-3">PHF = V / (4·V₁₅) — leave the peak 15 blank at 0? No: both counts must be positive.</p>
-            </Card>
-
-            <Card title="Design hour (from ADT)">
-              <Num label="ADT" unit="veh/day" value={adt} onChange={setAdt} min={100} max={500000} step="500" />
-              <Num label="K factor" value={k} onChange={setK} min={0.01} max={0.3} step="0.005" />
-              <Num label="D factor (directional)" value={d} onChange={setD} min={0.5} max={1} step="0.01" />
-              <p className="text-[10px] text-faint sm:col-span-2 lg:col-span-3">Planning range: K ≈ 0.08–0.13, D ≈ 0.52–0.68 — outside it the engine attaches a note, not an error.</p>
-            </Card>
-
-            <Card title="Growth to the design year">
-              <Num label="Base-year AADT" unit="veh/day" value={aadt0} onChange={setAadt0} min={100} max={500000} step="500" />
-              <Num label="Annual growth g" unit="%" value={growthPct} onChange={setGrowthPct} min={-5} max={15} step="0.5" />
-              <Num label="Years to design year" unit="yr" value={years} onChange={setYears} min={0} max={50} step="1" />
-            </Card>
-          </div>
-
-          {/* ── results ── */}
-          <div className="space-y-5">
-            {res ? (
-              <>
-                <ResultCard title="Peak-hour demand">
-                  <Row label="Peak-hour factor" value={f3(res.phf)} sub={res.phf > 0.92 ? 'uniform peak — design-friendly' : res.phf > 0.8 ? 'typical urban peak' : 'sharp spike — nearly all demand in one quarter hour'} />
-                  <Row label="Design flow rate" value={`${f3(res.flowRate)} veh/h`} sub="the rate the facility must clear" />
-                </ResultCard>
-
-                <ResultCard title="Design-hour volumes">
-                  <Row label="DHV" value={`${f3(res.dhv)} veh/h`} sub={`ADT × K = ${f3(adt)} × ${f3(k)}`} />
-                  <Row label="DDHV (peak direction)" value={`${f3(res.ddhv)} veh/h`} sub={`DHV × D = ${f3(d)} directional split`} />
-                </ResultCard>
-
-                <ResultCard title="Projection">
-                  <Row label={`AADT in ${f2(years)} years`} value={`${f3(res.aadtDesign)} veh/day`} sub={`from ${f3(aadt0)} at ${f2(growthPct)} %/yr compound`} />
-                  <Row label="Growth added" value={`+${f3(res.aadtDesign - aadt0)} veh/day`} sub={`×${f3(Math.pow(1 + growthPct / 100, years))} total factor`} />
-                </ResultCard>
-
-                {res.warnings.length > 0 && (
-                  <ResultCard title="Notes">
-                    <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
-                      {res.warnings.map((w) => <li key={w}>{w}</li>)}
-                    </ul>
-                  </ResultCard>
-                )}
-              </>
-            ) : (
-              <ResultCard title="Check the counts">
-                <p className="text-sm text-fail">
-                  Volumes must be positive, K between 0 and 1, D between 0.5 and 1, and the growth
-                  rate above −100 %.
-                </p>
-              </ResultCard>
-            )}
-          </div>
-        </div>
-
-        {res && (
-          <div className="mt-6">
-            <WorkedSolution steps={steps} title="Traffic Volume Studies — step-by-step" />
-          </div>
-        )}
-      </div>
-    </div>
+    <WorkspacePage title="Traffic Volume Studies" badges={['Traffic', 'PHF · DHV · AADT']}
+      intro="From counts to design volumes: the peak-hour factor and the 15-minute flow rate, the design-hour and directional volumes from K and D, and the compound-growth projection that carries today's AADT to the design year."
+      inputs={<>
+        <InputGroup title="Peak hour" hint="PHF = V / (4·V₁₅); both counts must be positive.">
+          <Num label="Peak-hour volume V" unit="veh/h" value={hourly} onChange={setHourly} min={1} max={50000} step="50" />
+          <Num label="Busiest 15 min V₁₅" unit="veh" value={peak15} onChange={setPeak15} min={1} max={50000} step="10" />
+        </InputGroup>
+        <InputGroup title="Design hour" hint="Planning range K ≈ 0.08–0.13, D ≈ 0.52–0.68.">
+          <div className="col-span-2"><Num label="ADT" unit="veh/day" value={adt} onChange={setAdt} min={100} max={500000} step="500" /></div>
+          <Num label="K factor" value={k} onChange={setK} min={0.01} max={0.3} step="0.005" />
+          <Num label="D factor" value={d} onChange={setD} min={0.5} max={1} step="0.01" />
+        </InputGroup>
+        <InputGroup title="Growth to the design year">
+          <div className="col-span-2"><Num label="Base-year AADT" unit="veh/day" value={aadt0} onChange={setAadt0} min={100} max={500000} step="500" /></div>
+          <Num label="Annual growth g" unit="%" value={growthPct} onChange={setGrowthPct} min={-5} max={15} step="0.5" />
+          <Num label="Years" unit="yr" value={years} onChange={setYears} min={0} max={50} step="1" />
+        </InputGroup>
+      </>}
+      checks={res ? <>
+        <CheckCard title="Peak-hour factor" basis={phfNote} status="info" value={f3(res.phf)} formula="PHF = V / (4 V₁₅)"
+          pairs={[{ label: 'Design flow rate', value: `${f2(res.flowRate)} veh/h` }, { label: 'Counted hour', value: `${f2(hourly)} veh/h` }]} />
+        <CheckCard title="Directional design hour" basis="ADT × K × D" status="info" value={f2(res.ddhv)} unit="veh/h"
+          pairs={[{ label: 'DHV', value: `${f2(res.dhv)} veh/h` }, { label: 'Split D', value: f3(d) }]} />
+        <CheckCard title="Design-year AADT" basis={`${f2(growthPct)} %/yr for ${f2(years)} yr`} status="info" value={f2(res.aadtDesign)} unit="veh/day"
+          formula="AADTₙ = AADT₀ (1 + g)ⁿ"
+          pairs={[{ label: 'Growth added', value: `${f2(res.aadtDesign - aadt0)} veh/day` }, { label: 'Factor', value: `× ${f3(Math.pow(1 + growthPct / 100, years))}` }]} />
+      </> : (
+        <CheckCard title="Check the counts" basis="traffic volume" status="warn" pillLabel="CHECK" value="—" formula="Positive volumes; 0 < K < 1; 0.5 ≤ D ≤ 1." />
+      )}
+      summary={[
+        { label: 'Peak hour', value: `${f2(hourly)} veh/h, V₁₅ ${f2(peak15)}` },
+        { label: 'ADT', value: `${f2(adt)} veh/day` },
+        { label: 'K, D', value: `${f3(k)}, ${f3(d)}` },
+        { label: 'Growth', value: `${f2(growthPct)} %/yr, ${f2(years)} yr` },
+      ]}
+      drawing={res ? { title: 'AADT projection', node: <div data-pdf-drawing><GrowthCurve aadt0={aadt0} growthPct={growthPct} years={years} /></div> } : undefined}
+      resultsCaption={res && res.warnings.length ? res.warnings.join(' ') : undefined}
+      results={res ? [
+        { check: 'Peak-hour factor', basis: 'V / (4 V₁₅)', demand: f3(res.phf), status: 'info' as const },
+        { check: 'Design flow rate', basis: 'V / PHF', demand: `${f2(res.flowRate)} veh/h`, status: 'info' as const },
+        { check: 'DHV', basis: 'ADT × K', demand: `${f2(res.dhv)} veh/h`, status: 'info' as const },
+        { check: 'DDHV', basis: 'DHV × D', demand: `${f2(res.ddhv)} veh/h`, status: 'info' as const },
+        { check: 'Design-year AADT', basis: 'compound growth', demand: `${f2(res.aadtDesign)} veh/day`, status: 'info' as const },
+      ] : [{ check: 'Volumes', basis: 'invalid input', demand: '—', status: 'warn' as const }]}
+      steps={steps}
+      references={[
+        { topic: 'Peak-hour factor', basis: 'PHF = V / (4 V₁₅)', source: 'HCM 6th ed., Ch. 4' },
+        { topic: 'Design hour', basis: 'DHV = AADT × K, DDHV = DHV × D', source: 'AASHTO Green Book §2.3' },
+        { topic: 'Projection', basis: 'compound growth to the design year', source: 'Garber & Hoel, Traffic and Highway Engineering' },
+      ]}
+    />
   )
 }
