@@ -71,7 +71,13 @@ const StormSewer = lazy(() => import('./pages/StormSewer'))
 const PumpStation = lazy(() => import('./pages/PumpStation'))
 const WaterDemand = lazy(() => import('./pages/WaterDemand'))
 const EngEconomy = lazy(() => import('./pages/EngEconomy'))
-const Hydrostatics = lazy(() => import('./pages/Hydrostatics'))
+const HydrostaticForce = lazy(() => import('./pages/HydrostaticForce'))
+const CurvedGate = lazy(() => import('./pages/CurvedGate'))
+const Buoyancy = lazy(() => import('./pages/Buoyancy'))
+const Manometer = lazy(() => import('./pages/Manometer'))
+const RelativeEquilibrium = lazy(() => import('./pages/RelativeEquilibrium'))
+const EnergyEquation = lazy(() => import('./pages/EnergyEquation'))
+const JetOnVane = lazy(() => import('./pages/JetOnVane'))
 const Dynamics = lazy(() => import('./pages/Dynamics'))
 const Drafting3D = lazy(() => import('./pages/Drafting3D'))
 const Documentation = lazy(() => import('./pages/Documentation'))
@@ -282,7 +288,16 @@ export default function App() {
         {/* mathematics: engineering economy (board-exam money mathematics) */}
         <Route path="/eng-economy" element={<EngEconomy />} />
         {/* fluid statics: hydrostatic force, gates, buoyancy, vessels */}
-        <Route path="/hydrostatics" element={<Hydrostatics />} />
+        {/* fluid statics and hydraulics — one calculator per page; /hydrostatics was
+            the combined page and now lands on the first of them */}
+        <Route path="/hydrostatics" element={<Navigate to="/hydrostatic-force" replace />} />
+        <Route path="/hydrostatic-force" element={<HydrostaticForce />} />
+        <Route path="/curved-gate" element={<CurvedGate />} />
+        <Route path="/buoyancy" element={<Buoyancy />} />
+        <Route path="/manometer" element={<Manometer />} />
+        <Route path="/relative-equilibrium" element={<RelativeEquilibrium />} />
+        <Route path="/bernoulli" element={<EnergyEquation />} />
+        <Route path="/jet-on-vane" element={<JetOnVane />} />
         {/* mechanics: kinematics, kinetics, work-energy, impulse-momentum */}
         <Route path="/dynamics" element={<Dynamics />} />
         {/* drafting: 2D floor plans → 3D viewport → ModelSpace export */}

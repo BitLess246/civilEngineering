@@ -59,8 +59,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/rigid-pavement', '/roundabout', '/esal', '/storm-sewer', '/pump-station', '/water-demand',
   // mathematics: engineering economy
   '/eng-economy',
-  // fluid statics: hydrostatics
-  '/hydrostatics',
+  // fluid statics and hydraulics — one calculator per page
+  '/hydrostatic-force', '/curved-gate', '/buoyancy', '/manometer', '/relative-equilibrium', '/bernoulli', '/jet-on-vane',
   // mechanics: dynamics
   '/dynamics',
   // drafting: 2D floor plans → 3D
@@ -92,6 +92,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
   // instead of the page that replaced it — and charging it here would bill the
   // same visit twice.
   '/steel', '/geotech',
+  // the combined Hydrostatics page, now a stub landing on /hydrostatic-force
+  '/hydrostatics',
   '/signin', '/signup', '/forgot-password', '/reset-password',
   // Policy and contact pages. A customer must be able to read the terms and
   // find a way to complain WITHOUT an account — and a payment provider
