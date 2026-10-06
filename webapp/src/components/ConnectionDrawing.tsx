@@ -28,6 +28,9 @@ export function ConnectionDrawing({ geom, db, boltForces, critical, Vu, Hu, ex_l
   ex_load: number; ey_load: number
   connType?: 'bolt' | 'weld'
 }) {
+  // ex_load / ey_load are the ECCENTRICITY from the bolt centroid. The page
+  // used to pass Cx + ex, and this adds Cx again — so a concentric load was
+  // drawn at twice the centroid offset, on the plate corner.
   // absolute bolt positions (plate coords, bottom-left origin, Y up)
   const abs = geom.bolts.map((b) => ({ id: b.id, x: b.x + geom.Cx, y: b.y + geom.Cy }))
   const loadX = geom.Cx + ex_load, loadY = geom.Cy + ey_load
@@ -60,10 +63,7 @@ export function ConnectionDrawing({ geom, db, boltForces, critical, Vu, Hu, ex_l
   const X0 = tx(px0), X1 = tx(px1), Y0 = ty(py1), Y1 = ty(py0)   // plate rect in px (Y0 = top)
 
   return (
-    <div className="print-avoid-break rounded-xl border border-hairline bg-sheet p-3 shadow-sm">
-      <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-muted">
-        Connection face — {connType === 'bolt' ? 'bolt layout' : 'weld layout'}
-      </h3>
+    <div className="print-avoid-break">
       <DrawingFrame label="connection face">
           <svg width="100%" style={{ maxWidth: svgW * 1.15 }} viewBox={`0 0 ${svgW} ${svgH}`} className="h-auto">
           {/* plate */}
@@ -90,7 +90,7 @@ export function ConnectionDrawing({ geom, db, boltForces, critical, Vu, Hu, ex_l
                       const sc = 22 / Math.max(...(boltForces?.map((f) => f.R) ?? [1]))
                       const dx = bfEntry.Vx * sc, dy = -bfEntry.Vy * sc
                       return <line x1={cx} y1={cy} x2={cx + dx} y2={cy + dy}
-                        stroke={isCrit ? '#dc2626' : '#3b82f6'} strokeWidth={1.4} markerEnd="url(#arrow)" />
+                        stroke={isCrit ? '#dc2626' : '#3b82f6'} strokeWidth={1.4} markerEnd={isCrit ? 'url(#arrow-crit)' : 'url(#arrow)'} />
                     })()}
                     {/* id top-left of the hole, force bottom-right — no stacking collisions */}
                     {label(cx - r - 3, cy - r - 1, b.id, isCrit ? '#dc2626' : '#475569', 9, 'end')}
@@ -127,18 +127,20 @@ export function ConnectionDrawing({ geom, db, boltForces, critical, Vu, Hu, ex_l
                 <line x1={tx(geom.Cx)} y1={ty(geom.Cy)} x2={lx} y2={ly} stroke="#16a34a" strokeWidth={0.8} strokeDasharray="4,3" />
                 <circle cx={lx} cy={ly} r={4} fill="none" stroke="#16a34a" strokeWidth={1.5} strokeDasharray="3,2" />
                 {Vu !== 0 && <line x1={lx} y1={ly - 22} x2={lx} y2={ly - 6}
-                  stroke="#16a34a" strokeWidth={1.5} markerEnd="url(#arrow)" />}
+                  stroke="#16a34a" strokeWidth={1.5} markerEnd="url(#arrow-load)" />}
                 {Hu !== 0 && <line x1={lx + (Hu > 0 ? -22 : 22)} y1={ly} x2={lx + (Hu > 0 ? -6 : 6)} y2={ly}
-                  stroke="#16a34a" strokeWidth={1.5} markerEnd="url(#arrow)" />}
+                  stroke="#16a34a" strokeWidth={1.5} markerEnd="url(#arrow-load)" />}
                 {label(onRight ? lx - 7 : lx + 7, ly - 24, `P @ (${Math.round(loadX)}, ${Math.round(loadY)})`, '#15803d', 8.5, onRight ? 'end' : 'start')}
               </g>
             )
           })()}
 
           <defs>
-            <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-              <path d="M0,0 L6,3 L0,6 Z" fill="#1d4ed8" />
-            </marker>
+            {([['arrow', '#3b82f6'], ['arrow-crit', '#dc2626'], ['arrow-load', '#16a34a']] as const).map(([id, c]) => (
+              <marker key={id} id={id} markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                <path d="M0,0 L6,3 L0,6 Z" fill={c} />
+              </marker>
+            ))}
           </defs>
         </svg>
       </DrawingFrame>

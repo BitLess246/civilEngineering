@@ -4,19 +4,18 @@ import type { BoltGrade } from '../engine/steelDesign'
 import { calcConnection } from '../lib/calcApi'
 import type { ConnectionCalcResult } from '../lib/calcApi'
 import { useCalcResult } from '../lib/useCalcResult'
-import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard, ResultsTable, type ResultRow } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { ConnectionDrawing } from '../components/ConnectionDrawing'
 import type { SolutionStep } from '../lib/solution'
 import { f1, f2, f3 } from '../lib/format'
 import { sn1, sn2 } from '../lib/solution'
-import { PageHeader } from '../components/calc'
-import { CalcBadge, TrialWall, Verdict, BasisPick, BasisNote } from '../components/steelUi'
+import { CalcBadge, TrialWall, BasisPick, BasisNote } from '../components/steelUi'
 import { capacityLabel, demandLabel, factorLabel, SAFETY, type DesignBasis } from '../engine/designBasis'
 
 
-function BoltedConnectionCalc() {
+export default function BoltedConnection() {
   const [Vu,         setVu]         = useState(150)
   const [Hu,         setHu]         = useState(0)
   const [boltGrade,  setBoltGrade]  = useState<BoltGrade>('A325M')
@@ -171,277 +170,185 @@ function BoltedConnectionCalc() {
     ]
   }, [res, boltGrade, db, nRows, nCols, sy, ex_edge, tPlate, FuPlate, threads, Vu, Hu, ex_load, ey_load, e_out, b_gage])
 
+  const boltRatio = res && res.avail.governing > 0 ? res.eccentric.Rmax / res.avail.governing : undefined
+  const boltOK = boltRatio != null && boltRatio <= 1
+  const bsOK = govAvailBlockShear == null || Vu <= govAvailBlockShear
+  const oop = res?.outOfPlane ?? null
+  const pry = res?.prying ?? null
+  const allOK = boltOK && bsOK && (oop ? oop.ok : true) && (pry ? pry.ok : true)
+  const R = res ? capacityLabel(res.basis, 'R') : ''
+  const report = res ? {
+    docCode: 'S-BC',
+    ok: allOK,
+    governing: `critical bolt ${res.eccentric.critical}: R ${f2(res.eccentric.Rmax)} / ${R} ${f2(res.avail.governing)} kN · ${res.geom.n} × ⌀${db} ${boltGrade}`,
+    stats: [
+      { label: `${R} per bolt`, value: f2(res.avail.governing), unit: 'kN' },
+      { label: `Maximum ${demandLabel(res.basis, 'V')}`, value: f2(res.maxVu), unit: 'kN' },
+      { label: 'In-plane M', value: res.eccentric.M.toFixed(0), unit: 'kN·mm' },
+    ],
+    checks: [
+      { name: 'Critical bolt R ≤ available §J3.6/§J3.10', ratio: boltRatio ?? 0, ok: boltOK },
+      ...(govAvailBlockShear != null ? [{ name: 'Block shear §J4.3', ratio: govAvailBlockShear > 0 ? Vu / govAvailBlockShear : 0, ok: bsOK }] : []),
+      ...(oop ? [{ name: 'Tension–shear interaction §J3.7', ratio: oop.phiTn_crit > 0 ? oop.Tmax / oop.phiTn_crit : 0, ok: oop.ok }] : []),
+      ...(pry ? [{ name: 'Prying §J3.9', ratio: null, ok: pry.ok }] : []),
+    ],
+    data: [
+      ['Applied V / H', `${f2(Vu)} / ${f2(Hu)} kN (${basis})`],
+      ['Bolts', `${boltGrade} ⌀${db}, threads ${threads === 'yes' ? 'included (N)' : 'excluded (X)'}, ${nShear === 2 ? 'double' : 'single'} shear`],
+      ['Pattern', custom ? `free-form, ${custom.length} bolts` : `${nRows} × ${nCols}, sv ${sy}, sh ${sx}, edges ${ey} / ${ex_edge} mm`],
+      ['Eccentricity ex / ey / e_out', `${ex_load} / ${ey_load} / ${e_out} mm`],
+      ['Plate', `t ${tPlate} mm, Fy ${FyPlate}, Fu ${FuPlate} MPa`],
+    ] as [string, string][],
+    steps: boltSteps,
+  } : undefined
+
+  const boltForceRows: ResultRow[] = res ? res.eccentric.bolts.map((b) => ({
+    check: b.id, basis: `Vx ${f2(b.Vx)} · Vy ${f2(b.Vy)} kN · fbr ${f1(b.fbr)} MPa`,
+    demand: `${f2(b.R)} kN`, limit: `${f2(res.avail.governing)} kN`,
+    ratio: res.avail.governing > 0 ? b.R / res.avail.governing : undefined,
+    status: b.id === res.eccentric.critical ? (boltOK ? 'pass' : 'fail') : 'info',
+  })) : []
+  const oopRows: ResultRow[] = oop ? oop.bolts.map((b) => ({
+    check: b.id, basis: `yi ${b.yi.toFixed(0)} mm · frv ${f1(b.frv)} MPa`, demand: `T ${f2(b.T)} kN`,
+    ratio: b.util, status: b.util > 1 ? 'fail' : b.id === oop.critical ? 'pass' : 'info',
+  })) : []
+  const cell = 'w-16 rounded border border-hairline bg-sheet px-1 py-0.5 text-right font-mono'
+
   return (
-    <div>
-      <TrialWall cause={cause} />
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.9fr_1fr]">
-      {/* ── inputs ── */}
-      <div className="space-y-5">
-        <Card title={<>Applied load<CalcBadge loading={loading} error={error} cause={cause} /></>}>
+    <WorkspacePage title="Bolted Connection" badges={['Steel', 'AISC 360-16 §J3–J4 · NSCP 2015']}
+      intro="An eccentrically loaded bolt group by the elastic method: available strength per bolt in shear and bearing (§J3.6, §J3.10), block shear on a shear tab (§J4.3), out-of-plane tension with the §J3.7 interaction, and prying (§J3.9). The load is entered directly, so it must match the basis — factored for LRFD, service for ASD."
+      report={report}
+      inputs={<>
+        <TrialWall cause={cause} />
+        <InputGroup title="Applied load">
           <BasisPick value={basis} onChange={setBasis} />
-          <Num label={`Applied ${demandLabel(basis, 'V')}`} unit="kN" value={Vu} onChange={setVu} />
-          <Num label={`Applied ${demandLabel(basis, 'H')} (horizontal)`} unit="kN" value={Hu} onChange={setHu} />
-          <BasisNote basis={basis} />
-          <p className="col-span-full text-[10px] text-muted">
-            The load is entered directly here, so it is on you to enter a demand that matches the
-            basis — factored for LRFD, service for ASD.
-          </p>
-        </Card>
-        <Card title="Bolt properties">
-            <Pick label="Grade" value={boltGrade} onChange={v => setBoltGrade(v as BoltGrade)}
-              options={[['A325M','A325M (F10T)'],['A490M','A490M (F13T)']]} />
-            <Num label="Diameter db" unit="mm" value={db} onChange={setDb} />
-            <Pick label="Threads in shear plane" value={threads} onChange={v => setThreads(v as 'yes'|'no')}
-              options={[['yes','Yes (N)'],['no','No (X)']]} />
-            <Pick label="Shear planes" value={String(nShear)} onChange={v => setNShear(Number(v) as 1 | 2)}
-              options={[['1','Single shear (1)'],['2','Double shear (2)']]} />
-            <p className="col-span-full text-[10px] text-muted">
-              §J3.6 counts bolt shear per PLANE, so double shear doubles φRn,shear. Bearing is a
-              plate check and does not change — enter the thickness of the ply the bolt bears on.
-            </p>
-          </Card>
-          <Card title="Bolt pattern" grid={false}>
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-              <Pick label="Layout" value={custom ? 'custom' : 'grid'}
-                onChange={v => setCustom(v === 'custom' ? gridBolts : null)}
-                options={[['grid','Rectangular grid'],['custom','Free-form (any x, y)']]} />
-            </div>
-            {custom ? (
-              <div className="mt-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-[11.5px] font-semibold text-muted">Bolt coordinates (mm, from the plate corner)</span>
-                  <button type="button" onClick={addBolt}
-                    className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">+ Add bolt</button>
-                </div>
-                <div className="max-h-60 overflow-auto">
-                  <table className="w-full text-xs">
-                    <thead className="text-muted"><tr className="text-left">
-                      <th className="py-1 pr-2">Bolt</th><th className="pr-2">x</th><th className="pr-2">y</th>
-                      <th className="pr-2 text-right">R (kN)</th><th />
-                    </tr></thead>
-                    <tbody>
-                      {custom.map((b, i) => {
-                        const force = res?.eccentric.bolts.find(f => f.id === b.id)
-                        const crit = force && res && b.id === res.eccentric.critical
-                        return (
-                          <tr key={b.id} className={`border-t border-hairline-2 ${crit ? 'font-semibold text-warn' : ''}`}>
-                            <td className="py-1 pr-2 font-medium">{b.id}</td>
-                            {(['x','y'] as const).map(k => (
-                              <td key={k} className="pr-2">
-                                <input type="number" value={b[k]} onChange={e => setBolt(i, k, Number(e.target.value))}
-                                  className="w-16 rounded border border-hairline px-1 py-0.5" />
-                              </td>
-                            ))}
-                            <td className="pr-2 text-right font-mono">{force ? f2(force.R) : '—'}</td>
-                            <td className="text-right">
-                              <button type="button" onClick={() => delBolt(i)} disabled={custom.length <= 1}
-                                className="text-muted hover:text-fail disabled:opacity-30">✕</button>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="mt-1.5 text-[10px] text-muted">
-                  Seeded from the grid. Block shear is not reported for a free-form pattern —
-                  the shear-tab tear-out paths assume a single vertical bolt line.
-                </p>
-              </div>
-            ) : (
-              <div className="mt-3 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-                <Num label="Rows (vertical) nR" value={nRows} onChange={setNRows} />
-                <Num label="Cols (horizontal) nC" value={nCols} onChange={setNCols} />
-                <Num label="Vertical spacing sv" unit="mm" value={sy} onChange={setSy} />
-                <Num label="Horizontal spacing sh" unit="mm" value={sx} onChange={setSx} />
-                <Num label="Edge dist vertical ey" unit="mm" value={ey} onChange={setEy} />
-                <Num label="Edge dist horiz ex" unit="mm" value={ex_edge} onChange={setExEdge} />
-              </div>
-            )}
-          </Card>
-          <Card title="Eccentricity (load point from bolt centroid)">
-            <Num label="In-plane e_x" unit="mm" value={ex_load} onChange={setExLoad} />
-            <Num label="In-plane e_y" unit="mm" value={ey_load} onChange={setEyLoad} />
-            <Num label="Out-of-plane e_out" unit="mm" value={e_out} onChange={setEOut} />
-            <p className="col-span-full text-[10px] text-muted">
-              e_x/e_y: in-plane offset (§J3.6 elastic method).
-              e_out: perpendicular to plate → bolt tension + §J3.7 interaction.
-            </p>
-          </Card>
-          {e_out > 0 && (
-            <Card title="Prying action §J3.9">
-              <Num label="Gage b (bolt CL → web face)" unit="mm" value={b_gage} onChange={setBGage} />
-              <p className="col-span-full text-[10px] text-muted">
-                b = distance from bolt centreline to face of the connecting web or stem.
-                Set 0 to skip prying check. Edge dist a = ex, pitch p = sv, plate tf/Fy reused from above.
-              </p>
-            </Card>
-          )}
-          <Card title="Plate / connected part">
-            <Num label="Plate thickness t" unit="mm" value={tPlate} onChange={setTPlate} />
-            <Num label="Plate Fy" unit="MPa" value={FyPlate} onChange={setFyPlate} />
-            <Num label="Plate Fu" unit="MPa" value={FuPlate} onChange={setFuPlate} />
-        </Card>
-      </div>
-
-      {/* ── 2D drawing ── */}
-      <div className="space-y-4">
-        {res && (
-          <ConnectionDrawing
-            geom={res.geom} db={db}
-            boltForces={res.eccentric.bolts}
-            critical={res.eccentric.critical}
-            Vu={Vu} Hu={Hu} ex_load={res.geom.Cx + ex_load} ey_load={res.geom.Cy + ey_load}
-            connType="bolt"
-          />
-        )}
-      </div>
-
-      {/* ── results ── */}
-      <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
-        {res && (<>
-          <ResultCard title="Bolt capacity / bolt">
-            <Row label={`${capacityLabel(res.basis, 'R')} shear`} value={`${f2(res.avail.shear)} kN`} />
-            <Row label={`${capacityLabel(res.basis, 'R')} bearing`} value={`${f2(res.avail.bearing)} kN`} />
-            <Row label={`${capacityLabel(res.basis, 'R')} governing`} value={<b>{f2(res.avail.governing)} kN</b>}
-              sub={`${nShear === 2 ? 'double shear' : 'single shear'} · ${factorLabel(res.basis, 'connection')}`} />
-          </ResultCard>
-          <ResultCard title={`Eccentric group (${res.geom.n} bolts)`}>
-            <Row label="Ip" value={`${res.geom.Ip.toFixed(0)} mm²`} />
-            <Row label="In-plane M" value={`${res.eccentric.M.toFixed(0)} kN·mm`} />
-            <Row label="Critical bolt" value={res.eccentric.critical} sub={`R = ${f2(res.eccentric.Rmax)} kN`} />
-            <Row alert={res.eccentric.Rmax > res.avail.governing}
-              label={`Rmax / ${capacityLabel(res.basis, 'R')}`}
-              value={<Verdict pass={res.eccentric.Rmax <= res.avail.governing} value={`${(res.eccentric.Rmax/res.avail.governing*100).toFixed(0)} %`} />} />
-            <Row label="Bolt shear stress τmax" value={`${f1(res.tauMax)} MPa`}
-              sub={`Rmax / (Ab × ${nShear})`} />
-            <Row label={`Maximum applied ${demandLabel(res.basis, 'V')}`} value={<b>{f2(res.maxVu)} kN</b>}
-              sub="at this eccentricity — the method is linear in the load" />
-          </ResultCard>
-          <ResultCard title="Per-bolt forces">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead><tr className="text-left text-muted">
-                  <th className="pr-2 pb-1">id</th><th className="pr-2 pb-1">Vx kN</th><th className="pr-2 pb-1">Vy kN</th>
-                  <th className="pr-2 pb-1">R kN</th><th className="pb-1">fbr MPa</th>
-                </tr></thead>
-                <tbody>
-                  {res.eccentric.bolts.map(b => (
-                    <tr key={b.id} className={b.id === res.eccentric.critical ? 'font-semibold text-warn' : ''}>
-                      <td className="pr-2">{b.id}</td>
-                      <td className="pr-2">{f2(b.Vx)}</td>
-                      <td className="pr-2">{f2(b.Vy)}</td>
-                      <td className="pr-2">{f2(b.R)}</td>
-                      <td>{f1(b.fbr)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </ResultCard>
-          <ResultCard title="Block shear §J4.3">
-            {res.blockShear.length === 0 && (
-              <p className="col-span-full text-[11px] text-muted">
-                Not applicable to a free-form bolt pattern: the §J4.3 shear-tab paths run along a
-                single vertical bolt line. Switch the layout back to a rectangular grid, or check
-                tear-out by hand against the pattern you have.
-              </p>
-            )}
-            {res.blockShear.map((c, k) => (
-              <Row key={c.label} alert={Vu > res.availBlockShear[k]}
-                label={<span className="text-[10px]">{c.label.replace('§J4.3 ', '')}</span>}
-                value={<Verdict pass={Vu <= res.availBlockShear[k]}
-                  value={`${capacityLabel(res.basis, 'R')} = ${f1(res.availBlockShear[k])} kN`} />} />
-            ))}
-            {govAvailBlockShear !== null && (
-              <Row alert={Vu > govAvailBlockShear}
-                label="Governing block shear"
-                value={<Verdict pass={Vu <= govAvailBlockShear} value={`${f1(govAvailBlockShear)} kN`} />} />
-            )}
-          </ResultCard>
-
-          {res.outOfPlane && (
-            <ResultCard title="Out-of-plane eccentricity §J3.7 (critical bolt)">
-              <Row label="M_op = Vu·e_out" value={`${res.outOfPlane.M_op.toFixed(0)} kN·mm`} />
-              <Row label="Σyi²" value={`${res.outOfPlane.sumYi2.toFixed(0)} mm²`} />
-              <Row label="Critical bolt (max T)" value={res.outOfPlane.critical}
-                sub={`T = ${f2(res.outOfPlane.Tmax)} kN`} />
-              <Row label="φTn (reduced)" value={`${f2(res.outOfPlane.phiTn_crit)} kN`}
-                sub={`φFnt' = ${res.outOfPlane.bolts.find(b=>b.id===res.outOfPlane!.critical)?.phiFnt_prime.toFixed(0)} MPa`} />
-              <Row alert={!res.outOfPlane.ok}
-                label="Combined check (§J3.7)"
-                value={<Verdict pass={res.outOfPlane.ok} value={res.outOfPlane.ok ? 'PASS' : 'FAIL'} />} />
-              <div className="col-span-full overflow-x-auto">
-                <table className="mt-1 w-full text-xs">
-                  <thead><tr className="text-left text-muted">
-                    <th className="pr-2 pb-1">id</th><th className="pr-2 pb-1">yi mm</th>
-                    <th className="pr-2 pb-1">T kN</th><th className="pr-2 pb-1">frv MPa</th><th className="pb-1">util</th>
+          <Num label={`${demandLabel(basis, 'V')} (vertical)`} unit="kN" value={Vu} onChange={setVu} />
+          <Num label={`${demandLabel(basis, 'H')} (horizontal)`} unit="kN" value={Hu} onChange={setHu} />
+          <div className="col-span-2"><BasisNote basis={basis} /></div>
+        </InputGroup>
+        <InputGroup title="Bolts" hint="§J3.6 counts bolt shear per plane, so double shear doubles it; bearing is a plate check and does not change.">
+          <Pick label="Grade" value={boltGrade} onChange={v => setBoltGrade(v as BoltGrade)}
+            options={[['A325M','A325M (F10T)'],['A490M','A490M (F13T)']]} />
+          <Num label="Diameter db" unit="mm" value={db} onChange={setDb} />
+          <Pick label="Threads in shear plane" value={threads} onChange={v => setThreads(v as 'yes'|'no')}
+            options={[['yes','Yes (N)'],['no','No (X)']]} />
+          <Pick label="Shear planes" value={String(nShear)} onChange={v => setNShear(Number(v) as 1 | 2)}
+            options={[['1','Single shear'],['2','Double shear']]} />
+        </InputGroup>
+        <InputGroup title="Bolt pattern">
+          <div className="col-span-2">
+            <Pick label="Layout" value={custom ? 'custom' : 'grid'}
+              onChange={v => setCustom(v === 'custom' ? gridBolts : null)}
+              options={[['grid','Rectangular grid'],['custom','Free-form (any x, y)']]} />
+          </div>
+          {custom ? (
+            <div className="col-span-2">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-muted"><tr className="text-left">
+                    <th className="py-1 pr-2">Bolt</th><th className="pr-2">x</th><th className="pr-2">y</th>
+                    <th className="pr-2 text-right">R (kN)</th><th />
                   </tr></thead>
                   <tbody>
-                    {res.outOfPlane.bolts.map(b => (
-                      <tr key={b.id} className={b.id === res.outOfPlane!.critical ? 'font-semibold text-warn' : ''}>
-                        <td className="pr-2">{b.id}</td>
-                        <td className="pr-2">{b.yi.toFixed(0)}</td>
-                        <td className="pr-2">{f2(b.T)}</td>
-                        <td className="pr-2">{f1(b.frv)}</td>
-                        <td className={b.util > 1 ? 'text-fail' : ''}>{(b.util*100).toFixed(0)}%</td>
-                      </tr>
-                    ))}
+                    {custom.map((b, i) => {
+                      const force = res?.eccentric.bolts.find(f => f.id === b.id)
+                      const crit = force && res && b.id === res.eccentric.critical
+                      return (
+                        <tr key={b.id} className={`border-t border-hairline-2 ${crit ? 'font-semibold text-warn' : ''}`}>
+                          <td className="py-1 pr-2 font-medium">{b.id}</td>
+                          {(['x','y'] as const).map(k => (
+                            <td key={k} className="pr-2">
+                              <input type="number" aria-label={`${b.id} ${k}`} value={b[k]} onChange={e => setBolt(i, k, Number(e.target.value))} className={cell} />
+                            </td>
+                          ))}
+                          <td className="pr-2 text-right font-mono">{force ? f2(force.R) : '—'}</td>
+                          <td className="text-right">
+                            <button type="button" aria-label={`Remove ${b.id}`} onClick={() => delBolt(i)} disabled={custom.length <= 1}
+                              className="text-muted hover:text-fail disabled:opacity-30">✕</button>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
-            </ResultCard>
-          )}
-
-          {res.prying && (
-            <ResultCard title="Prying action §J3.9 (critical bolt)">
-              <Row label="b' = b − db/2" value={`${res.prying.b_prime.toFixed(1)} mm`} />
-              <Row label="a' = min(a, 1.25b)" value={`${res.prying.a_prime.toFixed(1)} mm`} />
-              <Row label="ρ = b'/a'" value={f3(res.prying.rho)} />
-              <Row label="δ = 1 − dh/p" value={f3(res.prying.delta)} />
-              <Row label="β (prying potential)" value={f3(res.prying.beta)} />
-              <Row label="α (prying fraction)" value={f3(res.prying.alpha)} sub="0 = none, 1 = full" />
-              <Row label="Prying force Q" value={`${f2(res.prying.Q)} kN`} />
-              <Row label="T_total = T + Q" value={`${f2(res.prying.T_total)} kN`} />
-              <Row label="Required plate t" value={`${res.prying.t_req.toFixed(1)} mm`}
-                sub={`t_no_prying = ${res.prying.t_no_prying.toFixed(1)} mm`} />
-              <Row alert={!res.prying.ok}
-                label="T_total ≤ φTn (§J3.9)"
-                value={<Verdict pass={res.prying.ok} value={res.prying.ok ? 'PASS' : 'FAIL'} />} />
-            </ResultCard>
-          )}
-        </>)}
-      </div>
-      </div>
-
-      {/* Outside the grid on purpose: inside it, the sticky results rail's
-          containing block covers this row and floats over the equations
-          (see #560). */}
-      {res && (
-        <div>
-          <WorkedSolution steps={boltSteps} title="Bolted Connection — step-by-step (AISC 360-16 §J3, §J4)" />
-        </div>
-      )}
-    </div>
-  )
-}
-
-export default function BoltedConnection() {
-  return (
-    <div>
-      <PageHeader title="Bolted Connection" badges={['AISC 360-16']} />
-      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <p className="no-print mt-1 text-muted">
-          Eccentrically-loaded bolt group by the elastic method — φRn per bolt in shear and
-          bearing (§J3.6 / §J3.10), block shear on the shear tab (§J4.3), out-of-plane tension
-          with the §J3.7 interaction, and prying (§J3.9). 2D layout and a
-          step-by-step solution.
-        </p>
-        <ReportControls title="Bolted Connection Report" />
-        <div className="mt-5">
-          <BoltedConnectionCalc />
-        </div>
-      </div>
-    </div>
+              <button type="button" onClick={addBolt}
+                className="mt-2 rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">+ Add bolt</button>
+              <p className="mt-1.5 text-[10px] text-muted">
+                Coordinates in mm from the plate corner, seeded from the grid. Block shear is not
+                reported for a free-form pattern — the shear-tab paths assume one vertical bolt line.
+              </p>
+            </div>
+          ) : (<>
+            <Num label="Rows nR" value={nRows} onChange={setNRows} />
+            <Num label="Columns nC" value={nCols} onChange={setNCols} />
+            <Num label="Vertical spacing sv" unit="mm" value={sy} onChange={setSy} />
+            <Num label="Horizontal spacing sh" unit="mm" value={sx} onChange={setSx} />
+            <Num label="Edge distance ey" unit="mm" value={ey} onChange={setEy} />
+            <Num label="Edge distance ex" unit="mm" value={ex_edge} onChange={setExEdge} />
+          </>)}
+        </InputGroup>
+        <InputGroup title="Eccentricity" hint="ex, ey: in-plane offset of the load from the bolt centroid. e_out: perpendicular to the plate — bolt tension and the §J3.7 interaction.">
+          <Num label="In-plane ex" unit="mm" value={ex_load} onChange={setExLoad} />
+          <Num label="In-plane ey" unit="mm" value={ey_load} onChange={setEyLoad} />
+          <Num label="Out-of-plane e_out" unit="mm" value={e_out} onChange={setEOut} />
+          {e_out > 0 && <Num label="Prying gage b" unit="mm" value={b_gage} onChange={setBGage} hint="bolt CL to web face; 0 skips prying" />}
+        </InputGroup>
+        <InputGroup title="Plate / connected part">
+          <Num label="Thickness t" unit="mm" value={tPlate} onChange={setTPlate} />
+          <Num label="Fy" unit="MPa" value={FyPlate} onChange={setFyPlate} />
+          <Num label="Fu" unit="MPa" value={FuPlate} onChange={setFuPlate} />
+        </InputGroup>
+      </>}
+      checks={res ? <>
+        <CheckCard title="Critical bolt" basis={`${res.eccentric.critical} · elastic method · ${factorLabel(res.basis, 'connection')}`} status={boltOK ? 'pass' : 'fail'}
+          value={f2(res.eccentric.Rmax)} unit="kN" ratio={boltRatio} ratioLabel={`R ÷ ${R}`}
+          pairs={[{ label: `${R} shear / bearing`, value: `${f2(res.avail.shear)} / ${f2(res.avail.bearing)} kN` }, { label: `Max ${demandLabel(res.basis, 'V')}`, value: `${f2(res.maxVu)} kN` }]} />
+        <CheckCard title="Block shear §J4.3" basis="shear tab, one bolt line" status={govAvailBlockShear == null ? 'info' : bsOK ? 'pass' : 'fail'}
+          pillLabel={govAvailBlockShear == null ? 'NOT RUN' : undefined}
+          value={govAvailBlockShear == null ? '—' : f1(govAvailBlockShear)} unit={govAvailBlockShear == null ? '' : 'kN'}
+          ratio={govAvailBlockShear ? Vu / govAvailBlockShear : undefined} ratioLabel={`${demandLabel(res.basis, 'V')} ÷ ${R}`} />
+        {oop && <CheckCard title="Out-of-plane §J3.7" basis={`critical ${oop.critical}`} status={oop.ok ? 'pass' : 'fail'}
+          value={f2(oop.Tmax)} unit="kN" ratio={oop.phiTn_crit > 0 ? oop.Tmax / oop.phiTn_crit : undefined} ratioLabel="T ÷ reduced Tn"
+          pairs={[{ label: 'M_op', value: `${oop.M_op.toFixed(0)} kN·mm` }, { label: 'Reduced Tn', value: `${f2(oop.phiTn_crit)} kN` }]} />}
+        {pry && <CheckCard title="Prying §J3.9" basis={`α ${f3(pry.alpha)}`} status={pry.ok ? 'pass' : 'fail'}
+          value={f2(pry.T_total)} unit="kN T + Q"
+          pairs={[{ label: 'Q', value: `${f2(pry.Q)} kN` }, { label: 'Required t', value: `${pry.t_req.toFixed(1)} mm` }]} />}
+        <CalcBadge loading={loading} error={error} cause={cause} />
+      </> : <CalcBadge loading={loading} error={error} cause={cause} />}
+      summary={[
+        { label: 'Load', value: `${demandLabel(basis, 'V')} ${f2(Vu)}, ${demandLabel(basis, 'H')} ${f2(Hu)} kN (${basis})` },
+        { label: 'Bolts', value: `${custom ? `${custom.length} free-form` : `${nRows} × ${nCols}`} ${boltGrade} ⌀${db}, ${nShear === 2 ? 'double' : 'single'} shear` },
+        { label: 'Plate', value: `t ${tPlate} mm, Fu ${FuPlate} MPa` },
+      ]}
+      drawing={res ? { title: 'Connection face', node: <div data-pdf-drawing>
+        <ConnectionDrawing geom={res.geom} db={db} boltForces={res.eccentric.bolts} critical={res.eccentric.critical}
+          Vu={Vu} Hu={Hu} ex_load={ex_load} ey_load={ey_load} connType="bolt" />
+      </div> } : undefined}
+      results={res ? [
+        { check: 'Bolt shear', basis: `§J3.6 · ${nShear === 2 ? 'double' : 'single'} shear`, demand: `${f2(res.avail.shear)} kN`, status: 'info' as const },
+        { check: 'Bearing on plate', basis: '§J3.10', demand: `${f2(res.avail.bearing)} kN`, status: 'info' as const },
+        { check: 'Polar moment', basis: 'Ip = Σ(x² + y²)', demand: `${res.geom.Ip.toFixed(0)} mm²`, status: 'info' as const },
+        { check: 'In-plane moment', basis: 'about the centroid', demand: `${res.eccentric.M.toFixed(0)} kN·mm`, status: 'info' as const },
+        { check: 'Critical bolt', basis: `${res.eccentric.critical} · τmax ${f1(res.tauMax)} MPa`, demand: `${f2(res.eccentric.Rmax)} kN`, limit: `${f2(res.avail.governing)} kN`, ratio: boltRatio, status: boltOK ? 'pass' as const : 'fail' as const },
+        ...res.blockShear.map((c, k) => ({ check: 'Block shear', basis: c.label.replace('§J4.3 ', ''), demand: `${f2(Vu)} kN`, limit: `${f1(res.availBlockShear[k]!)} kN`, ratio: res.availBlockShear[k]! > 0 ? Vu / res.availBlockShear[k]! : undefined, status: Vu <= res.availBlockShear[k]! ? 'pass' as const : 'fail' as const })),
+        ...(pry ? [
+          { check: 'Prying geometry', basis: "b' · a' · ρ · δ · β", demand: `${pry.b_prime.toFixed(1)} · ${pry.a_prime.toFixed(1)} · ${f3(pry.rho)} · ${f3(pry.delta)} · ${f3(pry.beta)}`, status: 'info' as const },
+          { check: 'Prying', basis: `α ${f3(pry.alpha)} · Q ${f2(pry.Q)} kN`, demand: `${f2(pry.T_total)} kN`, limit: `t req ${pry.t_req.toFixed(1)} mm`, status: pry.ok ? 'pass' as const : 'fail' as const },
+        ] : []),
+      ] : []}
+      extraSections={res ? [
+        { title: 'Per-bolt forces', node: <ResultsTable rows={boltForceRows} /> },
+        ...(oop ? [{ title: 'Out-of-plane bolt tension §J3.7', node: <ResultsTable rows={oopRows} /> }] : []),
+      ] : []}
+      steps={boltSteps}
+      references={[
+        { topic: 'Bolt shear and bearing', basis: 'Fnv·Ab per plane; bearing at bolt holes', source: 'AISC 360-16 §J3.6, §J3.10 · NSCP 2015 §510.3' },
+        { topic: 'Combined tension and shear', basis: 'reduced Fnt′', source: 'AISC 360-16 §J3.7' },
+        { topic: 'Prying', basis: 'tee / angle flange bending', source: 'AISC 360-16 §J3.9 commentary; AISC Manual Part 9' },
+        { topic: 'Block shear', basis: 'shear + tension rupture paths', source: 'AISC 360-16 §J4.3' },
+        { topic: 'Eccentric bolt groups', basis: 'elastic method', source: 'AISC Manual Part 7' },
+      ]}
+    />
   )
 }
