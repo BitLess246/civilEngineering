@@ -116,7 +116,10 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
   {
     label: 'Mathematics',
     tools: [
-      { to: '/eng-economy', name: 'Engineering Economy', sub: 'Time value · NPV/IRR · depreciation', group: 'Time Value of Money' },
+      { to: '/interest-factors', name: 'Interest Factors', sub: 'P/F · P/A · gradients · i_eff', group: 'Engineering Economy' },
+      { to: '/cash-flow-analysis', name: 'Cash-Flow Analysis', sub: 'NPV · IRR · B/C · payback', group: 'Engineering Economy' },
+      { to: '/depreciation', name: 'Depreciation', sub: 'SL · SYD · declining balance', group: 'Engineering Economy' },
+      { to: '/break-even', name: 'Break-Even Analysis', sub: 'Q = F/(p − v) · margin of safety', group: 'Engineering Economy' },
       { to: '/rectilinear-motion', name: 'Rectilinear Motion', sub: 'Constant acceleration · any three of u, a, t, v, s', group: 'Mechanics' },
       { to: '/projectile-motion', name: 'Projectile Motion', sub: 'Range · height · time of flight', group: 'Mechanics' },
       { to: '/curvilinear-motion', name: 'Curvilinear Motion', sub: 'Normal & tangential acceleration', group: 'Mechanics' },
