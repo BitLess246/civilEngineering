@@ -43,16 +43,23 @@ const ColumnDesign = lazy(() => import('./pages/ColumnDesign'))
 const FrameAnalysis = lazy(() => import('./pages/FrameAnalysis'))
 const LoadPath = lazy(() => import('./pages/LoadPath'))
 const InfluenceLines = lazy(() => import('./pages/InfluenceLines'))
-const Surveying = lazy(() => import('./pages/Surveying'))
+const DifferentialLeveling = lazy(() => import('./pages/DifferentialLeveling'))
+const Traverse = lazy(() => import('./pages/Traverse'))
+const SimpleCurve = lazy(() => import('./pages/SimpleCurve'))
+const Earthwork = lazy(() => import('./pages/Earthwork'))
 const TrafficVolume = lazy(() => import('./pages/TrafficVolume'))
 const SignalTiming = lazy(() => import('./pages/SignalTiming'))
 const TrafficQueue = lazy(() => import('./pages/TrafficQueue'))
 const RationalMethod = lazy(() => import('./pages/RationalMethod'))
 const OpenChannel = lazy(() => import('./pages/OpenChannel'))
+const CriticalDepth = lazy(() => import('./pages/CriticalDepth'))
+const HydraulicJump = lazy(() => import('./pages/HydraulicJump'))
 const PipeFlow = lazy(() => import('./pages/PipeFlow'))
 const MixDesign = lazy(() => import('./pages/MixDesign'))
 const SectionProperties = lazy(() => import('./pages/SectionProperties'))
-const GeometricDesign = lazy(() => import('./pages/GeometricDesign'))
+const SightDistance = lazy(() => import('./pages/SightDistance'))
+const VerticalCurves = lazy(() => import('./pages/VerticalCurves'))
+const Superelevation = lazy(() => import('./pages/Superelevation'))
 const WeirFlow = lazy(() => import('./pages/WeirFlow'))
 const PileCapacity = lazy(() => import('./pages/PileCapacity'))
 const BridgeLoading = lazy(() => import('./pages/BridgeLoading'))
@@ -264,16 +271,29 @@ export default function App() {
         <Route path="/frame" element={<RequireAuth><FrameAnalysis /></RequireAuth>} />
         <Route path="/load-path" element={<LoadPath />} />
         <Route path="/influence-lines" element={<InfluenceLines />} />
-        <Route path="/surveying" element={<Surveying />} />
+        {/* surveying — one calculator per page; /surveying was the four-mode
+            toolbox and now lands on the first of them */}
+        <Route path="/surveying" element={<Navigate to="/leveling" replace />} />
+        <Route path="/leveling" element={<DifferentialLeveling />} />
+        <Route path="/traverse" element={<Traverse />} />
+        <Route path="/simple-curve" element={<SimpleCurve />} />
+        <Route path="/earthwork" element={<Earthwork />} />
         <Route path="/traffic-volume" element={<TrafficVolume />} />
         <Route path="/signal-timing" element={<SignalTiming />} />
         <Route path="/traffic-queue" element={<TrafficQueue />} />
         <Route path="/rational-method" element={<RationalMethod />} />
         <Route path="/open-channel" element={<OpenChannel />} />
+        <Route path="/critical-depth" element={<CriticalDepth />} />
+        <Route path="/hydraulic-jump" element={<HydraulicJump />} />
         <Route path="/pipe-flow" element={<PipeFlow />} />
         <Route path="/concrete-mix" element={<MixDesign />} />
         <Route path="/section-properties" element={<SectionProperties />} />
-        <Route path="/geometric-design" element={<GeometricDesign />} />
+        {/* highway geometry — one calculator per page; /geometric-design was
+            the three-mode shell and now lands on the first of them */}
+        <Route path="/geometric-design" element={<Navigate to="/sight-distance" replace />} />
+        <Route path="/sight-distance" element={<SightDistance />} />
+        <Route path="/vertical-curves" element={<VerticalCurves />} />
+        <Route path="/superelevation" element={<Superelevation />} />
         <Route path="/weir-flow" element={<WeirFlow />} />
         <Route path="/pile-capacity" element={<PileCapacity />} />
         <Route path="/bridge-loading" element={<BridgeLoading />} />

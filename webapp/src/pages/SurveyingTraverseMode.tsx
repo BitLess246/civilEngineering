@@ -98,7 +98,7 @@ export function TraverseMode() {
           board-exam chain in one pass.
         </p>
 
-        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
           {/* ── inputs ── */}
           <div className="space-y-5">
             <Card title="Courses" hint="bearing like N 45-30 E, or azimuth degrees">
@@ -110,12 +110,12 @@ export function TraverseMode() {
               </div>
               <div className="sm:col-span-2 lg:col-span-3 space-y-1.5">
                 {courses.map((c, i) => (
-                  <div key={i} className="grid grid-cols-[3.4rem_1fr_1.4fr_1.4rem] items-end gap-1.5">
+                  <div key={i} className="grid grid-cols-[3.4rem_minmax(0,1fr)_minmax(0,1.4fr)_1.4rem] items-end gap-1.5">
                     <label className="flex flex-col text-sm">
                       <span className="mb-1 text-[11.5px] font-semibold text-muted">Course {i + 1}</span>
                       <input value={c.name} onChange={(e) => setCourse(i, { name: e.target.value })} className="text-[13px]" />
                     </label>
-                    <Num label="Dist" unit="m" value={parseFloat(c.length) || 0} onChange={(v) => setCourse(i, { length: String(v) })} step="0.01" />
+                    <Num label="Dist (m)" value={parseFloat(c.length) || 0} onChange={(v) => setCourse(i, { length: String(v) })} step="0.01" />
                     <label className="flex flex-col text-sm">
                       <span className="mb-1 text-[11.5px] font-semibold text-muted">Bearing / azimuth</span>
                       <input value={c.dir} onChange={(e) => setCourse(i, { dir: e.target.value })} placeholder="N 45-30 E" className="text-[13px]" />

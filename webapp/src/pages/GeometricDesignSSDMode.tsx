@@ -65,7 +65,7 @@ export function GeometricSSDMode() {
         and horizontal sight lines are checked against this number.
       </p>
 
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+      <div className="mt-5 grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
         <div className="space-y-5">
           <Card title="Design conditions">
             <div className="sm:col-span-2 lg:col-span-3">

@@ -65,7 +65,10 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
   {
     label: 'Surveying',
     tools: [
-      { to: '/surveying', name: 'Surveying Toolbox', sub: 'Leveling · traverse · curves · earthwork', group: 'Field & route surveying' },
+      { to: '/leveling', name: 'Differential Leveling', sub: 'HI · rise & fall · misclosure', group: 'Field surveying' },
+      { to: '/traverse', name: 'Traverse', sub: 'Bowditch · transit · DMD area', group: 'Field surveying' },
+      { to: '/simple-curve', name: 'Simple Curve', sub: 'Elements · deflection staking', group: 'Route surveying' },
+      { to: '/earthwork', name: 'Earthwork', sub: 'End area · prismoidal · mass haul', group: 'Route surveying' },
     ],
   },
   {
@@ -75,7 +78,9 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/signal-timing', name: 'Signal Timing', sub: 'Webster cycle · splits · LOS', group: 'Traffic' },
       { to: '/traffic-queue', name: 'Traffic Queues', sub: 'D/D/1 · M/M/1 · delay', group: 'Traffic' },
       { to: '/roundabout', name: 'Roundabout Capacity', sub: 'HCM 2010 · entry · LOS', group: 'Intersections' },
-      { to: '/geometric-design', name: 'Geometric Design', sub: 'SSD · vertical curves · superelevation', group: 'Highway Design' },
+      { to: '/sight-distance', name: 'Stopping Sight Distance', sub: 'Reaction · braking · grade', group: 'Highway Design' },
+      { to: '/vertical-curves', name: 'Vertical Curves', sub: 'Crest · sag · K · sight checks', group: 'Highway Design' },
+      { to: '/superelevation', name: 'Superelevation', sub: 'e + f = V²/127R · Rmin', group: 'Highway Design' },
       { to: '/pavement', name: 'Flexible Pavement', sub: 'AASHTO 93 · ESALs · SN', group: 'Highway Design' },
       { to: '/rigid-pavement', name: 'Rigid Pavement', sub: 'AASHTO 93 · D-slab · J', group: 'Highway Design' },
       { to: '/esal', name: 'Axle Load ESALs', sub: 'Fourth-power · LEF · W18', group: 'Highway Design' },
@@ -92,7 +97,9 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/bernoulli', name: 'Energy Equation', sub: 'Bernoulli · pumps · turbines · losses', group: 'Hydraulics' },
       { to: '/jet-on-vane', name: 'Jet on a Vane', sub: 'Impulse–momentum · power · efficiency', group: 'Hydraulics' },
       { to: '/rational-method', name: 'Rational Method', sub: 'Q = CiA · Tc · IDF', group: 'Hydrology' },
-      { to: '/open-channel', name: 'Open Channel Flow', sub: 'Manning · critical · jump', group: 'Hydraulics' },
+      { to: '/open-channel', name: 'Normal Depth', sub: 'Manning · uniform flow · Fr', group: 'Hydraulics' },
+      { to: '/critical-depth', name: 'Critical Depth', sub: 'Specific energy · E–y curve', group: 'Hydraulics' },
+      { to: '/hydraulic-jump', name: 'Hydraulic Jump', sub: 'Sequent depth · ΔE · power', group: 'Hydraulics' },
       { to: '/pipe-flow', name: 'Pipe Flow', sub: 'Hazen–Williams · Darcy', group: 'Hydraulics' },
       { to: '/weir-flow', name: 'Weir Flow', sub: 'Francis · Cipolletti · V-notch', group: 'Hydraulics' },
       { to: '/culvert', name: 'Culvert Hydraulics', sub: 'HDS-5 · inlet & outlet control', group: 'Hydraulics' },
