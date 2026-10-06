@@ -14,6 +14,7 @@
 
 import { slabBarRuns, DEFAULT_EXT, type SlabBarExtensions } from '../engine/slabBarDetail'
 import { DrawingFrame } from './DrawingFrame'
+import { DimBelow, Tick } from './dims'
 
 const INK = '#37526e'
 const CONC = '#eef3f8'
@@ -53,7 +54,7 @@ export function SlabBarSection({
   // Enough slab depth for the two mats to read as separate layers, and enough
   // margin below for the callouts — the first version stacked the two bottom
   // labels on the same baseline and they printed on top of each other.
-  const ML = 26, MR = 26, MT = 58, MB = 96
+  const ML = 26, MR = 26, MT = 82, MB = 96
   const DRAW_W = 620, SLAB_H = 62
   const sx = (m: number) => ML + (m / Math.max(l1, 1e-9)) * DRAW_W
   const W = ML + DRAW_W + MR, HT = MT + SLAB_H + MB
@@ -70,6 +71,7 @@ export function SlabBarSection({
 
   const tops = L.runs.filter((r) => r.mat === 'top')
   const bots = L.runs.filter((r) => r.mat === 'bottom')
+  const leftTops = tops.filter((r) => r.x1 === 0)
 
   return (
     <DrawingFrame label="slab bar section">
@@ -86,7 +88,7 @@ export function SlabBarSection({
 
         {/* face-of-support lines — every cut-off below is measured from these */}
         {[faceL, faceR].map((x, i) => (
-          <line key={i} x1={x} y1={yTop - 8} x2={x} y2={yBot + 24}
+          <line key={i} x1={x} y1={yTop - 4} x2={x} y2={yBot}
             stroke={FAINT} strokeWidth={0.8} strokeDasharray="3 3" />
         ))}
 
@@ -101,13 +103,27 @@ export function SlabBarSection({
                   slab, which is what stops it lifting during the pour */}
               {!r.continuesRight && <line x1={sx(r.x2)} y1={y} x2={sx(r.x2)} y2={y + 9} stroke={TOPBAR} strokeWidth={2.4} strokeLinecap="round" />}
               {!r.continuesLeft && <line x1={sx(r.x1)} y1={y} x2={sx(r.x1)} y2={y + 9} stroke={TOPBAR} strokeWidth={2.4} strokeLinecap="round" />}
-              {/* Label the LEFT run of each pair only; the right end mirrors it,
-                  and two labels per length is noise. Stagger by pair so the
-                  0.30ℓn and 0.20ℓn callouts do not land on one baseline. */}
-              {r.x1 === 0 && (
-                <text x={sx(r.x2)} y={y - 6 - pair * 11} fontSize={8} fill={TOPBAR} textAnchor="end"
-                  paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>{r.label} →|</text>
-              )}
+              {/* Each cut-off is DIMENSIONED from the face of support it is
+                  measured from — left run of each pair only, the right end
+                  mirrors it. They used to be loose "0.30ℓn →|" labels on the
+                  slab's top edge, the two pairs 6 px apart and overprinting. */}
+              {r.x1 === 0 && (() => {
+                // nested: the shorter cut-off sits nearer the slab, so no
+                // extension line has to cross the other dimension
+                const level = leftTops.filter((o) => o.x2 < r.x2).length
+                const dY = yTop - 12 - level * 16
+                const xe = sx(r.x2)
+                return (
+                  <g>
+                    <line x1={xe} y1={y - 3} x2={xe} y2={dY - 5} stroke={DIM} strokeWidth={0.6} />
+                    <line x1={faceL} y1={yTop - 4} x2={faceL} y2={dY - 5} stroke={DIM} strokeWidth={0.6} />
+                    <line x1={faceL} y1={dY} x2={xe} y2={dY} stroke={DIM} strokeWidth={0.9} />
+                    <Tick x={faceL} y={dY} /><Tick x={xe} y={dY} />
+                    <text x={(faceL + xe) / 2} y={dY - 3} fontSize={8} fill={TOPBAR} textAnchor="middle"
+                      paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{r.label}</text>
+                  </g>
+                )
+              })()}
             </g>
           )
         })}
@@ -122,10 +138,10 @@ export function SlabBarSection({
           return (
             <g key={`b${i}`}>
               <line x1={sx(r.x1)} y1={y} x2={sx(r.x2)} y2={y} stroke={BOTBAR} strokeWidth={2.4} strokeLinecap="round" />
-              {i === 0 && <line x1={sx(r.x1) + 8} y1={y} x2={sx(r.x1) + 8} y2={ly - 8} stroke={BOTBAR} strokeWidth={0.7} />}
-              <text x={i === 0 ? sx(r.x1) + 12 : (sx(r.x1) + sx(r.x2)) / 2} y={ly}
+              {i === 0 && <line x1={faceL + 14} y1={y} x2={faceL + 14} y2={ly - 8} stroke={BOTBAR} strokeWidth={0.7} />}
+              <text x={i === 0 ? faceL + 18 : (sx(r.x1) + sx(r.x2)) / 2} y={ly}
                 fontSize={8} fill={BOTBAR} textAnchor={i === 0 ? 'start' : 'middle'}
-                paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>{r.label}</text>
+                paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{r.label}</text>
             </g>
           )
         })}
@@ -135,8 +151,8 @@ export function SlabBarSection({
           const x = ML + 18 + (i * (DRAW_W - 36)) / 16
           return <circle key={`s${i}`} cx={x} cy={yMatTop + 7} r={2.1} fill={TEMP} />
         })}
-        <text x={W - MR} y={yBot + 34} fontSize={7.5} fill={TEMP} textAnchor="end"
-          paintOrder="stroke" stroke="#fff" strokeWidth={2.4}>
+        <text x={faceR - 8} y={yBot + 34} fontSize={7.5} fill={TEMP} textAnchor="end"
+          paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.4}>
           ⊙ shrinkage / temperature bars — perpendicular, seen end-on (§424.4.3)
         </text>
 
@@ -149,15 +165,8 @@ export function SlabBarSection({
           {tempBars && <text x={W - MR} y={21} fill={TEMP} textAnchor="end">Temp · {tempBars}</text>}
         </g>
 
-        {/* clear span, face to face */}
-        <g>
-          <line x1={faceL} y1={HT - 28} x2={faceR} y2={HT - 28} stroke={DIM} strokeWidth={0.9} />
-          {[faceL, faceR].map((x, i) => (
-            <line key={i} x1={x - 4} y1={HT - 24} x2={x + 4} y2={HT - 32} stroke={DIM} strokeWidth={1.2} />
-          ))}
-          <text x={(faceL + faceR) / 2} y={HT - 32} fontSize={9} fill={DIM} textAnchor="middle"
-            paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>ℓn = {L.ln.toFixed(2)} m</text>
-        </g>
+        {/* clear span, face to face — extension lines off the support faces */}
+        <DimBelow xA={faceL} xB={faceR} featY={yBot + 18} dY={HT - 28} label={`ℓn = ${L.ln.toFixed(2)} m`} />
         <text x={W / 2} y={HT - 8} fontSize={7.5} fill={FAINT} textAnchor="middle">
           {strip === 'column' ? 'Column strip' : 'Middle strip'} · slab {h} mm, cover {cover} mm ·
           thickness exaggerated, do not scale · extensions per ACI 318-14 Fig. 8.7.4.1.3(a)
