@@ -29,6 +29,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/dev-length',    name: 'Dev & Splice',       sub: 'ACI 318-14 §25.4–25.5',     group: 'Concrete' },
       { to: '/punching-shear', name: 'Punching Shear',    sub: 'Two-way §22.6 · ACI 318',   group: 'Concrete' },
       { to: '/model',         name: '3D Model Space',     sub: 'BIM-lite viewer',           group: 'Analysis & Modelling' },
+      { to: '/drafting3d',    name: 'Drafting3D',         sub: 'Floor plans → 3D → ModelSpace', group: 'Analysis & Modelling' },
       { to: '/frame',         name: 'Frame Analysis',     sub: '2D stiffness method',       group: 'Analysis & Modelling' },
       { to: '/beam-analysis', name: 'Beam Analysis',      sub: 'FEM multi-span',            group: 'Analysis & Modelling' },
       { to: '/truss',         name: 'Truss Space',        sub: 'Plane truss solver',        group: 'Analysis & Modelling' },
@@ -128,7 +129,6 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/impulse-momentum', name: 'Impulse–Momentum', sub: 'I = m(v₂ − v₁) = F·t', group: 'Mechanics' },
       { to: '/friction', name: 'Friction', sub: 'Block on an incline · holds or slides', group: 'Mechanics' },
       { to: '/belt-friction', name: 'Belt Friction', sub: 'Capstan T₁ = T₂e^(μβ)', group: 'Mechanics' },
-      { to: '/drafting3d', name: 'Drafting3D', sub: 'Floor plans → 3D → ModelSpace', group: 'Drafting' },
     ],
   },
   {

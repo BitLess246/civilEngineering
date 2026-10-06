@@ -30,6 +30,8 @@ import {
   createWallOpening,
   deleteDraftElements,
   mergeDraftNodes,
+  mergeCoincidentNodes,
+  withColumnPartners,
   canMergeDraftNodes,
   nearestDraftNode,
   doorSwing,
@@ -148,7 +150,7 @@ export function FloorPlanCanvas({
   // View offset (pan is a translate; the 40 px margin keeps origin labels on
   // screen) and zoom — BOTH mutable now: drag-empty-space pans, pinch/wheel
   // zooms.
-  const [pan, setPan] = useState({ x: 40, y: 40 })
+  const [pan, setPan] = useState({ x: 64, y: 48 })  // room for the axis labels
   const [zoom, setZoom] = useState(1)
   // The multi-click tool currently drawing (null = idle). Tagging the sequence
   // with its tool makes a mid-draw tool switch self-correcting: the next tap
@@ -341,10 +343,16 @@ export function FloorPlanCanvas({
     ctx.font = `${10 / (zoom * CANVAS_SCALE)}px monospace`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    for (const x of xs) ctx.fillText(`${x.toFixed(1)}`, x, -0.5)
+    // axis labels a fixed 14 px off the grid's near edge — a metre offset
+    // grew and shrank with zoom and pushed the Y labels off the canvas
+    const px = 1 / (zoom * CANVAS_SCALE)
+    const xLab = Math.min(0, ...ys) - 14 * px
+    const yLab = Math.min(0, ...xs) - 14 * px
+    ctx.textBaseline = 'bottom'
+    for (const x of xs) ctx.fillText(`${x.toFixed(1)}`, x, xLab)
     ctx.textAlign = 'right'
     ctx.textBaseline = 'middle'
-    for (const y of ys) ctx.fillText(`${y.toFixed(1)}`, -0.5, y)
+    for (const y of ys) ctx.fillText(`${y.toFixed(1)}`, yLab, y)
 
     /** Band corners of a wall: the two centreline ends offset ± half
      *  thickness perpendicular to the run. */
@@ -765,9 +773,15 @@ export function FloorPlanCanvas({
       if (hit.kind === 'node') {
         const n = nodesView.get(hit.id)
         if (n) {
+          // a column's two joints travel together — dragging only its base
+          // used to lean the column across the storey
+          const orig = withColumnPartners(level, [hit.id])
+            .map(id => nodesView.get(id))
+            .filter((m): m is DraftNode => m !== undefined)
+            .map(m => ({ id: m.id, x: m.x, y: m.y, z: m.z }))
           gestureRef.current = {
             mode: 'move', startWorld: world, startScreen: { x: e.clientX, y: e.clientY }, primary: hit.id,
-            orig: [{ id: hit.id, x: n.x, y: n.y, z: n.z }], movedPx: 0,
+            orig, movedPx: 0,
           }
         }
       } else {
@@ -776,7 +790,7 @@ export function FloorPlanCanvas({
         if (el.type === 'door' || el.type === 'window') {
           gestureRef.current = { mode: 'moveOpening', id: hit.id, startScreen: { x: e.clientX, y: e.clientY }, movedPx: 0 }
         } else {
-          const refs = el.corners ? [...el.corners] : [...el.nodes]
+          const refs = withColumnPartners(level, el.corners ? [...el.corners] : [...el.nodes])
           const orig = refs
             .map(id => ({ id, n: nodesView.get(id) }))
             .filter((o): o is { id: string; n: DraftNode } => o.n !== undefined)
@@ -982,6 +996,17 @@ export function FloorPlanCanvas({
         // the dropped joint no longer exists — keep the survivor selected
         onSelectionChange([moveSnapTarget])
       }
+      // the move may have brought other joints onto existing ones (a column's
+      // top following its base onto another column): weld those too
+      const moved = next.levels.get(level.id)
+      if (moved) {
+        const welded = mergeCoincidentNodes(moved)
+        if (welded !== moved) {
+          const levels = new Map(next.levels)
+          levels.set(level.id, welded)
+          next = { ...next, levels }
+        }
+      }
       onProjectChange(next)
       setNodePreview(null)
       setMoveSnapTarget(null)
@@ -1037,7 +1062,12 @@ export function FloorPlanCanvas({
   // hosted doors/windows, orphan joints are swept); Escape clears.
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Delete' && selectedIds.length > 0) {
+      // keys typed into a field (an opening's width, a level name) belong to
+      // the field — Delete there used to delete the selected element
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName))) return
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length > 0) {
+        e.preventDefault()
         const next = deleteDraftElements(level, selectedIds)
         const levels = new Map(project.levels)
         levels.set(level.id, next)

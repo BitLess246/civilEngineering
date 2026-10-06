@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { DraftProject } from '../engine/drafting3d'
-import { createDraftProject, deserializeProject, draftToStructuralModel, serializeProject } from '../engine/drafting3d'
+import { createDraftProject, deserializeProject, draftToStructuralModel, normalizeDraftSections, serializeProject } from '../engine/drafting3d'
 
 const STORAGE_KEY = 'drafting3d.project'
 const AUTOSAVE_KEY = 'drafting3d.autosave'
@@ -14,7 +14,9 @@ export function useDraftProject() {
   const [project, setProject] = useState<DraftProject>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) return deserializeProject(saved)
+      // repaired on load: slabs and walls saved under the old single active
+      // section carry a 400×400 column section (see normalizeDraftSections)
+      if (saved) return normalizeDraftSections(deserializeProject(saved))
     } catch {
       // corrupt or blocked storage must never break the tool — start fresh
     }

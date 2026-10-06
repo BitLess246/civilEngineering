@@ -8,6 +8,12 @@ import {
   deserializeProject,
   uid,
   DEFAULT_SECTIONS,
+  DEFAULT_SECTION_FOR,
+  sectionRole,
+  normalizeDraftSections,
+  withColumnPartners,
+  mergeCoincidentNodes,
+  panelCorners,
   type DraftProject,
   type DraftLevel,
   type DraftNode,
@@ -81,13 +87,16 @@ describe('createDraftProject', () => {
 })
 
 describe('addLevel', () => {
-  it('stacks the next level one storey above the highest and makes it active', () => {
+  it('stacks the next level on top of the storey below and makes it active', () => {
     const p = createDraftProject()
-    // an explicit height sets the first step; later steps use the fixed 3.5 m
+    // the new level's own height is ITS storey; it stands where the level
+    // below ends — Level 1 is 3.5 m tall, so Level 2 is at 3.5 whatever its height
     const l2 = addLevel(p, 4)
-    expect(l2.elevation).toBe(4)
+    expect(l2.elevation).toBe(3.5)
     expect(l2.height).toBe(4)
     expect(p.activeLevelId).toBe(l2.id)
+    // …and Level 3 stands on Level 2's 4 m storey — not on a fixed 3.5 m step,
+    // which would have left Level 2's column tops 0.5 m above Level 3's floor
     const l3 = addLevel(p)
     expect(l3.elevation).toBe(7.5)
     expect(l3.name).toBe('Level 3')
@@ -243,5 +252,125 @@ describe('uid', () => {
   it('generates unique ids', () => {
     const ids = new Set(Array.from({ length: 200 }, () => uid('t')))
     expect(ids.size).toBe(200)
+  })
+})
+
+describe('audit fixes — sections follow the tool', () => {
+  it('every library section has the role its id says, and each tool default exists', () => {
+    for (const sec of DEFAULT_SECTIONS) {
+      const prefix = sec.id.split('-')[0]
+      expect(sectionRole(sec)).toBe({ beam: 'beam', col: 'column', slab: 'slab', wall: 'wall' }[prefix])
+    }
+    const ids = new Set(DEFAULT_SECTIONS.map(s => s.id))
+    for (const id of Object.values(DEFAULT_SECTION_FOR)) expect(ids.has(id)).toBe(true)
+    expect(sectionRole(DEFAULT_SECTIONS.find(s => s.id === DEFAULT_SECTION_FOR.slab)!)).toBe('slab')
+  })
+
+  it('repairs slabs and walls stamped with the old single active section (a 400×400 column)', () => {
+    const p = sampleProject()
+    const l1 = p.levels.get('L1')!
+    l1.elements.set('es1', { ...l1.elements.get('es1')!, sectionId: 'col-400x400' })
+    l1.elements.set('ew1', { ...l1.elements.get('ew1')!, sectionId: 'col-400x400' })
+    const before = draftToStructuralModel(p)
+    expect(before.plates.find(pl => pl.id === 'es1')!.thickness).toBe(400)   // the bug
+    const fixed = normalizeDraftSections(p)
+    const m = draftToStructuralModel(fixed)
+    expect(m.plates.find(pl => pl.id === 'es1')!.thickness).toBe(150)
+    expect(m.walls!.find(w => w.id === 'ew1')!.thickness).toBe(200)
+    // right-role sections are left alone, and a clean project is returned as is
+    expect(fixed.levels.get('L1')!.elements.get('eb1')!.sectionId).toBe('beam-300x500')
+    expect(normalizeDraftSections(fixed)).toBe(fixed)
+  })
+})
+
+describe('audit fixes — export', () => {
+  it('exports no free joints: wall bases, ceiling corners and abandoned panel taps stay out', () => {
+    const p = sampleProject()
+    const l1 = p.levels.get('L1')!
+    l1.nodes.set('stray', n('stray', 2, 2, 0))               // an abandoned slab tap
+    l1.nodes.set('k1', n('k1', 1, 1, 0)); l1.nodes.set('k2', n('k2', 2, 1, 0))
+    l1.nodes.set('k3', n('k3', 2, 2.5, 0)); l1.nodes.set('k4', n('k4', 1, 2.5, 0))
+    l1.elements.set('ceil', el('ceil', 'ceiling', ['k1', 'k2'], 'slab-150', { corners: ['k1', 'k2', 'k3', 'k4'] }))
+    const m = draftToStructuralModel(p)
+    const used = new Set<string>()
+    for (const mm of m.members) { used.add(mm.i); used.add(mm.j) }
+    for (const pl of m.plates) for (const c of pl.corners) used.add(c)
+    for (const nd of m.nodes) expect(used.has(nd.id)).toBe(true)
+    expect(m.nodes.some(nd => nd.x === 2 && nd.z === 2)).toBe(false)
+  })
+
+  it('carries a wall on a BEAM section, not on the wall strip itself', () => {
+    const m = draftToStructuralModel(sampleProject())
+    const carry = m.members.find(mm => mm.id === 'ew1')!
+    expect(carry.section).toBe(DEFAULT_SECTION_FOR.beam)
+    expect(m.walls!.find(w => w.id === 'ew1')!.thickness).toBe(200)
+  })
+
+  it('rides a wall on a beam already drawn along its top instead of doubling it', () => {
+    const p = sampleProject()
+    // Level 2 gets a beam over the Level 1 wall b–c, drawn c→b
+    const l2 = p.levels.get('L2')!
+    l2.nodes.set('b3', n('b3', 6, 0, 3.5)); l2.nodes.set('c3', n('c3', 6, 6, 3.5))
+    l2.elements.set('eb2', el('eb2', 'beam', ['c3', 'b3']))
+    const m = draftToStructuralModel(p)
+    const w = m.walls!.find(ww => ww.id === 'ew1')!
+    expect(w.member).toBe('eb2')
+    expect(m.members.find(mm => mm.id === 'ew1')).toBeUndefined()
+    const beam = m.members.find(mm => mm.id === 'eb2')!
+    expect(m.members.filter(mm => (mm.i === beam.i && mm.j === beam.j) || (mm.i === beam.j && mm.j === beam.i))).toHaveLength(1)
+  })
+
+  it('fixes the column bases of the LOWEST level, even when it is not at EL 0', () => {
+    const p = sampleProject()
+    // lower everything by 3 m: a basement-first building
+    for (const l of p.levels.values()) {
+      l.elevation -= 3
+      for (const [id, nd] of l.nodes) l.nodes.set(id, { ...nd, z: nd.z - 3 })
+    }
+    const m = draftToStructuralModel(p)
+    expect(m.supports).toHaveLength(1)
+    const col = m.members.find(mm => mm.id === 'ec1')!
+    expect(m.supports[0].node).toBe(col.i)
+    expect(m.nodes.find(nd => nd.id === col.i)!.y).toBe(-3)
+  })
+})
+
+describe('audit fixes — moving joints', () => {
+  it('a column base drags its top along', () => {
+    const l1 = sampleProject().levels.get('L1')!
+    expect(withColumnPartners(l1, ['a']).sort()).toEqual(['a', 'a2'])
+    expect(withColumnPartners(l1, ['a2']).sort()).toEqual(['a', 'a2'])
+    expect(withColumnPartners(l1, ['b'])).toEqual(['b'])
+  })
+
+  it('welds coincident joints at the same elevation, never a column base to its own top', () => {
+    const l = level('L', 'L', 0, 3.5, [
+      n('p', 3, 0, 0), n('p2', 3, 0, 3.5),      // column 1
+      n('q', 3, 0, 0), n('q2', 3, 0, 3.5),      // column 2 dropped on the same spot
+      n('r', 6, 0, 0),
+    ], [
+      el('c1', 'column', ['p', 'p2'], 'col-400x400'),
+      el('c2', 'column', ['q', 'q2'], 'col-400x400'),
+      el('bm', 'beam', ['q', 'r']),
+    ])
+    const out = mergeCoincidentNodes(l)
+    expect(out.nodes.size).toBe(3)                     // p, p2, r — bases and tops welded
+    const beam = out.elements.get('bm')!
+    expect(out.nodes.has(beam.nodes[0])).toBe(true)
+    expect(out.elements.get('c1')!.nodes[0]).not.toBe(out.elements.get('c1')!.nodes[1])
+    // c2 landed exactly on c1 — the copy is dropped, the first one stays
+    expect(out.elements.has('c1')).toBe(true)
+    expect(out.elements.has('c2')).toBe(false)
+    // nothing coincident → the same object back
+    expect(mergeCoincidentNodes(out)).toBe(out)
+  })
+})
+
+describe('audit fixes — panels', () => {
+  it('reads a panel in PLAN coordinates (x, y), never the elevation', () => {
+    const l1 = sampleProject().levels.get('L1')!
+    const slab = l1.elements.get('es1')!
+    expect(panelCorners(l1, slab)).toEqual([{ x: 0, y: 0 }, { x: 6, y: 0 }, { x: 6, y: 6 }, { x: 0, y: 6 }])
+    expect(panelCorners(l1, { ...slab, corners: ['a', 'b', 'c', 'zz'] })).toBeNull()
   })
 })
