@@ -84,6 +84,13 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
   {
     label: 'Water Resources',
     tools: [
+      { to: '/hydrostatic-force', name: 'Hydrostatic Force', sub: 'Plane surfaces · center of pressure', group: 'Fluid Statics' },
+      { to: '/curved-gate', name: 'Curved Gate', sub: 'Quarter circle · Fh · Fv · resultant', group: 'Fluid Statics' },
+      { to: '/buoyancy', name: 'Buoyancy & Stability', sub: 'Displacement · metacentric height', group: 'Fluid Statics' },
+      { to: '/manometer', name: 'Manometer', sub: 'Multi-fluid pressure walk', group: 'Fluid Statics' },
+      { to: '/relative-equilibrium', name: 'Accelerating & Rotating Vessels', sub: 'Surface tilt · paraboloid', group: 'Fluid Statics' },
+      { to: '/bernoulli', name: 'Energy Equation', sub: 'Bernoulli · pumps · turbines · losses', group: 'Hydraulics' },
+      { to: '/jet-on-vane', name: 'Jet on a Vane', sub: 'Impulse–momentum · power · efficiency', group: 'Hydraulics' },
       { to: '/rational-method', name: 'Rational Method', sub: 'Q = CiA · Tc · IDF', group: 'Hydrology' },
       { to: '/open-channel', name: 'Open Channel Flow', sub: 'Manning · critical · jump', group: 'Hydraulics' },
       { to: '/pipe-flow', name: 'Pipe Flow', sub: 'Hazen–Williams · Darcy', group: 'Hydraulics' },
@@ -103,7 +110,6 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     label: 'Mathematics',
     tools: [
       { to: '/eng-economy', name: 'Engineering Economy', sub: 'Time value · NPV/IRR · depreciation', group: 'Time Value of Money' },
-      { to: '/hydrostatics', name: 'Hydrostatics & Hydraulics', sub: 'Plane force · gates · buoyancy · Bernoulli · jets', group: 'Fluid Statics' },
       { to: '/dynamics', name: 'Dynamics', sub: 'Kinematics · kinetics · work-energy · impulse', group: 'Mechanics' },
       { to: '/drafting3d', name: 'Drafting3D', sub: 'Floor plans → 3D → ModelSpace', group: 'Drafting' },
     ],
