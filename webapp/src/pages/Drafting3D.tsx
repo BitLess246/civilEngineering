@@ -7,12 +7,14 @@
  * draw, drag elements to move them, pinch to zoom, two-finger drag to pan.
  */
 
-import { useState, useCallback, useMemo, useLayoutEffect } from 'react'
+import { useState, useCallback, useMemo, useLayoutEffect, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Drafting3DViewport } from '../components/Drafting3DViewport'
 import { FloorPlanCanvas, type PlanTool } from '../components/FloorPlanCanvas'
 import { useDraftProject } from '../lib/drafting3dSession'
 import type { DraftProject } from '../engine/drafting3d'
-import { addLevel, SLAB_MATERIALS, CEILING_MATERIALS, finishMaterial, DEFAULT_SECTION_FOR, sectionRole, type DraftSectionRole } from '../engine/drafting3d'
+import { addLevel, SLAB_MATERIALS, CEILING_MATERIALS, finishMaterial, DEFAULT_SECTION_FOR, sectionRole, deleteDraftElements, renameLevel, setLevelHeight, canDeleteLevel, deleteLevel, type DraftSectionRole } from '../engine/drafting3d'
+import { readSession, writeSession, writeOpenId } from '../lib/modelSpaceSession'
 
 /** The ribbon, grouped the way Revit groups its tools. */
 const TOOL_GROUPS: Array<{ label: string; tools: PlanTool[] }> = [
@@ -56,7 +58,8 @@ function useFillHeight() {
 }
 
 export default function Drafting3D() {
-  const { project, setProject, exportToModelSpace } = useDraftProject()
+  const { project, setProject, replaceProject, exportToModelSpace, undo, redo, canUndo, canRedo } = useDraftProject()
+  const navigate = useNavigate()
   const [activeTool, setActiveTool] = useState<PlanTool>('select')
   // One section PER ROLE — a single active section stamped the 400×400
   // column on every slab and wall drawn before the panel was opened.
@@ -103,9 +106,11 @@ export default function Drafting3D() {
     setSelectedIds(prev => (prev.length === 1 && prev[0] === id ? [] : [id]))
   }, [])
 
+  // switching storeys is view state, not an edit — Undo should not flip it
   const activateLevel = useCallback((id: string) => {
-    setProject({ ...project, activeLevelId: id })
-  }, [project, setProject])
+    replaceProject({ ...project, activeLevelId: id })
+    setSelectedIds([])
+  }, [project, replaceProject])
 
   const handleAddLevel = useCallback(() => {
     const clone: DraftProject = { ...project, levels: new Map(project.levels) }
@@ -113,7 +118,8 @@ export default function Drafting3D() {
     setProject(clone)
   }, [project, setProject])
 
-  const handleExportModelSpace = useCallback(() => {
+  /** The drafted frame as a downloadable StructuralModel JSON. */
+  const handleDownloadJson = useCallback(() => {
     const model = exportToModelSpace(project)
     const blob = new Blob([JSON.stringify(model, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -123,6 +129,50 @@ export default function Drafting3D() {
     a.click()
     URL.revokeObjectURL(url)
   }, [project, exportToModelSpace])
+
+  /** Hand the drafted frame to Model Space: write it where Model Space reads
+   *  its session at mount (lib/modelSpaceSession) and go there. The old
+   *  button only downloaded a JSON file Model Space had no way to import. */
+  const handleOpenInModelSpace = useCallback(() => {
+    const model = exportToModelSpace(project)
+    if (model.members.length === 0 && model.plates.length === 0) {
+      window.alert('Nothing to send yet — draw at least one column, beam, wall or slab.')
+      return
+    }
+    const open = readSession()
+    if (open.model && (open.model.members?.length ?? 0) > 0
+      && !window.confirm('Model Space already has a model open in this tab. Replace it with this drafting? (Save it as a project first if you need it.)')) return
+    // a fresh, unsaved model: no stale design results, not tied to a saved project
+    writeSession({ model, inputs: open.inputs, design: null })
+    writeOpenId(null)
+    navigate('/model')
+  }, [exportToModelSpace, navigate, project])
+
+  const deleteSelected = useCallback(() => {
+    if (selectedIds.length === 0) return
+    const levels = new Map(project.levels)
+    levels.set(level.id, deleteDraftElements(level, selectedIds))
+    setProject({ ...project, levels })
+    setSelectedIds([])
+  }, [level, project, selectedIds, setProject])
+
+  // Ctrl/⌘+Z undo, Ctrl/⌘+Shift+Z or Ctrl+Y redo — never while typing in a field
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName))) return
+      if (!(e.ctrlKey || e.metaKey)) return
+      const k = e.key.toLowerCase()
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo])
+
+  const topLevelId = useMemo(
+    () => Array.from(project.levels.values()).reduce((a, b) => (b.elevation > a.elevation ? b : a)).id,
+    [project.levels])
 
   /** Edit the selected opening's properties (width / height / sill / swing). */
   const patchSelectedOpening = useCallback((patch: Partial<{ width: number; height: number; sill: number; swing: 0 | 1 | 2 | 3 }>) => {
@@ -195,6 +245,26 @@ export default function Drafting3D() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
+            {/* Edit — undo/redo and a Delete a finger can reach (the key is desktop-only) */}
+            <div className="flex items-center gap-1 bg-white border border-field-line rounded-lg p-1">
+              <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)" aria-label="Undo"
+                className="px-2.5 py-1.5 text-sm font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint disabled:opacity-40 disabled:hover:bg-transparent">↶ Undo</button>
+              <button onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo"
+                className="px-2.5 py-1.5 text-sm font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint disabled:opacity-40 disabled:hover:bg-transparent">↷ Redo</button>
+              <button onClick={deleteSelected} disabled={selectedIds.length === 0} title="Delete the selection (Delete)"
+                className="px-2.5 py-1.5 text-sm font-medium rounded-md text-fail hover:bg-fail-tint disabled:opacity-40 disabled:text-muted disabled:hover:bg-transparent">Delete</button>
+            </div>
+
+            <label className="flex items-center gap-1.5 text-sm text-muted">
+              <span className="sr-only">Active level</span>
+              <select value={project.activeLevelId} onChange={e => activateLevel(e.target.value)}
+                className="py-1.5 pl-2 pr-7 text-sm border border-field-line rounded-lg text-ink">
+                {Array.from(project.levels.values()).sort((a, b) => a.elevation - b.elevation).map(l => (
+                  <option key={l.id} value={l.id}>{l.name} · EL {l.elevation.toFixed(2)}</option>
+                ))}
+              </select>
+            </label>
+
             <div className="flex items-center gap-1 bg-white border border-field-line rounded-lg p-1">
               {(['2d', '3d', 'split'] as const).map(mode => (
                 <button
@@ -229,10 +299,17 @@ export default function Drafting3D() {
                 Levels
               </button>
               <button
-                onClick={handleExportModelSpace}
+                onClick={handleDownloadJson}
+                title="Download the frame as a StructuralModel JSON file"
+                className="px-3 py-1.5 text-sm font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint transition"
+              >
+                JSON
+              </button>
+              <button
+                onClick={handleOpenInModelSpace}
                 className="px-4 py-1.5 text-sm font-semibold bg-brand text-on-solid rounded hover:bg-brand-hover transition"
               >
-                Export to ModelSpace
+                Open in Model Space
               </button>
             </div>
           </div>
@@ -280,20 +357,41 @@ export default function Drafting3D() {
             <button onClick={() => setShowLevelPanel(false)} className="text-muted hover:text-ink">×</button>
           </div>
           <div className="flex-1 p-4 space-y-2 overflow-auto">
-            {Array.from(project.levels.values()).map(l => (
-              <button
-                key={l.id}
-                onClick={() => activateLevel(l.id)}
-                className={`w-full text-left p-3 rounded-lg border transition ${
-                  project.activeLevelId === l.id
-                    ? 'bg-brand-tint border-brand'
-                    : 'border-hairline hover:bg-brand-tint hover:border-brand'
+            {Array.from(project.levels.values()).sort((x, y) => y.elevation - x.elevation).map(l => (
+              <div key={l.id}
+                className={`p-3 rounded-lg border transition ${
+                  project.activeLevelId === l.id ? 'bg-brand-tint border-brand' : 'border-hairline'
                 }`}
               >
-                <div className="font-medium text-ink">{l.name}</div>
-                <div className="text-sm text-muted">EL {l.elevation.toFixed(2)} m</div>
-              </button>
+                <div className="flex items-center gap-2">
+                  {/* keyed on name: a rename (or an undo of one) remounts it with the new value */}
+                  <input key={l.name} defaultValue={l.name} aria-label="Level name"
+                    onBlur={e => setProject(renameLevel(project, l.id, e.target.value))}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                    className="min-w-0 flex-1 px-2 py-1 text-sm font-medium border border-field-line rounded text-ink" />
+                  <button onClick={() => activateLevel(l.id)} disabled={project.activeLevelId === l.id}
+                    className="px-2 py-1 text-xs font-semibold rounded border border-hairline text-muted hover:border-brand hover:text-brand disabled:border-brand disabled:text-brand">
+                    {project.activeLevelId === l.id ? 'Active' : 'Open'}
+                  </button>
+                </div>
+                <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+                  <span>EL {l.elevation.toFixed(2)} m</span>
+                  <label className="ml-auto flex items-center gap-1">
+                    Storey
+                    <input key={l.height} type="number" min={2} step={0.1} defaultValue={l.height} aria-label="Storey height"
+                      onBlur={e => setProject(setLevelHeight(project, l.id, Number(e.target.value)))}
+                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                      className="w-16 px-1.5 py-1 border border-field-line rounded text-ink" />
+                    m
+                  </label>
+                  {l.id === topLevelId && canDeleteLevel(project, l.id) && (
+                    <button onClick={() => { if (window.confirm(`Delete ${l.name} and everything drawn on it?`)) setProject(deleteLevel(project, l.id)) }}
+                      className="px-2 py-1 rounded text-fail hover:bg-fail-tint" title="Only the top level can be deleted">Delete</button>
+                  )}
+                </div>
+              </div>
             ))}
+            <p className="text-xs text-muted">A taller storey lifts every level above it, so columns keep meeting the floor they carry.</p>
             <button
               onClick={handleAddLevel}
               className="w-full p-3 rounded-lg border border-dashed border-hairline text-muted hover:border-brand hover:text-brand transition"

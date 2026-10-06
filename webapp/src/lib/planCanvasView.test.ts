@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextPinchView, anchoredZoom, CANVAS_SCALE, MIN_ZOOM, MAX_ZOOM } from './planCanvasView'
+import { nextPinchView, anchoredZoom, fitView, CANVAS_SCALE, MIN_ZOOM, MAX_ZOOM } from './planCanvasView'
 
 const base = {
   dist: 200,
@@ -62,5 +62,27 @@ describe('anchoredZoom', () => {
   it('clamps into [MIN, MAX]', () => {
     expect(anchoredZoom({ zoom: MAX_ZOOM, pan: { x: 0, y: 0 } }, { x: 0, y: 0 }, 10).zoom).toBe(MAX_ZOOM)
     expect(anchoredZoom({ zoom: MIN_ZOOM, pan: { x: 0, y: 0 } }, { x: 0, y: 0 }, 0.01).zoom).toBe(MIN_ZOOM)
+  })
+})
+
+describe('fitView', () => {
+  it('frames the box centred, the binding axis filling the canvas less its margins', () => {
+    // 12 × 6 m plan in an 800 × 600 canvas, 50 px margins: x binds (700 / 600 px)
+    const v = fitView({ minX: 0, minY: 0, maxX: 12, maxY: 6 }, { w: 800, h: 600 }, 50)
+    expect(v.zoom).toBeCloseTo(700 / (12 * CANVAS_SCALE), 9)
+    const s = v.zoom * CANVAS_SCALE
+    // the box's centre lands on the canvas centre, its ends on the margins
+    expect(v.pan.x + 6 * s).toBeCloseTo(400, 9)
+    expect(v.pan.y + 3 * s).toBeCloseTo(300, 9)
+    expect(v.pan.x + 0 * s).toBeCloseTo(50, 9)
+    expect(v.pan.x + 12 * s).toBeCloseTo(750, 9)
+  })
+
+  it('frames a single point as a 6 m square and respects the zoom limits', () => {
+    const v = fitView({ minX: 3, minY: 3, maxX: 3, maxY: 3 }, { w: 400, h: 400 }, 50)
+    expect(v.zoom).toBeCloseTo(300 / (6 * CANVAS_SCALE), 9)
+    const huge = fitView({ minX: 0, minY: 0, maxX: 1e6, maxY: 1e6 }, { w: 400, h: 400 })
+    expect(huge.zoom).toBe(MIN_ZOOM)
+    expect(MAX_ZOOM).toBeGreaterThan(MIN_ZOOM)
   })
 })

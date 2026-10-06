@@ -39,7 +39,7 @@ import {
   DEFAULT_DOOR,
   DEFAULT_WINDOW,
 } from '../engine/drafting3d'
-import { CANVAS_SCALE, nextPinchView, anchoredZoom } from '../lib/planCanvasView'
+import { CANVAS_SCALE, nextPinchView, anchoredZoom, fitView } from '../lib/planCanvasView'
 
 export type PlanTool = 'select' | 'wall' | 'beam' | 'column' | 'slab' | 'door' | 'window' | 'ceiling' | 'grid'
 
@@ -1085,12 +1085,32 @@ export function FloorPlanCanvas({
     return () => window.removeEventListener('keydown', handleKey)
   }, [selectedIds, project, level, onProjectChange, onSelectionChange, cancelDrawState])
 
+  /** Frame everything on this level — its joints and its grid lines. */
+  const fitToView = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    const xs = [...(level.grids?.x ?? project.gridX)], ys = [...(level.grids?.y ?? project.gridY)]
+    for (const n of level.nodes.values()) { xs.push(n.x); ys.push(n.y) }
+    if (xs.length === 0) xs.push(0)
+    if (ys.length === 0) ys.push(0)
+    const v = fitView(
+      { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) },
+      { w: el.clientWidth, h: el.clientHeight },
+    )
+    setZoom(v.zoom)
+    setPan(v.pan)
+  }, [level, project.gridX, project.gridY])
+
   return (
     <div
       ref={containerRef}
       className="relative w-full h-full bg-white"
       style={{ touchAction: 'none' }}
     >
+      <button type="button" onClick={fitToView} title="Fit the plan to the view"
+        className="absolute bottom-3 right-3 z-10 rounded-md border border-field-line bg-white/90 px-3 py-1.5 text-xs font-semibold text-muted shadow-sm hover:text-ink">
+        Fit
+      </button>
       <canvas
         ref={canvasRef}
         onPointerDown={handlePointerDown}
