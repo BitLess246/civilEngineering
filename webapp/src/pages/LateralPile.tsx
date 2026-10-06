@@ -1,94 +1,17 @@
 import { useMemo, useState } from 'react'
-import { ReportControls } from '../components/ReportControls'
 import {
   bromsClay, bromsSand, pyAnalysis,
-  type PileHead, type SoilModel, type PyResult, type BromsResult,
+  type PileHead, type SoilModel,
 } from '../engine/lateralPile'
 import { buildLateralPileSolution } from '../lib/lateralPileSolution'
-import { WorkedSolution } from '../components/WorkedSolution'
-import { PageHeader, CalcBody } from '../components/calc'
-import { Card, ResultCard } from '../components/qty'
-import { DrawingFrame } from '../components/DrawingFrame'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { PyPanels } from '../components/pileSketches'
 
-function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
 const f1 = (n: number) => (Number.isFinite(n) ? n.toFixed(1) : '—')
 const f0 = (n: number) => (Number.isFinite(n) ? Math.round(n).toString() : '—')
-
-function Field({ label, value, onChange, unit, step = 'any' }: {
-  label: string; value: number; onChange: (v: number) => void; unit?: string; step?: string
-}) {
-  return (
-    <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
-      <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-field-line px-2.5 py-1.5" />
-    </label>
-  )
-}
-
-function Out({ label, value, ok, sub }: { label: string; value: string; ok?: boolean; sub?: string }) {
-  return (
-    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
-      <span className="text-muted">{label}{sub && <span className="ml-1 text-[11px] text-faint">{sub}</span>}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
-    </div>
-  )
-}
-
-/** Deflection, moment and soil-reaction profiles down the pile. */
-function PyProfiles({ res, L }: { res: PyResult; L: number }) {
-  const W = 470, H = 300, padT = 18, padB = 30
-  const panelW = (W - 30) / 3
-  const series = [
-    { key: 'y' as const, title: 'y (mm)', color: '#0056b3' },
-    { key: 'moment' as const, title: 'M (kN·m)', color: '#b45309' },
-    { key: 'p' as const, title: 'p (kN/m)', color: '#0f766e' },
-  ]
-  const Y = (z: number) => padT + ((H - padT - padB) * z) / Math.max(L, 1e-9)
-
-  return (
-    <DrawingFrame label="pile deflection profile">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full rounded-lg border border-hairline bg-sheet" style={{ maxHeight: 320 }}>
-        {series.map((s, si) => {
-          const vals = res.stations.map((st) => st[s.key])
-          const m = Math.max(...vals.map(Math.abs), 1e-9)
-          const x0 = 12 + si * (panelW + 6)
-          const cx = x0 + panelW / 2
-          const X = (v: number) => cx + ((panelW / 2 - 6) * v) / m
-          const d = res.stations
-            .map((st, i) => `${i ? 'L' : 'M'}${X(st[s.key]).toFixed(1)},${Y(st.z).toFixed(1)}`).join(' ')
-          return (
-            <g key={s.key}>
-              <line x1={cx} y1={padT} x2={cx} y2={H - padB} stroke="#e2e8f0" strokeWidth={0.9} />
-              <line x1={x0} y1={padT} x2={x0 + panelW} y2={padT} stroke="#475569" strokeWidth={1} />
-              <path d={d} fill="none" stroke={s.color} strokeWidth={1.8} />
-              <text x={cx} y={11} fontSize={9} fill="#334155" textAnchor="middle" fontWeight={700}>{s.title}</text>
-              <text x={cx} y={H - 18} fontSize={8} fill="#94a3b8" textAnchor="middle">±{f1(m)}</text>
-            </g>
-          )
-        })}
-        <text x={12} y={H - 4} fontSize={8.5} fill="#64748b">z = 0</text>
-        <text x={W - 40} y={H - 4} fontSize={8.5} fill="#64748b">z = {f1(L)} m</text>
-      </svg>
-    </DrawingFrame>
-  )
-}
-
-function BromsCard({ r, title }: { r: BromsResult; title: string }) {
-  return (
-    <div className="rounded-lg border border-hairline p-3">
-      <p className="mb-1 text-[12px] font-bold text-ink-2">{title}</p>
-      <Out label="Ultimate lateral load Hu" value={`${f1(r.Hu)} kN`} />
-      <Out label="Short-pile (soil) capacity" value={`${f1(r.shortPile)} kN`}
-        ok={r.mode === 'short' ? false : undefined} />
-      <Out label="Long-pile (hinge) capacity" value={`${f1(r.longPile)} kN`}
-        ok={r.mode === 'long' ? false : undefined} />
-      <Out label="Governing mechanism" value={r.mode === 'short' ? 'soil failure' : 'pile hinge'} />
-      <Out label="Mmax at Hu" value={`${f1(r.Mmax)} kN·m`} sub={`at z = ${f2(r.zMax)} m`} />
-    </div>
-  )
-}
 
 export default function LateralPile() {
   const [soilKind, setSoilKind] = useState<'clay' | 'sand'>('clay')
@@ -106,6 +29,8 @@ export default function LateralPile() {
   const [phi, setPhi] = useState(33)
   const [k, setK] = useState(25000)
   const [gamma, setGamma] = useState(9)
+  // the head-deflection limit is a serviceability decision, entered rather than asserted
+  const [yLimit, setYLimit] = useState(25)
 
   const soil: SoilModel = soilKind === 'clay'
     ? { kind: 'clay', cu, gamma, e50 }
@@ -122,148 +47,78 @@ export default function LateralPile() {
   )
 
   const util = broms.Hu > 0 ? H / broms.Hu : Infinity
-  const headOK = py.yHead <= 25    // 25 mm is the usual serviceability yardstick
+  const headOK = Math.abs(py.yHead) <= yLimit
 
   const solution = buildLateralPileSolution(
     { soilKind, L, D, EI, My, H, e, head, cu, e50, phiDeg: phi, k, gamma }, broms, py,
   )
 
-  const report = {
-    docCode: 'G-LP',
-    ok: util <= 1 && headOK && py.converged,
-    governing: `Broms ${broms.mode}-pile Hu = ${f1(broms.Hu)} kN · head deflection ${f1(py.yHead)} mm`,
-    stats: [
-      { label: 'Ultimate capacity Hu', value: f1(broms.Hu), unit: 'kN' },
-      { label: 'Head deflection', value: f1(py.yHead), unit: 'mm' },
-      { label: 'Max moment (p–y)', value: f1(py.Mmax), unit: 'kN·m' },
-    ],
-    checks: [
-      { name: `Lateral capacity H/Hu (Broms, ${broms.mode} pile)`, ratio: util, ok: util <= 1 },
-      // 25 mm is the usual serviceability yardstick, not a code limit — stated
-      // in the check name so it reads as the convention it is.
-      { name: 'Head deflection vs 25 mm', ratio: py.yHead / 25, ok: headOK },
-    ],
-    data: [
-      ['Soil model', soilKind],
-      ['Pile length L', `${f2(L)} m`],
-      ['Diameter D', `${f2(D)} m`],
-      ['Flexural stiffness EI', `${f0(EI)} kN·m²`],
-      ['Yield moment My', `${f1(My)} kN·m`],
-      ['Lateral load H', `${f1(H)} kN`],
-      ['Load eccentricity e', `${f2(e)} m`],
-      ['Head fixity', head],
-      ...(soilKind === 'clay'
-        ? [['Undrained strength cu', `${f1(cu)} kPa`] as [string, string],
-           ['Strain ε₅₀', f2(e50)] as [string, string]]
-        : [['Friction angle φ', `${f1(phi)}°`] as [string, string],
-           ['Subgrade modulus k', `${f0(k)} kN/m³`] as [string, string]]),
-      ['Effective unit weight γ′', `${f1(gamma)} kN/m³`],
-      ['Broms short-pile capacity', `${f1(broms.shortPile)} kN`],
-      ['Broms long-pile capacity', `${f1(broms.longPile)} kN`],
-      ['Broms Mmax at Hu', `${f1(broms.Mmax)} kN·m`],
-      ['p–y max moment depth', `${f2(py.zMmax)} m`],
-      ['p–y convergence', `${py.converged ? 'converged' : 'DID NOT CONVERGE'} in ${py.iterations} iterations (residual ${py.residual.toExponential(1)})`],
-    ] as [string, string][],
-    steps: solution,
-  }
-
+  const mUtil = My > 0 ? py.Mmax / My : Infinity
   return (
-        <div>
-      <PageHeader title="Laterally loaded pile" badges={['Broms', 'Matlock', 'API RP 2A']} />
-      <CalcBody wide>
-        <div className="space-y-5">
-      <ReportControls title="Laterally Loaded Pile" badges={['Broms', 'Matlock', 'API RP 2A']} report={report} />
-      <p className="mt-2 text-sm text-muted">
-        Two questions, two methods. <strong>Broms</strong> gives the ultimate lateral capacity in closed form and
-        says whether the soil or the pile section fails first. <strong>p-y</strong> solves the pile as a beam on
-        nonlinear soil springs and gives what Broms cannot — head deflection, and where the maximum moment sits.
-      </p>
-
-      <Card title="Pile & loading">
-        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Embedded length L" unit="m" value={L} onChange={setL} step="0.5" />
-          <Field label="Diameter D" unit="m" value={D} onChange={setD} step="0.05" />
-          <Field label="Rigidity EI" unit="kN·m²" value={EI} onChange={setEI} step="10000" />
-          <Field label="Yield moment My" unit="kN·m" value={My} onChange={setMy} step="50" />
-          <Field label="Lateral load H" unit="kN" value={H} onChange={setH} step="10" />
-          <Field label="Load height e" unit="m" value={e} onChange={setE} step="0.25" />
-          <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-muted">Head condition</span>
-            <select value={head} onChange={(ev) => setHead(ev.target.value as PileHead)}
-              className="rounded-md border border-field-line px-2.5 py-1.5">
-              <option value="free">Free (rotates)</option>
-              <option value="fixed">Fixed (capped)</option>
-            </select>
-          </label>
-          <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-muted">Soil type</span>
-            <select value={soilKind} onChange={(ev) => setSoilKind(ev.target.value as 'clay' | 'sand')}
-              className="rounded-md border border-field-line px-2.5 py-1.5">
-              <option value="clay">Clay (Matlock)</option>
-              <option value="sand">Sand (API)</option>
-            </select>
-          </label>
-        </div>
-      </Card>
-
-      <Card title="Soil">
-        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Unit weight γ′" unit="kN/m³" value={gamma} onChange={setGamma} step="0.5" />
-          {soilKind === 'clay' ? (
-            <>
-              <Field label="Undrained cu" unit="kPa" value={cu} onChange={setCu} step="5" />
-              <Field label="Strain ε₅₀" value={e50} onChange={setE50} step="0.005" />
-            </>
-          ) : (
-            <>
-              <Field label="Friction φ′" unit="°" value={phi} onChange={setPhi} step="1" />
-              <Field label="Subgrade k" unit="kN/m³" value={k} onChange={setK} step="5000" />
-            </>
-          )}
-        </div>
-        {head === 'fixed' && (
-          <p className="mt-2 text-[11px] text-warn">
-            A fixed head has no free rotation, so the load height e is not used by either method.
-          </p>
-        )}
-      </Card>
-
-      <ResultCard title="Ultimate capacity — Broms">
-        <BromsCard r={broms} title={soilKind === 'clay' ? 'Cohesive (9·cu·d below 1.5d)' : 'Cohesionless (3·Kp·γ·z·d)'} />
-        <div className="mt-3">
-          <Out label="Applied H / Hu" value={f2(util)} ok={util <= 1}
-            sub={util <= 1 ? 'within ultimate capacity' : 'exceeds ultimate capacity'} />
-        </div>
-        <p className="mt-2 text-[11px] text-muted">
-          The governing capacity is the LOWER of the two mechanisms, which is also what tells you which kind of pile
-          this is — &ldquo;short&rdquo; is a verdict, not a length. Broms is an ultimate check: apply your own factor
-          of safety, typically 2 to 3 on Hu for a working load.
-        </p>
-      </ResultCard>
-
-      <ResultCard title="Response at working load — p-y">
-        <PyProfiles res={py} L={L} />
-        <div className="mt-3">
-          <Out label="Head deflection" value={`${f2(py.yHead)} mm`} ok={headOK}
-            sub="25 mm is the usual serviceability yardstick" />
-          <Out label="Maximum moment" value={`${f1(py.Mmax)} kN·m`} sub={`at z = ${f2(py.zMmax)} m`} />
-          <Out label="Moment utilisation M/My" value={f2(My > 0 ? py.Mmax / My : Infinity)}
-            ok={My > 0 && py.Mmax <= My} />
-          <Out label="Solution" value={py.converged ? `converged in ${f0(py.iterations)} iterations` : 'did not converge'}
-            ok={py.converged} sub={`residual ${py.residual.toExponential(1)}`} />
-        </div>
-        <p className="mt-2 text-[11px] text-muted">
-          Clay uses Matlock&rsquo;s soft-clay curve, sand the API RP 2A sand curve. The pile is modelled as beam
-          elements on nonlinear springs and solved by Newton; the residual is reported so a solve that fell short is
-          visible rather than silently presented as an answer. Deflections are relative to the undeflected pile axis.
-        </p>
-      </ResultCard>
-      {/* The step-by-step already existed and only ever reached the PDF. */}
-      <div className="mt-5">
-        <WorkedSolution steps={solution} title="Calculation report — worked solution" />
-      </div>
-        </div>
-      </CalcBody>
-    </div>
+    <WorkspacePage title="Laterally Loaded Pile" badges={['Geotechnical', 'Broms · p-y']}
+      intro="Two questions, two methods. Broms gives the ultimate lateral capacity in closed form and says whether the soil or the pile section fails first; p-y solves the pile as a beam on nonlinear soil springs and gives what Broms cannot — head deflection, and where the maximum moment sits."
+      inputs={<>
+        <InputGroup title="Pile">
+          <Num label="Embedded length L" unit="m" value={L} onChange={setL} step="0.5" />
+          <Num label="Diameter D" unit="m" value={D} onChange={setD} step="0.05" />
+          <Num label="Rigidity EI" unit="kN·m²" value={EI} onChange={setEI} step="10000" />
+          <Num label="Yield moment My" unit="kN·m" value={My} onChange={setMy} step="50" />
+        </InputGroup>
+        <InputGroup title="Loading" hint={head === 'fixed' ? 'A fixed head has no free rotation, so the load height e is not used.' : undefined}>
+          <Num label="Lateral load H" unit="kN" value={H} onChange={setH} step="10" />
+          <Num label="Load height e" unit="m" value={e} onChange={setE} step="0.25" />
+          <div className="col-span-2">
+            <Pick label="Head condition" value={head} onChange={(v) => setHead(v as PileHead)} options={[['free', 'Free (rotates)'], ['fixed', 'Fixed (capped)']]} />
+          </div>
+          <Num label="Deflection limit" unit="mm" value={yLimit} onChange={setYLimit} step="5" hint="a project decision" />
+        </InputGroup>
+        <InputGroup title="Soil">
+          <div className="col-span-2">
+            <Pick label="Soil type" value={soilKind} onChange={(v) => setSoilKind(v as 'clay' | 'sand')} options={[['clay', 'Clay (Matlock)'], ['sand', 'Sand (API)']]} />
+          </div>
+          <Num label="Unit weight γ′" unit="kN/m³" value={gamma} onChange={setGamma} step="0.5" />
+          {soilKind === 'clay' ? <>
+            <Num label="Undrained cu" unit="kPa" value={cu} onChange={setCu} step="5" />
+            <Num label="Strain ε₅₀" value={e50} onChange={setE50} step="0.005" />
+          </> : <>
+            <Num label="Friction φ′" unit="°" value={phi} onChange={setPhi} step="1" />
+            <Num label="Subgrade k" unit="kN/m³" value={k} onChange={setK} step="5000" />
+          </>}
+        </InputGroup>
+      </>}
+      checks={<>
+        <CheckCard title="Ultimate capacity" basis={`Broms, ${broms.mode === 'short' ? 'soil failure' : 'pile hinge'} governs`} status={util <= 1 ? 'pass' : 'fail'}
+          value={f1(broms.Hu)} unit="kN" ratio={util} ratioLabel="Applied H ÷ Hu"
+          pairs={[{ label: 'Short-pile (soil)', value: `${f1(broms.shortPile)} kN` }, { label: 'Long-pile (hinge)', value: `${f1(broms.longPile)} kN` }]} />
+        <CheckCard title="Head deflection" basis={`p-y, limit ${f0(yLimit)} mm`} status={!py.converged ? 'warn' : headOK ? 'pass' : 'fail'}
+          pillLabel={!py.converged ? 'NOT CONVERGED' : undefined} value={f2(py.yHead)} unit="mm"
+          ratio={yLimit > 0 ? Math.abs(py.yHead) / yLimit : undefined} ratioLabel="Deflection ÷ limit"
+          pairs={[{ label: 'Iterations', value: `${py.iterations}` }, { label: 'Residual', value: py.residual.toExponential(1) }]} />
+        <CheckCard title="Section moment" basis="p-y Mmax ≤ My" status={mUtil <= 1 ? 'pass' : 'fail'} value={f1(py.Mmax)} unit="kN·m"
+          ratio={Number.isFinite(mUtil) ? mUtil : undefined} ratioLabel="Mmax ÷ My"
+          pairs={[{ label: 'At depth', value: `${f2(py.zMmax)} m` }, { label: 'My', value: `${f1(My)} kN·m` }]} />
+      </>}
+      summary={[
+        { label: 'Pile', value: `L ${f2(L)} m, D ${f2(D)} m, EI ${f0(EI)} kN·m²` },
+        { label: 'Load', value: `H ${f1(H)} kN at e ${f2(e)} m, ${head} head` },
+        { label: 'Soil', value: soilKind === 'clay' ? `clay, cu ${f1(cu)} kPa, ε₅₀ ${f2(e50)}` : `sand, φ′ ${f1(phi)}°, k ${f0(k)} kN/m³` },
+        { label: 'γ′', value: `${f1(gamma)} kN/m³` },
+      ]}
+      drawing={{ title: 'Response at working load (p-y)', node: <div data-pdf-drawing><PyPanels stations={py.stations} L={L} yHead={py.yHead} Mmax={py.Mmax} zMmax={py.zMmax} /></div> }}
+      resultsCaption="Broms is an ultimate check: apply your own factor of safety, typically 2 to 3 on Hu for a working load. Clay uses Matlock's soft-clay curve, sand the API RP 2A curve; the residual is reported so a solve that fell short is visible."
+      results={[
+        { check: 'Broms short-pile', basis: soilKind === 'clay' ? '9 cu d below 1.5d' : '3 Kp γ z d', demand: `${f1(broms.shortPile)} kN`, status: 'info' as const },
+        { check: 'Broms long-pile', basis: 'plastic hinge at My', demand: `${f1(broms.longPile)} kN`, status: 'info' as const },
+        { check: 'Applied / ultimate', basis: `${broms.mode} pile governs`, demand: `${f1(H)} kN`, limit: `${f1(broms.Hu)} kN`, ratio: util, status: util <= 1 ? 'pass' as const : 'fail' as const },
+        { check: 'Head deflection', basis: `limit ${f0(yLimit)} mm`, demand: `${f2(py.yHead)} mm`, limit: `${f0(yLimit)} mm`, ratio: yLimit > 0 ? Math.abs(py.yHead) / yLimit : undefined, status: headOK ? 'pass' as const : 'fail' as const },
+        { check: 'Maximum moment', basis: `at z = ${f2(py.zMmax)} m`, demand: `${f1(py.Mmax)} kN·m`, limit: `${f1(My)} kN·m`, ratio: Number.isFinite(mUtil) ? mUtil : undefined, status: mUtil <= 1 ? 'pass' as const : 'fail' as const },
+      ]}
+      steps={solution}
+      references={[
+        { topic: 'Ultimate lateral capacity', basis: 'short and long pile in clay and sand', source: 'Broms (1964a, 1964b)' },
+        { topic: 'p-y in soft clay', basis: 'Matlock curve with ε₅₀', source: 'Matlock (1970)' },
+        { topic: 'p-y in sand', basis: 'hyperbolic tangent curve', source: 'API RP 2A-WSD' },
+      ]}
+    />
   )
 }
