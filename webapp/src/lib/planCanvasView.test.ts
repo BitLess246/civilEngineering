@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nextPinchView, anchoredZoom, fitView, CANVAS_SCALE, MIN_ZOOM, MAX_ZOOM } from './planCanvasView'
+import { nextPinchView, anchoredZoom, fitView, runReadout, CANVAS_SCALE, MIN_ZOOM, MAX_ZOOM } from './planCanvasView'
 
 const base = {
   dist: 200,
@@ -84,5 +84,14 @@ describe('fitView', () => {
     const huge = fitView({ minX: 0, minY: 0, maxX: 1e6, maxY: 1e6 }, { w: 400, h: 400 })
     expect(huge.zoom).toBe(MIN_ZOOM)
     expect(MAX_ZOOM).toBeGreaterThan(MIN_ZOOM)
+  })
+})
+
+describe('runReadout', () => {
+  it('reads length and bearing as the plan is seen (canvas y down)', () => {
+    expect(runReadout({ x: 0, y: 0 }, { x: 6, y: 0 })).toBe('6.00 m · 0°')
+    expect(runReadout({ x: 0, y: 0 }, { x: 0, y: -4 })).toBe('4.00 m · 90°')   // up the screen
+    expect(runReadout({ x: 0, y: 0 }, { x: 3, y: 4 })).toBe('5.00 m · 306.9°')
+    expect(runReadout({ x: 1, y: 1 }, { x: 1, y: 1 })).toBe('0.00 m')
   })
 })

@@ -18,6 +18,8 @@ import {
   setLevelHeight,
   canDeleteLevel,
   deleteLevel,
+  retypeElements,
+  duplicateLevelUp,
   type DraftProject,
   type DraftLevel,
   type DraftNode,
@@ -411,5 +413,42 @@ describe('level management', () => {
     expect(q.levels.has('L2')).toBe(false)
     expect(q.activeLevelId).toBe('L1')
     expect(deleteLevel(q, 'L1')).toBe(q)                 // never the last level
+  })
+})
+
+describe('retype and duplicate', () => {
+  it('retypes only the selected elements the section is sized for', () => {
+    const p = sampleProject()
+    const l1 = p.levels.get('L1')!
+    const big = DEFAULT_SECTIONS.find(s => s.id === 'beam-400x700')!
+    const out = retypeElements(l1, ['eb1', 'es1', 'ec1'], big)
+    expect(out.elements.get('eb1')!.sectionId).toBe('beam-400x700')
+    expect(out.elements.get('es1')!.sectionId).toBe('slab-200')       // a slab keeps its own
+    expect(out.elements.get('ec1')!.sectionId).toBe('col-400x400')
+    expect(retypeElements(l1, ['es1'], big)).toBe(l1)                // nothing matched
+  })
+
+  it('stacks a copy on top: lifted joints, fresh ids, openings re-hosted, columns continuous', () => {
+    const p = sampleProject()
+    const l1 = p.levels.get('L1')!
+    l1.elements.set('door', el('door', 'door', ['b', 'c'], 'wall-200', { hostId: 'ew1', at: 3, width: 0.9, height: 2.1, sill: 0 }))
+    const q = duplicateLevelUp(p, 'L1')
+    expect(q.levels.size).toBe(3)
+    const copy = q.levels.get(q.activeLevelId)!
+    expect(copy.elevation).toBeCloseTo(7, 9)                         // on top of L2 (3.5 + 3.5)
+    expect(copy.elements.size).toBe(l1.elements.size)
+    for (const id of copy.elements.keys()) expect(l1.elements.has(id)).toBe(false)
+    const zs = [...copy.nodes.values()].map(nd => nd.z).sort((a, b) => a - b)
+    expect(zs[0]).toBeCloseTo(7, 9)
+    const door = [...copy.elements.values()].find(e => e.type === 'door')!
+    const host = copy.elements.get(door.hostId!)!
+    expect(host.type).toBe('wall')
+    // the source is untouched
+    expect(p.levels.get('L1')!.nodes.get('a')!.z).toBe(0)
+    // the copied column base meets the L2 column top (EL 7) as one model joint
+    const m = draftToStructuralModel(q)
+    const c2 = m.members.find(mm => mm.id === 'ec2')!
+    const cCopy = m.members.find(mm => mm.role === 'column' && mm.id !== 'ec1' && mm.id !== 'ec2')!
+    expect(cCopy.i).toBe(c2.j)
   })
 })
