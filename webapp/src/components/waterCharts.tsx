@@ -15,13 +15,15 @@ import { niceStep, tickLabel, axesMap } from '../lib/chartScale'
 const mono = 'var(--font-mono, monospace)'
 const halo = { paintOrder: 'stroke' as const, stroke: 'var(--sheet)', strokeWidth: 3 }
 
+/** Numbered axes for a plot box. A bar chart passes xMax = 0 to keep the
+ *  value axis only (its categories label themselves). */
 export function Axes({ box, xMax, yMax, xLabel, yLabel }: {
   box: { x0: number; x1: number; top: number; base: number }; xMax: number; yMax: number; xLabel: string; yLabel: string
 }) {
   const { X, Y } = axesMap(box, xMax, yMax)
   const xs = niceStep(xMax, 6), ys = niceStep(yMax, 4)
   const xt: number[] = [], yt: number[] = []
-  for (let v = 0; v <= xMax * 1.0001; v += xs) xt.push(v)
+  if (xMax > 0) for (let v = 0; v <= xMax * 1.0001; v += xs) xt.push(v)
   for (let v = 0; v <= yMax * 1.0001; v += ys) yt.push(v)
   return (
     <g>
@@ -370,6 +372,67 @@ export function PumpCurves({ pump, system, Hstatic, H0, Q, H }: {
       <text x={box.x0 + 6} y={Y(H) - 5} fontSize="10" fontWeight="700" fill={red} fontFamily={mono} {...halo}>H* {f2(H)}</text>
       <circle cx={X(Q)} cy={Y(H)} r="4.5" fill={red} />
       <VDim x={xd} a={Y(H)} b={Y(Hstatic)} label={`losses ${f2(H - Hstatic)} m`} color={INK} />
+    </Chart>
+  )
+}
+
+// ── Water demand and storage ─────────────────────────────────────────────
+
+/** Demand is a rate (m³/day) and storage a volume (m³), so they stand in two
+ *  panels on two numbered axes. The demand bars carry the peaking factors
+ *  actually entered; the reservoir stack dimensions each share and the
+ *  total between its segment edges. */
+export function DemandCharts({ ADD, MDD, PHD, fDay, fHour, operating, fire, emergency }: {
+  ADD: number; MDD: number; PHD: number; fDay: number; fHour: number; operating: number; fire: number; emergency: number
+}) {
+  const W = 660, H = 360
+  const L = { x0: 70, x1: 318, top: 56, base: H - 70 }
+  const R = { x0: 384, x1: 434, top: 56, base: H - 70 }
+  const dMax = Math.max(PHD, MDD, ADD, 1e-6) * 1.18
+  const total = operating + fire + emergency
+  const sMax = Math.max(total, 1e-6) * 1.18
+  const A = axesMap(L, 1, dMax), B = axesMap(R, 1, sMax)
+  const bw = 52, step = (L.x1 - L.x0) / 3
+  const bars = [
+    { name: 'ADD', sub: 'average day', v: ADD, fill: 'rgba(15,76,146,0.22)' },
+    { name: 'MDD', sub: `${f2(fDay)} × ADD`, v: MDD, fill: 'rgba(15,76,146,0.45)' },
+    { name: 'PHD', sub: `${f2(fHour)} × ADD`, v: PHD, fill: 'rgba(15,76,146,0.7)' },
+  ]
+  // the reservoir stack from the floor up: operating, fire, emergency
+  const segs = [
+    { name: 'operating', v: operating, fill: 'rgba(15,76,146,0.3)' },
+    { name: 'fire', v: fire, fill: 'rgba(200,60,60,0.45)' },
+    { name: 'emergency', v: emergency, fill: 'rgba(115,109,94,0.4)' },
+  ].map((sg, i, all) => ({ ...sg, z0: all.slice(0, i).reduce((t, x) => t + x.v, 0) }))
+  const n0 = (v: number) => Math.round(v).toLocaleString('en-US')
+  return (
+    <Chart label="Design demands and reservoir storage" W={W} H={H}>
+      <Axes box={L} xMax={0} yMax={dMax} xLabel="" yLabel="demand (m³/day)" />
+      {bars.map((b, i) => {
+        const x = L.x0 + step * (i + 0.5) - bw / 2
+        return (
+          <g key={b.name}>
+            <rect x={x} y={A.Y(b.v)} width={bw} height={L.base - A.Y(b.v)} fill={b.fill} stroke={INK} strokeWidth="1" />
+            <text x={x + bw / 2} y={A.Y(b.v) - 6} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono} {...halo}>{n0(b.v)}</text>
+            <text x={x + bw / 2} y={L.base + 16} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono}>{b.name}</text>
+            <text x={x + bw / 2} y={L.base + 30} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily={mono}>{b.sub}</text>
+          </g>
+        )
+      })}
+
+      <Axes box={R} xMax={0} yMax={sMax} xLabel="" yLabel="storage (m³)" />
+      {segs.map((sg) => (
+        <g key={sg.name}>
+          <rect x={R.x0 + 8} y={B.Y(sg.z0 + sg.v)} width={R.x1 - R.x0 - 16} height={B.Y(sg.z0) - B.Y(sg.z0 + sg.v)} fill={sg.fill} stroke={INK} strokeWidth="1" />
+          {/* each segment edge carried out to its dimension */}
+          <line x1={R.x1 - 8} x2={R.x1 + 22} y1={B.Y(sg.z0 + sg.v)} y2={B.Y(sg.z0 + sg.v)} stroke={MUTED} strokeWidth="0.8" />
+          {sg.v > 0 && <VDim x={R.x1 + 16} a={B.Y(sg.z0 + sg.v)} b={B.Y(sg.z0)} label={`${sg.name} ${n0(sg.v)}`} color={INK} />}
+        </g>
+      ))}
+      <line x1={R.x1 + 22} x2={R.x1 + 140} y1={B.Y(total)} y2={B.Y(total)} stroke={MUTED} strokeWidth="0.8" />
+      <line x1={R.x1} x2={R.x1 + 140} y1={R.base} y2={R.base} stroke={MUTED} strokeWidth="0.8" />
+      <VDim x={R.x1 + 134} a={B.Y(total)} b={R.base} label={`total ${n0(total)}`} color={INK} />
+      <text x={(R.x0 + R.x1) / 2} y={R.base + 16} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono}>reservoir</text>
     </Chart>
   )
 }
