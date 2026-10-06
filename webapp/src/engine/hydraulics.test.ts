@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  bernoulli,
-  rotatingVessel,
-  movingVessel,
-  waterJet,
-} from "./hydraulics";
+import { bernoulli, waterJet } from "./hydraulics";
 
 describe("bernoulli", () => {
   it("computes point 2 from point 1 with no losses or machinery", () => {
@@ -61,48 +56,6 @@ describe("bernoulli", () => {
   });
 });
 
-describe("rotatingVessel", () => {
-  it("computes rim rise and volume for forced vortex", () => {
-    const r = rotatingVessel({ omega: 5, R: 0.5, h0: 0.3 });
-    // z_rim = 5^2 * 0.5^2 / (2*9.81) = 6.25 / 19.62 = 0.3186 m
-    expect(r.z_rim).toBeCloseTo(0.3186, 3);
-    expect(r.z_center).toBe(0);
-    // volume = π*0.5^2*0.3 + π*0.5^2*0.3186/2 = 0.2356 + 0.1249 = 0.3605
-    expect(r.volume).toBeCloseTo(0.3605, 3);
-    // pressure at r=0.5, h=0.1: p = 1000*9.81*0.1 + 1000*25*0.25/2 = 981 + 3125 = 4106 Pa
-    expect(r.p_at_r(0.5, 0.1)).toBeCloseTo(4106, 0);
-  });
-});
-
-describe("movingVessel", () => {
-  it("horizontal acceleration: computes surface tilt and pressure", () => {
-    const r = movingVessel({ a: 3, direction: "horizontal", depth: 1, x: 0.5 });
-    // tanθ = 3/9.81 = 0.3058, θ = 17.0°
-    expect(r.thetaDeg).toBeCloseTo(17.0, 1);
-    // p = 1000*(9.81*1 + 3*0.5) = 1000*(9.81 + 1.5) = 11310 Pa
-    expect(r.p).toBeCloseTo(11310, 0);
-    expect(r.free_surface_slope).toBeCloseTo(0.3058, 3);
-  });
-
-  it("vertical acceleration: computes effective gravity", () => {
-    const r = movingVessel({ a: 2, direction: "vertical", depth: 2 });
-    // g_eff = 9.81 + 2 = 11.81
-    // p = 1000 * 11.81 * 2 = 23620 Pa
-    expect(r.p).toBeCloseTo(23620, 0);
-    expect(r.thetaDeg).toBe(0);
-  });
-
-  it("inclined acceleration: computes effective perpendicular gravity", () => {
-    const r = movingVessel({ a: 3, direction: "inclined", thetaDeg: 30, depth: 1 });
-    // theta = 30°, a_parallel = 3*cos30 = 2.598, a_perp = 3*sin30 = 1.5
-    // g_eff_perp = 9.81*cos30 + 1.5 = 8.496 + 1.5 = 9.996
-    // p = 1000 * 9.996 * 1 = 9996 Pa
-    expect(r.p).toBeCloseTo(9996, 0);
-    // free surface slope = a_parallel / g_eff_perp = 2.598 / 9.996 = 0.2599
-    expect(r.free_surface_slope).toBeCloseTo(0.26, 2);
-  });
-});
-
 describe("waterJet", () => {
   it("stationary vane: 90° deflection", () => {
     const r = waterJet({ v: 20, d: 0.05, thetaDeg: 90, u: 0 });
@@ -121,7 +74,7 @@ describe("waterJet", () => {
     expect(r.efficiency).toBe(0);
   });
 
-  it("stationary flat plate: 180° deflection", () => {
+  it("full reversal (Pelton cup): 180° deflection", () => {
     const r = waterJet({ v: 20, d: 0.05, thetaDeg: 180, u: 0 });
     // F = m_dot * v * (1 - cos180°) = 39.27 * 20 * 2 = 1570.8 N
     expect(r.F).toBeCloseTo(1570.8, 0);
@@ -137,10 +90,18 @@ describe("waterJet", () => {
     // m_dot = 1000 * 0.02945 = 29.45 kg/s
     // F = 29.45 * 15 * (1 - cos90°) = 441.75 N
     // power = F * u = 441.75 * 5 = 2208.75 W
-    // power_in = 0.5 * 29.45 * 20^2 = 5890 W
-    // efficiency = 2208.75 / 5890 = 0.375 = 37.5%
+    // jet power = ½ρ·A·v³ = 0.5·1000·0.0019635·8000 = 7854 W
+    // efficiency = 2208.93 / 7854 = 0.2812 — the single-vane value, which peaks
+    // at u = v/3 (η_max = 8/27 for a 90° plate, ×2 for a full reversal)
     expect(r.F).toBeCloseTo(441.8, 1);
     expect(r.power).toBeCloseTo(2208.93, 1);
-    expect(r.efficiency).toBeCloseTo(0.375, 3);
+    expect(r.efficiency).toBeCloseTo(2208.93 / 7854, 3);
+  });
+
+  it("single moving vane: efficiency peaks at u = v/3 with η = 8/27 (90° plate)", () => {
+    const at = (u: number) => waterJet({ v: 30, d: 0.05, thetaDeg: 90, u }).efficiency;
+    expect(at(10)).toBeCloseTo(8 / 27, 6);
+    expect(at(10)).toBeGreaterThan(at(9));
+    expect(at(10)).toBeGreaterThan(at(11));
   });
 });

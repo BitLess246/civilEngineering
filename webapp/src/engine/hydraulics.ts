@@ -1,7 +1,15 @@
 /**
- * Hydraulics calculator — PRC CELE syllabus (Hydraulics 30%).
- * Bernoulli's energy equation, rotating/moving vessels, water jet on vane/bend.
- * Units: SI (m, kg, s, Pa, N, J).
+ * Hydraulics — fluid in motion, on the Hydrostatics page (PRC CELE syllabus,
+ * Hydraulics): Bernoulli's energy equation with losses, pumps and turbines,
+ * and the force of a water jet on a stationary or moving vane.
+ *
+ * Rotating and accelerating vessels live in `hydrostatics.ts` (`rotationRise`,
+ * `accelTilt`, `accelPressure`); the copies that were here were removed — one
+ * added the paraboloid to the at-rest liquid volume (spinning a vessel does not
+ * change how much liquid is in it), the other's inclined case mixed g·cosθ into
+ * a vertical effective gravity.
+ *
+ * Units: SI (m, kg, s, Pa, N, W).
  */
 
 export interface BernoulliInput {
@@ -101,118 +109,6 @@ export function bernoulli(input: BernoulliInput): {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ROTATING VESSEL WITH LIQUID
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface RotatingVesselInput {
-  /** Angular velocity (rad/s) */
-  omega: number;
-  /** Radius of vessel (m) */
-  R: number;
-  /** Fluid density (kg/m³) — default 1000 */
-  rho?: number;
-  /** Gravity (m/s²) — default 9.81 */
-  g?: number;
-  /** Initial fluid height at rest (m) — optional */
-  h0?: number;
-}
-
-/**
- * Rotating vessel (forced vortex): free surface is paraboloid z = ω²r²/2g
- * Pressure: p = p_atm + ρ(g·h + ω²r²/2) at depth h below surface
- */
-export function rotatingVessel(input: RotatingVesselInput): {
-  z_rim: number;
-  z_center: number;
-  h_surface: (r: number) => number;
-  p_at_r: (r: number, h: number) => number;
-  volume: number;
-} {
-  const { omega, R, rho = 1000, g = 9.81, h0 } = input;
-  const z_rim = (omega * omega * R * R) / (2 * g);
-  const z_center = 0;
-  const volume = Math.PI * R * R * (h0 ?? 0) + (Math.PI * R * R * z_rim) / 2;
-
-  const h_surface = (r: number) => (omega * omega * r * r) / (2 * g);
-  const p_at_r = (r: number, h: number) => rho * g * h + rho * (omega * omega * r * r) / 2;
-
-  return { z_rim, z_center, h_surface, p_at_r, volume };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MOVING VESSEL WITH LIQUID (VERTICAL / HORIZONTAL / INCLINED)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface MovingVesselInput {
-  /** Acceleration (m/s²) */
-  a: number;
-  /** Direction: "horizontal" | "vertical" | "inclined" */
-  direction: "horizontal" | "vertical" | "inclined";
-  /** Incline angle (deg) — only for "inclined" */
-  thetaDeg?: number;
-  /** Fluid density (kg/m³) — default 1000 */
-  rho?: number;
-  /** Gravity (m/s²) — default 9.81 */
-  g?: number;
-  /** Vessel dimensions for pressure at point */
-  depth?: number;  // depth below free surface (m)
-  x?: number;      // horizontal distance from reference (m)
-}
-
-/**
- * Vessel with liquid under linear acceleration:
- * - Horizontal: surface tilts tanθ = a/g, p = ρ(g·h + a·x)
- * - Vertical: p = ρ(g + a_z)h (a_z positive up)
- * - Inclined: combine components
- */
-export function movingVessel(input: MovingVesselInput): {
-  thetaDeg: number;
-  p: number;
-  p_distribution: (h: number) => number;
-  free_surface_slope: number;
-} {
-  const { a, direction, thetaDeg = 0, rho = 1000, g = 9.81, depth = 1, x = 0 } = input;
-
-  if (direction === "horizontal") {
-    // Free surface tilts: tanθ = a/g
-    const theta = Math.atan(a / g);
-    const thetaDegCalc = (theta * 180) / Math.PI;
-    const pCalc = rho * (g * depth + a * x);
-    return {
-      thetaDeg: thetaDegCalc,
-      p: pCalc,
-      p_distribution: (h: number) => rho * (g * h + a * x),
-      free_surface_slope: Math.tan(theta),
-    };
-  }
-
-  if (direction === "vertical") {
-    // Vertical acceleration: p = ρ(g + a)h where a positive upward
-    const g_eff = g + a;
-    const pCalc = rho * g_eff * depth;
-    return {
-      thetaDeg: 0,
-      p: pCalc,
-      p_distribution: (h: number) => rho * g_eff * h,
-      free_surface_slope: 0,
-    };
-  }
-
-  // Inclined
-  const theta = (thetaDeg * Math.PI) / 180;
-  const a_parallel = a * Math.cos(theta);
-  const a_perp = a * Math.sin(theta);
-  const g_eff_perp = g * Math.cos(theta) + a_perp;
-  const pCalc = rho * g_eff_perp * depth;
-  return {
-    thetaDeg: thetaDeg,
-    p: pCalc,
-    p_distribution: (h: number) => rho * g_eff_perp * h,
-    free_surface_slope: a_parallel / g_eff_perp,
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // WATER JET ON BEND / VANE
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -223,7 +119,8 @@ export interface WaterJetInput {
   d: number;
   /** Fluid density (kg/m³) — default 1000 */
   rho?: number;
-  /** Deflection angle (deg) — 180 for flat plate normal, 90 for 90° bend, etc. */
+  /** Deflection of the jet by the vane, degrees: 90 = a flat plate normal to
+   *  the jet (or a 90° bend), 180 = a full reversal (Pelton cup). */
   thetaDeg: number;
   /** Vane velocity (m/s) — for moving vane, default 0 (stationary) */
   u?: number;
@@ -259,8 +156,10 @@ export function waterJet(input: WaterJetInput): {
 
   // Power for moving vane
   const power = F_x * u;
-  // Efficiency = power out / power in
-  const power_in = 0.5 * m_dot * v * v;
+  // Efficiency = power delivered / kinetic power of the JET, ½ρ(Av)v² — the
+  // jet's own discharge A·v, not the relative flow the single vane intercepts.
+  // (This used ½·ṁ·v² with ṁ at the RELATIVE velocity, overstating η by v/(v−u).)
+  const power_in = 0.5 * rho * A * v * v * v;
   const efficiency = power_in > 0 ? power / power_in : 0;
 
   return { A, Q, m_dot, F, F_x, F_y, power, efficiency };
