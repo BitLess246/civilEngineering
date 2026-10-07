@@ -101,12 +101,41 @@ export function connectionRowSolution(c: BeamConnection, host: ConnHost): Soluti
 
   if (c.connType === 'moment-flange-weld' && c.flange) {
     steps.push({
-      title: 'Flange force — CJP groove welds (§J2.6)',
+      title: 'Flange force — CJP groove welds (Table J2.5, §J4.1)',
       lines: [
         { tex: `T_f = \\dfrac{M_u}{d - t_f} = ${sn1(c.flange.Tf)}\\ \\text{kN}` },
-        { tex: `\\phi R_{CJP} = \\phi F_u A_{fl} = ${sn1(c.flange.phiCapKn)}\\ \\text{kN} \\quad ${c.flange.ok ? '\\checkmark' : '\\text{NG}'} \\qquad (A_{fl} = ${Math.round(c.flange.flangeArea)}\\ \\text{mm}^2)` },
-        { text: 'Provide column continuity plates at both beam-flange levels (web crippling/local bending, §J10).' },
+        { text: 'A CJP groove weld in tension with matching filler has the strength of the base metal (Table J2.5): the beam flange in tension yielding.' },
+        { tex: `\\phi R_n = 0.90\\, F_y A_{fl} = 0.90 \\cdot ${c.flange.Fy} \\cdot ${Math.round(c.flange.flangeArea)} / 10^3 = ${sn1(c.flange.phiCapKn)}\\ \\text{kN} \\quad ${c.flange.ok ? '\\checkmark' : '\\text{NG}'}` },
       ],
+    })
+  }
+
+  const j = c.j10
+  if (j) {
+    const ck = (x: { phiRn: number }) => (x.phiRn >= j.Ru ? '\\checkmark' : '<\\ R_u')
+    steps.push({
+      title: `Column ${j.col.name} under the flange forces (§J10)`,
+      lines: [
+        { tex: `R_u = ${sn1(j.Ru)}\\ \\text{kN (largest beam flange force)},\\quad l_b = t_{fb} = ${j.lb}\\ \\text{mm},\\quad k = t_f = ${j.k}\\ \\text{mm},\\quad F_y = ${j.col.Fy}\\ \\text{MPa}` },
+        { text: j.atEnd ? 'The joint is at the column’s end: the end forms of §J10.1–§J10.3 (and 50 % of §J10.5) apply.' : 'The column continues above and below: interior forms.' },
+        { tex: `\\text{§J10.1 flange bending: } 0.90 \\cdot 6.25 F_y t_f^2${j.atEnd ? ' \\cdot 0.5' : ''} = ${sn1(j.flangeLocalBending.phiRn)}\\ \\text{kN} \\quad ${ck(j.flangeLocalBending)}` },
+        { tex: `\\text{§J10.2 web yielding: } 1.0\\, F_y t_w (${j.atEnd ? '2.5' : '5'}k + l_b) = ${sn1(j.webLocalYielding.phiRn)}\\ \\text{kN} \\quad ${ck(j.webLocalYielding)}` },
+        { tex: `\\text{§J10.3 web crippling: } 0.75 \\cdot ${j.atEnd ? '0.40' : '0.80'}\\, t_w^2\\left[1 + 3\\tfrac{l_b}{d}\\left(\\tfrac{t_w}{t_f}\\right)^{1.5}\\right]\\sqrt{\\tfrac{EF_yt_f}{t_w}} = ${sn1(j.webCrippling.phiRn)}\\ \\text{kN} \\quad ${ck(j.webCrippling)}` },
+        ...(j.webBuckling ? [{ tex: `\\text{§J10.5 web buckling (beams both sides): } 0.90 \\cdot \\dfrac{24\\, t_w^3\\sqrt{EF_y}}{h}${j.atEnd ? ' \\cdot 0.5' : ''} = ${sn1(j.webBuckling.phiRn)}\\ \\text{kN} \\quad ${ck(j.webBuckling)}` }] : []),
+        ...(j.stiffeners ? [
+          { tex: `\\text{§J10.7 continuity plates: } F_{st} = R_u - \\phi R_{n,min} = ${sn1(j.Ru)} - ${sn1(j.phiRnMin)} = ${sn1(j.stiffeners.Fst)}\\ \\text{kN (${j.governs})}` },
+          { tex: `\\text{§J10.8: } b_s \\ge \\tfrac{b_{fb}}{3} - \\tfrac{t_w}{2} \\Rightarrow ${Math.round(j.stiffeners.bs)}\\ \\text{mm},\\ t_s \\ge \\max\\left(\\tfrac{t_{fb}}{2}, \\tfrac{b_s}{16}\\right) \\Rightarrow ${j.stiffeners.ts}\\ \\text{mm};\\ 0.9F_y(2b_st_s) = ${sn1(j.stiffeners.phiRn)}\\ \\text{kN} \\ge F_{st} \\quad \\checkmark` },
+          { text: `PL ${j.stiffeners.ts}×${Math.round(j.stiffeners.bs)} each side of the web at both beam-flange levels${j.stiffeners.fullDepth ? ', full depth (§J10.5 governs)' : ''}; ${j.stiffeners.weld} mm fillets both faces to the column flange.` },
+        ] : [{ tex: `\\phi R_{n,min} = ${sn1(j.phiRnMin)}\\ \\text{kN} \\ge R_u \\Rightarrow \\text{no continuity plates required (§J10.7)} \\quad \\checkmark` }]),
+        { tex: `\\text{§J10.6 panel zone: } V_u = \\textstyle\\sum P_f = ${sn1(j.panel.Vu)}\\ \\text{kN},\\ P_r = ${sn1(j.panel.Pr)} ${j.panel.Pr <= 0.4 * j.panel.Py ? '\\le' : '>'} 0.4P_y = ${sn1(0.4 * j.panel.Py)}\\ \\text{kN}` },
+        { tex: `\\phi R_v = 0.90 \\cdot 0.60 F_y d_c t_w${j.panel.Pr > 0.4 * j.panel.Py ? '(1.4 - P_r/P_y)' : ''} = ${sn1(j.panel.phiRv)}\\ \\text{kN} \\quad ${j.panel.ok ? '\\checkmark' : '<\\ V_u'}` },
+        { text: 'The flange forces of the beams on both flanges are added (the sway sense) — conservative when gravity moments oppose each other.' },
+        ...(j.doubler ? [
+          { tex: `\\text{§J10.9 doubler: } t_d = ${j.doubler.td}\\ \\text{mm},\\ \\phi R_v = 0.90 \\cdot 0.60F_yd_c(t_w + t_d) = ${sn1(j.doubler.phiRv)}\\ \\text{kN} \\quad ${j.doubler.phiRv >= j.panel.Vu ? '\\checkmark' : '\\text{NG}'}` },
+          { text: `The doubler carries ${sn1(j.doubler.Vd)} kN of the panel shear; ${j.doubler.weld} mm fillets along both vertical edges to the column flanges.` },
+        ] : []),
+      ],
+      note: `governs: ${j.governs}, ${Math.round((j.Ru / j.phiRnMin) * 100)}% unstiffened`,
     })
   }
 
@@ -115,7 +144,7 @@ export function connectionRowSolution(c: BeamConnection, host: ConnHost): Soluti
     steps.push({
       title: 'Flange force — weak-axis extension plates (§J4.1, §J2.4)',
       lines: [
-        { tex: `T_f = \\dfrac{M_u}{d - t_f} = ${sn1(c.flange.Tf)}\\ \\text{kN}` },
+        { tex: `T_f = \\dfrac{M_u}{d - t_f} = ${sn1(c.flange.Tf)}\\ \\text{kN};\\quad \\text{beam flange (CJP base metal): } 0.90F_yA_{fl} = ${sn1(0.9 * c.flange.Fy * c.flange.flangeArea / 1000)}\\ \\text{kN}` },
         { text: `Horizontal plates PL ${wp.tMm}×${wp.wMm} mm at both beam-flange levels, welded into the column web between the flanges; the beam flanges CJP to the plate edges.` },
         { tex: `\\phi R_{pl} = 0.9\\, F_y\\, t\\, w = 0.9 \\cdot 248 \\cdot ${wp.tMm} \\cdot ${wp.wMm} / 10^3 = ${sn1(wp.phiPlateKn)}\\ \\text{kN} \\; ${wp.phiPlateKn >= c.flange.Tf ? '\\ge' : '<'} \\; T_f \\quad ${wp.phiPlateKn >= c.flange.Tf ? '\\checkmark' : '\\text{NG}'}` },
         { tex: `\\phi R_w = ${sn1(wp.phiWeldKn)}\\ \\text{kN} \\; ${wp.phiWeldKn >= c.flange.Tf ? '\\ge' : '<'} \\; T_f \\quad ${wp.phiWeldKn >= c.flange.Tf ? '\\checkmark' : '\\text{NG}'} \\qquad (w = ${wp.weldMm}\\ \\text{mm fillet, both sides along the web})` },
@@ -152,6 +181,7 @@ export function connectionRowSolution(c: BeamConnection, host: ConnHost): Soluti
     c.copedBeam && !c.copedBeam.ok && `coped beam ${c.copedBeam.governs}`,
     c.webBlockShear && !c.webBlockShear.ok && 'coped-web block shear',
     c.flange && !c.flange.ok && 'flange force',
+    c.j10 && !c.j10.ok && `column §J10 (${c.j10.panel.ok || c.j10.doubler ? c.j10.governs : 'panel zone'})`,
     c.note,
   ].filter(Boolean)
   steps.push({

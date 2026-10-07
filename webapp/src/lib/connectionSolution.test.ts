@@ -59,6 +59,22 @@ describe('connectionRowSolution — schedule row worked solution', () => {
     expect(steps.some((s) => s.title.includes('Flange force'))).toBe(true)
   })
 
+  it('a flange-face moment connection prints the column §J10 checks, not a reminder to stiffen', () => {
+    const m4 = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: steel })
+    m4.loads = buildGravityLoads(m4, 4.8, 2.4)
+    for (const mem of m4.members) if (mem.role !== 'column') mem.connections = { iEnd: 'moment', jEnd: 'moment' }
+    const d4 = designStructure(m4, soil)!
+    const j4 = d4.joints.find((j) => j.connections.some((c) => c.connType === 'moment-flange-weld'))!
+    const mc = j4.connections.find((c) => c.connType === 'moment-flange-weld')!
+    const steps = connectionRowSolution(mc, { kind: 'column', shape: j4.columnShape, faceType: mc.faceType })
+    const flat = JSON.stringify(steps)
+    expect(flat).not.toContain('Provide column continuity plates')
+    expect(flat).toContain('0.90\\\\, F_y A_{fl}')
+    const col = JSON.stringify(steps.find((s) => s.title.includes('§J10')))
+    for (const k of ['§J10.1', '§J10.2', '§J10.3', '§J10.6']) expect(col).toContain(k)
+    expect(col).toContain(mc.j10!.webLocalYielding.phiRn.toFixed(1))
+  })
+
   it('a weak-axis (column-web) moment connection adds the extension-plate step', () => {
     const m2 = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: steel })
     m2.loads = buildGravityLoads(m2, 4.8, 2.4)

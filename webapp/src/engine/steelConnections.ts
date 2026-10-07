@@ -15,6 +15,7 @@ import { boltFnv, boltGeomFromPositions, eccentricBoltGroup, plyBearing, type Bo
 import { shapeByName } from './aiscSections'
 import { localAxes, defaultAxisRotation, type V3 } from './frame3d'
 import { resolveSteelConnections, throughCarrier } from './steelJoints'
+import { columnJ10, type ColumnJ10 } from './columnJointChecks'
 import { tabPlateChecks, sizeTabWeld, tabWeldCheck, copedBeamChecks, type TabPlateChecks, type TabWeldCheck, type CopedBeamChecks } from './shearTabChecks'
 
 // ── Material constants ──────────────────────────────────────────────────────
@@ -32,7 +33,10 @@ const PHI_WELD = 0.75
 /** Capacity of a single fillet weld (one side) per unit length: kN/mm */
 const phiWeldPerMm = (w: number) => PHI_WELD * 0.6 * FEXX * 0.707 * w / 1000
 
-const PHI_CJP = 0.9                   // AISC Table J2.5 complete-joint-penetration
+// AISC Table J2.5: a CJP groove weld in tension normal to its axis, with
+// matching filler, has the strength of the BASE METAL — §J4.1(a) tension
+// yielding of the beam flange, φ = 0.90 on Fy (not Fu)
+const PHI_CJP = 0.9
 
 // ── Plate stock ──────────────────────────────────────────────────────────────
 export const PLATE_STOCK = [6, 8, 10, 12, 16, 19, 22, 25] // mm, standard stock
@@ -96,6 +100,7 @@ export interface WebMomentPlate {
 export interface FlangeMomentConn {
   Tf: number        // design flange force kN  (= Mu / (d - tf))
   flangeArea: number // beam flange area mm²
+  Fy: number        // beam flange yield, MPa — the CJP's base metal
   /** Governing capacity of the flange-force path: CJP (flange face) or
    *  min(plate, weld) of the extension plates (web face). kN */
   phiCapKn: number
@@ -134,6 +139,9 @@ export interface BeamConnection {
   weld: TabWeldCheck
   /** The coped beam's reduced section at the cope (beam-to-girder only). */
   copedBeam?: CopedBeamChecks
+  /** §J10 on the column under a flange-face moment connection — shared by
+   *  every moment connection on that column at that node. */
+  j10?: ColumnJ10
   /** Why the connection fails for a reason its capacities do not show. */
   note?: string
   ok: boolean
@@ -374,12 +382,12 @@ function pairOpposite(conns: BeamConnection[], dirs: [number, number][], onSameE
 
 /** Design the flange groove weld for moment transfer. Tf = Mu / lever arm (kN).
  *  Uses complete joint penetration (CJP) with φFu strength. */
-function designFlangeConn(Mu: number, d: number, tf: number, bf: number): FlangeMomentConn {
+function designFlangeConn(Mu: number, d: number, tf: number, bf: number, Fy = FY_PLATE): FlangeMomentConn {
   const leverArm = Math.max(d - tf, 1)    // mm
   const Tf = (Mu * 1e6) / leverArm / 1000  // kN  (Mu kN·m → N·mm, ÷ mm → N, ÷1000 → kN)
   const flangeArea = bf * tf               // mm²
-  const phiCapKn = PHI_CJP * FU_PLATE * flangeArea / 1000  // kN
-  return { Tf, flangeArea, phiCapKn, ok: phiCapKn >= Tf - 1e-6 }
+  const phiCapKn = PHI_CJP * Fy * flangeArea / 1000  // kN, base metal (Table J2.5)
+  return { Tf, flangeArea, Fy, phiCapKn, ok: phiCapKn >= Tf - 1e-6 }
 }
 
 const PHI_TENSION = 0.9   // AISC §J4.1 tensile yielding of connecting elements
@@ -522,10 +530,10 @@ export function designSteelJoints(
         // has no stiffness path — AISC DG13 weak-axis detail).
         let flangeConn: FlangeMomentConn | undefined
         if (useMoment && row) {
-          flangeConn = designFlangeConn(Mu, row.d, row.tf, row.bf)
+          flangeConn = designFlangeConn(Mu, row.d, row.tf, row.bf, secOf.get(mem.section)?.steelFy ?? FY_PLATE)
           if (faceType === 'web') {
             const wp = designWebMomentPlate(flangeConn.Tf, row.bf, colShp?.d ?? 300, colShp?.tf ?? 15)
-            flangeConn = { ...flangeConn, phiCapKn: Math.min(wp.phiPlateKn, wp.phiWeldKn), ok: wp.ok, webPlate: wp }
+            flangeConn = { ...flangeConn, phiCapKn: Math.min(wp.phiPlateKn, wp.phiWeldKn, flangeConn.phiCapKn), ok: wp.ok && flangeConn.ok, webPlate: wp }
           }
         }
 
@@ -557,6 +565,24 @@ export function designSteelJoints(
       if (connections.length === 0) continue
       // web-face tabs from both sides load the one column web
       pairOpposite(connections, dirs, (c) => c.faceType === 'web')
+
+      // §J10: the column under the flange-face moment connections
+      const mIdx = connections.flatMap((c, k) => (c.connType === 'moment-flange-weld' && c.flange ? [k] : []))
+      if (mIdx.length && colShp?.d && colShp.bf && colShp.tf && colShp.tw) {
+        const colSec = secOf.get(colMemAtNode.section)
+        const columnsHere = neighbours.filter((mid) => memMap.get(mid)?.role === 'column')
+        const twoSided = mIdx.some((a) => mIdx.some((b) => dirs[a][0] * dirs[b][0] + dirs[a][1] * dirs[b][1] < -0.9))
+        const Pr = Math.max(0, ...design.steelColumns.filter((c) => columnsHere.includes(c.id)).map((c) => c.Pu))
+        const j10 = columnJ10(
+          { name: colShp.name, d: colShp.d, bf: colShp.bf, tf: colShp.tf, tw: colShp.tw, A: colShp.A, Fy: colSec?.steelFy ?? FY_PLATE },
+          mIdx.map((k) => {
+            const r = beamRow.get(connections[k].beamId)
+            return { beamId: connections[k].beamId, Pf: connections[k].flange!.Tf, bfb: r?.bf ?? 150, tfb: r?.tf ?? 10 }
+          }),
+          { atEnd: columnsHere.length < 2, twoSided, Pr, FEXX, beamDepth: Math.max(...mIdx.map((k) => beamRow.get(connections[k].beamId)?.d ?? 300)) },
+        )
+        for (const k of mIdx) connections[k] = { ...connections[k], j10, ok: connections[k].ok && j10.ok }
+      }
 
       joints.push({
         nodeId,
