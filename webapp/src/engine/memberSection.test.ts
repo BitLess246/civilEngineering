@@ -124,8 +124,8 @@ describe('the section sheet', () => {
   it('dimensions both faces, in millimetres', () => {
     const g = memberGeometry(model, beamId)!
     const dims = d.primitives.filter((p) => p.kind === 'dim').map((p) => (p as { text: string }).text)
-    expect(dims).toContain(String(Math.round(g.section.b)))
-    expect(dims).toContain(String(Math.round(g.section.h)))
+    expect(dims).toContain(`${Math.round(g.section.b)} mm`)
+    expect(dims).toContain(`${Math.round(g.section.h)} mm`)
   })
 
   it('bounds everything it drew', () => {

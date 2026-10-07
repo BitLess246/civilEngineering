@@ -79,7 +79,7 @@ export function withStressDiagrams<T extends Drawing>(section: T, i: StressDiagr
   P.push({ kind: 'line', x1: u1, y1: g.yFace, x2: xb + wb, y2: g.yFace, stroke: FAINT, width: 0.5, dash: [0.012, 0.01] })
   P.push({ kind: 'line', x1: u0, y1: g.yNA, x2: xb + wb + size * 1.2, y2: g.yNA, stroke: FAINT, width: 0.9, dash: [0.03, 0.015] })
   P.push({ kind: 'line', x1: u0, y1: g.ySteel, x2: xs - wt - size, y2: g.ySteel, stroke: TENS, width: 0.6, dash: [0.03, 0.01, 0.006, 0.01] })
-  P.push({ kind: 'text', x: xb + wb + size * 1.4, y: g.yNA, text: `N.A.  c = ${Math.round(i.s.c)}`, size: size * 0.78, color: FAINT })
+  P.push({ kind: 'text', x: xb + wb + size * 1.4, y: g.yNA, text: `N.A.  c = ${Math.round(i.s.c)} mm`, size: size * 0.78, color: FAINT })
 
   // ── strain: compression triangle to the right, inverting through the N.A.
   // into the tension triangle to the left, down to the steel ──
@@ -119,9 +119,14 @@ export function withStressDiagrams<T extends Drawing>(section: T, i: StressDiagr
 
   // ── dimensions: d off the section's compression face to its steel; a on
   // the block; the lever arm between C and T ──
-  P.push({ kind: 'dim', x1: u0 - off, y1: g.yFace, x2: u0 - off, y2: g.ySteel, text: `d = ${Math.round(i.d)}`, off: 0, size: size * 0.9, ext: u0 })
-  P.push({ kind: 'dim', x1: xb - size * 1.6, y1: g.yFace, x2: xb - size * 1.6, y2: g.yA, text: `a = ${Math.round(i.s.a)}`, off: 0, size: size * 0.75, ext: xb })
-  P.push({ kind: 'dim', x1: xEnd, y1: g.yC, x2: xEnd, y2: g.ySteel, text: `z = ${Math.round(Math.abs(g.ySteel - g.yC) * 1000)}`, off: 0, size: size * 0.8, ext: xArrow })
+  P.push({ kind: 'dim', x1: u0 - off, y1: g.yFace, x2: u0 - off, y2: g.ySteel, text: `d = ${Math.round(i.d)} mm`, off: 0, size: size * 0.9, ext: u0 })
+  // a is short: its label sits IN the block it measures (below it when the
+  // block is too thin to hold the text), not along a dimension it outruns
+  P.push({ kind: 'dim', x1: xb - size * 1.6, y1: g.yFace, x2: xb - size * 1.6, y2: g.yA, text: '', off: 0, size: size * 0.75, ext: xb })
+  const aFits = Math.abs(g.yA - g.yFace) > size * 0.95
+  const yAText = aFits ? (g.yFace + g.yA) / 2 + size * 0.27 : g.yA + (i.hogging ? -size * 0.5 : size * 0.95)
+  P.push({ kind: 'text', x: xb + wb / 2, y: yAText, text: `a = ${Math.round(i.s.a)} mm`, size: size * 0.75, anchor: 'middle', color: COMP })
+  P.push({ kind: 'dim', x1: xEnd, y1: g.yC, x2: xEnd, y2: g.ySteel, text: `z = ${Math.round(Math.abs(g.ySteel - g.yC) * 1000)} mm`, off: 0, size: size * 0.8, ext: xArrow })
 
   const yMn = H + off + size * 0.4
   P.push({
