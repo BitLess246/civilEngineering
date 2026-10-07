@@ -83,7 +83,8 @@ describe('buildConnectionDetail — the designed connection, drawn', () => {
   })
 
   it('names the column face with a leader whose arrow lands ON that face', () => {
-    const col = shapeByName('W310x79')!
+    const s = shapeByName('W310x79')!
+    const col = { d: s.d!, tf: s.tf!, bf: s.bf! }
     const tipOf = (label: string, t: ConnectionType) => {
       const ps = draw(t).primitives
       const k = ps.findIndex((p) => p.kind === 'text' && p.text === label)
