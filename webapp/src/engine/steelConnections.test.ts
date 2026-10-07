@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { designStructure } from './pipeline'
-import { designSteelJoints, designBolts, designBoltedTab, copedWebBlockShear, tabBearing } from './steelConnections'
+import { designSteelJoints, designBolts, designBoltedTab, copedWebBlockShear, tabBearing, FNV_A325, phiBoltShear } from './steelConnections'
 import { shapeByName } from './aiscSections'
 import type { BoltPos } from './steelDesign'
 import type { RectSection } from './model'
@@ -318,5 +318,14 @@ describe('coped beam web: tear-out toward the cope and §J4.3 block shear', () =
     const d = designBoltedTab(320, 5, undefined, { beamD: 460, depthMm: 25 })
     expect(d.webBlockShear!.ok).toBe(true)
     expect(d.webBlockShear!.phiRn).toBeGreaterThanOrEqual(320)
+  })
+})
+
+describe('model-space bolt shear reads Table J3.2', () => {
+  it('A325M threads excluded: Fnv 469 MPa (360-16), M20 φRn = 0.75·469·π·10²/1000', () => {
+    // was a stray 495 — 5 % above the 68 ksi the table gives
+    expect(FNV_A325).toBe(469)
+    expect(phiBoltShear(20)).toBeCloseTo(0.75 * 469 * Math.PI * 100 / 1000, 9)
+    expect(phiBoltShear(20)).toBeCloseTo(110.5, 1)
   })
 })

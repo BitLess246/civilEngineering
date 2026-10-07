@@ -39,7 +39,7 @@ import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
 import { type ModalResult, type MassModel } from '../engine/modal'
 import { computeResponseSpectrum, rsaEquivalentLoads, type ResponseSpectrumResult, type RsaLateralResult } from '../engine/responseSpectrum'
 import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase, type BiaxialMethod } from '../engine/pipeline'
-import type { SteelJoint } from '../engine/steelConnections'
+import { FNV_A325, phiBoltShear, type SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
 import { footingLayout } from '../engine/footingLayout'
 import { type ShellNode, type ShellElem, type ElementStress, recoverShellStress } from '../engine/shell'
@@ -6629,7 +6629,7 @@ export default function ModelSpace() {
             <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel connection schedule — AISC SCM<SchedChip items={[...design.joints.flatMap((j) => j.connections), ...design.beamJoints.flatMap((j) => j.connections)]} ok={(cn) => cn.ok} /></h3>
               <p className="mb-2 text-[11px] text-muted">
-                Columns oriented with depth <em>d</em> in X (flanges face ±X); X-direction girders land on the column <strong>flange</strong> face, Z-direction beams on the column <strong>web</strong> face. Each end is built as it was analysed: a moment connection unless the end is set Simple (a shear tab, released in the analysis); a beam landing on a girder is a pin (fin plate) by default. Bolts: M20 A325 single-shear (φRₙ = 116.5 kN/bolt). Welds: E70XX fillet, both sides of plate.
+                Columns oriented with depth <em>d</em> in X (flanges face ±X); X-direction girders land on the column <strong>flange</strong> face, Z-direction beams on the column <strong>web</strong> face. Each end is built as it was analysed: a moment connection unless the end is set Simple (a shear tab, released in the analysis); a beam landing on a girder is a pin (fin plate) by default. Bolts: M20 A325-X single-shear (φRₙ = {phiBoltShear(20).toFixed(1)} kN/bolt, F<sub>nv</sub> = {FNV_A325} MPa, Table J3.2). Welds: E70XX fillet, both sides of plate.
               </p>
               <table className="w-full border-collapse text-xs">
                 <thead>
