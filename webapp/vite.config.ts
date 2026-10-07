@@ -2,6 +2,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { robotsTxt, sitemapXml } from './src/lib/sitemap'
 
 // The React SPA is deployed to Vercel; the calc API runs as a separate
 // Node service on Render. Source maps are off and console/debugger are
@@ -10,7 +11,17 @@ import tailwindcss from '@tailwindcss/vite'
 // the hardening below never affects dev ergonomics or the test pipeline.
 export default defineConfig(({ command }) => ({
   base: '/',
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), {
+    // robots.txt and sitemap.xml, written into the build from the tool
+    // catalogue (src/lib/sitemap.ts) so neither can drift from the routes.
+    // Vercel serves a real file ahead of the SPA rewrite in vercel.json.
+    name: 'zeta-seo-files',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'robots.txt', source: robotsTxt() })
+      this.emitFile({ type: 'asset', fileName: 'sitemap.xml', source: sitemapXml() })
+    },
+  }],
   esbuild: command === 'build' ? { drop: ['console', 'debugger'] } : {},
   // The commit the running build came from, so a printed report can name it.
   // Vercel and GitHub Actions each expose it under their own name and neither
