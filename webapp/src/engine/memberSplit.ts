@@ -182,15 +182,110 @@ export function splitAxialModes(
   return out
 }
 
+// ── the slab's traction, recovered from the forces the mesh hands the beam ──
+//
+// A beam carrying mesh nodes receives the slab through those nodes: in the
+// discrete model the transfer is a POINT force (and a small couple) at every
+// junction, so the stitched diagram is a staircase in V and a polyline in M —
+// jagged, and more so the finer the mesh. Physically the slab bears on the beam
+// along its whole length. The junction forces are that line load as the FE sees
+// it: its CONSISTENT nodal values, J_j = ∫ q·N_j dx with N_j the linear hat on
+// the junction stations (Zienkiewicz & Taylor, The Finite Element Method, Vol. 1
+// §2.4 — the consistent load vector, read backwards).
+//
+// So q is recovered by inverting that relation, piecewise linear on the
+// stations, and the steps are replaced by what q does to the beam. The property
+// that makes this more than a cosmetic: the moment the transferred FORCES make
+// at every junction is unchanged, exactly. (x_k − ξ)₊ is linear between stations, so it is its own
+// hat interpolant, and ∫(x_k − ξ)₊ q dξ = Σ_j (x_k − x_j)₊ J_j — the point-force
+// moment. Between stations M now bulges the way a distributed load bends it,
+// which is the better estimate of the span moment, not a softer one.
+//
+// The two ends are where the beam meets its joint. There the mesh delivered the
+// slab's share straight into the joint node, so the recovered q is carried to
+// the end (extrapolated from the two nearest junctions) and the drawn end shear
+// includes that share — larger than the solver's end force by ∫ q·N_0, the load
+// a finer mesh would have put into the beam. Reactions and `f` are untouched.
+//
+// The slab also passes small COUPLES through the shared rotational DOFs — a
+// jump in M at the junction. Those ramp across the two half-cells beside it, so
+// the drawn moment there is the middle of the solver's jump and the member
+// ends, where design reads the support moment, are never moved.
+
+/** Solve the small dense system A·x = b by Gaussian elimination, partial pivoting. */
+function solveDense(A: number[][], b: number[]): number[] {
+  const n = b.length
+  const M = A.map((r, i) => [...r, b[i]])
+  for (let c = 0; c < n; c++) {
+    let p = c
+    for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r
+    ;[M[c], M[p]] = [M[p], M[c]]
+    const d = M[c][c] || 1e-300
+    for (let r = c + 1; r < n; r++) {
+      const f = M[r][c] / d
+      if (f) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]
+    }
+  }
+  const x = new Array(n).fill(0)
+  for (let r = n - 1; r >= 0; r--) {
+    let v = M[r][n]
+    for (let k = r + 1; k < n; k++) v -= M[r][k] * x[k]
+    x[r] = v / (M[r][r] || 1e-300)
+  }
+  return x
+}
+
+/**
+ * Nodal values q_0..q_K of the piecewise-linear line load whose consistent
+ * interior nodal forces are `J` (J[j] at station x[j], j = 1..K−1; J[0], J[K]
+ * ignored). Ends: linear extrapolation from the two nearest junctions (K ≥ 3),
+ * uniform when there is only one junction.
+ */
+export function recoverLineLoad(x: number[], J: number[]): number[] {
+  const K = x.length - 1
+  if (K < 2) return new Array(K + 1).fill(0)
+  const h = x.slice(1).map((v, i) => v - x[i])
+  if (K === 2) { const q = J[1] / ((h[0] + h[1]) / 2); return [q, q, q] }
+  const A = Array.from({ length: K + 1 }, () => new Array(K + 1).fill(0))
+  const b = new Array(K + 1).fill(0)
+  for (let j = 1; j < K; j++) {
+    A[j][j - 1] = h[j - 1] / 6; A[j][j] = (h[j - 1] + h[j]) / 3; A[j][j + 1] = h[j] / 6
+    b[j] = J[j]
+  }
+  // q_0 on the line through q_1, q_2;  q_K on the line through q_{K−1}, q_{K−2}
+  A[0][0] = 1; A[0][1] = -(1 + h[0] / h[1]); A[0][2] = h[0] / h[1]
+  A[K][K] = 1; A[K][K - 1] = -(1 + h[K - 1] / h[K - 2]); A[K][K - 2] = h[K - 1] / h[K - 2]
+  return solveDense(A, b)
+}
+
+/** ∫₀ˣ q and ∫₀ˣ∫₀ q for the piecewise-linear q on stations `xn`, at `x`. */
+function loadIntegrals(xn: number[], q: number[], x: number): [number, number] {
+  let I1 = 0, I2 = 0
+  for (let k = 0; k + 1 < xn.length; k++) {
+    const a = xn[k], hk = xn[k + 1] - a
+    if (x <= a) break
+    const s = Math.min(x, xn[k + 1]) - a
+    const slope = (q[k + 1] - q[k]) / hk
+    // over [a, a+s]: ∫q = q_k s + slope s²/2;  ∫∫q adds I1·s + q_k s²/2 + slope s³/6
+    I2 += I1 * s + q[k] * s * s / 2 + slope * s * s * s / 6
+    I1 += q[k] * s + slope * s * s / 2
+  }
+  return [I1, I2]
+}
+
 /**
  * Reassemble the parent member's result from its parts.
  *
- * The station list keeps the duplicated junction value: shear really is
- * discontinuous there, because the shell delivers a point force into the beam,
- * and smoothing it away would hide the very load this whole phase exists to
- * transfer. End forces come from the outer ends of the chain — valid because
- * every part is collinear and shares the parent's `rot`, so they share a local
- * frame.
+ * End forces come from the outer ends of the chain — valid because every part
+ * is collinear and shares the parent's `rot`, so they share a local frame.
+ *
+ * The junction steps are replaced by the slab's recovered line load (see
+ * above): every component comes back continuous, the moments at the junctions
+ * are exactly the solver's, and the duplicated junction station is dropped.
+ * This reverses an earlier choice to keep the staircase, made on the grounds
+ * that smoothing would hide the transferred load. It does not: the load is
+ * still there, in the slope of V and the curvature of M — where the slab puts
+ * it — instead of in steps that grow sharper as the mesh is refined.
  */
 export function stitchMembers(res: F3MemberResult[], map: SplitMap[]): F3MemberResult[] {
   if (map.length === 0) return res
@@ -203,25 +298,101 @@ export function stitchMembers(res: F3MemberResult[], map: SplitMap[]): F3MemberR
     if (parts.some((p) => !p)) continue           // a part went missing — drop rather than lie
     const ps = parts as F3MemberResult[]
     const st = starts(s.lengths)
+    const K = ps.length
+    type Comp = 'N' | 'Vy' | 'Vz' | 'T' | 'My' | 'Mz'
+    const C: Comp[] = ['N', 'Vy', 'Vz', 'T', 'My', 'Mz']
+    // the jump of each component at each junction: start of part k − end of part k−1
+    const jump = (c: Comp) => st.map((_, j) => (j > 0 && j < K)
+      ? ps[j][c][0] - ps[j - 1][c][ps[j - 1][c].length - 1] : 0)
+    const J = Object.fromEntries(C.map((c) => [c, jump(c)])) as Record<Comp, number[]>
+    // force components: the line load each one's steps came from
+    const qOf = Object.fromEntries((['N', 'Vy', 'Vz', 'T'] as Comp[]).map((c) => [c, recoverLineLoad(st, J[c])])) as Record<string, number[]>
+    // a couple the slab passed through the rotational DOFs ramps across the two
+    // half-cells either side of its junction (midpoint to midpoint): the moment
+    // at that junction is the middle of the solver's jump, and the member ends —
+    // the support moments design reads — are never touched
+    const ramp = (c: 'My' | 'Mz', x: number) => {
+      let v = 0
+      for (let j = 1; j < K; j++) {
+        const a = (st[j - 1] + st[j]) / 2, b = (st[j] + st[j + 1]) / 2
+        v += J[c][j] * (x <= a ? 0 : x >= b ? 1 : (x - a) / (b - a))
+      }
+      return v
+    }
+    const e0 = (q: number[]) => (st[1] - st[0]) * (2 * q[0] + q[1]) / 6
+
     const xs: number[] = []
-    const N: number[] = [], Vy: number[] = [], Vz: number[] = [], T: number[] = []
-    const My: number[] = [], Mz: number[] = []
+    const D: Record<Comp, number[]> = { N: [], Vy: [], Vz: [], T: [], My: [], Mz: [] }
     ps.forEach((p, k) => {
-      for (let q = 0; q < p.xs.length; q++) xs.push(st[k] + p.xs[q])
-      N.push(...p.N); Vy.push(...p.Vy); Vz.push(...p.Vz)
-      T.push(...p.T); My.push(...p.My); Mz.push(...p.Mz)
+      for (let q = 0; q < p.xs.length; q++) {
+        if (k > 0 && q === 0) continue              // the junction station, once
+        const x = st[k] + p.xs[q]
+        xs.push(x)
+        // the steps already crossed at this station (part k carries junctions 1..k)
+        const S = (c: Comp) => { let v = 0; for (let j = 1; j <= k; j++) v += J[c][j]; return v }
+        const Sx = (c: Comp) => { let v = 0; for (let j = 1; j <= k; j++) v += J[c][j] * (x - st[j]); return v }
+        for (const c of ['N', 'Vy', 'Vz', 'T'] as Comp[]) {
+          const [I1] = loadIntegrals(st, qOf[c], x)
+          D[c].push(p[c][q] - S(c) + I1 - e0(qOf[c]))
+        }
+        // moments: the force steps' effect (∫ of the V change), then the couples'
+        const dV = (c: 'Vy' | 'Vz') => { const [, I2] = loadIntegrals(st, qOf[c], x); return I2 - e0(qOf[c]) * x - Sx(c) }
+        D.Mz.push(p.Mz[q] + dV('Vy') - S('Mz') + ramp('Mz', x))
+        D.My.push(p.My[q] - dV('Vz') - S('My') + ramp('My', x))
+      }
     })
     const first = ps[0], lastP = ps[ps.length - 1]
+    const amax = (a: number[]) => a.reduce((m, v) => Math.max(m, Math.abs(v)), 0)
     out.push({
       id: s.parent,
       L: s.lengths.reduce((a, b) => a + b, 0),
       f: [...first.f.slice(0, 6), ...lastP.f.slice(6, 12)],
-      xs, N, Vy, Vz, T, My, Mz,
-      Nmax: Math.max(...ps.map((p) => p.Nmax)),
-      Vmax: Math.max(...ps.map((p) => p.Vmax)),
-      Mmax: Math.max(...ps.map((p) => p.Mmax)),
-      Tmax: Math.max(...ps.map((p) => p.Tmax)),
+      xs, ...D,
+      Nmax: amax(D.N),
+      Vmax: Math.max(amax(D.Vy), amax(D.Vz)),
+      Mmax: Math.max(amax(D.My), amax(D.Mz)),
+      Tmax: amax(D.T),
     })
+  }
+  return out
+}
+
+/**
+ * Put a combination's factored loads back on the parent members, in the
+ * parent's own stations — the inverse of `splitLoads`.
+ *
+ * The results are stitched onto the parent ids, and the loads must follow, or
+ * anything that reads the two together sees a different structure: the statics
+ * check measured `w · memberLen('B1#2')`, found no such member, and reported
+ * every beam line load on a meshed slab as missing — a 15 % "residual" on a
+ * structure in exact equilibrium.
+ */
+export function stitchLoads(loads: F3Load[], map: SplitMap[]): F3Load[] {
+  if (map.length === 0) return loads
+  const owner = new Map<string, { s: SplitMap; k: number; st: number[] }>()
+  for (const s of map) { const st = starts(s.lengths); s.parts.forEach((p, k) => owner.set(p, { s, k, st })) }
+  const out: F3Load[] = []
+  // a parent UDL (or thermal load) was copied onto every part: count the copies back down
+  const copies = new Map<string, { ld: F3Load; n: number; parts: number }>()
+  for (const ld of loads) {
+    if (ld.kind === 'node') { out.push(ld); continue }
+    const o = owner.get(ld.member)
+    if (!o) { out.push(ld); continue }
+    const parent = o.s.parent, x0 = o.st[o.k]
+    if (ld.kind === 'member-udl' || ld.kind === 'member-thermal') {
+      const key = JSON.stringify({ ...ld, member: parent })
+      const e = copies.get(key) ?? { ld: { ...ld, member: parent }, n: 0, parts: o.s.parts.length }
+      e.n++; copies.set(key, e)
+    } else if (ld.kind === 'member-point') out.push({ ...ld, member: parent, a: ld.a + x0 })
+    else out.push({ ...ld, member: parent, x1: ld.x1 + x0, x2: ld.x2 + x0 })
+  }
+  for (const e of copies.values()) {
+    const whole = Math.floor(e.n / e.parts)
+    for (let i = 0; i < whole; i++) out.push(e.ld)
+    // a remainder cannot come from splitLoads; if one ever does, keep its total
+    // force on the parent rather than drop it
+    const rem = e.n % e.parts
+    if (rem && e.ld.kind === 'member-udl') out.push({ ...e.ld, w: (e.ld.w * rem) / e.parts })
   }
   return out
 }
@@ -241,6 +412,6 @@ export function stitchAnalysis<T extends F3Analysis>(a: T, map: SplitMap[]): T {
   if (map.length === 0) return a
   return {
     ...a,
-    perCombo: a.perCombo.map((c) => (c.result ? { ...c, result: stitchResult(c.result, map) } : c)),
+    perCombo: a.perCombo.map((c) => ({ ...c, factored: stitchLoads(c.factored, map), ...(c.result ? { result: stitchResult(c.result, map) } : {}) })),
   }
 }
