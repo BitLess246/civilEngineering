@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { splitMembers, splitLoads, splitAxialModes, stitchResult, partId } from './memberSplit'
-import { solveFrame3D, type F3Node, type F3Member, type F3Load, type F3Support } from './frame3d'
+import { splitMembers, splitLoads, splitAxialModes, stitchResult, stitchMembers, stitchLoads, stitchAnalysis, recoverLineLoad, partId } from './memberSplit'
+import { solveFrame3D, appliedResultant, type F3Node, type F3Member, type F3Load, type F3Support, type F3MemberResult } from './frame3d'
+import { runModelAnalysis } from './modelAnalysis'
+import { generateGridModel } from './modelBuilder'
+import type { RectSection } from './model'
 
 // ─────────────────────────────────────────────────────────────────────────
 // THE CORRECTNESS PROOF FOR EDGE ATTACHMENT, AND IT NEEDS NO SHELLS.
@@ -100,15 +103,18 @@ describe('splitMembers / stitchResult — a split member behaves as one member',
       expect(sign * got.Mz[k]).toBeCloseTo(exact(got.xs[k]), 4)
   })
 
-  it('keeps the junction stations duplicated — shear really is discontinuous there', () => {
-    // A point load at a cut makes V jump. Smoothing the duplicate away would
-    // hide exactly the transfer this phase exists to model.
+  it('draws every cut continuous, and keeps a real point load’s step', () => {
+    // The step a member-point load makes belongs to the part it sits on (on a
+    // cut it lands at the END of the earlier part), so it survives stitching.
+    // A cut itself carries nothing here, and draws as nothing: one station per
+    // junction, no jump.
     const loads: F3Load[] = [{ kind: 'member-point', member: 'B1', a: 5, P: 40, cat: 'D' }]
     const { members, map } = splitMembers(whole, nodes, cuts)
     const got = stitchResult(solve(members, splitLoads(loads, map))!, map).members[0]
-    const dupes = got.xs.filter((x, k) => k > 0 && Math.abs(x - got.xs[k - 1]) < 1e-9)
-    expect(dupes.length).toBeGreaterThanOrEqual(3)      // one per interior cut
     expect(got.xs).toEqual([...got.xs].sort((p, q) => p - q))
+    for (const x of [2, 7]) expect(got.xs.filter((v) => Math.abs(v - x) < 1e-9)).toHaveLength(1)
+    const at = (x: number) => got.Vy[got.xs.findIndex((v) => Math.abs(v - x) < 1e-12)]
+    expect(Math.abs(at(5) - at(5 - 1e-6))).toBeCloseTo(40, 6)
   })
 
   it('the reactions are the same, not merely the member forces', () => {
@@ -263,4 +269,174 @@ describe('splitAxialModes', () => {
     expect(splitAxialModes(modes, map).get('OTHER')).toBe('tension-only')
     expect(splitAxialModes(modes, [])).toBe(modes)
   })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE SLAB'S LINE LOAD, RECOVERED FROM THE FORCES THE MESH HANDS THE BEAM.
+// ─────────────────────────────────────────────────────────────────────────
+describe('recoverLineLoad — the consistent nodal forces, read backwards', () => {
+  it('a uniform q gives back q, on even and uneven stations', () => {
+    for (const x of [[0, 1, 2, 3, 4, 5, 6], [0, 0.5, 1.75, 3, 4.5, 5, 6]]) {
+      const q = 7.5
+      const J = x.map((_, j) => (j > 0 && j < x.length - 1 ? q * (x[j + 1] - x[j - 1]) / 2 : 0))
+      for (const v of recoverLineLoad(x, J)) expect(v).toBeCloseTo(q, 10)
+    }
+  })
+
+  it('a linear q is recovered exactly, ends included', () => {
+    // consistent forces of q(x) = 2 + 3x on linear hats: h(q_{j−1} + 4q_j + q_{j+1})/6 for even h
+    const x = [0, 1, 2, 3, 4, 5]
+    const qx = (t: number) => 2 + 3 * t
+    const J = x.map((t, j) => (j > 0 && j < x.length - 1 ? (qx(t - 1) + 4 * qx(t) + qx(t + 1)) / 6 : 0))
+    recoverLineLoad(x, J).forEach((v, j) => expect(v).toBeCloseTo(qx(x[j]), 10))
+  })
+
+  it('with one junction the load is uniform; with none there is no load', () => {
+    expect(recoverLineLoad([0, 2, 6], [0, 12, 0])).toEqual([4, 4, 4])
+    expect(recoverLineLoad([0, 6], [0, 0])).toEqual([0, 0])
+  })
+})
+
+/** A part of a simply supported beam carrying point loads −P at every interior
+ *  junction: V steps, M a polygon — exactly what the meshed slab hands a beam. */
+function ssParts(L: number, K: number, P: number): { res: F3MemberResult[]; map: { parent: string; parts: string[]; lengths: number[] }[] } {
+  const h = L / K, R = (P * (K - 1)) / 2
+  const res: F3MemberResult[] = []
+  for (let k = 0; k < K; k++) {
+    const xs = Array.from({ length: 5 }, (_, i) => (h * i) / 4)
+    const V0 = R - P * k, M0 = R * k * h - P * (k * (k - 1) / 2) * h
+    const zero = xs.map(() => 0)
+    res.push({ id: partId('B', k), L: h, f: new Array(12).fill(0), xs,
+      N: zero, Vz: zero, T: zero, My: zero, Vy: xs.map(() => V0), Mz: xs.map((x) => M0 + V0 * x),
+      Nmax: 0, Vmax: 0, Mmax: 0, Tmax: 0 })
+  }
+  return { res, map: [{ parent: 'B', parts: res.map((r) => r.id), lengths: res.map(() => h) }] }
+}
+
+describe('stitchMembers — the junction steps become the line load they came from', () => {
+  it('point forces of qh at the junctions draw the uniform-load parabola, exactly', () => {
+    // q = P/h = 10 kN/m over 6 m: V = q(L/2 − x), M = q·x(L − x)/2, 45 kN·m at midspan.
+    // The solver's nodal moments are kept, and between them M bulges as a UDL bends it.
+    const L = 6, K = 6, P = 10, q = P / (L / K)
+    const { res, map } = ssParts(L, K, P)
+    const got = stitchMembers(res, map)[0]
+    expect(got.id).toBe('B')
+    expect(new Set(got.xs).size).toBe(got.xs.length)
+    got.xs.forEach((x, i) => {
+      expect(got.Vy[i]).toBeCloseTo(q * (L / 2 - x), 9)
+      expect(got.Mz[i]).toBeCloseTo((q * x * (L - x)) / 2, 9)
+    })
+    expect(got.Mmax).toBeCloseTo(45, 9)
+    expect(got.Vmax).toBeCloseTo(30, 9)          // qL/2: the end shares the joint took, drawn on the beam
+  })
+
+  it('the junction moments are the solver’s, whatever the load profile', () => {
+    // uneven junction forces — a triangular tributary, say — on uneven cuts
+    const lengths = [0.8, 1.4, 1.1, 1.6, 0.6, 1.5], Pj = [0, 3, 9, 14, 6, 11]
+    const st = [0]; for (const l of lengths) st.push(st[st.length - 1] + l)
+    const L = st[st.length - 1]
+    const total = Pj.reduce((a, b) => a + b, 0)
+    const R0 = Pj.reduce((a, p, j) => a + p * (L - st[j]), 0) / L
+    const res: F3MemberResult[] = lengths.map((h, k) => {
+      const xs = [0, h / 3, (2 * h) / 3, h]
+      const V0 = R0 - Pj.slice(1, k + 1).reduce((a, b) => a + b, 0)
+      const M0 = R0 * st[k] - Pj.slice(1, k + 1).reduce((a, p, j) => a + p * (st[k] - st[j + 1]), 0)
+      const zero = xs.map(() => 0)
+      return { id: partId('B', k), L: h, f: new Array(12).fill(0), xs, N: zero, Vz: zero, T: zero, My: zero,
+        Vy: xs.map(() => V0), Mz: xs.map((x) => M0 + V0 * x), Nmax: 0, Vmax: 0, Mmax: 0, Tmax: 0 }
+    })
+    const got = stitchMembers(res, [{ parent: 'B', parts: res.map((r) => r.id), lengths }])[0]
+    for (let k = 0; k <= lengths.length; k++) {
+      const i = got.xs.findIndex((x) => Math.abs(x - st[k]) < 1e-12)
+      const exact = k === 0 ? res[0].Mz[0] : res[k - 1].Mz[res[k - 1].Mz.length - 1]
+      expect(got.Mz[i]).toBeCloseTo(exact, 9)
+    }
+    expect(total).toBeGreaterThan(0)
+  })
+
+  it('a couple at a junction lands at the middle of its jump, and leaves the ends alone', () => {
+    const lengths = [1, 1, 1, 1], C = 4
+    const res: F3MemberResult[] = lengths.map((h, k) => {
+      const xs = [0, 0.5, 1], zero = xs.map(() => 0)
+      return { id: partId('B', k), L: h, f: new Array(12).fill(0), xs, N: zero, Vy: zero, Vz: zero, T: zero, My: zero,
+        Mz: xs.map(() => C * k), Nmax: 0, Vmax: 0, Mmax: 0, Tmax: 0 }
+    })
+    const got = stitchMembers(res, [{ parent: 'B', parts: res.map((r) => r.id), lengths }])[0]
+    const at = (x: number) => got.Mz[got.xs.findIndex((v) => Math.abs(v - x) < 1e-12)]
+    expect(at(0)).toBeCloseTo(0, 12)
+    expect(at(4)).toBeCloseTo(3 * C, 12)
+    for (const k of [1, 2, 3]) expect(at(k)).toBeCloseTo(C * (k - 0.5), 12)
+  })
+})
+
+describe('stitchLoads — the loads follow the results back onto the parent', () => {
+  const lens = new Map([['B1', 9]])
+  const memberLen = (id: string) => lens.get(id) ?? 0
+  const kinds: F3Load[] = [
+    { kind: 'member-udl', member: 'B1', w: 12, cat: 'D' },
+    { kind: 'member-udl', member: 'B1', w: 12, cat: 'D' },
+    { kind: 'member-point', member: 'B1', a: 5, P: 40, cat: 'D' },
+    { kind: 'member-point', member: 'B1', a: 3.5, P: 25, cat: 'L' },
+    { kind: 'member-vdl', member: 'B1', x1: 1, x2: 8, w1: 4, w2: 16, cat: 'D' },
+    { kind: 'member-thermal', member: 'B1', PT: 500, cat: 'D' },
+    { kind: 'node', node: 'a', Fy: -7, cat: 'D' },
+  ]
+
+  it('undoes splitLoads: the same resultant, measured on the parent', () => {
+    const { map } = splitMembers(whole, nodes, cuts)
+    const back = stitchLoads(splitLoads(kinds, map), map)
+    const [r0, r1] = [appliedResultant(kinds, memberLen), appliedResultant(back, memberLen)]
+    for (let c = 0; c < 3; c++) expect(r1[c]).toBeCloseTo(r0[c], 9)
+    // and a UDL comes back as the UDL it was, not as four copies
+    expect(back.filter((l) => l.kind === 'member-udl')).toEqual(kinds.filter((l) => l.kind === 'member-udl'))
+    for (const l of back) if (l.kind !== 'node') expect(l.member).toBe('B1')
+  })
+
+  it('the split ids measure to nothing — which is what the statics check used to read', () => {
+    const { map } = splitMembers(whole, nodes, cuts)
+    const raw = appliedResultant(splitLoads(kinds, map), memberLen)
+    expect(raw[1]).toBeGreaterThan(appliedResultant(kinds, memberLen)[1])  // the line loads went missing
+  })
+})
+
+describe('a meshed slab: statics holds and the beams read smoothly at every subdivision', () => {
+  const section: RectSection = { id: 'C', name: '400×400', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  for (const n of [2, 4, 6]) {
+    it(`subdivision ${n}: ΣApplied = ΣReactions, and no beam diagram steps`, () => {
+      const m = generateGridModel({ baysX: [6, 6], baysZ: [5, 5], storeyH: [4, 3.5], section, slabThickness: 150 })
+      for (const p of m.plates) m.loads.push({ kind: 'area', plate: p.id, q: 5, cat: 'D' })
+      for (const b of m.members.filter((x) => x.role === 'beam')) m.loads.push({ kind: 'member-udl', member: b.id, w: 3, cat: 'D' })
+      m.shellElements = true; m.shellSubdiv = n
+      const out = runModelAnalysis({ model: m, opts: { f1: 0.5 }, drift: { hasSeis: false, T: 0.5, R: 8.5, axis: 'x', pDelta: false } })
+      const nm = new Map(m.nodes.map((q) => [q.id, q]))
+      const len = new Map(m.members.map((q) => { const a = nm.get(q.i)!, b = nm.get(q.j)!; return [q.id, Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)] }))
+      for (const run of out.analysis!.perCombo) {
+        if (!run.result) continue
+        const applied = appliedResultant(run.factored, (id) => len.get(id) ?? 0)
+        const rFy = run.result.reactions.reduce((t, r) => t + r.F[1], 0)
+        expect(Math.abs(applied[1] + rFy) / Math.abs(rFy)).toBeLessThan(1e-9)
+        for (const l of run.factored) if (l.kind !== 'node') expect(len.has(l.member)).toBe(true)
+      }
+      // every beam: one station per x, and no jump in V or M bigger than its own slope allows
+      const r = out.analysis!.perCombo[0].result!
+      for (const b of m.members.filter((x) => x.role === 'beam')) {
+        const mr = r.members.find((x) => x.id === b.id)!
+        expect(new Set(mr.xs).size).toBe(mr.xs.length)
+        const span = Math.max(...mr.Vy.map(Math.abs)) || 1
+        for (let i = 1; i < mr.xs.length; i++) {
+          const dx = mr.xs[i] - mr.xs[i - 1]
+          expect(Math.abs(mr.Vy[i] - mr.Vy[i - 1])).toBeLessThan(span * (dx * 2 + 1e-6))
+        }
+      }
+    }, 120000)
+  }
+})
+
+it('stitchAnalysis carries the factored loads with the results', () => {
+  const { members, map } = splitMembers(whole, nodes, cuts)
+  const loads = splitLoads([{ kind: 'member-udl', member: 'B1', w: 12, cat: 'D' }], map)
+  const r = solve(members, loads)!
+  const a = stitchAnalysis({ perCombo: [{ combo: { name: '1.0D', f: { D: 1 } }, result: r, factored: loads, skipped: false }], govIdx: 0 }, map)
+  expect(a.perCombo[0].factored).toEqual([{ kind: 'member-udl', member: 'B1', w: 12, cat: 'D' }])
+  expect(a.perCombo[0].result!.members[0].id).toBe('B1')
 })

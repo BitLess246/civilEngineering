@@ -1249,6 +1249,12 @@ shell analysis was in.
   right end forces and a **wrong span moment**, which is the number beam design
   reads. Results are stitched back onto the parent id before anything downstream
   sees them.
+  **Since #916** the stitch also (a) puts each combination's factored loads back
+  on the parent (`stitchLoads`) — the statics check had been reading split ids
+  as zero-length and failing every meshed slab by the beam line loads — and
+  (b) draws the junction transfer as the slab's recovered line load
+  (`recoverLineLoad`) instead of a staircase: junction moments exact, member
+  ends untouched, V and M continuous.
 - **Openings** (#746) cut whole cells whose centre falls in a `SlabOpening`, and
   every node left unreferenced goes with them — an orphan carries six
   zero-stiffness DOFs and `symFactor` then returns null, killing the solve
