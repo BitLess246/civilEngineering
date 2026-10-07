@@ -11,7 +11,7 @@
  */
 import type { StructuralModel, Node as ModelNode } from './model'
 import type { StructureDesign, SteelBeamScheduleRow } from './pipeline'
-import { boltGeomFromPositions, eccentricBoltGroup, plyBearing, type BoltPos } from './steelDesign'
+import { boltFnv, boltGeomFromPositions, eccentricBoltGroup, plyBearing, type BoltPos } from './steelDesign'
 import { shapeByName } from './aiscSections'
 import { localAxes, defaultAxisRotation, type V3 } from './frame3d'
 import { resolveSteelConnections, throughCarrier } from './steelJoints'
@@ -19,7 +19,8 @@ import { resolveSteelConnections, throughCarrier } from './steelJoints'
 // ── Material constants ──────────────────────────────────────────────────────
 const PHI_SHEAR_BOLT = 0.75           // AISC §J3.6
 const PHI_BEARING = 0.75              // AISC §J3.10
-const FNV_A325 = 495                  // MPa  (threads excluded from shear plane)
+/** A325M, threads excluded from the shear plane (X) — Table J3.2, MPa. */
+export const FNV_A325 = boltFnv('A325M', false)
 
 const PHI_PLATE_YIELD = 1.0           // AISC §J4.2 shear yielding
 const FY_PLATE = 248                  // MPa  A36
@@ -165,7 +166,7 @@ export interface SteelJoint {
 const A_WELD_TO_BOLT = 60
 
 /** Per-bolt design shear strength (single shear plane), kN. */
-function phiBoltShear(dia: number): number {
+export function phiBoltShear(dia: number): number {
   const Ab = (Math.PI / 4) * dia * dia
   return (PHI_SHEAR_BOLT * FNV_A325 * Ab) / 1000
 }

@@ -336,6 +336,18 @@ export function combinedLoading(
 
 export type BoltGrade = 'A325M' | 'A490M'
 
+/** Nominal bolt shear stress Fnv, MPa — AISC 360-16 Table J3.2. A325M is
+ *  Group A (54 / 68 ksi), A490M Group B (68 / 84 ksi); N = threads included in
+ *  the shear plane, X = excluded. 360-10's metric column printed 457 for 68 ksi;
+ *  360-16 corrected the conversion to 469 (68 × 6.895). One table, so the
+ *  calculator, the out-of-plane check and the model-space tabs cannot drift. */
+export const BOLT_Fnv: Record<BoltGrade, { N: number; X: number }> = {
+  A325M: { N: 372, X: 469 },
+  A490M: { N: 469, X: 579 },
+}
+export const boltFnv = (grade: BoltGrade, threadsInPlane: boolean): number =>
+  BOLT_Fnv[grade][threadsInPlane ? 'N' : 'X']
+
 export interface BoltResult {
   Ab: number; Fnv: number
   phiRn_shear: number   // kN per bolt
@@ -361,9 +373,7 @@ export function boltShear(
   threadsInPlane = true, nShear = 1
 ): BoltResult {
   const Ab  = (Math.PI / 4) * db * db
-  const Fnv = grade === 'A325M'
-    ? (threadsInPlane ? 310 : 372)
-    : (threadsInPlane ? 372 : 457)   // Table J3.2
+  const Fnv = boltFnv(grade, threadsInPlane)   // Table J3.2
   const Rn_shear   = (Fnv * Ab * nShear) / 1000
   const Rn_bearing = (2.4 * Fu_conn * db * t_conn) / 1000
   const phiRn_shear   = PHI_J * Rn_shear
@@ -720,9 +730,7 @@ export function outOfPlaneBoltGroup(
 ): OutOfPlaneResult {
   const k = basisFactor(basis, 'connection')   // φ, or 1/Ω
   const Fnt = BOLT_Fnt[boltGrade]
-  const Fnv = boltGrade === 'A325M'
-    ? (threadInPlane ? 310 : 372)
-    : (threadInPlane ? 372 : 457)
+  const Fnv = boltFnv(boltGrade, threadInPlane)
   const Ab = (Math.PI / 4) * db * db
   const M_op = Vu * e_out   // kN·mm
 

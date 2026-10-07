@@ -260,10 +260,10 @@ describe('localConnection — §J3.10(a) bearing and tear-out per bolt', () => {
 
   it('a thin tab: tear-out at the edge bolt governs over bolt shear, and the check says so', () => {
     const r = localConnection({ ...BASE, tPlate: 6 })
-    // 0.75·1.2·29·6·400/1000 = 62.64 kN < bolt shear 0.75·310·π·10²/1000 = 73.04 kN
+    // 0.75·1.2·29·6·400/1000 = 62.64 kN < bolt shear 0.75·372·π·10²/1000 = 87.65 kN
     const b1 = r.bearing.find((b) => b.id === 'B1')!
     expect(b1.avail).toBeCloseTo(62.64, 2)
-    expect(r.avail.shear).toBeCloseTo(73.04, 2)
+    expect(r.avail.shear).toBeCloseTo(87.65, 2)
     expect(r.boltGoverning).toBe('B1')
     expect(r.boltUtil).toBeCloseTo(50 / 62.64, 3)
     // and the largest load scales by the WORST bolt, not the shear strength

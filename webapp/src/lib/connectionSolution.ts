@@ -6,10 +6,10 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { SolutionStep } from './solution'
 import { sn1, sn2 } from './solution'
-import type { BeamConnection } from '../engine/steelConnections'
+import { FNV_A325 as FNV, type BeamConnection } from '../engine/steelConnections'
 import { boltGeomFromPositions } from '../engine/steelDesign'
 
-const PHI_BOLT = 0.75, FNV = 495          // §J3.6, A325 threads excluded
+const PHI_BOLT = 0.75                     // §J3.6; FNV = A325 threads excluded
 const PHI_PLATE = 1.0, FY_PL = 248        // §J4.2 shear yielding, A36
 const PHI_WELD = 0.75, FEXX = 480         // §J2.4, E70XX
 
