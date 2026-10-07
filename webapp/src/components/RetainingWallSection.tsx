@@ -128,12 +128,16 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
           </g>
         )}
 
-        {/* soil in front of the toe — faint, because its passive resistance is
-            deliberately NOT counted in the sliding check */}
-        <rect x={x0 - 62} y={yBase - 24} width={62} height={yBot - yBase + 24}
+        {/* soil in front of the wall — over the toe up to the stem face and on
+            down past the toe to the base soffit (the base is drawn over it).
+            Faint, because its passive resistance is deliberately NOT counted
+            in the sliding check */}
+        <rect x={x0 - 62} y={yBase - 24} width={xStemL - x0 + 62} height={yBot - yBase + 24}
           fill={SOIL} opacity={0.45} />
-        <line x1={x0 - 62} y1={yBase - 24} x2={x0} y2={yBase - 24} stroke={FAINT} strokeWidth={1} />
-        <text x={x0 - 60} y={yBase - 14} fontSize={6.5} fill={FAINT}>passive — not counted</text>
+        <rect x={x0 - 62} y={yBase - 24} width={xStemL - x0 + 62} height={yBot - yBase + 24}
+          fill="url(#rw-soil)" opacity={0.45} />
+        <line x1={x0 - 62} y1={yBase - 24} x2={xStemL} y2={yBase - 24} stroke={FAINT} strokeWidth={1} />
+        <text x={x0 - 60} y={yBase - 28} fontSize={6.5} fill={FAINT}>passive — not counted</text>
 
         {/* ── the wall ────────────────────────────────────────────────────── */}
         <rect x={xStemL} y={yTop} width={xStemR - xStemL} height={yBase - yTop}
