@@ -65,3 +65,7 @@ A full render is ~15–17 min across four workers on a 4-core box. The master
 Everything generated (`cap/ svg/ key/ assets/ audio/ frames/ out/ reel.html`)
 is gitignored; only the sources and the fonts (Archivo and IBM Plex Mono, both
 OFL) are committed.
+
+The companion reel about the standalone calculators lives in
+[`calculators/`](calculators/README.md) and shares `lib.mjs`, `render.mjs`,
+`still.mjs` and the fonts with this one.
