@@ -44,6 +44,8 @@ import { nextTimberSize, lighterTimberSize, toStockSize, toGlulam, withinStockLe
 import { designPedestal, pedestalSide, type PedestalResult } from './pedestal'
 import { designWoodSlab, woodSlabTimberSizes, type WoodSlabResult, type WoodSlabInput } from './woodSlab'
 import type { TimberSizeQty } from './takeoff'
+import { designBraceMember, type BraceMemberDesign } from './steelBrace'
+import { designBraceEnd, braceEndSupported, braceEndFrameFor, type BraceEndDesign, type BraceEndFrame } from './braceConnection'
 import { designBasePlate, basePlateMoments, columnBaseWeld, type ColumnBaseWeld, adoptPlateThickness, ANCHOR_FU, ANCHOR_FY, type BasePlateResult, type BasePlateMomentCheck, type BaseCase } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
 import { optimizeFootingRebar, optimizeSlabRebar, applySlabMats } from './matRebarOptimize'
@@ -416,6 +418,18 @@ export interface SteelColumnScheduleRow {
   Fcr: number; Fe: number
   slendernessX: number; slendernessY: number
 }
+/** A steel brace: the member (§D2/§E3/§E7) and each end's gusset (HSS
+ *  slotted over it; Whitmore, block shear, UFM interfaces). */
+export interface SteelBraceScheduleRow {
+  id: string; shape: string; L: number
+  Fy: number; Fu: number                 // brace steel, MPa
+  Pu: number; Tu: number                 // envelope compression / tension, kN
+  member: BraceMemberDesign
+  ends: { node: string; frame: BraceEndFrame; design: BraceEndDesign }[]
+  ok: boolean
+  gov?: string
+}
+
 export interface BasePlateScheduleRow {
   node: string; shape: string
   Pu: number; Tu: number
@@ -504,6 +518,8 @@ export interface StructureDesign {
   woodBeams: WoodBeamScheduleRow[]
   woodColumns: WoodColumnScheduleRow[]
   basePlates: BasePlateScheduleRow[]
+  /** Steel braces with their gusset end connections — absent on older designs. */
+  steelBraces?: SteelBraceScheduleRow[]
   /** RC pedestals under steel / timber columns — absent on older designs. */
   pedestals?: PedestalScheduleRow[]
   /** The designed post base under every timber column on a pedestal. */
@@ -547,7 +563,7 @@ export function designOK(d: StructureDesign): boolean {
     && d.steelBeams.every((b) => b.ok) && d.steelColumns.every((c) => c.ok)
     && d.woodBeams.every((b) => b.ok) && d.woodColumns.every((c) => c.ok)
     && d.basePlates.every((p) => p.ok) && (d.pedestals ?? []).every((p) => p.ok)
-    && (d.postBases ?? []).every((p) => p.ok)
+    && (d.postBases ?? []).every((p) => p.ok) && (d.steelBraces ?? []).every((b) => b.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
     && d.slabs.every((s) => s.ok) && d.woodSlabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
     && d.stairs.every((s) => s.ok)
@@ -1460,6 +1476,7 @@ function designFromRuns(
   const columns: ColumnScheduleRow[] = []
   const steelBeams: SteelBeamScheduleRow[] = []
   const steelColumns: SteelColumnScheduleRow[] = []
+  const steelBraces: SteelBraceScheduleRow[] = []
   const woodBeams: WoodBeamScheduleRow[] = []
   const woodColumns: WoodColumnScheduleRow[] = []
   const unchecked: UncheckedMember[] = []
@@ -1553,6 +1570,36 @@ function designFromRuns(
           prestressed.push({ id: m.id, L, design, ok: design.ok })
         }
       }
+    } else if (role === 'brace') {
+      const shape = isSteel && sec.shape ? shapeByName(sec.shape) : undefined
+      if (!shape) {
+        unchecked.push({ id: m.id, role: 'brace', shape: sec.shape ?? sec.name,
+          reason: isSteel ? 'shape not found in the AISC library — brace not checked' : 'braces are designed in steel only — this brace is not checked' })
+        continue
+      }
+      let Pu = 0, Tu = 0, gov = ''
+      for (const run of runs) {
+        const mr = memberOf(run, m.id); if (!mr) continue
+        const c = Math.max(0, -Math.min(...mr.N)), t = Math.max(0, ...mr.N)
+        if (Math.max(c, t) > Math.max(Pu, Tu)) gov = run.name
+        Pu = Math.max(Pu, c); Tu = Math.max(Tu, t)
+      }
+      const na = model.nodes.find((n) => n.id === m.i)!, nb = model.nodes.find((n) => n.id === m.j)!
+      const L = Math.hypot(nb.x - na.x, nb.y - na.y, nb.z - na.z)
+      if (!braceEndSupported(shape)) {
+        unchecked.push({ id: m.id, role: 'brace', shape: shape.name,
+          reason: `${shape.family} brace: its end connection is designed for HSS and pipe braces slotted over a gusset — choose one, or detail this end` })
+        continue
+      }
+      const Fy = sec.steelFy ?? 248, Fu = sec.steelFu ?? 400
+      // the ends first, each asked for the effective net area the member's
+      // rupture needs (Tu/(0.75·Fu)); then the member on the worst end
+      const AeNeed = (Tu * 1000) / (0.75 * Fu)
+      const ends = [m.i, m.j].map((node) => ({ node, frame: braceEndFrameFor(model, m, node) }))
+        .map(({ node, frame }) => ({ node, frame, design: designBraceEnd(shape, Tu, Pu, frame, Fu, 248, 400, AeNeed)! }))
+      const weak = ends.reduce((a, b) => (b.design.U * b.design.An < a.design.U * a.design.An ? b : a))
+      const member = designBraceMember(shape, L, Pu, Tu, Fy, Fu, { An: weak.design.An, U: weak.design.U })
+      steelBraces.push({ id: m.id, shape: shape.name, L, Fy, Fu, Pu, Tu, member, ends, gov, ok: member.ok && ends.every((e) => e.design.ok) })
     } else if (role === 'column') {
       if (isSteel) {
         let best: SteelColumnScheduleRow | null = null, bestRatio = -1, gov = '', Tu = 0
@@ -2112,7 +2159,7 @@ function designFromRuns(
     govName: runs[govIdx].name,
     system: opts.seismicSystem ?? 'gravity',
     cases: runs.map((r) => r.name),
-    beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates, pedestals, postBases,
+    beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates, pedestals, postBases, steelBraces,
     joints: [] as SteelJoint[],
     beamJoints: [] as BeamBeamJoint[],
     slabs, woodSlabs, walls, stairs, footings, combined,
@@ -2991,6 +3038,7 @@ function buildUtilMap(
   for (const c of design.columns)      if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.util))
   for (const b of design.steelBeams)   if (!b.ok) bump(memSecId.get(b.id), Math.max(2, b.utilM, b.utilV, b.deflLim > 0 ? b.defl / b.deflLim : 2))
   for (const c of design.steelColumns) if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.ratio))
+  for (const b of design.steelBraces ?? []) if (!b.ok) bump(memSecId.get(b.id), Math.max(2, b.member.util))
   for (const b of design.woodBeams)    if (!b.ok) bump(memSecId.get(b.id), Math.max(2, b.utilM, b.utilV))
   for (const c of design.woodColumns)  if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.ratio))
   return out
