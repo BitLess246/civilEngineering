@@ -165,7 +165,7 @@ export default function BeamDesign() {
   // beam. The callout is composed by the schedule's own `beamSectionNotes`, so
   // the calculator and the schedule cannot word the same section differently.
   const sectionNotes = useMemo(() => (r ? [
-    `d = ${Math.round(r.d)} TO THE ${hogging ? 'BOTTOM' : 'TOP'} FACE`,
+    `d = ${Math.round(r.d)} mm TO THE ${hogging ? 'BOTTOM' : 'TOP'} FACE`,
     ...beamSectionNotes(
       { x: 0, label: '', hogging, design: {
         bars: r.bars, sAdopt: r.sAdopt, sHinge: r.sHinge, legs: fd.legs, layers: r.layers,

@@ -80,7 +80,7 @@ export function calcBeamSection(i: CalcBeamSectionInput): SectionDetailDrawing {
     outline: { u0: -i.b / 2000, v0: 0, u1: i.b / 2000, v1: hM },
     cages: [cage], cut, cover: i.cover,
     notes: [
-      ...(i.d ? [`d = ${Math.round(i.d)} TO THE ${i.hogging ? 'BOTTOM' : 'TOP'} FACE`] : []),
+      ...(i.d ? [`d = ${Math.round(i.d)} mm TO THE ${i.hogging ? 'BOTTOM' : 'TOP'} FACE`] : []),
       ...(i.notes ?? []),
     ],
   })
