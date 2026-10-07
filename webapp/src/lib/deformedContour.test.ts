@@ -230,6 +230,6 @@ describe('the page wires it the way the analysis ran', () => {
   it('replaces the solid model while it is on, rather than drawing over it', () => {
     expect(page).toContain('{!deformActive && model.members.map((m) => {')
     expect(page).toContain('{!deformActive && model.plates.map((p) => {')
-    expect(page).toMatch(/<DeformedShape3D geo=\{deformInfo\.geo\} bands=\{bands\} \/>/)
+    expect(page).toMatch(/<DeformedShape3D geo=\{deformInfo\.geo\} bands=\{bands\} palette=\{palette\} \/>/)
   })
 })

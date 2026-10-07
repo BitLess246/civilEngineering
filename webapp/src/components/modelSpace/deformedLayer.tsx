@@ -12,8 +12,9 @@ import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import type { DeformedGeometry } from '../../lib/deformedContour'
 import { contourMaterial } from '../../lib/contourMaterial'
+import type { RampPalette } from '../../lib/stressScale'
 
-export function DeformedShape3D({ geo, bands }: { geo: DeformedGeometry; bands: number }) {
+export function DeformedShape3D({ geo, bands, palette }: { geo: DeformedGeometry; bands: number; palette?: RampPalette }) {
   const g = useMemo(() => {
     const b = new THREE.BufferGeometry()
     b.setAttribute('position', new THREE.BufferAttribute(geo.position, 3))
@@ -23,7 +24,7 @@ export function DeformedShape3D({ geo, bands }: { geo: DeformedGeometry; bands: 
     return b
   }, [geo])
   useEffect(() => () => { g.dispose() }, [g])
-  const mat = useMemo(() => contourMaterial({ signed: geo.domain.signed, bands }), [geo.domain.signed, bands])
+  const mat = useMemo(() => contourMaterial({ signed: geo.domain.signed, bands, palette }), [geo.domain.signed, bands, palette])
   useEffect(() => () => { mat.dispose() }, [mat])
   return <mesh geometry={g} material={mat} renderOrder={2} />
 }

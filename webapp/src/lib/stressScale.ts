@@ -180,7 +180,34 @@ const DIVERGING: readonly RGB[] = [
  * than JavaScript — the contour shader takes these as a uniform so the picture
  * and the legend are the SAME nine numbers rather than two transcriptions.
  */
-export const rampStops = (signed: boolean): readonly RGB[] => (signed ? DIVERGING : VIRIDIS)
+/**
+ * The FEA spectrum — dark blue → blue → cyan → green → yellow → orange → red →
+ * dark red, sampled at the same nine points ("jet").
+ *
+ * This is the palette every FEA post-processor engineers learn on (ANSYS,
+ * SolidWorks Simulation, ETABS shell plots), so it is the DEFAULT: a reader
+ * finds the hot spot by looking for red without consulting the legend. It is
+ * used for signed and unsigned fields alike, as those programs do — a signed
+ * domain is symmetric about zero, so zero lands on the green middle.
+ *
+ * The caveats under VIRIDIS above are real (it is not perceptually uniform
+ * and it fails red–green colour deficiency), which is why 'perceptual' stays
+ * one click away in the Display tab rather than being deleted.
+ */
+const JET: readonly RGB[] = [
+  [0, 0, 143], [0, 0, 255], [0, 128, 255], [0, 255, 255], [128, 255, 128],
+  [255, 255, 0], [255, 128, 0], [255, 0, 0], [128, 0, 0],
+]
+
+/** Which ramp family a contour draws in. */
+export type RampPalette = 'fea' | 'perceptual'
+export const DEFAULT_PALETTE: RampPalette = 'fea'
+
+const stopsFor = (signed: boolean, palette: RampPalette): readonly RGB[] =>
+  palette === 'fea' ? JET : signed ? DIVERGING : VIRIDIS
+
+export const rampStops = (signed: boolean, palette: RampPalette = DEFAULT_PALETTE): readonly RGB[] =>
+  stopsFor(signed, palette)
 
 /**
  * How many discrete colour bands a contour is drawn in. 0 = smooth.
@@ -216,14 +243,14 @@ export function bandEdges(d: Domain, bands: number): number[] {
 }
 
 /** `rgb(r,g,b)` for a normalised position on the ramp this domain calls for. */
-export function stressColor(t: number, signed: boolean): string {
-  const [r, g, b] = sample(signed ? DIVERGING : VIRIDIS, t)
+export function stressColor(t: number, signed: boolean, palette: RampPalette = DEFAULT_PALETTE): string {
+  const [r, g, b] = sample(stopsFor(signed, palette), t)
   return `rgb(${Math.round(r)},${Math.round(g)},${Math.round(b)})`
 }
 
 /** The same colour as 0–1 channel floats, which is what three.js wants. */
-export function stressColorRGB(t: number, signed: boolean): RGB {
-  const [r, g, b] = sample(signed ? DIVERGING : VIRIDIS, t)
+export function stressColorRGB(t: number, signed: boolean, palette: RampPalette = DEFAULT_PALETTE): RGB {
+  const [r, g, b] = sample(stopsFor(signed, palette), t)
   return [r / 255, g / 255, b / 255]
 }
 
@@ -235,12 +262,12 @@ export function stressColorRGB(t: number, signed: boolean): RGB {
  * the picture rather than a decorative gradient beside it. A legend that
  * cannot be matched to a region is not a legend.
  */
-export function rampSwatches(n: number, signed: boolean, bands = 0): string[] {
+export function rampSwatches(n: number, signed: boolean, bands = 0, palette: RampPalette = DEFAULT_PALETTE): string[] {
   if (bands > 0) {
-    return Array.from({ length: bands }, (_, i) => stressColor(bandCenter((i + 0.5) / bands, bands), signed))
+    return Array.from({ length: bands }, (_, i) => stressColor(bandCenter((i + 0.5) / bands, bands), signed, palette))
   }
-  if (n < 2) return [stressColor(0.5, signed)]
-  return Array.from({ length: n }, (_, i) => stressColor(i / (n - 1), signed))
+  if (n < 2) return [stressColor(0.5, signed, palette)]
+  return Array.from({ length: n }, (_, i) => stressColor(i / (n - 1), signed, palette))
 }
 
 /**

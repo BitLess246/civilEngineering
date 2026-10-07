@@ -98,7 +98,7 @@ import { TimeHistoryPanel } from '../components/TimeHistoryPanel'
 import { ShellContourPanel } from '../components/ShellContourPanel'
 import { ShellStress3D } from '../components/modelSpace/shellStress'
 import { contourData } from '../lib/shellContour'
-import { STRESS_KEYS, rampSwatches, rampTicks, formatStress, isMembrane, unitFor, labelFor, DEFAULT_BANDS, type StressKey } from '../lib/stressScale'
+import { STRESS_KEYS, rampSwatches, rampTicks, formatStress, isMembrane, unitFor, labelFor, DEFAULT_BANDS, DEFAULT_PALETTE, type StressKey, type RampPalette } from '../lib/stressScale'
 import { parseCase, describeCase, caseNodePeak, caseLoads, caseBaseShear } from '../lib/lateralCases'
 import { MemberStress3D } from '../components/modelSpace/memberStressLayer'
 import { stressSection, type StressSection } from '../engine/memberStress'
@@ -346,6 +346,16 @@ export default function ModelSpace() {
   // reader comparing a slab band against a beam band would be comparing two
   // different quantisations of the same ramp.
   const [bands, setBands] = useState(DEFAULT_BANDS)
+  // Contour palette — the FEA spectrum by default; the perceptual pair
+  // (viridis / diverging) for colour-deficient readers and greyscale print.
+  // Remembered per browser; a blocked storage just falls back to the default.
+  const [palette, setPaletteState] = useState<RampPalette>(() => {
+    try { return localStorage.getItem('contour-palette') === 'perceptual' ? 'perceptual' : DEFAULT_PALETTE } catch { return DEFAULT_PALETTE }
+  })
+  const setPalette = (p: RampPalette) => {
+    setPaletteState(p)
+    try { localStorage.setItem('contour-palette', p) } catch { /* storage blocked — session only */ }
+  }
   const [memStressKey, setMemStressKey] = useState<MemberStressKey>('sigma')
   // Averaged at joints by default: exact member by member, the field breaks at
   // every joint (a beam's σ and a column's σ are different components), which
@@ -2383,16 +2393,16 @@ export default function ModelSpace() {
                 {deformInfo && (
                   <>
                     <UndeformedGhost segments={deformInfo.ghost} />
-                    <DeformedShape3D geo={deformInfo.geo} bands={bands} />
+                    <DeformedShape3D geo={deformInfo.geo} bands={bands} palette={palette} />
                   </>
                 )}
                 {!deformActive && showStress && shellStress && (
                   <ShellStress3D nodes={shellStress.nodes} elems={shellStress.elems}
-                    stresses={shellStress.stresses} contourKey={stressKey} bands={bands} />
+                    stresses={shellStress.stresses} contourKey={stressKey} bands={bands} palette={palette} />
                 )}
                 {!deformActive && memStressInfo && (
                   <MemberStress3D members={memStressInfo.members}
-                    contourKey={memStressKey} domain={memStressInfo.domain} bands={bands}
+                    contourKey={memStressKey} domain={memStressInfo.domain} bands={bands} palette={palette}
                     blendJoints={memBlend} />
                 )}
                 {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} kinds={cageKinds} />}
@@ -4065,7 +4075,7 @@ export default function ModelSpace() {
               )}
               {shellOut?.ok && (
                 <ShellContourPanel nodes={shellOut.nodes} elems={shellOut.elems} stresses={shellOut.stresses}
-                  caseName={shellOut.caseName} source={shellOut.source} />
+                  caseName={shellOut.caseName} source={shellOut.source} palette={palette} />
               )}
               {slabFEFail && (
                 <div className="col-span-full rounded-xl border border-warn-line bg-warn-tint p-3 text-[12px] leading-relaxed text-warn">
@@ -5094,6 +5104,24 @@ export default function ModelSpace() {
                         ? 'Smooth — a continuous blend, with no iso-boundary to read a value against.'
                         : `${bands} bands — every boundary is an iso-line, so a region on the model can be matched to a swatch on the bar.`}
                     </p>
+                    <p className="mt-2 text-[11px] font-medium text-ink">Colours</p>
+                    <div className="mt-1 flex gap-1">
+                      {([['fea', 'FEA spectrum'], ['perceptual', 'Colour-blind safe']] as const).map(([p, label]) => (
+                        <button key={p} type="button" onClick={() => setPalette(p)}
+                          aria-pressed={palette === p}
+                          className={`flex-1 rounded border px-2 py-1 text-[11px] font-medium ${
+                            palette === p
+                              ? 'border-brand bg-brand text-on-solid'
+                              : 'border-field-line bg-field text-ink hover:border-brand-hover'}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[11px] leading-snug text-muted">
+                      {palette === 'fea'
+                        ? 'Blue → cyan → green → yellow → red, as FEA programs draw it: the peak reads red at a glance.'
+                        : 'Viridis for magnitudes, blue ↔ red for signed values — readable under red–green deficiency and in greyscale print.'}
+                    </p>
                   </div>
                 )}
                 {/* DEFORMED SHAPE — displacement contour. Continuous through
@@ -5119,7 +5147,7 @@ export default function ModelSpace() {
                           </p>
                         ) : (<>
                           <div className="mt-1.5 flex h-3 overflow-hidden rounded-sm">
-                            {rampSwatches(24, d.signed, bands).map((c, i) => (
+                            {rampSwatches(24, d.signed, bands, palette).map((c, i) => (
                               <div key={i} className="flex-1" style={{ background: c }} />
                             ))}
                           </div>
@@ -5193,7 +5221,7 @@ export default function ModelSpace() {
                           {/* The colour bar, low → high, labelled at the
                               magnitude of THIS field. */}
                           <div className="mt-1.5 flex h-3 overflow-hidden rounded-sm">
-                            {rampSwatches(24, domain.signed, bands).map((c, i) => (
+                            {rampSwatches(24, domain.signed, bands, palette).map((c, i) => (
                               <div key={i} className="flex-1" style={{ background: c }} />
                             ))}
                           </div>
@@ -5273,7 +5301,7 @@ export default function ModelSpace() {
                           </p>
                         ) : (<>
                           <div className="mt-1.5 flex h-3 overflow-hidden rounded-sm">
-                            {rampSwatches(24, domain.signed, bands).map((c, i) => (
+                            {rampSwatches(24, domain.signed, bands, palette).map((c, i) => (
                               <div key={i} className="flex-1" style={{ background: c }} />
                             ))}
                           </div>
