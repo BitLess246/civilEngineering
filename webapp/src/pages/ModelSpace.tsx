@@ -78,6 +78,8 @@ import { connectionRowSolution } from '../lib/connectionSolution'
 import { ModelConnectionMechanics } from '../components/ModelConnectionMechanics'
 import { BasePlateDetail2D } from '../components/BasePlateDetail2D'
 import { basePlateRowSolution, basePlateContext } from '../lib/basePlateSolution'
+import { BraceGussetDetail2D } from '../components/BraceGussetDetail2D'
+import { braceRowSolution } from '../lib/braceSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { ConstructionSchedule } from '../components/ConstructionSchedule'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
@@ -6440,6 +6442,72 @@ export default function ModelSpace() {
               </table>
               <p className="mt-1 text-[11px] text-muted">
                 §E3 axial buckling (governing KL/r, K = 1.0), §H1-1 combined axial + flexure. Ratio ≤ 100% passes. Click a row to expand the worked solution.
+              </p>
+            </div>
+          )}
+
+          {/* Steel brace schedule (full width) */}
+          {(design.steelBraces ?? []).length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel brace schedule — AISC Ch. D/E + gusset ends (UFM)<SchedChip items={design.steelBraces ?? []} ok={(b) => b.ok} /></h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
+                    <th className="py-1 pr-2 font-semibold">Brace</th>
+                    <th className="py-1 pr-2 font-semibold">Shape</th>
+                    <th className="py-1 pr-2 text-right font-semibold">L (m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Tu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">KL/r</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Member</th>
+                    <th className="py-1 pr-2 font-semibold">End gussets</th>
+                    <th className="py-1 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(design.steelBraces ?? []).flatMap((b) => {
+                    const key = `br:${b.id}`
+                    const open = expanded === key || reportOpen
+                    return [(
+                    <tr key={b.id} onClick={() => setExpanded(expanded === key ? null : key)}
+                      className={`sched-row cursor-pointer border-t border-hairline-2 hover:bg-brand-tint/40 ${b.ok ? '' : 'bg-fail-tint text-fail'}`}>
+                      <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {b.id}</td>
+                      <td className="py-1 pr-2">{b.shape}</td>
+                      <td className="py-1 pr-2 text-right">{b.L.toFixed(2)}</td>
+                      <td className="py-1 pr-2 text-right">{b.Pu > 0 ? f1(b.Pu) : '—'}</td>
+                      <td className="py-1 pr-2 text-right">{b.Tu > 0 ? f1(b.Tu) : '—'}</td>
+                      <td className="py-1 pr-2 text-right">{b.member.KLr.toFixed(0)}</td>
+                      <td className="py-1 pr-2 text-right">{(b.member.util * 100).toFixed(0)}% <span className="text-muted">({b.member.governs})</span></td>
+                      <td className="py-1 pr-2">
+                        {b.ends.map((e) => (
+                          <div key={e.node} className={e.design.ok ? '' : 'text-fail'}>
+                            {e.node}: PL {e.design.tg} · 4×{e.design.weld.w}×{e.design.weld.lw} · {Math.round(e.design.ufm.Lh)}{e.design.ufm.Lv > 0 ? `×${Math.round(e.design.ufm.Lv)}` : ''} · {(e.design.util * 100).toFixed(0)}% <span className="text-muted">({e.design.governs})</span>
+                          </div>
+                        ))}
+                      </td>
+                      <td className="py-1">{b.ok ? '✓ OK' : '✗ check'}</td>
+                    </tr>
+                    ),
+                    open && (
+                      <tr key={`${key}:detail`}>
+                        <td colSpan={9} className="bg-sheet-2/60 px-2 pb-2">
+                          <div className="grid w-full grid-cols-1 gap-3">
+                            {wantDraw && <BraceGussetDetail2D row={b} />}
+                            {wantSol && <WorkedSolution steps={braceRowSolution(b)} title={`Brace ${b.id} — worked solution`} />}
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                    ]
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-muted">
+                Member: §E3 flexural buckling (pin-ended, K = 1, least r) with §E7 effective area for slender walls;
+                §D2 yielding and rupture at the slot (An = Ag − 2t(tg + 3), U from Table D3.1 for the weld length the end uses);
+                KL/r ≤ 200, L/r ≤ 300. Ends: the HSS slotted over a gusset, four fillets; the Whitmore section in the plate
+                (yielding, §J4.4 buckling at K = 0.65), §J4.3 block shear; gusset-to-frame forces by the Uniform Force Method
+                with interface fillets for 1.25× the resultant. Click a row for the gusset details and the worked solution.
               </p>
             </div>
           )}

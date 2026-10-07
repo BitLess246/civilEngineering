@@ -59,6 +59,8 @@ import { stressSection, sectionResultants } from './memberStress'
 import { influenceLines, ilAt } from './influenceTruss'
 import { buildBeam, effectPoints, ilTotalArea } from './influenceBeam'
 import type { RectSection } from './model'
+import { designBraceEnd } from './braceConnection'
+import { designBraceMember } from './steelBrace'
 
 export interface ValidationCase {
   id: string
@@ -684,6 +686,24 @@ const basePlateLargeM = (() => {
   return { manual: (q * Y - 500000) / 1000, software: r.Tu }
 })()
 
+const gussetWhitmore = (() => {
+  // HSS127x127x6.4 at 45° into a corner, beam face eb 155, column flange ec
+  // 153.5: the brace end sits where both HSS corners clear the faces by 25,
+  // sEnd = (155 + 25 + 63.5·c)/c; the Whitmore section there leaves the plate
+  // at the two faces, so the width that counts is 2·sEnd − (eb + ec)/c, c = cos45°.
+  const e = designBraceEnd(shapeByName('HSS127x127x6.4')!, 400, 300, { kind: 'corner', eb: 155, ec: 153.5, theta: Math.PI / 4 }, 450)!
+  const c = Math.SQRT1_2, sEnd = (155 + 25 + 63.5 * c) / c
+  return { manual: 2 * sEnd - (155 + 153.5) / c, software: e.whitmore.Lw }
+})()
+
+const braceCompression = (() => {
+  // HSS127x127x6.4 (A 2 770, r 49), L 5 m, Fy 345: KL/r = 102.04 ≤ 4.71√(E/Fy),
+  // Fe = π²E/(KL/r)², Fcr = 0.658^(Fy/Fe)·Fy, φPn = 0.9·Fcr·Ag (walls nonslender)
+  const r = designBraceMember(shapeByName('HSS127x127x6.4')!, 5, 300, 0, 345, 427, { An: 2770, U: 1 })
+  const Fe = (Math.PI ** 2 * 200000) / (5000 / 49) ** 2
+  return { manual: (0.9 * 0.658 ** (345 / Fe) * 345 * 2770) / 1000, software: r.compression.phiPn }
+})()
+
 const pryingT0 = (() => {
   // Minimum fitting thickness that eliminates prying (AISC Part 9):
   // t₀ = √(4·φBn·b′/(φf·Fy·p)) with φBn = 60 kN, b′ = 45 − 20/2 = 35 mm,
@@ -1204,6 +1224,16 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'baseplate-moment-rods', category: 'Connections', title: 'Base plate, large moment — rod tension',
     reference: 'AISC Design Guide 1 (2nd ed.) §3.4', formula: 'q·Y·(f + N/2 − Y/2) = Pu(e + f);  Tu = q·Y − Pu',
     manual: basePlateLargeM.manual, software: basePlateLargeM.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'brace-compression-e3', category: 'Steel', title: 'HSS brace — flexural buckling strength',
+    reference: 'AISC 360-16 §E3, Eq. E3-2/E3-4', formula: 'φPn = 0.9·0.658^(Fy/Fe)·Fy·Ag,  Fe = π²E/(KL/r)²',
+    manual: braceCompression.manual, software: braceCompression.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'gusset-whitmore-in-plate', category: 'Connections', title: 'Corner gusset — Whitmore width inside the plate',
+    reference: 'AISC Manual Part 9 (Whitmore section) / §J4.1', formula: 'Lw = 2·sEnd − (eb + ec)/cos45°  (of H + 2·lw·tan30°)',
+    manual: gussetWhitmore.manual, software: gussetWhitmore.software, unit: 'mm', tol: 1e-9,
   },
   {
     id: 'prying-t0', category: 'Connections', title: 'Prying — thickness eliminating prying',

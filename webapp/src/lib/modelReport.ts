@@ -17,6 +17,7 @@ import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRow
   woodBeamRowSolution, woodColumnRowSolution, woodSlabRowSolution } from './modelSpaceSolutions'
 import { connectionRowSolution } from './connectionSolution'
 import { basePlateRowSolution, basePlateContext } from './basePlateSolution'
+import { braceRowSolution } from './braceSolution'
 import { buildPrestressedSolution } from './prestressedSolution'
 import type { SolutionStep, SolutionLine } from './solution'
 import { estimateTakeoff, barKgPerM, type TakeoffResult } from '../engine/takeoff'
@@ -247,6 +248,11 @@ export function buildModelReport(
     const w = worst(design.woodColumns, (c) => c.ratio)!
     checks.push({ name: 'Timber columns (NDS §3.9)', detail: `${design.woodColumns.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.woodColumns.every((c) => c.ok), member: w.row.id, loc: memberLoc(w.row.id) })
   }
+  const braces = design.steelBraces ?? []
+  if (braces.length) {
+    const w = worst(braces, (b) => Math.max(b.member.util, ...b.ends.map((e) => e.design.util)))!
+    checks.push({ name: 'Steel braces + gussets (§D2/§E3, UFM)', detail: `${braces.length} braces · governing ${w.row.id}`, ratio: w.r, ok: braces.every((b) => b.ok), member: w.row.id, loc: memberLoc(w.row.id) })
+  }
   if (design.basePlates.length) {
     const w = worst(design.basePlates, (p) => p.design.bearingUtil)!
     checks.push({ name: 'Base plates', detail: `${design.basePlates.length} plates · governing ${w.row.node}`, ratio: w.r, ok: design.basePlates.every((p) => p.ok), member: w.row.node })
@@ -446,6 +452,14 @@ export function buildModelReport(
     rows: design.woodColumns.map((c) => [c.id, `${f0(c.b)}×${f0(c.d)}`, `${c.species || '—'} (${c.kind})`, f2(c.L),
       f1(c.Pu), `${f2(c.fc)}/${f2(c.FcPrime)}`, f2(c.CP), f1(c.Mu), f2(c.ratio), c.ok ? 'PASS' : 'FAIL']),
   })
+  if (braces.length) tables.push({
+    title: 'Steel brace schedule',
+    head: ['Brace', 'Shape', 'L (m)', 'Pu (kN)', 'Tu (kN)', 'KL/r', 'Member', 'End gussets', 'Status'],
+    right: [2, 3, 4, 5, 6],
+    rows: braces.map((b) => [b.id, b.shape, f2(b.L), f1(b.Pu), f1(b.Tu), f0(b.member.KLr), f2(b.member.util),
+      b.ends.map((e) => `${e.node}: PL ${e.design.tg} · 4×${e.design.weld.w}×${e.design.weld.lw} · ${f2(e.design.util)}`).join('; '),
+      b.ok ? 'PASS' : 'FAIL']),
+  })
   if (design.basePlates.length) tables.push({
     title: 'Base plate schedule',
     head: ['Node', 'Shape', 'Pu (kN)', 'Plate N × B × t (mm)', 'Bearing util', 'Status'],
@@ -632,6 +646,14 @@ export function buildModelReport(
     }))),
   ]
   if (connItems.length) groups.push({ title: 'Steel connections', items: connItems })
+  if (braces.length) groups.push({
+    title: 'Steel braces and gussets',
+    items: braces.map((b) => ({
+      title: `Brace ${b.id}`,
+      sub: `${b.shape}, ${f2(b.L)} m — gussets ${b.ends.map((e) => `PL ${e.design.tg} at ${e.node}`).join(', ')}`,
+      steps: braceRowSolution(b),
+    })),
+  })
   if (design.basePlates.length && model) groups.push({
     title: 'Column base plates',
     items: design.basePlates.map((p) => {

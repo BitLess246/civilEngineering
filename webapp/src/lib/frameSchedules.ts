@@ -69,9 +69,11 @@ function pedestalTable(design: StructureDesign, material: 'steel' | 'wood'): Sch
  *  end (`steelMarks`), camber — and the connection-type schedule those marks
  *  point at. */
 export function steelScheduleDrawings(design: StructureDesign, model?: StructuralModel): { key: string; title: string; drawing: Drawing }[] {
-  if (!design.steelBeams.length && !design.steelColumns.length) return []
+  const braces = design.steelBraces ?? []
+  if (!design.steelBeams.length && !design.steelColumns.length && !braces.length) return []
   const members = [
     ...design.steelColumns.map((c) => ({ shape: c.shape, role: 'column', L: c.L, util: c.ratio, ok: c.ok })),
+    ...braces.map((b) => ({ shape: b.shape, role: 'brace', L: b.L, util: b.member.util, ok: b.member.ok })),
     ...design.steelBeams.map((b) => ({ shape: b.shape, role: b.role, L: b.L, util: Math.max(b.utilM, b.utilV), ok: b.ok })),
   ]
   const memberRows = group(members, (m) => `${m.role}|${m.shape}`).map((g) => {
@@ -109,6 +111,16 @@ export function steelScheduleDrawings(design: StructureDesign, model?: Structura
     rows: conns.map(({ node, c, bb }) => [node, c.beamId, markAt(marks, c.beamId, node), connType(c, bb), `${c.bolts.n}×M${c.bolts.dia} A325`, `${c.tab.t}×${f0(c.tab.hMm)}`, weldOf(c), f1(c.Vu), c.pinned ? '—' : f1(c.Mu), status(c.ok)]),
     failRows: conns.flatMap((x, i) => (x.c.ok ? [] : [i])),
     note: 'Each end is built as analysed: a moment connection unless the end is Simple (a pin, released in the analysis). Plates Fy 248 MPa; bolts single shear.',
+  } : null
+
+  const braceTable: ScheduleTable | null = braces.length ? {
+    heading: 'BRACE & GUSSET SCHEDULE',
+    columns: [{ head: 'BRACE', w: 8 }, { head: 'SHAPE', w: 15 }, { head: 'Pu kN', w: 8, align: 'end' }, { head: 'Tu kN', w: 8, align: 'end' }, { head: 'END', w: 7 }, { head: 'GUSSET', w: 7 }, { head: 'Lh×Lv mm', w: 10 }, { head: 'BRACE WELD', w: 12 }, { head: 'TO FRAME', w: 12 }, { head: 'UTIL', w: 6, align: 'end' }, { head: 'STATUS', w: 8 }],
+    rows: braces.flatMap((b) => b.ends.map((e, k) => [k === 0 ? b.id : '', k === 0 ? b.shape : '', k === 0 ? f1(b.Pu) : '', k === 0 ? f1(b.Tu) : '', e.node,
+      `PL ${e.design.tg}`, `${f0(e.design.ufm.Lh)}${e.design.ufm.Lv > 0 ? `×${f0(e.design.ufm.Lv)}` : ''}`, `4×${e.design.weld.w}×${e.design.weld.lw}`,
+      `${e.design.ufm.weldBeam}${e.design.ufm.Lv > 0 ? ` / ${e.design.ufm.weldColumn}` : ''} BS`, pct(Math.max(e.design.util, b.member.util)), status(b.ok)])),
+    failRows: braces.flatMap((b) => b.ends.map(() => b.ok)).flatMap((ok, i) => (ok ? [] : [i])),
+    note: 'HSS slotted (tg + 3) over the gusset, four E70 fillets of the length shown. Gusset A36 to the beam / column (TO FRAME: beam / column fillet legs, both sides) by the Uniform Force Method, fillets for 1.25× the interface resultant. AISC 360-16 Ch. D, E, J.',
   } : null
 
   const memberTables: ScheduleTable[] = []
@@ -150,7 +162,11 @@ export function steelScheduleDrawings(design: StructureDesign, model?: Structura
   })
 
   const out = [{ key: 'steel-schedules', title: 'Steel member, base-plate and pedestal schedules', drawing: buildScheduleSheet(tables, { title: 'STEEL MEMBER, BASE-PLATE & PEDESTAL SCHEDULES', sheetRef: 'S-07' }) }]
-  if (connTable) out.push({ key: 'steel-connection-schedule', title: 'Steel connection schedule', drawing: buildScheduleSheet([connTable], { title: 'STEEL CONNECTION SCHEDULE', detailNo: '2', sheetRef: 'S-07' }) })
+  if (connTable || braceTable) {
+    const t = [connTable, braceTable].filter((x): x is ScheduleTable => x != null)
+    out.push({ key: 'steel-connection-schedule', title: braceTable ? 'Steel connection, brace and gusset schedules' : 'Steel connection schedule',
+      drawing: buildScheduleSheet(t, { title: braceTable ? 'STEEL CONNECTION, BRACE & GUSSET SCHEDULES' : 'STEEL CONNECTION SCHEDULE', detailNo: '2', sheetRef: 'S-07' }) })
+  }
   if (memberTables.length) out.push({ key: 'steel-member-marks', title: 'Steel beam, column and connection-type schedules', drawing: buildScheduleSheet(memberTables, { title: 'STEEL BEAM, COLUMN & CONNECTION SCHEDULES', detailNo: '3', sheetRef: 'S-07' }) })
   return out
 }

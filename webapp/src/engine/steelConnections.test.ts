@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { designStructure } from './pipeline'
+import { buildBraceGussetDetail } from './braceGussetDetail'
+import { braceRowSolution } from '../lib/braceSolution'
 import { designSteelJoints, designBolts, designBoltedTab, copedWebBlockShear, tabBearing, tabHeightLimit, FNV_A325, phiBoltShear } from './steelConnections'
 import { shapeByName } from './aiscSections'
 import type { BoltPos } from './steelDesign'
@@ -432,5 +434,57 @@ describe('the shear tab fits the beam web between its flanges', () => {
     const r = designBoltedTab(900, 6, undefined, undefined, undefined, 160)
     expect(r.fits).toBe(false)
     expect(r.tab.hMm).toBeLessThanOrEqual(160)
+  })
+})
+
+describe('steel braces: the member and both gusset ends, in the design', () => {
+  function bracedModel(shape: string) {
+    const m = makeModel()
+    // a diagonal in the X-direction bay, base to beam-column joint
+    const base = m.nodes.find((n) => n.y === 0 && n.x === 0 && n.z === 0)!
+    const top = m.nodes.find((n) => n.y > 0 && n.x > 0 && n.z === 0)!
+    m.sections.push({ ...steelSection, id: 'BR', name: shape, shape })
+    m.members.push({ id: 'br1', i: base.id, j: top.id, role: 'brace', section: 'BR' })
+    m.loads = [...m.loads, { kind: 'node', node: top.id, Fx: -60, cat: 'D' }]
+    return m
+  }
+  it('an HSS brace is designed, its ends resolved: base plate at the support, corner at the joint', () => {
+    const d = designStructure(bracedModel('HSS127x127x6.4'), soil)!
+    const b = d.steelBraces!.find((x) => x.id === 'br1')!
+    expect(b).toBeTruthy()
+    expect(b.Pu + b.Tu).toBeGreaterThan(0)
+    expect(b.ends.map((e) => e.design.kind).sort()).toEqual(['base', 'corner'])
+    const corner = b.ends.find((e) => e.design.kind === 'corner')!.design
+    expect(corner.ufm.Hc).toBeGreaterThan(0)
+    // the member's rupture uses the end that gives the least effective net area
+    const minAe = Math.min(...b.ends.map((e) => e.design.U * e.design.An))
+    expect(b.member.tension.Ae).toBeCloseTo(minAe, 9)
+    expect(b.ok).toBe(b.member.ok && b.ends.every((e) => e.design.ok))
+  })
+  it('each end is drawn and solved from the design: the gusset sheet carries its numbers, the solution its steps', () => {
+    const d = designStructure(bracedModel('HSS127x127x6.4'), soil)!
+    const b = d.steelBraces!.find((x) => x.id === 'br1')!
+    const top = b.ends.find((e) => e.design.kind === 'corner')!, bot = b.ends.find((e) => e.design.kind === 'base')!
+    expect(top.frame.upper).toBe(true)                     // the brace runs down from the joint
+    expect(bot.frame.upper).toBe(false)
+    for (const e of b.ends) {
+      const dr = buildBraceGussetDetail({ end: e.design, frame: e.frame, braceShape: b.shape, node: e.node })
+      const texts = dr.primitives.flatMap((p) => (p.kind === 'text' ? [p.text] : []))
+      expect(texts.some((t) => t.includes(`GUSSET PL ${e.design.tg}`) && t.includes(`${Math.round(e.design.ufm.Lh)}`))).toBe(true)
+      expect(texts).toContain(`4 × ${e.design.weld.w} FILLET × ${e.design.weld.lw}`)
+      expect(texts.some((t) => t.startsWith(`WHITMORE ${Math.round(e.design.whitmore.Lw)}`))).toBe(true)
+      expect(texts.some((t) => t.includes(`${b.shape} BRACE`))).toBe(true)
+      for (const p of dr.primitives) for (const v of Object.values(p)) if (typeof v === 'number') expect(Number.isFinite(v)).toBe(true)
+      expect(dr.bounds.maxX).toBeGreaterThan(dr.bounds.minX)
+    }
+    const steps = braceRowSolution(b)
+    expect(steps.map((s) => s.title)).toEqual(['Design forces', 'Compression (§E3, §E7)', 'Tension (§D2, Table D3.1)',
+      ...b.ends.map((e) => expect.stringContaining(`End at ${e.node}`)), 'Verdict'])
+    expect(JSON.stringify(steps)).toContain(b.member.compression.phiPn.toFixed(1))
+  })
+  it('a W brace is listed as unchecked (its end detail is not designed) — never silently passed', () => {
+    const d = designStructure(bracedModel('W200x46.1'), soil)!
+    expect(d.steelBraces!.some((x) => x.id === 'br1')).toBe(false)
+    expect(d.unchecked.some((u) => u.id === 'br1' && u.role === 'brace')).toBe(true)
   })
 })
