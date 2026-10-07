@@ -20,6 +20,7 @@
 
 import { DrawingFrame } from './DrawingFrame'
 import { DimSide, Tick } from './dims'
+import { criticalSection } from '../engine/shear'
 
 const INK = '#37526e'
 const CONC = '#eef3f8'
@@ -56,24 +57,33 @@ export function PunchingPlan({ c1, c2, d, h, position, b0, alphaS }: PunchingPla
   // c₁ is drawn across the page and is the side PARALLEL to a free edge (the
   // engine's convention: b₀ = (c₁ + d) + 2(c₂ + d/2) at an edge), so an edge
   // column's free edge is the TOP of the plan, and a corner adds the left.
-  // This used to put the edge column's free edge on the left — parallel to c₂,
-  // the transpose of the perimeter the engine measures.
+  // The column stands FLUSH with each free edge — its outer face is the slab
+  // edge — which is what the engine's b₀ and A₀ assume: the section runs from
+  // the edge, round the inner faces at d/2, and back to the edge.
   const openTop = position === 'edge' || position === 'corner'
   const openLeft = position === 'corner'
-  const cx = ML + PLAN / 2 - (openLeft ? PLAN / 2 - cw / 2 - off - 4 : 0)
-  const cy = MT + PLAN / 2 - (openTop ? PLAN / 2 - ch / 2 - off - 4 : 0)
+  const cx = openLeft ? ML + cw / 2 : ML + PLAN / 2
+  const cy = openTop ? MT + ch / 2 : MT + PLAN / 2
 
   const l = cx - cw / 2 - off, r = cx + cw / 2 + off
   const t = cy - ch / 2 - off, bm = cy + ch / 2 + off
-  const edgeX = cx - cw / 2 - off - 4        // the slab's free edges
-  const edgeY = cy - ch / 2 - off - 4
   // the perimeter runs out to a free edge and stops there — no side along it
-  const yTo = openTop ? edgeY : t, xTo = openLeft ? edgeX : l
+  const yTo = openTop ? MT : t, xTo = openLeft ? ML : l
   const perimeter = `M${r} ${yTo} L${r} ${bm} L${xTo} ${bm}`
     + (openLeft ? '' : ` L${l} ${yTo}`) + (openTop ? '' : ` L${r} ${t}`)
+  // the engine's section, labelled — the drawing takes b₀ and A₀ from it
+  const cs = criticalSection(c2, c1, d, position)
+  const legX = openLeft ? 'c₁ + d/2' : 'c₁ + d'
+  const legY = openTop ? 'c₂ + d/2' : 'c₂ + d'
+  const lenX = openLeft ? c1 + d / 2 : c1 + d, lenY = openTop ? c2 + d / 2 : c2 + d
+  const b0Tex = position === 'interior' ? `2(${legX}) + 2(${legY})`
+    : position === 'edge' ? `(${legX}) + 2(${legY})` : `(${legX}) + (${legY})`
+  const b0Num = position === 'interior' ? `2(${Math.round(lenX)}) + 2(${Math.round(lenY)})`
+    : position === 'edge' ? `${Math.round(lenX)} + 2(${Math.round(lenY)})` : `${Math.round(lenX)} + ${Math.round(lenY)}`
 
   const sy = MT + PLAN + 44, sh = Math.max(14, h * s), dd = Math.min(sh - 2, d * s)
-  const HT = sy + sh + 16 + 40
+  const HT = sy + sh + 16 + 72
+  const halo = { paintOrder: 'stroke' as const, stroke: 'var(--sheet, #fff)', strokeWidth: 2.6 }
 
   return (
     <DrawingFrame label="punching shear plan">
@@ -83,23 +93,25 @@ export function PunchingPlan({ c1, c2, d, h, position, b0, alphaS }: PunchingPla
           PLAN — critical section at d/2
         </text>
 
-        {/* the slab, clipped at any free edge */}
-        <rect x={openLeft ? edgeX : ML} y={openTop ? edgeY : MT}
-          width={(openLeft ? ML + PLAN - edgeX : PLAN)} height={(openTop ? MT + PLAN - edgeY : PLAN)}
-          fill={CONC} stroke={INK} strokeWidth={1.2} />
-        {openLeft && <line x1={edgeX} y1={openTop ? edgeY : MT} x2={edgeX} y2={MT + PLAN} stroke={INK} strokeWidth={2.2} />}
-        {openTop && <line x1={openLeft ? edgeX : ML} y1={edgeY} x2={ML + PLAN} y2={edgeY} stroke={INK} strokeWidth={2.2} />}
-        {(openLeft || openTop) && (
-          <text x={openLeft ? edgeX + 4 : ML + 4} y={(openTop ? edgeY : MT) + 11} fontSize={7} fill={FAINT}>
-            slab edge
-          </text>
-        )}
+        {/* the slab; a free edge is drawn heavy, a continuing side light */}
+        <rect x={ML} y={MT} width={PLAN} height={PLAN} fill={CONC} stroke={INK} strokeWidth={0.8} strokeDasharray="5 3" />
+        {openLeft && <line x1={ML} y1={MT} x2={ML} y2={MT + PLAN} stroke={INK} strokeWidth={2.2} />}
+        {openTop && <line x1={ML} y1={MT} x2={ML + PLAN} y2={MT} stroke={INK} strokeWidth={2.2} />}
+        {openTop && <text x={openLeft ? ML + 4 : ML} y={MT - 4} fontSize={7} fill={FAINT}>free edge</text>}
+        {openLeft && <text x={ML - 4} y={MT + PLAN} fontSize={7} fill={FAINT} textAnchor="start"
+          transform={`rotate(-90 ${ML - 4} ${MT + PLAN})`}>free edge</text>}
+
+        {/* A₀ — the area inside the section, whose load does not punch */}
+        <rect x={xTo} y={yTo} width={r - xTo} height={bm - yTo} fill={CRIT} opacity={0.1} />
 
         {/* the column */}
         <rect x={cx - cw / 2} y={cy - ch / 2} width={cw} height={ch} fill={COL} opacity={0.85} />
 
         {/* the critical perimeter — open where the slab is */}
         <path d={perimeter} fill="none" stroke={CRIT} strokeWidth={2} strokeDasharray="7 3" />
+        <text x={(xTo + r) / 2} y={bm - 3} fontSize={7} fill={CRIT} textAnchor="middle" {...halo}>{legX}</text>
+        <text x={r - 3} y={(yTo + bm) / 2} fontSize={7} fill={CRIT} textAnchor="middle" {...halo}
+          transform={`rotate(-90 ${r - 3} ${(yTo + bm) / 2})`}>{legY}</text>
 
         {/* c₁ and the d/2 offset as one chain below the plan, every end on an
             extension line off a column corner or a perimeter corner */}
@@ -130,11 +142,11 @@ export function PunchingPlan({ c1, c2, d, h, position, b0, alphaS }: PunchingPla
         {(() => {
           const half = cw / 2
           const ySteel = sy + sh - dd
-          const slabL = openLeft ? edgeX : ML
+          const slabL = ML
           return (
             <g>
               <text x={ML} y={sy - 8} fontSize={9} fontWeight={700} fill={INK}>SECTION — failure cone</text>
-              <rect x={slabL} y={sy} width={ML + PLAN - slabL} height={sh} fill={CONC} stroke={INK} strokeWidth={1.2} />
+              <rect x={slabL} y={sy} width={PLAN} height={sh} fill={CONC} stroke={INK} strokeWidth={1.2} />
               <rect x={cx - half} y={sy + sh} width={cw} height={16} fill={COL} opacity={0.85} />
               <line x1={slabL + 3} y1={ySteel} x2={ML + PLAN - 3} y2={ySteel} stroke={INK} strokeWidth={1} strokeDasharray="2 2" />
               {(openLeft ? [1] : [-1, 1]).map((k) => (
@@ -149,12 +161,18 @@ export function PunchingPlan({ c1, c2, d, h, position, b0, alphaS }: PunchingPla
           )
         })()}
 
-        {/* what the position actually buys you */}
-        <text x={W / 2} y={HT - 20} fontSize={8} fill={CRIT} textAnchor="middle">
-          {position} column · b₀ = {Math.round(b0).toLocaleString()} mm · αs = {alphaS}
+        {/* what the position actually buys you — one fact per line, each inside the sheet */}
+        <text x={W / 2} y={HT - 56} fontSize={8} fill={CRIT} textAnchor="middle" fontWeight={700}>
+          {position} column · αs = {alphaS} · {position === 'interior' ? 'closed on four sides' : `flush with the free ${openLeft ? 'edges' : 'edge'}`}
         </text>
-        <text x={W / 2} y={HT - 8} fontSize={7.5} fill={FAINT} textAnchor="middle">
-  Perimeter closes only for an interior column — hence αs = 40 / 30 / 20 (§22.6.5.2c).
+        <text x={W / 2} y={HT - 43} fontSize={8} fill={CRIT} textAnchor="middle">
+          b₀ = {b0Tex} = {b0Num} = {Math.round(b0).toLocaleString()} mm
+        </text>
+        <text x={W / 2} y={HT - 30} fontSize={8} fill={CRIT} textAnchor="middle">
+          A₀ = ({legX})({legY}) = {Math.round(lenX)} × {Math.round(lenY)} = {(cs.Ao / 1e6).toFixed(3)} m²
+        </text>
+        <text x={W / 2} y={HT - 12} fontSize={7} fill={FAINT} textAnchor="middle">
+          Each free edge drops one side of b₀ and one d/2 of A₀ (§22.6.4.1, §22.6.5.2c).
         </text>
       </svg>
     </DrawingFrame>

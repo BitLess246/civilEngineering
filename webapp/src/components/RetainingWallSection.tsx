@@ -110,9 +110,11 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
           Drawn to scale from the entered geometry. Marks ①–⑤ are scheduled below.
         </text>
 
-        {/* ── retained soil, behind the stem and over the heel ─────────────── */}
-        <rect x={xStemR} y={yTop} width={xp - xStemR} height={yBase - yTop} fill={SOIL} />
-        <rect x={xStemR} y={yTop} width={xp - xStemR} height={yBase - yTop} fill="url(#rw-soil)" />
+        {/* ── retained soil, behind the stem, over the heel and on down past
+            the heel's end to the base soffit — the backfill does not stop at
+            the top of the base; the base is drawn over it ────────────────── */}
+        <rect x={xStemR} y={yTop} width={xp - xStemR} height={yBot - yTop} fill={SOIL} />
+        <rect x={xStemR} y={yTop} width={xp - xStemR} height={yBot - yTop} fill="url(#rw-soil)" />
         <line x1={xStemR} y1={yTop} x2={xp} y2={yTop} stroke={INK} strokeWidth={1.4} />
         {p.q_sur > 0 && (
           <g>
@@ -230,7 +232,7 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
             })
           })()}
           <HDim y={yDim2} x1={x0} x2={xHeel} label={`B = ${B.toFixed(2)} m`} />
-          <text x={xHeel + 6} y={(yBase + yBot) / 2 + 3} fontSize={7.5} stroke="none">tb = {tb}</text>
+          <text x={xHeel + 6} y={(yBase + yBot) / 2 + 3} fontSize={7.5} stroke="var(--sheet, #fff)" strokeWidth={2.6} paintOrder="stroke">tb = {tb}</text>
         </g>
 
         {/* ── bearing pressure under the base ──────────────────────────────── */}

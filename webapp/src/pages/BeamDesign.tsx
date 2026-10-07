@@ -10,6 +10,8 @@ import type { CriticalSection } from '../engine/beamSections'
 import { SheetFigure } from '../components/modelSpace/figures'
 import { calcBeamSection } from '../lib/calcFigures'
 import { beamSectionNotes } from '../lib/scheduleFigures'
+import { beamStressBlock } from '../lib/beamStressBlock'
+import { withStressDiagrams } from '../lib/beamSectionStress'
 import { buildBeamSolution, beamProvidedCapacities } from '../lib/beamSolution'
 import { optimizeBeamRebar, optimizeBeamMember } from '../engine/beamRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
@@ -162,28 +164,39 @@ export default function BeamDesign() {
   // returns, a second layer, nor the arrangement the sheets draw for the same
   // beam. The callout is composed by the schedule's own `beamSectionNotes`, so
   // the calculator and the schedule cannot word the same section differently.
+  const sectionNotes = useMemo(() => (r ? [
+    `d = ${Math.round(r.d)} TO THE ${hogging ? 'BOTTOM' : 'TOP'} FACE`,
+    ...beamSectionNotes(
+      { x: 0, label: '', hogging, design: {
+        bars: r.bars, sAdopt: r.sAdopt, sHinge: r.sHinge, legs: fd.legs, layers: r.layers,
+        comprBars: r.comprBars, comprLayers: r.comprLayers,
+        mode: r.mode, comprEffective: r.comprEffective,
+      } },
+      { b: fd.b, h: fd.h, cover: fd.cover, barDia: fd.barDia, tieDia: fd.stirrupDia },
+    ),
+    // The reason comes from the engine: "enlarge it" is right for a
+    // diverging layout and wrong for a mistyped bar diameter.
+    ...r.flexNotes.map((n) => n.toUpperCase()),
+  ] : []), [r, fd, hogging])
+  // The notes print BELOW the figure as text, not inside the SVG — a long
+  // callout was clipped at the figure's edge.
   const sectionFigure = useMemo(() => {
     if (!r || !sectionGeomOK) return null
     const rect = { b: fd.b, h: fd.h, cover: fd.cover, barDia: fd.barDia, tieDia: fd.stirrupDia }
-    return calcBeamSection({
+    const section = calcBeamSection({
       ...rect, stirrupDia: fd.stirrupDia,
-      bars: r.bars, comprBars: r.comprBars, hogging, spacing: r.sAdopt, d: r.d,
+      bars: r.bars, comprBars: r.comprBars, hogging, spacing: r.sAdopt,
       title: `SECTION — ${f0(fd.b)}×${f0(fd.h)}`,
-      notes: [
-        ...beamSectionNotes(
-          { x: 0, label: '', hogging, design: {
-            bars: r.bars, sAdopt: r.sAdopt, sHinge: r.sHinge, legs: fd.legs, layers: r.layers,
-            comprBars: r.comprBars, comprLayers: r.comprLayers,
-            mode: r.mode, comprEffective: r.comprEffective,
-          } },
-          rect,
-        ),
-        // The reason comes from the engine: "enlarge it" is right for a
-        // diverging layout and wrong for a mistyped bar diameter.
-        ...r.flexNotes.map((n) => n.toUpperCase()),
-      ],
+      notes: [],
+    })
+    // the strain and stress diagrams, joined to the actual section on its
+    // right at the section's own depth scale
+    return withStressDiagrams(section, {
+      b: fd.b, h: fd.h, d: r.d, dPrime: r.dPrime, fc: fd.fc, fy: fd.fy,
+      s: beamStressBlock(r, fd.fc, fd.fy), hogging,
     })
   }, [r, fd, hogging, sectionGeomOK])
+  const stress = useMemo(() => (r && sectionGeomOK ? beamStressBlock(r, fd.fc, fd.fy) : null), [r, fd.fc, fd.fy, sectionGeomOK])
   // The selection is appended, not prepended: it justifies the bar chosen for
   // the steel the flexure steps above derived, so it reads after them.
   const solution = useMemo(
@@ -302,6 +315,9 @@ export default function BeamDesign() {
       ['Bar ⌀ / stirrup ⌀', `${fd.barDia} / ${fd.stirrupDia} mm (${fd.legs}-leg)`],
       ['Moment Mu', `${f1(demand.Mu)} kN·m${hogging ? ' (hogging)' : ''}`],
       ['Shear Vu', `${f1(demand.Vu)} kN`], ['ρ / ρmin / ρmax', `${r.rho.toFixed(4)} / ${r.rhoMin.toFixed(4)} / ${r.rhoMax.toFixed(4)}`],
+      ...(stress ? [['Internal couple', `a = ${f0(stress.a)} mm, c = ${f0(stress.c)} mm, C = ${f1(stress.Cc + stress.Cs)} kN, T = ${f1(stress.T)} kN`] as [string, string]] : []),
+      // the section's notes left the drawing; the PDF keeps them here
+      ...sectionNotes.map((n, i) => [`Section note ${i + 1}`, n] as [string, string]),
     ] as [string, string][],
     steps: solution,
     drawingTitle: 'Beam Section',
@@ -479,10 +495,19 @@ export default function BeamDesign() {
         { label: 'Bars', value: `⌀${fd.barDia} tension, ⌀${fd.comprBarDia} compr., ⌀${f.stirrupDia} ${f.legs}-leg stirrups` },
         { label: multi && active ? `Demands (${active.label})` : 'Demands', value: `Mu ${f1(demand.Mu)} kN·m${hogging ? ' (hogging)' : ''}, Vu ${f1(demand.Vu)} kN` },
       ]}
-      drawing={{ title: `Section${multi && active ? ` — ${active.label}` : ''}`, node: <div data-pdf-drawing>
-        {r && sectionFigure ? <SheetFigure drawing={sectionFigure} width={420} />
-          : <p className="py-8 text-center text-sm text-faint">{detailingNotes(f)[0] ?? 'Enter a valid section.'}</p>}
-      </div> }}
+      drawing={{ title: `Section${multi && active ? ` — ${active.label}` : ''}`, node: r && sectionFigure ? (
+        <div>
+          <div data-pdf-drawing><SheetFigure drawing={sectionFigure} width={900} /></div>
+          {sectionNotes.length > 0 && (
+            <div className="mt-4 border-t border-hairline pt-3">
+              <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[.14em] text-ink-2">Section notes</div>
+              <ol className="list-decimal space-y-1 pl-5 font-mono text-[11.5px] leading-snug text-ink">
+                {sectionNotes.map((n, i) => <li key={i}>{n}</li>)}
+              </ol>
+            </div>
+          )}
+        </div>
+      ) : <p className="py-8 text-center text-sm text-faint">{detailingNotes(f)[0] ?? 'Enter a valid section.'}</p> }}
       results={resultRows}
       resultsCaption={r ? `ρ = ${r.rho.toFixed(4)} within ρmin ${r.rhoMin.toFixed(4)} … ρmax ${r.rhoMax.toFixed(4)} — §9.6.1.2 / §21.2.2` : undefined}
       extraSections={[
