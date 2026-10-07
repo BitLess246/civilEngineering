@@ -94,21 +94,11 @@ export function solveWeldedConnection(p: {
   const ey = p.load.py - Cy
   const T = Py * ex - Px * ey            // kN·mm, +CCW
 
-  // Direct force per unit length (N/mm): (kN → N) / mm.
-  const fdx = Lw > 0 ? (Px * 1000) / Lw : 0
-  const fdy = Lw > 0 ? (Py * 1000) / Lw : 0
-
   // Evaluate the resultant at each segment endpoint; the extreme fibre governs.
   const points: WeldPoint[] = []
   for (const s of segs) {
     for (const [x, y] of [[s.x1, s.y1], [s.x2, s.y2]] as const) {
-      const rx = x - Cx, ry = y - Cy
-      // Torsional force per unit length: fT = T·ρ/(J/t), ⟂ to ρ.
-      const ftx = Jt > 0 ? (-(T * 1000) * ry) / Jt : 0
-      const fty = Jt > 0 ? ((T * 1000) * rx) / Jt : 0
-      const fx = fdx + ftx
-      const fy = fdy + fty
-      points.push({ x, y, fx, fy, f: Math.hypot(fx, fy) })
+      points.push(weldForceAt({ Lw, Cx, Cy, Jt, Px, Py, T }, x, y))
     }
   }
 
@@ -127,6 +117,27 @@ export function solveWeldedConnection(p: {
     fMax, criticalIndex, throat, capacityPerLen, reqSize, maxP,
     ok: fMax <= capacityPerLen + 1e-6,
   }
+}
+
+/**
+ * The force per unit length, N/mm, at ANY point of the weld line — the direct
+ * share P/Lw plus the torsional share T·ρ/(J/t) perpendicular to ρ from the
+ * centroid. Both are linear in position, so along a straight segment the
+ * components vary linearly between its ends and the magnitude peaks at an
+ * end — which is why the solver only evaluates the endpoints. Exported so a
+ * drawing can colour the whole line from the same formula.
+ */
+export function weldForceAt(
+  r: Pick<WeldConnResult, 'Lw' | 'Cx' | 'Cy' | 'Jt' | 'Px' | 'Py' | 'T'>, x: number, y: number,
+): WeldPoint {
+  const fdx = r.Lw > 0 ? (r.Px * 1000) / r.Lw : 0
+  const fdy = r.Lw > 0 ? (r.Py * 1000) / r.Lw : 0
+  const rx = x - r.Cx, ry = y - r.Cy
+  // Torsional force per unit length: fT = T·ρ/(J/t), ⟂ to ρ.
+  const ftx = r.Jt > 0 ? (-(r.T * 1000) * ry) / r.Jt : 0
+  const fty = r.Jt > 0 ? ((r.T * 1000) * rx) / r.Jt : 0
+  const fx = fdx + ftx, fy = fdy + fty
+  return { x, y, fx, fy, f: Math.hypot(fx, fy) }
 }
 
 // ── Worked solution ────────────────────────────────────────────────────────
