@@ -111,3 +111,45 @@ export function defaultBeamFor(plateH: number): AiscShape | undefined {
 export function defaultColumn(): AiscShape | undefined {
   return W_SORTED.find((s) => (s.d ?? 0) >= 240 && (s.d ?? 0) <= 275 && (s.bf ?? 0) >= 250) ?? W_SORTED[0]
 }
+
+/**
+ * AISC 360-16 §J2.2b(b): the largest fillet along the EDGE of a part t thick,
+ * mm — the full thickness below 6 mm, t − 2 mm from 6 mm up (so the edge is
+ * not melted away and the leg can be inspected).
+ */
+export const maxFilletAlongEdge = (t: number) => (t < 6 ? t : t - 2)
+
+/**
+ * AISC 360-16 Table J2.4: the MINIMUM fillet size for the thinner part
+ * joined, mm — 3 to 6 mm thick, 5 to 13, 6 to 19, 8 above. A weld the page
+ * draws but does not design is drawn at this size and labelled as such.
+ */
+export function minFilletSize(tThinner: number): number {
+  if (tThinner <= 6) return 3
+  if (tThinner <= 13) return 5
+  if (tThinner <= 19) return 6
+  return 8
+}
+
+/**
+ * Do the weld lines sit on a column's FLANGE TIPS? Two (or more) vertical
+ * lines on exactly two x positions — the textbook bracket: a plate lapped
+ * across the flange face, fillet-welded along both flange edges. Returns the
+ * flange width the lines imply, mm, or null for any other pattern.
+ */
+export function flangeTipSpan(segs: readonly { x1: number; y1: number; x2: number; y2: number }[]): number | null {
+  if (segs.length < 2 || segs.some((g) => Math.abs(g.x1 - g.x2) > 1e-6)) return null
+  const xs = [...new Set(segs.map((g) => Math.round(g.x1 * 1000) / 1000))]
+  return xs.length === 2 ? Math.abs(xs[1] - xs[0]) : null
+}
+
+/** The W whose flange is closest to a width, mm — for drawing a bracket whose
+ *  welds sit on the flange tips. */
+export function columnForFlange(bf: number): AiscShape | undefined {
+  let best: AiscShape | undefined, err = Infinity
+  for (const s of W_SORTED) {
+    const e = Math.abs((s.bf ?? 0) - bf)
+    if (e < err - 1e-9) { best = s; err = e }
+  }
+  return best
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { blockShearPath, clearDistance, defaultBeamFor, defaultColumn, holeDia } from './connectionMechanics'
+import { blockShearPath, clearDistance, defaultBeamFor, defaultColumn, holeDia, maxFilletAlongEdge, minFilletSize, flangeTipSpan, columnForFlange } from './connectionMechanics'
 import { boltGroupGeom, shearTabBlockShear } from '../engine/steelDesign'
 
 // the page's default tab: 3 rows @ 70, ey 40, ex 35, ⌀20, t 10
@@ -52,5 +52,34 @@ describe('drawing shapes', () => {
     const c = defaultColumn()!
     expect(c.family).toBe('W')
     expect(c.bf!).toBeGreaterThanOrEqual(250)
+  })
+})
+
+describe('§J2.2b fillet size along an edge', () => {
+  it('is t below 6 mm and t − 2 from 6 mm up', () => {
+    expect(maxFilletAlongEdge(5)).toBe(5)
+    expect(maxFilletAlongEdge(6)).toBe(4)
+    expect(maxFilletAlongEdge(12)).toBe(10)
+  })
+})
+
+describe('Table J2.4 minimum fillet', () => {
+  it('steps at 6, 13 and 19 mm of the thinner part', () => {
+    expect([5, 6, 6.5, 10, 13, 14, 19, 20, 32].map(minFilletSize)).toEqual([3, 3, 5, 5, 5, 6, 6, 8, 8])
+  })
+})
+
+describe('bracket welds on the flange tips', () => {
+  const v = (x: number) => ({ x1: x, y1: 0, x2: x, y2: 250 })
+  it('two vertical lines on two x positions imply a flange that wide', () => {
+    expect(flangeTipSpan([v(0), v(200)])).toBe(200)
+    expect(flangeTipSpan([v(0), v(200), { x1: 0, y1: 300, x2: 0, y2: 400 }])).toBe(200)
+    expect(flangeTipSpan([v(0)])).toBeNull()
+    expect(flangeTipSpan([v(0), { x1: 0, y1: 0, x2: 200, y2: 0 }])).toBeNull()
+    expect(flangeTipSpan([v(0), v(100), v(200)])).toBeNull()
+  })
+  it('picks the W whose flange is nearest that width', () => {
+    const w = columnForFlange(200)!
+    expect(Math.abs(w.bf! - 200)).toBeLessThan(10)
   })
 })

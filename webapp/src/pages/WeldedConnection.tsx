@@ -5,12 +5,17 @@ import { basisFactor, SAFETY, demandLabel, type DesignBasis } from '../engine/de
 import { Num, Pick } from '../components/qty'
 import { InputGroup, CheckCard } from '../components/workspace'
 import { WorkspacePage } from '../components/WorkspacePage'
-import { WeldGroupPlan } from '../components/connectionSketches'
+import { WeldedJointMechanics } from '../components/WeldedJointMechanics'
+import { W_SORTED, shapeByName } from '../engine/aiscSections'
+import { defaultColumn, flangeTipSpan, columnForFlange } from '../lib/connectionMechanics'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
 
 // Bracket plate: two vertical fillet lines 200 apart, 250 mm tall.
+/** Every W in the catalogue, light to heavy — for the drawing's column pick. */
+const W_OPTIONS: [string, string][] = W_SORTED.map((w) => [w.name, w.name])
+
 const DEFAULT_SEGS: WeldSegment[] = [
   { id: 'L', x1: 0, y1: 0, x2: 0, y2: 250 },
   { id: 'R', x1: 200, y1: 0, x2: 200, y2: 250 },
@@ -34,6 +39,10 @@ export default function WeldedConnection() {
   // the sheet saying which basis the number belonged to. The basis is now the
   // control, and it sets the factor (phi = 0.75, or 1/Omega = 1/2.00).
   const [basis, setBasis] = useState<DesignBasis>('LRFD')
+  // DRAWING: the column the bracket is welded to, and the bracket plate's
+  // thickness (which also bounds the fillet size along its edge, §J2.2b).
+  const [colName, setColName] = useState('auto')
+  const [tPlate, setTPlate] = useState(12)
   const phi = basisFactor(basis, 'connection')
 
   const r = solveWeldedConnection({ segments: segs, size, FEXX, phi, load: { P, angleDeg: angle, px, py } })
@@ -97,6 +106,11 @@ export default function WeldedConnection() {
           <Num label="Fillet leg w" unit="mm" value={size} onChange={setSize} />
           {electrode === 'custom' && <Num label="F_EXX" unit="MPa" value={FEXX} onChange={setFEXX} />}
         </InputGroup>
+        <InputGroup title="Drawing">
+          <Pick label="Column" value={colName} onChange={setColName}
+            options={[['auto', 'Auto — flange fits the welds'], ...W_OPTIONS]} />
+          <Num label="Bracket plate t" unit="mm" value={tPlate} onChange={setTPlate} />
+        </InputGroup>
         <InputGroup title="Load">
           <Num label={`Load ${demandLabel(basis, 'P')}`} unit="kN" value={P} onChange={setP} />
           <Num label="Angle from +x" unit="°" value={angle} onChange={setAngle} />
@@ -116,8 +130,10 @@ export default function WeldedConnection() {
         { label: 'Weld', value: `${segs.length} segments, ${f2(r.Lw)} mm, ${size} mm fillet, ${electrode === 'custom' ? `F_EXX ${FEXX}` : `${electrode}XX`}` },
         { label: 'Load', value: `${demandLabel(basis, 'P')} ${f2(P)} kN at ${f2(angle)}°, applied at (${px}, ${py})` },
       ]}
-      drawing={{ title: 'Weld group', node: <div data-pdf-drawing>
-        <WeldGroupPlan segs={segs} r={r} px={px} py={py} P={P} angleDeg={angle} Plabel={demandLabel(basis, 'P')} />
+      drawing={{ title: 'Welded bracket — what the check checks', node: <div data-pdf-drawing>
+        <WeldedJointMechanics segs={segs} r={r} size={size} FEXX={FEXX} px={px} py={py} P={P} angleDeg={angle}
+          Plabel={demandLabel(basis, 'P')} availLabel={basis === 'LRFD' ? 'φRn' : 'Rn/Ω'}
+          column={(colName !== 'auto' && shapeByName(colName)) || (flangeTipSpan(segs) != null ? columnForFlange(flangeTipSpan(segs)!) : undefined) || defaultColumn()!} tPlate={tPlate} />
       </div> }}
       results={[
         { check: 'Weld length and centroid', basis: 'Σ L, Σ L·x / Lw', demand: `${f2(r.Lw)} mm`, limit: `C (${f2(r.Cx)}, ${f2(r.Cy)})`, status: 'info' as const },

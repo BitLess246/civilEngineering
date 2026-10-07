@@ -22,7 +22,7 @@
 import { useMemo, useState } from 'react'
 import type { BoltGroupGeom, BoltForce, BlockShearCase } from '../engine/steelDesign'
 import type { AiscShape } from '../engine/aiscSections'
-import { blockShearPath, clearDistance, holeDia, type Pt } from '../lib/connectionMechanics'
+import { blockShearPath, clearDistance, holeDia, minFilletSize, type Pt } from '../lib/connectionMechanics'
 import { DrawingFrame } from './DrawingFrame'
 
 const INK = '#1e293b', NOTE = '#475569'
@@ -78,6 +78,10 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
   // ── shapes, mm ─────────────────────────────────────────────────────────
   const bd = p.beam.d ?? 310, btf = p.beam.tf ?? 10, btw = p.beam.tw ?? 6
   const cd = p.column.d ?? 260, ctf = p.column.tf ?? 14, cbf = p.column.bf ?? 255
+  // The tab-to-column weld is NOT designed on this page — it is drawn at the
+  // Table J2.4 minimum for the thinner part, on BOTH faces of the tab, and
+  // labelled as exactly that.
+  const wWeld = minFilletSize(Math.min(t, ctf))
   const yc = H / 2
   const setback = 13
   const beamEnd = W + 170
@@ -171,7 +175,7 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
           <rect x={X(0)} y={Y(H)} width={W * s} height={H * s} fill={PLATE} fillOpacity={0.92} stroke={INK} strokeWidth={1.2} />
           <line x1={X(0)} y1={Y(H)} x2={X(0)} y2={Y(0)} stroke={WELD} strokeWidth={3.2} />
           <line x1={X(0) + 2} y1={Y(H) + 6} x2={X(0) + 22} y2={Y(H) - 16} stroke={WELD} strokeWidth={0.8} />
-          <text x={X(0) + 24} y={Y(H) - 18} fontSize={9} fill={WELD}>fillet weld, both sides</text>
+          <text x={X(0) + 24} y={Y(H) - 18} fontSize={9} fill={WELD}>fillets both faces, w {wWeld} (J2.4 min.) — not checked</text>
           <text x={X(W) + 6} y={Y(0) - 2} fontSize={9.5} fill={NOTE}>PL {Math.round(W)}×{Math.round(H)}×{t}</text>
 
           {/* block shear */}
@@ -228,7 +232,12 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
           {plies.map((q, k) => (
             <g key={k}>
               <rect x={SX(0)} y={SZ(q.z1)} width={W * ss} height={t * ss} fill={PLATE} stroke={INK} strokeWidth={1} />
-              <path d={`M${SX(0)} ${SZ(q.z0 > 0 ? q.z1 : q.z0)} l${4 * Math.max(1, ss)} 0 l${-4 * Math.max(1, ss)} ${(q.z0 > 0 ? -1 : 1) * 4 * Math.max(1, ss)} z`} fill={WELD} />
+              {/* the two fillets, one on each face of the tab, against the
+                  column flange face (x = 0) — leg wWeld on both surfaces */}
+              {[[q.z1, 1], [q.z0, -1]].map(([zf, dir]) => (
+                <polygon key={dir} points={`${SX(0)},${SZ(zf)} ${SX(0)},${SZ(zf + dir * wWeld)} ${SX(wWeld)},${SZ(zf)}`}
+                  fill={WELD} stroke={WELD} strokeWidth={0.6} />
+              ))}
             </g>
           ))}
           <text x={SX(W) + 3} y={SZ(btw / 2 + t) - 3} fontSize={8.5} fill={NOTE}>tab t {t}</text>
@@ -290,6 +299,8 @@ function readout(
   block: { Lv: number; Lt: number; holes: Pt[] }, k: 0 | 1, dh: number,
 ): Line[] {
   const L: Line[] = []
+  const wWeld = minFilletSize(Math.min(p.t, p.column.tf ?? p.t))
+  L.push({ text: `Tab weld: a fillet on each face at the Table J2.4 minimum w = ${wWeld} mm — its strength is NOT checked here (size it on Welded Connection).`, color: WELD })
   if (on.has('forces')) {
     const c = p.forces.find((f) => f.id === p.critical)
     if (c) L.push({ text: `Bolt forces — Vu ${p.Vu.toFixed(1)} kN down, Hu ${p.Hu.toFixed(1)} kN at e = (${p.ex_load}, ${p.ey_load}) mm; critical ${p.critical}: R = ${c.R.toFixed(2)} kN.`, color: FORCE })
