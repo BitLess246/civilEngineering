@@ -7,13 +7,18 @@ import { useCalcResult } from '../lib/useCalcResult'
 import { Num, Pick } from '../components/qty'
 import { InputGroup, CheckCard, ResultsTable, type ResultRow } from '../components/workspace'
 import { WorkspacePage } from '../components/WorkspacePage'
-import { ConnectionDrawing } from '../components/ConnectionDrawing'
+import { ShearTabMechanics } from '../components/ShearTabMechanics'
+import { defaultBeamFor, defaultColumn } from '../lib/connectionMechanics'
+import { W_SORTED, shapeByName } from '../engine/aiscSections'
 import type { SolutionStep } from '../lib/solution'
 import { f1, f2, f3 } from '../lib/format'
 import { sn1, sn2 } from '../lib/solution'
 import { CalcBadge, TrialWall, BasisPick, BasisNote } from '../components/steelUi'
 import { capacityLabel, demandLabel, factorLabel, SAFETY, type DesignBasis } from '../engine/designBasis'
 
+
+/** Every W in the catalogue, light to heavy — for the drawing's member picks. */
+const W_OPTIONS: [string, string][] = W_SORTED.map((w) => [w.name, w.name])
 
 export default function BoltedConnection() {
   const [Vu,         setVu]         = useState(150)
@@ -40,6 +45,11 @@ export default function BoltedConnection() {
   // itself FROM the grid on the way in, so switching to custom starts from the
   // pattern already on screen rather than from an empty table.
   const [custom, setCustom] = useState<{ id: string; x: number; y: number }[] | null>(null)
+  // DRAWING ONLY: the W-shapes the tab is drawn between. 'auto' picks a beam
+  // whose clear web takes the tab and a W250-class column; the calculation
+  // checks the tab and its bolts, not these members.
+  const [beamName, setBeamName] = useState('auto')
+  const [colName, setColName] = useState('auto')
 
   const gridBolts = useMemo(() => {
     const out: { id: string; x: number; y: number }[] = []
@@ -299,6 +309,12 @@ export default function BoltedConnection() {
           <Num label="Fy" unit="MPa" value={FyPlate} onChange={setFyPlate} />
           <Num label="Fu" unit="MPa" value={FuPlate} onChange={setFuPlate} />
         </InputGroup>
+        <InputGroup title="Drawing">
+          <Pick label="Supported beam" value={beamName} onChange={setBeamName}
+            options={[['auto', 'Auto — web fits the tab'], ...W_OPTIONS]} />
+          <Pick label="Supporting column" value={colName} onChange={setColName}
+            options={[['auto', 'Auto — W250 class'], ...W_OPTIONS]} />
+        </InputGroup>
       </>}
       checks={res ? <>
         <CheckCard title="Critical bolt" basis={`${res.eccentric.critical} · elastic method · ${factorLabel(res.basis, 'connection')}`} status={boltOK ? 'pass' : 'fail'}
@@ -321,9 +337,13 @@ export default function BoltedConnection() {
         { label: 'Bolts', value: `${custom ? `${custom.length} free-form` : `${nRows} × ${nCols}`} ${boltGrade} ⌀${db}, ${nShear === 2 ? 'double' : 'single'} shear` },
         { label: 'Plate', value: `t ${tPlate} mm, Fu ${FuPlate} MPa` },
       ]}
-      drawing={res ? { title: 'Connection face', node: <div data-pdf-drawing>
-        <ConnectionDrawing geom={res.geom} db={db} boltForces={res.eccentric.bolts} critical={res.eccentric.critical}
-          Vu={Vu} Hu={Hu} ex_load={ex_load} ey_load={ey_load} connType="bolt" />
+      drawing={res ? { title: 'Connection — what each check checks', node: <div data-pdf-drawing>
+        <ShearTabMechanics geom={res.geom} db={db} t={tPlate} Fu={FuPlate} nShear={nShear}
+          forces={res.eccentric.bolts} critical={res.eccentric.critical}
+          blockShear={res.blockShear} availBlockShear={res.availBlockShear}
+          avail={res.avail} R={R} Vu={Vu} Hu={Hu} ex_load={ex_load} ey_load={ey_load}
+          beam={(beamName !== 'auto' && shapeByName(beamName)) || defaultBeamFor(res.geom.plateH)!}
+          column={(colName !== 'auto' && shapeByName(colName)) || defaultColumn()!} />
       </div> } : undefined}
       results={res ? [
         { check: 'Bolt shear', basis: `§J3.6 · ${nShear === 2 ? 'double' : 'single'} shear`, demand: `${f2(res.avail.shear)} kN`, status: 'info' as const },
