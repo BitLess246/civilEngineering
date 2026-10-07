@@ -48,6 +48,29 @@ describe('steel joint / connection design', () => {
     }
   })
 
+  it('every tab passes its plate limit states and its welds, at no less than the Table J2.4 leg', () => {
+    for (const j of joints) for (const c of j.connections) {
+      expect(c.plate.ok).toBe(true)
+      expect(c.plate.t).toBe(c.tab.t)
+      expect(c.weld.ok).toBe(true)
+      expect(c.weld.w).toBe(c.tab.weldSizeMm)
+      expect(c.weld.w).toBeGreaterThanOrEqual(c.weld.wMin)
+      expect(c.weld.fMax).toBeLessThanOrEqual(Math.min(c.weld.phiWeld, c.weld.phiTab) + 1e-9)
+      // the support is the column flange or web the tab is welded to
+      const col = shapeByName(j.columnShape)!
+      expect(c.weld.tSupport).toBe(c.faceType === 'flange' ? col.tf : col.tw)
+    }
+  })
+
+  it('a web-face tab, extended past the flange tips, is thickened until the tab can take its welds', () => {
+    const web = joints.flatMap((j) => j.connections).filter((c) => c.faceType === 'web')
+    expect(web.length).toBeGreaterThan(0)
+    for (const c of web) {
+      expect(c.plate.flexure.a).toBeGreaterThan(60)
+      expect(c.weld.fMax).toBeLessThanOrEqual(c.weld.phiTab + 1e-9)
+    }
+  })
+
   it('bolt group: elastic eccentric method sizes each bolt within φRn', () => {
     for (const j of joints) {
       for (const c of j.connections) {
@@ -251,6 +274,27 @@ describe('designBeamBeamJoints — beams framing into a girder web (fin plates)'
     expect(c.cope!.lengthMm).toBeGreaterThan(60)
     expect(c.cope!.depthMm).toBeGreaterThan(12)
     expect(c.ok).toBe(true)
+  })
+
+  it('checks the coped beam, the tab plate and its welds, and a beam opposite loads the same girder web', () => {
+    const m = beamBeamModel()
+    // a second secondary beam framing into the other face of the girder web
+    m.nodes.push({ id: 'sd', x: 3, y: 3, z: 5 })
+    m.members.push({ id: 'sb2', i: 'gm', j: 'sd', role: 'beam', section: 'sbs' })
+    m.supports.push({ node: 'sd', fixity: 'pin' })
+    m.loads.push({ kind: 'member-point', member: 'sb2', t: 0.4, P: 60, cat: 'D' })
+    const d = designStructure(m, soil)!
+    const bj = d.beamJoints.find((j) => j.nodeId === 'gm')!
+    const a = bj.connections.find((x) => x.beamId === 'sb')!, b = bj.connections.find((x) => x.beamId === 'sb2')!
+    for (const c of [a, b]) {
+      expect(c.copedBeam).toBeTruthy()
+      expect(c.copedBeam!.ho).toBeCloseTo(c.copedBeam!.d - c.cope!.depthMm, 9)
+      expect(c.copedBeam!.Mu).toBeCloseTo(c.Vu * (c.cope!.lengthMm + 13), 9)
+      expect(c.plate.ok).toBe(true)
+      expect(c.weld.tSupport).toBe(shapeByName('W360x51')!.tw)
+    }
+    // the girder web's base metal carries BOTH tabs' weld force
+    expect(a.weld.util).toBeGreaterThanOrEqual((a.weld.fMax + b.weld.fMax) / a.weld.phiSupport - 1e-9)
   })
 
   it('does NOT create beam-to-beam joints at column-hosted nodes', () => {

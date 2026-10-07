@@ -12,8 +12,9 @@
 // the edge `shearTabBlockShear` measures `ex_edge` to (AISC §J4.3: the
 // tension plane runs from the bolt line to the free edge).
 // ─────────────────────────────────────────────────────────────────────────
-import { W_SORTED, type AiscShape } from '../engine/aiscSections'
-import { clearDistance as engineClearDistance, holeDia, minFilletSize, maxFilletAlongEdge } from '../engine/steelDesign'
+import { W_SORTED, shapeByName, type AiscShape } from '../engine/aiscSections'
+import { clearDistance as engineClearDistance, holeDia, minFilletSize, maxFilletAlongEdge, boltGeomFromPositions, eccentricBoltGroup, shearTabBlockShear, type BoltGroupGeom, type BoltForce, type BlockShearCase } from '../engine/steelDesign'
+import type { BeamConnection } from '../engine/steelConnections'
 
 /** The fillet-size rules live in the engine (they are checks); re-exported for the drawings. */
 export { minFilletSize, maxFilletAlongEdge }
@@ -116,4 +117,41 @@ export function columnForFlange(bf: number): AiscShape | undefined {
     if (e < err - 1e-9) { best = s; err = e }
   }
   return best
+}
+
+// ── A model-space connection, as the mechanics drawing takes it ─────────────
+// Everything is read off the designed `BeamConnection` (or recomputed by the
+// SAME engine calls that sized it), so the drawing beside a schedule row and
+// the row itself cannot disagree.
+
+
+export interface ModelTabMechanics {
+  geom: BoltGroupGeom
+  forces: BoltForce[]
+  blockShear: BlockShearCase[]
+  beam?: AiscShape
+  support: { name: string; t: number; shape?: AiscShape }
+}
+
+/** The tab frame (welded along x = 0, bottom-left origin) of a designed
+ *  connection: bolts, forces and both §J4.3 cases, plus the support it is
+ *  welded to. `host`: the column face or girder web. */
+export function modelTabMechanics(
+  c: BeamConnection, host: { kind: 'column' | 'girder'; shape: string; faceType: 'flange' | 'web' }, beamShape?: string,
+): ModelTabMechanics {
+  const g = boltGeomFromPositions(c.bolts.locations)
+  const geom = { ...g, plateW: c.tab.wMm, plateH: c.tab.hMm }
+  // the engine's own call (steelConnections.tabBearing): load at +ecc
+  const forces = eccentricBoltGroup(g, c.Vu, 0, c.bolts.ecc, 0, c.bolts.phiRnKn, c.bolts.dia, c.tab.t).bolts
+  const ys = c.bolts.locations.map((b) => b.y)
+  const a = Math.max(...c.bolts.locations.map((b) => b.x))
+  const blockShear = shearTabBlockShear(c.bolts.n, c.bolts.pitchMm, c.tab.hMm - Math.max(...ys), Math.min(...ys),
+    c.tab.wMm - a, c.bolts.dia, c.tab.t, c.plate.Fy, c.plate.Fu)
+  const hostShape = shapeByName(host.shape)
+  const name = host.kind === 'girder' ? 'girder web' : `column ${host.faceType}`
+  return {
+    geom, forces, blockShear,
+    beam: beamShape ? shapeByName(beamShape) : undefined,
+    support: { name, t: c.weld.tSupport, shape: hostShape },
+  }
 }
