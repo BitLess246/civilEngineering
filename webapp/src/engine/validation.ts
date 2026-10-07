@@ -61,6 +61,7 @@ import { buildBeam, effectPoints, ilTotalArea } from './influenceBeam'
 import type { RectSection } from './model'
 import { designBraceEnd } from './braceConnection'
 import { designBraceMember } from './steelBrace'
+import { solvePlateFE } from './plateFE'
 
 export interface ValidationCase {
   id: string
@@ -704,6 +705,24 @@ const braceCompression = (() => {
   return { manual: (0.9 * 0.658 ** (345 / Fe) * 345 * 2770) / 1000, software: r.compression.phiPn }
 })()
 
+const plateFECantilever = (() => {
+  // A 400 × 100 × 10 plate fixed at x = 0, 20 kN tip shear: the top-row
+  // element centre at x = 202.5, y = 97.5 against beam theory M·y/I there.
+  const L = 400, d = 100, t = 10, V = 20000, h = 5
+  const r = solvePlateFE({
+    outline: [[0, 0], [L, 0], [L, d], [0, d]], t, Fy: 250, h,
+    supports: [{ a: [0, 0], b: [0, d] }],
+    loads: [{ kind: 'line', a: [L, 0], b: [L, d], Fx: 0, Fy: -V }],
+  })!
+  const x = L / 2 + h / 2, y = d - h / 2
+  const e = r.elems.find((el) => {
+    const cx = el.nodes.reduce((s, k) => s + r.nodes[k][0], 0) / el.nodes.length
+    const cy = el.nodes.reduce((s, k) => s + r.nodes[k][1], 0) / el.nodes.length
+    return Math.abs(cx - x) < 1e-6 && Math.abs(cy - y) < 1e-6
+  })!
+  return { manual: (V * (L - x) * (y - d / 2)) / ((t * d ** 3) / 12), software: e.sx }
+})()
+
 const pryingT0 = (() => {
   // Minimum fitting thickness that eliminates prying (AISC Part 9):
   // t₀ = √(4·φBn·b′/(φf·Fy·p)) with φBn = 60 kN, b′ = 45 − 20/2 = 35 mm,
@@ -1234,6 +1253,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'gusset-whitmore-in-plate', category: 'Connections', title: 'Corner gusset — Whitmore width inside the plate',
     reference: 'AISC Manual Part 9 (Whitmore section) / §J4.1', formula: 'Lw = 2·sEnd − (eb + ec)/cos45°  (of H + 2·lw·tan30°)',
     manual: gussetWhitmore.manual, software: gussetWhitmore.software, unit: 'mm', tol: 1e-9,
+  },
+  {
+    id: 'plate-fe-cantilever', category: 'Connections', title: 'Connection plate FE — bending stress of a cantilever plate',
+    reference: 'Beam theory (Euler–Bernoulli), Q6 plane-stress element', formula: 'σx = M·y/I,  M = V·(L − x),  I = t·d³/12',
+    manual: plateFECantilever.manual, software: plateFECantilever.software, unit: 'MPa', tol: 1e-4,
   },
   {
     id: 'prying-t0', category: 'Connections', title: 'Prying — thickness eliminating prying',

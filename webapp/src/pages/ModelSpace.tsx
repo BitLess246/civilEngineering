@@ -76,6 +76,7 @@ import { ConnectionDetail2D } from '../components/ConnectionDetail2D'
 import { connectionMarks, markAt } from '../lib/steelMarks'
 import { connectionRowSolution } from '../lib/connectionSolution'
 import { ModelConnectionMechanics } from '../components/ModelConnectionMechanics'
+import { TabStressContour, GussetStressContours } from '../components/PlateStressContour'
 import { BasePlateDetail2D } from '../components/BasePlateDetail2D'
 import { basePlateRowSolution, basePlateContext } from '../lib/basePlateSolution'
 import { BraceGussetDetail2D } from '../components/BraceGussetDetail2D'
@@ -6493,6 +6494,7 @@ export default function ModelSpace() {
                         <td colSpan={9} className="bg-sheet-2/60 px-2 pb-2">
                           <div className="grid w-full grid-cols-1 gap-3">
                             {wantDraw && <BraceGussetDetail2D row={b} />}
+                            {wantDraw && expanded === key && <GussetStressContours row={b} />}
                             {wantSol && <WorkedSolution steps={braceRowSolution(b)} title={`Brace ${b.id} — worked solution`} />}
                           </div>
                         </td>
@@ -6816,6 +6818,7 @@ export default function ModelSpace() {
                               {/* two views side by side: the detail takes the row, the solution follows */}
                               <ConnectionDetail2D conn={c} hostShape={j.columnShape} hostKind="column" faceType={c.faceType} beamShape={beamShapeName} mark={connMarks ? markAt(connMarks, c.beamId, j.nodeId) : undefined} />
                               {wantDraw && <ModelConnectionMechanics conn={c} host={{ kind: 'column', shape: j.columnShape, faceType: c.faceType }} beamShape={beamShapeName} />}
+                              {wantDraw && expanded === key && <TabStressContour conn={c} />}
                               {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'column', shape: j.columnShape, faceType: c.faceType })} title={`Connection ${j.nodeId} · ${c.beamId} — worked solution`} />}
                             </div>
                           </td>
@@ -6886,6 +6889,7 @@ export default function ModelSpace() {
                               {/* two views side by side: the detail takes the row, the solution follows */}
                               <ConnectionDetail2D conn={c} hostShape={bj.girderShape} hostKind="girder" faceType="web" beamShape={beamShapeName} mark={connMarks ? markAt(connMarks, c.beamId, bj.nodeId) : undefined} />
                               {wantDraw && <ModelConnectionMechanics conn={c} host={{ kind: 'girder', shape: bj.girderShape, faceType: 'web' }} beamShape={beamShapeName} />}
+                              {wantDraw && expanded === key && <TabStressContour conn={c} />}
                               {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'girder', shape: bj.girderShape })} title={`Connection ${bj.nodeId} · ${c.beamId} — worked solution`} />}
                             </div>
                           </td>
