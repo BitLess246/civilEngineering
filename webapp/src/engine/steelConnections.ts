@@ -11,13 +11,14 @@
  */
 import type { StructuralModel, Node as ModelNode } from './model'
 import type { StructureDesign, SteelBeamScheduleRow } from './pipeline'
-import { boltGeomFromPositions, eccentricBoltGroup, type BoltPos } from './steelDesign'
+import { boltGeomFromPositions, eccentricBoltGroup, plyBearing, type BoltPos } from './steelDesign'
 import { shapeByName } from './aiscSections'
 import { localAxes, defaultAxisRotation, type V3 } from './frame3d'
 import { resolveSteelConnections, throughCarrier } from './steelJoints'
 
 // ── Material constants ──────────────────────────────────────────────────────
 const PHI_SHEAR_BOLT = 0.75           // AISC §J3.6
+const PHI_BEARING = 0.75              // AISC §J3.10
 const FNV_A325 = 495                  // MPa  (threads excluded from shear plane)
 
 const PHI_PLATE_YIELD = 1.0           // AISC §J4.2 shear yielding
@@ -119,8 +120,30 @@ export interface BeamConnection {
   /** Top-flange cope on the SUPPORTED beam (beam-to-beam fin plates only):
    *  clears the carrying girder's flange (AISC SCM Part 9 coped-beam detail). */
   cope?: { lengthMm: number; depthMm: number }
+  /** §J3.10(a) bearing and tear-out of every bolt on the tab and on the
+   *  beam web — each bolt against the least of its shear and both plies. */
+  bearing: TabBearing
+  /** §J4.3 block shear of the coped web (beam-to-girder fin plates). */
+  webBlockShear?: CopedWebBlockShear
   /** Why the connection fails for a reason its capacities do not show. */
   note?: string
+  ok: boolean
+}
+
+export interface TabBearing {
+  /** Least design bearing strength of any bolt on each ply, kN (tear-out included). */
+  phiRnTab: number
+  phiRnWeb: number
+  /** Clear distance of the tab's edge bolt to the edge it tears toward, mm. */
+  lcTabMin: number
+  /** Beam web thickness checked, mm, and the Fu taken for it, MPa. */
+  tw: number
+  FuWeb: number
+  /** max over bolts of R ÷ that bolt's own strength (shear, tab, web). */
+  util: number
+  governingBolt: string
+  /** What limits the governing bolt. */
+  governedBy: 'bolt shear' | 'tab bearing' | 'tab tear-out' | 'web bearing' | 'web tear-out'
   ok: boolean
 }
 
@@ -209,6 +232,98 @@ function designShearTab(Vu: number, nBolts: number, pitchMm = 75, edgeMm = 40, a
   const phiWeldVn = 2 * phiWeldPerMm(weldSizeMm) * hMm
 
   return { t, wMm, hMm, weldSizeMm, phiVn, phiWeldVn }
+}
+
+/**
+ * §J3.10(a) for a shear tab: every bolt bears on the TAB (pushed down by the
+ * reaction it delivers — the tab is welded along x = 0 and free on its other
+ * three edges) and on the BEAM WEB (pushed up; the web runs on into the
+ * flanges, so it only tears toward the next hole, or out of the beam end).
+ * Each bolt is held to the least of its shear, tab and web strengths.
+ *
+ * Fu of the beam is taken as 400 MPa (A36) — conservative for A992 (450).
+ * A COPED web has a free top edge `webTop` (tab frame, y up from the tab's
+ * bottom) above the bolts, and the top bolt tears toward it.
+ */
+export function tabBearing(bolts: BoltGroup, tab: ShearTab, Vu: number, tw: number, FuWeb = FU_PLATE, webTop?: number): TabBearing {
+  const geom = boltGeomFromPositions(bolts.locations)
+  const forces = eccentricBoltGroup(geom, Vu, 0, bolts.ecc, 0, bolts.phiRnKn, bolts.dia, tab.t).bolts
+  const f = new Map(forces.map((b) => [b.id, b]))
+  const abs = bolts.locations
+  const onTab = plyBearing(abs, (id) => { const b = f.get(id); return b ? { x: b.Vx, y: -b.Vy } : { x: 0, y: -1 } },
+    bolts.dia, tab.t, FU_PLATE, { xMax: tab.wMm, yMin: 0, yMax: tab.hMm })
+  const onWeb = plyBearing(abs, (id) => { const b = f.get(id); return b ? { x: -b.Vx, y: b.Vy } : { x: 0, y: 1 } },
+    bolts.dia, tw, FuWeb, { xMin: 13, ...(webTop != null ? { yMax: webTop } : {}) })
+  let util = 0, governingBolt = abs[0]?.id ?? '', governedBy: TabBearing['governedBy'] = 'bolt shear'
+  for (let k = 0; k < abs.length; k++) {
+    const t = onTab[k], w = onWeb[k]
+    const cands: [number, TabBearing['governedBy']][] = [
+      [bolts.phiRnKn, 'bolt shear'],
+      [PHI_BEARING * t.Rn, t.Rn_tear < t.Rn_bear ? 'tab tear-out' : 'tab bearing'],
+      [PHI_BEARING * w.Rn, w.Rn_tear < w.Rn_bear ? 'web tear-out' : 'web bearing'],
+    ]
+    const [cap, by] = cands.reduce((a, b) => (b[0] < a[0] ? b : a))
+    const u = cap > 0 ? (f.get(abs[k].id)?.R ?? 0) / cap : Infinity
+    if (u > util) { util = u; governingBolt = abs[k].id; governedBy = by }
+  }
+  return {
+    phiRnTab: PHI_BEARING * Math.min(...onTab.map((b) => b.Rn)),
+    phiRnWeb: PHI_BEARING * Math.min(...onWeb.map((b) => b.Rn)),
+    lcTabMin: Math.min(...onTab.map((b) => b.lc)),
+    tw, FuWeb, util, governingBolt, governedBy, ok: util <= 1 + 1e-9,
+  }
+}
+
+/** §J4.3 block shear of a COPED beam web: the shear plane from the cope
+ *  down the bolt line past the bottom bolt's hole, the tension plane from the
+ *  bolt line out through the beam end (13 mm past the support face). */
+export interface CopedWebBlockShear {
+  Agv: number; Anv: number; Ant: number
+  Rn: number      // kN, nominal
+  phiRn: number   // kN, φ = 0.75
+  ok: boolean
+}
+
+export function copedWebBlockShear(
+  bolts: BoltGroup, Vu: number, tw: number, webTop: number, Fy = FY_PLATE, Fu = FU_PLATE,
+): CopedWebBlockShear {
+  const dh = bolts.dia + 2
+  const ys = bolts.locations.map((b) => b.y)
+  const xLine = Math.max(...bolts.locations.map((b) => b.x))
+  const Lv = webTop - Math.min(...ys)        // cope edge to the bottom bolt's centre
+  const Lt = xLine - 13                       // bolt line to the beam end
+  const n = bolts.locations.filter((b) => Math.abs(b.x - xLine) < 1e-6).length
+  const Agv = tw * Math.max(0, Lv), Anv = Math.max(0, Agv - (n - 0.5) * dh * tw)
+  const Ant = Math.max(0, tw * Lt - 0.5 * dh * tw)
+  const Rn = (Math.min(0.6 * Fu * Anv, 0.6 * Fy * Agv) + 1.0 * Fu * Ant) / 1000
+  return { Agv, Anv, Ant, Rn, phiRn: 0.75 * Rn, ok: 0.75 * Rn >= Vu - 1e-6 }
+}
+
+/**
+ * The bolted tab, grown until every bolt passes shear AND bearing/tear-out on
+ * both plies — and, for a coped beam, until the coped web passes block shear.
+ * Bolt shear alone sized the column before; a thin web or a short end
+ * distance could then fail in bearing with nothing to say so.
+ *
+ * `cope`: the supported beam's depth and cope depth, mm. The tab sits at the
+ * beam's mid-depth (as `steelConnectionDetail` draws it), so the coped web's
+ * free top edge is d/2 − cope above the tab's centre.
+ */
+export function designBoltedTab(
+  Vu: number, tw: number, aMm = A_WELD_TO_BOLT, cope?: { beamD: number; depthMm: number },
+): { bolts: BoltGroup; tab: ShearTab; bearing: TabBearing; webBlockShear?: CopedWebBlockShear } {
+  let bolts = designBolts(Vu, { dia: 20, aMm })
+  for (;;) {
+    const tab = designShearTab(Vu, bolts.n, bolts.pitchMm, bolts.edgeMm, aMm)
+    const webTop = cope ? tab.hMm / 2 + cope.beamD / 2 - cope.depthMm : undefined
+    const bearing = tabBearing(bolts, tab, Vu, tw, FU_PLATE, webTop)
+    const webBlockShear = webTop != null ? copedWebBlockShear(bolts, Vu, tw, webTop) : undefined
+    const ok = bearing.ok && (!webBlockShear || webBlockShear.ok)
+    if (ok || bolts.n >= 24) {
+      return { bolts: { ...bolts, ok: bolts.ok && ok }, tab, bearing, ...(webBlockShear ? { webBlockShear } : {}) }
+    }
+    bolts = designBolts(Vu, { dia: 20, aMm, locations: boltColumn(bolts.n + 1, bolts.pitchMm, bolts.edgeMm, aMm) })
+  }
 }
 
 /** Design the flange groove weld for moment transfer. Tf = Mu / lever arm (kN).
@@ -348,8 +463,7 @@ export function designSteelJoints(
         // Elastic eccentric bolt group (each bolt placed & checked individually).
         // Web-face tabs carry the larger extended-plate eccentricity.
         const aMm = faceType === 'web' ? aWebMm : A_WELD_TO_BOLT
-        const bolts = designBolts(Vu, { dia: 20, aMm })
-        const tab = designShearTab(Vu, bolts.n, undefined, undefined, aMm)
+        const { bolts, tab, bearing } = designBoltedTab(Vu, row?.tw ?? 6, aMm)
 
         // Moment path per the FACE the flanges meet: direct CJP into a column
         // flange; extension plates into a column web (CJP into the thin web
@@ -381,6 +495,7 @@ export function designSteelJoints(
           Vu, Mu,
           bolts,
           tab,
+          bearing,
           flange: flangeConn,
           ok: bolts.ok && tabOk && flangeOk,
         })
@@ -476,19 +591,19 @@ export function designBeamBeamJoints(
       const note = kind !== 'simple'
         ? 'Analysed as a moment connection to the girder, which is not designed here — detail it, or set this end to Simple (pin).'
         : undefined
-      const bolts = designBolts(Vu, { dia: 20 })
-      const tab = designShearTab(Vu, bolts.n)
-      const tabOk = tab.phiVn >= Vu - 1e-6 && tab.phiWeldVn >= Vu - 1e-6
       // top-flange cope clears the girder flange: half its width + clearance
       // long, flange thickness + fillet allowance deep (SCM Part 9 detailing).
       const cope = {
         lengthMm: Math.round((girderShp.bf ?? 150) / 2 + 12),
         depthMm: Math.round((girderShp.tf ?? 12) + 12),
       }
+      const { bolts, tab, bearing, webBlockShear } = designBoltedTab(Vu, row?.tw ?? 6, undefined,
+        { beamD: row?.d ?? 300, depthMm: cope.depthMm })
+      const tabOk = tab.phiVn >= Vu - 1e-6 && tab.phiWeldVn >= Vu - 1e-6
       connections.push({
         beamId: mem.id, role: mem.role, spanDir: spanDirOf(ni, nj),
         faceType: 'web', beamElement: 'web', connType: 'shear-tab',
-        pinned: true, Vu, Mu: 0, bolts, tab, cope,
+        pinned: true, Vu, Mu: 0, bolts, tab, bearing, cope, ...(webBlockShear ? { webBlockShear } : {}),
         ...(note ? { note } : {}),
         ok: bolts.ok && tabOk && !note,
       })

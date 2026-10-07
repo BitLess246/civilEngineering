@@ -5,6 +5,7 @@ import {
   columnAxial, weakAxisFlexure, combinedLoading,
   boltShear, weldStrength, beamLoadingSimple, E_STEEL,
   boltGroupGeom, boltGeomFromPositions, eccentricBoltGroup, shearTabBlockShear, outOfPlaneBoltGroup, pryingAction,
+  bearingTearout, clearDistance, plyBearing, holeDia,
 } from './steelDesign'
 
 const W250x33 = shapeByName('W250x32.7')!
@@ -620,5 +621,29 @@ describe('§G2.1 Cv1 — the 360-16 two-branch form', () => {
         expect(r.Cv1).toBeCloseTo(expected, 9)
       }
     }
+  })
+})
+
+describe('§J3.10(a) bearing and tear-out', () => {
+  it('Rn = min(1.2·lc·t·Fu, 2.4·d·t·Fu), nominal kN', () => {
+    const a = bearingTearout(20, 10, 400, 29)
+    expect(a.Rn_tear).toBeCloseTo(139.2, 9)
+    expect(a.Rn_bear).toBeCloseTo(192, 9)
+    expect(a.Rn).toBeCloseTo(139.2, 9)
+    // the crossover: 1.2·lc = 2.4·d at lc = 2d
+    expect(bearingTearout(20, 10, 400, 40).Rn_tear).toBeCloseTo(bearingTearout(20, 10, 400, 40).Rn_bear, 9)
+    expect(bearingTearout(20, 10, 400, Infinity).Rn).toBeCloseTo(192, 9)
+  })
+
+  it('lc runs to the nearest free edge or next hole along the push, never a missing edge', () => {
+    const bolts = [{ id: 'a', x: 35, y: 40 }, { id: 'b', x: 35, y: 110 }]
+    const down = { x: 0, y: -1 }
+    expect(clearDistance(bolts[0], down, bolts, 22, { yMin: 0 })!.lc).toBeCloseTo(29, 9)
+    expect(clearDistance(bolts[1], down, bolts, 22, { yMin: 0 })!.lc).toBeCloseTo(48, 9)
+    expect(clearDistance(bolts[0], { x: -1, y: 0 }, bolts, 22, { xMax: 70 })!.lc).toBe(Infinity)
+    expect(clearDistance(bolts[0], { x: 0, y: 0 }, bolts, 22, {})).toBeNull()
+    const ply = plyBearing(bolts, () => down, 20, 10, 400, { yMin: 0, yMax: 150, xMax: 70 })
+    expect(ply.map((p) => Math.round(p.Rn * 10) / 10)).toEqual([139.2, 192])
+    expect(holeDia(20)).toBe(22)
   })
 })

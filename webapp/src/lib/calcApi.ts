@@ -7,7 +7,7 @@ import type {
   BeamFlexureResult, BeamShearResult, BeamLoadsResult,
   ColumnAxialResult, WeakAxisResult, CombinedResult,
   BoltResult, BoltGroupGeom, EccentricBoltResult,
-  OutOfPlaneResult, PryingResult, BlockShearCase,
+  OutOfPlaneResult, PryingResult, BlockShearCase, PlyBearing,
 } from '../engine/steelDesign'
 import type { DesignBasis } from '../engine/designBasis'
 import { runToken, ticketFor, rememberTicket, TrialExhaustedError } from './calcRun'
@@ -204,6 +204,15 @@ export interface ConnectionCalcInput {
   basis?: DesignBasis
   threads: boolean
   tPlate: number; FuPlate: number; FyPlate: number
+  /**
+   * The supported beam's web, which the bolts bear on as well as the tab
+   * (§J3.10(a)): thickness, mm, and Fu, MPa. Omitted, only the tab is checked —
+   * the page always sends them.
+   */
+  twWeb?: number; FuWeb?: number
+  /** Tab-to-support fillet welds, one on each face of the tab: leg, mm, and
+   *  electrode F_EXX, MPa (§J2.4). Omitted, the weld is not checked. */
+  weldSize?: number; FEXX?: number
   ex_load: number; ey_load: number; e_out: number; b_gage: number
   // NO WELD FIELDS. The fillet-weld §J2.4 sizing that used to ride along here
   // was the Steel Design page's weld tab, and that tab was a three-row subset
@@ -231,6 +240,31 @@ export interface ConnectionCalcResult {
   avail: AvailableBolt
   /** Available block-shear strength per case, kN, in `blockShear` order. */
   availBlockShear: number[]
+  /**
+   * §J3.10(a) per bolt on the tab: clear distance lc along the way the bolt
+   * pushes, the tear-out and bearing terms, and the bolt's available strength
+   * (the lesser of its shear and its bearing), kN.
+   */
+  bearing: (PlyBearing & { availBearing: number; avail: number })[]
+  /** max over bolts of R ÷ that bolt's own available strength. */
+  boltUtil: number
+  /** The bolt that ratio belongs to — not always the most loaded one. */
+  boltGoverning: string
+  /** What limits that bolt. */
+  boltGovernedBy: 'bolt shear' | 'tab bearing' | 'tab tear-out' | 'web bearing' | 'web tear-out'
+  /** §J3.10(a) per bolt on the beam web (pushed the other way), when given. */
+  webBearing: (PlyBearing & { availBearing: number })[] | null
+  /**
+   * The tab welds (both faces, along the tab height at the support face) for
+   * the bolt group's load at its eccentricity — elastic weld-line method, as
+   * /welded-connection. f per length vs the available of the two fillets,
+   * and the §J2.2b size limits.
+   */
+  weld: {
+    w: number; FEXX: number; L: number
+    fMax: number; availPerLen: number; util: number
+    wMin: number; wMax: number; sizeOk: boolean; ok: boolean
+  } | null
 }
 export const calcConnection = (input: ConnectionCalcInput) =>
   post<ConnectionCalcResult>('/api/steel/connection', input, TRIAL_ROUTE.connection)

@@ -13,11 +13,15 @@
 // tension plane runs from the bolt line to the free edge).
 // ─────────────────────────────────────────────────────────────────────────
 import { W_SORTED, type AiscShape } from '../engine/aiscSections'
+import { clearDistance as engineClearDistance, holeDia, minFilletSize, maxFilletAlongEdge } from '../engine/steelDesign'
+
+/** The fillet-size rules live in the engine (they are checks); re-exported for the drawings. */
+export { minFilletSize, maxFilletAlongEdge }
 
 export interface Pt { x: number; y: number }
 
-/** Standard hole, mm — the +2 mm the engine's block shear uses (§J3.2). */
-export const holeDia = (db: number) => db + 2
+/** Standard hole, mm — the engine's (d + 2, as block shear takes it). */
+export { holeDia }
 
 export interface BlockPath {
   /** The torn block, as a polygon (plate mm). */
@@ -62,39 +66,16 @@ export function blockShearPath(bolts: readonly Pt[], W: number, H: number, which
 
 /**
  * Clear distance lc, mm, from a hole's edge along the direction its bolt
- * pushes the plate, to the plate edge or the edge of the next hole in the
- * way (AISC §J3.10: the material a bolt tears out through). `dir` need not
- * be unit; a zero force has no tear-out direction and returns null.
- *
- * The plate edge only counts on the free sides: x = 0 is welded to the
- * support, so a bolt bearing toward it pushes into the weld, not off a free
- * edge — that face is skipped.
+ * pushes the TAB, to a free edge or the next hole — the engine's §J3.10(a)
+ * `clearDistance`, in the tab's frame: welded along x = 0, free at x = W,
+ * y = 0 and y = H. One implementation, so the lc the drawing dimensions is
+ * the lc the check used.
  */
 export function clearDistance(
   bolt: Pt, dir: Pt, others: readonly Pt[], W: number, H: number, dh: number,
 ): { lc: number; to: Pt } | null {
-  const l = Math.hypot(dir.x, dir.y)
-  if (l < 1e-9) return null
-  const ux = dir.x / l, uy = dir.y / l
-  // distance along the ray to the plate boundary (free faces only)
-  let tEdge = Infinity
-  if (ux > 1e-9) tEdge = Math.min(tEdge, (W - bolt.x) / ux)
-  if (uy > 1e-9) tEdge = Math.min(tEdge, (H - bolt.y) / uy)
-  if (uy < -1e-9) tEdge = Math.min(tEdge, (0 - bolt.y) / uy)
-  let best = Number.isFinite(tEdge) ? tEdge - dh / 2 : Infinity
-  // the next hole whose bore the ray passes through
-  for (const o of others) {
-    if (o === bolt || (o.x === bolt.x && o.y === bolt.y)) continue
-    const rx = o.x - bolt.x, ry = o.y - bolt.y
-    const along = rx * ux + ry * uy
-    if (along <= 0) continue
-    const off = Math.abs(rx * uy - ry * ux)
-    if (off >= dh / 2) continue
-    best = Math.min(best, along - dh)
-  }
-  if (!Number.isFinite(best)) return null
-  const lc = Math.max(0, best)
-  return { lc, to: { x: bolt.x + ux * (dh / 2 + lc), y: bolt.y + uy * (dh / 2 + lc) } }
+  const c = engineClearDistance(bolt, dir, others, dh, { xMax: W, yMin: 0, yMax: H })
+  return c && Number.isFinite(c.lc) ? c : null
 }
 
 /**
@@ -112,24 +93,7 @@ export function defaultColumn(): AiscShape | undefined {
   return W_SORTED.find((s) => (s.d ?? 0) >= 240 && (s.d ?? 0) <= 275 && (s.bf ?? 0) >= 250) ?? W_SORTED[0]
 }
 
-/**
- * AISC 360-16 §J2.2b(b): the largest fillet along the EDGE of a part t thick,
- * mm — the full thickness below 6 mm, t − 2 mm from 6 mm up (so the edge is
- * not melted away and the leg can be inspected).
- */
-export const maxFilletAlongEdge = (t: number) => (t < 6 ? t : t - 2)
 
-/**
- * AISC 360-16 Table J2.4: the MINIMUM fillet size for the thinner part
- * joined, mm — 3 to 6 mm thick, 5 to 13, 6 to 19, 8 above. A weld the page
- * draws but does not design is drawn at this size and labelled as such.
- */
-export function minFilletSize(tThinner: number): number {
-  if (tThinner <= 6) return 3
-  if (tThinner <= 13) return 5
-  if (tThinner <= 19) return 6
-  return 8
-}
 
 /**
  * Do the weld lines sit on a column's FLANGE TIPS? Two (or more) vertical
