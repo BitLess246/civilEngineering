@@ -1,0 +1,55 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../showreel/fonts/fonts.css">
+<style>
+  /* The link-preview card: 1200×630, the drafting theme, the logo's amber node the only glow. */
+  :root { --ink:#0f1b2a; --deep:#0a131e; --paper:#f2f5f9; --muted:#9eb0c5; --accent:#6ba4dc; --amber:#f2b53a }
+  * { margin:0; padding:0; box-sizing:border-box }
+  html, body { width:1200px; height:630px; overflow:hidden; background:var(--ink) }
+  body { position:relative; font-family:'Archivo', system-ui, sans-serif; color:var(--paper); -webkit-font-smoothing:antialiased }
+  .ground { position:absolute; inset:0; background:radial-gradient(900px 620px at 30% 45%, #15283f 0%, var(--ink) 55%, var(--deep) 100%) }
+  .grid { position:absolute; inset:0; background-image:
+      linear-gradient(rgba(107,164,220,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(107,164,220,.12) 1px, transparent 1px),
+      linear-gradient(rgba(107,164,220,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(107,164,220,.05) 1px, transparent 1px);
+    background-size:120px 120px, 120px 120px, 24px 24px, 24px 24px; background-position:-1px -1px }
+  .frame { position:absolute; right:-40px; top:58px; width:560px; opacity:.5 }
+  .mono { font-family:'IBM Plex Mono', ui-monospace, monospace; font-weight:500; letter-spacing:.18em; text-transform:uppercase }
+  .codes { position:absolute; left:84px; top:84px; font-size:17px; color:var(--accent) }
+  .lock { position:absolute; left:84px; top:150px; display:flex; align-items:center; gap:30px }
+  .word { font-size:150px; font-weight:900; letter-spacing:.03em; line-height:1 }
+  .tag { position:absolute; left:84px; top:358px; width:760px; font-size:52px; font-weight:800; letter-spacing:-.025em; line-height:1.04 }
+  .tag em { font-style:normal; color:var(--accent) }
+  .sub { position:absolute; left:86px; top:500px; font-size:22px; color:var(--muted); letter-spacing:-.005em }
+  .url { position:absolute; right:64px; bottom:46px; font-size:17px; color:var(--paper) }
+  .marks path { fill:none; stroke:rgba(232,234,237,.6); stroke-width:1.5 }
+</style></head>
+<body>
+  <div class="ground"></div><div class="grid"></div>
+  <!-- a portal frame in elevation, faint, behind the type -->
+  <svg class="frame" viewBox="0 0 560 480">
+    <g stroke="rgba(158,176,197,.55)" stroke-width="2" fill="none" stroke-linecap="round">
+      <path d="M60 120 H500 M60 240 H500 M60 360 H500" />
+      <path d="M60 120 V440 M206 120 V440 M353 120 V440 M500 120 V440" />
+    </g>
+    <path d="M30 440 H530" stroke="rgba(107,164,220,.7)" stroke-width="2" />
+    <g fill="rgba(242,245,249,.75)"><circle cx="60" cy="120" r="4"/><circle cx="206" cy="120" r="4"/><circle cx="353" cy="120" r="4"/><circle cx="500" cy="120" r="4"/>
+      <circle cx="60" cy="240" r="4"/><circle cx="206" cy="240" r="4"/><circle cx="353" cy="240" r="4"/><circle cx="500" cy="240" r="4"/>
+      <circle cx="60" cy="360" r="4"/><circle cx="206" cy="360" r="4"/><circle cx="353" cy="360" r="4"/><circle cx="500" cy="360" r="4"/></g>
+  </svg>
+  <svg class="marks" width="1200" height="630" style="position:absolute;inset:0">
+    <path d="M58 36 H36 V58"/><path d="M1142 36 H1164 V58"/><path d="M58 594 H36 V572"/><path d="M1142 594 H1164 V572"/>
+  </svg>
+  <div class="codes mono">NSCP 2015 · ACI 318-14 · AISC 360-16</div>
+  <div class="lock">
+    <svg viewBox="0 0 64 64" width="168" height="168" aria-hidden="true">
+      <rect x="1" y="1" width="62" height="62" rx="12" fill="#0f2a4a" stroke="rgba(107,164,220,.35)" stroke-width=".5"/>
+      <g stroke="#f2f5f9" stroke-width="4" stroke-linecap="round" fill="none"><line x1="14" y1="22" x2="50" y2="22"/><line x1="18" y1="22" x2="18" y2="50"/><line x1="46" y1="22" x2="46" y2="50"/></g>
+      <line x1="10" y1="50" x2="54" y2="50" stroke="#7fb3e8" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="32" cy="22" r="3.5" fill="#f2b53a" style="filter:drop-shadow(0 0 2.5px rgba(242,181,58,.95)) drop-shadow(0 0 7px rgba(242,181,58,.5))"/>
+    </svg>
+    <div class="word">ZETA</div>
+  </div>
+  <div class="tag">The structural workbench for <em>Philippine practice.</em></div>
+  <div class="sub">Every answer shows its work — every result traced to its clause.</div>
+  <div class="url mono">zetastruct.app</div>
+</body></html>
