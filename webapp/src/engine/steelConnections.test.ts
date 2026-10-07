@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { designStructure } from './pipeline'
-import { designSteelJoints, designBolts, designBoltedTab, copedWebBlockShear, tabBearing, FNV_A325, phiBoltShear } from './steelConnections'
+import { designSteelJoints, designBolts, designBoltedTab, copedWebBlockShear, tabBearing, tabHeightLimit, FNV_A325, phiBoltShear } from './steelConnections'
 import { shapeByName } from './aiscSections'
 import type { BoltPos } from './steelDesign'
 import type { RectSection } from './model'
@@ -74,7 +74,10 @@ describe('steel joint / connection design', () => {
   it('bolt group: elastic eccentric method sizes each bolt within φRn', () => {
     for (const j of joints) {
       for (const c of j.connections) {
-        expect(c.bolts.dia).toBe(20)                       // M20
+        // M20 unless the web is too shallow for enough of them: then M22/M24
+        expect([20, 22, 24]).toContain(c.bolts.dia)
+        const b = design.steelBeams.find((r) => r.id === c.beamId)!
+        expect(c.tab.hMm).toBeLessThanOrEqual(tabHeightLimit(b, c.pinned ? 'simple' : 'moment') + 1e-9)
         expect(c.bolts.locations.length).toBe(c.bolts.n)   // one position per bolt
         expect(c.bolts.Rmax).toBeLessThanOrEqual(c.bolts.phiRnKn + 1e-6)
         expect(c.bolts.ok).toBe(true)
@@ -405,5 +408,29 @@ describe('moment connections: the CJP is base metal, the column is checked under
 
   it('web-face moment connections carry no §J10 (the extension plates span to the flanges)', () => {
     for (const j of d.joints) for (const c of j.connections) if (c.faceType === 'web') expect(c.j10).toBeUndefined()
+  })
+})
+
+describe('the shear tab fits the beam web between its flanges', () => {
+  // W310x38.7: d 310, tf 9.7, tw 5.8
+  const b = { d: 310, tf: 9.7, tw: 5.8 }
+  it('limits: simple tf + 15 each side; moment tf + max(1.5tw, 25) + 5 (§J1.6 access holes); coped by the cope', () => {
+    expect(tabHeightLimit(b, 'simple')).toBeCloseTo(310 - 2 * 24.7, 9)
+    expect(tabHeightLimit(b, 'moment')).toBeCloseTo(310 - 2 * (9.7 + 25 + 5), 9)
+    expect(tabHeightLimit(b, 'simple', 24)).toBeCloseTo(310 - 48 - 20, 9)
+  })
+  it('the bolt column never grows past the limit: a bigger bolt first', () => {
+    const free = designBoltedTab(140, 9)                      // unlimited: M20, as many as it takes
+    expect(free.bolts.dia).toBe(20)
+    const capped = designBoltedTab(140, 9, undefined, undefined, undefined, 160)
+    expect(capped.tab.hMm).toBeLessThanOrEqual(160)
+    expect(capped.bolts.n).toBeLessThanOrEqual(2)
+    expect(capped.bolts.dia).toBeGreaterThan(20)
+    expect(capped.fits).toBe(true)
+  })
+  it('a reaction no single column in the web can carry is reported as not fitting', () => {
+    const r = designBoltedTab(900, 6, undefined, undefined, undefined, 160)
+    expect(r.fits).toBe(false)
+    expect(r.tab.hMm).toBeLessThanOrEqual(160)
   })
 })
