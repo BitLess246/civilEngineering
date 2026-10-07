@@ -28,7 +28,7 @@
 // nine `stressScale` hands the legend, so the bar and the surface cannot drift.
 // ─────────────────────────────────────────────────────────────────────────
 import * as THREE from 'three'
-import { rampStops, DEFAULT_BANDS } from './stressScale'
+import { rampStops, DEFAULT_BANDS, DEFAULT_PALETTE, type RampPalette } from './stressScale'
 
 const VERT = /* glsl */`
   attribute float aValue;     // normalised 0…1, already domain-mapped in JS
@@ -71,6 +71,8 @@ export interface ContourMaterialOpts {
   /** 0 = smooth. */
   bands?: number
   opacity?: number
+  /** Ramp family — the FEA spectrum by default. */
+  palette?: RampPalette
 }
 
 /**
@@ -82,9 +84,9 @@ export interface ContourMaterialOpts {
  * the number it is keyed to.
  */
 export function contourMaterial({
-  signed, bands = DEFAULT_BANDS, opacity = 1,
+  signed, bands = DEFAULT_BANDS, opacity = 1, palette = DEFAULT_PALETTE,
 }: ContourMaterialOpts): THREE.ShaderMaterial {
-  const stops = rampStops(signed).map(([r, g, b]) => new THREE.Vector3(r / 255, g / 255, b / 255))
+  const stops = rampStops(signed, palette).map(([r, g, b]) => new THREE.Vector3(r / 255, g / 255, b / 255))
   return new THREE.ShaderMaterial({
     uniforms: {
       uStops: { value: stops },

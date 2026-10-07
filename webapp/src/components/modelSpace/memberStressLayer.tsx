@@ -16,10 +16,10 @@ import * as THREE from 'three'
 import {
   memberContourGeometry, type ContourMember, type MemberStressKey,
 } from '../../lib/memberContour'
-import type { Domain } from '../../lib/stressScale'
+import type { Domain, RampPalette } from '../../lib/stressScale'
 import { contourMaterial } from '../../lib/contourMaterial'
 
-export function MemberStress3D({ members, contourKey, domain, bands, blendJoints }: {
+export function MemberStress3D({ members, contourKey, domain, bands, blendJoints, palette }: {
   members: readonly ContourMember[]
   contourKey: MemberStressKey
   /** Passed in rather than derived, so the legend beside the picture and the
@@ -27,6 +27,8 @@ export function MemberStress3D({ members, contourKey, domain, bands, blendJoints
   domain: Domain
   /** Discrete colour bands; 0 draws the field smooth. */
   bands: number
+  /** Ramp family; the FEA spectrum by default. */
+  palette?: RampPalette
   /** Average the field through the joint panels (display only) — see
    *  `lib/memberContour` § Joint blending. */
   blendJoints: boolean
@@ -46,7 +48,7 @@ export function MemberStress3D({ members, contourKey, domain, bands, blendJoints
   // replaced — a ShaderMaterial is a compiled GPU program, and leaking one per
   // band-count change is a real leak rather than a tidiness point.
   const mat = useMemo(
-    () => contourMaterial({ signed: domain.signed, bands }), [domain.signed, bands])
+    () => contourMaterial({ signed: domain.signed, bands, palette }), [domain.signed, bands, palette])
   useEffect(() => () => { mat.dispose() }, [mat])
 
   if (!geo) return null
