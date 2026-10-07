@@ -2824,6 +2824,18 @@ function buildGrowActions(design: StructureDesign, model: StructuralModel, memSe
       utils.set(mm.section, Math.max(utils.get(mm.section) ?? 0, need))
     }
   }
+  // Steel connections: a connection that fails — above all one whose bolt
+  // column does not fit between the beam's flanges — is fixed by a deeper
+  // beam; a column short under §J10 even with its stiffening, by a heavier
+  // column. Neither shows in the member's own utilisation, so without this
+  // the optimizer stops with every member passing and the joint failing.
+  const bump = (sec: string | undefined, f: number) => { if (sec) utils.set(sec, Math.max(utils.get(sec) ?? 0, f)) }
+  for (const j of design.joints) for (const c of j.connections) {
+    if (c.ok) continue
+    bump(memSecId.get(c.beamId), 1.15)
+    if (c.j10 && !c.j10.ok) bump(memSecId.get(j.columnId), 1.15)
+  }
+  for (const j of design.beamJoints) for (const c of j.connections) if (!c.ok) bump(memSecId.get(c.beamId), 1.15)
   // Slabs: §408.3.1.2 hmin directly; §424.2 deflection via Ie ≈ h³ ⇒ target
   // h ≈ h·∛(δ/δlim); and the thickness the mat search says it needs, straight.
   //

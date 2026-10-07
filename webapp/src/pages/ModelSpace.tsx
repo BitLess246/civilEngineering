@@ -6673,6 +6673,7 @@ export default function ModelSpace() {
                           {c.connType === 'moment-flange-weld' ? 'Moment (CJP flange)'
                             : c.connType === 'moment-web-plate' ? 'Moment (web ext. plates)' : 'Shear tab'}
                           <div className="text-[10px] text-muted">{c.pinned ? 'pin — releases Mz' : 'rigid'}</div>
+                          {c.note && <div className="text-[10px] font-medium">{c.note}</div>}
                         </td>
                         <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
                         <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>

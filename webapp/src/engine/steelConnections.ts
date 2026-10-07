@@ -333,10 +333,16 @@ export function copedWebBlockShear(
 export function designBoltedTab(
   Vu: number, tw: number, aMm = A_WELD_TO_BOLT, cope?: { beamD: number; depthMm: number },
   support: { t: number; Fu: number } = { t: 10, Fu: FU_PLATE },
-): { bolts: BoltGroup; tab: ShearTab; bearing: TabBearing; webBlockShear?: CopedWebBlockShear; plate: TabPlateChecks; weld: TabWeldCheck } {
-  let bolts = designBolts(Vu, { dia: 20, aMm })
-  for (;;) {
-    const base = designShearTab(Vu, bolts.n, bolts.pitchMm, bolts.edgeMm, aMm)
+  /** The tallest tab the beam web takes between its flanges, mm (see
+   *  `tabHeightLimit`). The bolt column never grows past it; M22 then M24 are
+   *  tried before the connection is called too big for the web. */
+  hMax = Infinity,
+): { bolts: BoltGroup; tab: ShearTab; bearing: TabBearing; webBlockShear?: CopedWebBlockShear; plate: TabPlateChecks; weld: TabWeldCheck; fits: boolean; hMax: number } {
+  const pitch = 75, edge = 40
+  const nMax = Math.min(24, Math.floor((hMax - 2 * edge) / pitch) + 1)
+  const attempt = (dia: number, n: number) => {
+    const bolts = designBolts(Vu, { dia, aMm, pitchMm: pitch, edgeMm: edge, locations: boltColumn(n, pitch, edge, aMm) })
+    const base = designShearTab(Vu, n, pitch, edge, aMm)
     // thicken the plate through stock until every plate limit state passes
     // (shear rupture, block shear and flexure at the bolt line, not only the
     // shear yielding that picked `base.t`) and the tab can take its welds
@@ -353,13 +359,31 @@ export function designBoltedTab(
     const webBlockShear = webTop != null ? copedWebBlockShear(bolts, Vu, tw, webTop) : undefined
     // a longer tab spreads the weld force too, so a weld (or support) the
     // plate thickness cannot fix still gets another bolt
-    const ok = bearing.ok && plate.ok && weld.ok && (!webBlockShear || webBlockShear.ok)
-    if (ok || bolts.n >= 24) {
-      tab = { ...tab, weldSizeMm: weld.w, phiWeldVn: weld.fMax > 0 ? (Vu * weld.phiWeld) / weld.fMax : Infinity }
-      return { bolts: { ...bolts, ok: bolts.ok && bearing.ok && (!webBlockShear || webBlockShear.ok) }, tab, bearing, plate, weld, ...(webBlockShear ? { webBlockShear } : {}) }
-    }
-    bolts = designBolts(Vu, { dia: 20, aMm, locations: boltColumn(bolts.n + 1, bolts.pitchMm, bolts.edgeMm, aMm) })
+    const ok = bolts.ok && bearing.ok && plate.ok && weld.ok && (!webBlockShear || webBlockShear.ok)
+    tab = { ...tab, weldSizeMm: weld.w, phiWeldVn: weld.fMax > 0 ? (Vu * weld.phiWeld) / weld.fMax : Infinity }
+    return { ok, r: { bolts: { ...bolts, ok: bolts.ok && bearing.ok && (!webBlockShear || webBlockShear.ok) }, tab, bearing, plate, weld, ...(webBlockShear ? { webBlockShear } : {}) } }
   }
+  // the smallest column that passes, M20 first; a bigger bolt before a tab
+  // taller than the web between its flanges
+  let last: ReturnType<typeof attempt> | undefined
+  for (const dia of [20, 22, 24]) {
+    for (let n = 2; n <= Math.max(2, nMax); n++) {
+      last = attempt(dia, n)
+      if (last.ok) return { ...last.r, fits: n <= nMax, hMax }
+    }
+  }
+  // nothing passes inside the web: report the largest that fits, flagged
+  return { ...last!.r, fits: false, hMax }
+}
+
+/** The tallest single-plate tab a beam web takes, mm: clear of the flanges and
+ *  their fillets (tf + 15) — and, under CJP-welded flanges, of the weld access
+ *  holes (§J1.6: max(1.5·tw, 25) high) — or, on a top-flange-coped beam, below
+ *  the cope with the tab centred at mid-depth as it is drawn. */
+export function tabHeightLimit(beam: { d: number; tf: number; tw: number }, kind: 'simple' | 'moment', copeDepth?: number): number {
+  const clear = kind === 'moment' ? beam.tf + Math.max(1.5 * beam.tw, 25) + 5 : beam.tf + 15
+  const byFlanges = beam.d - 2 * clear
+  return copeDepth != null ? Math.min(byFlanges, beam.d - 2 * copeDepth - 20) : byFlanges
 }
 
 /** Two tabs welded to opposite faces of ONE support element (a column web, or
@@ -523,7 +547,10 @@ export function designSteelJoints(
         const support = faceType === 'flange'
           ? { t: colShp?.tf ?? 12, Fu: colFu }
           : { t: colShp?.tw ?? 8, Fu: colFu }
-        const { bolts, tab, bearing, plate, weld } = designBoltedTab(Vu, row?.tw ?? 6, aMm, undefined, support)
+        const hMax = row ? tabHeightLimit(row, useMoment ? 'moment' : 'simple') : Infinity
+        const { bolts, tab, bearing, plate, weld, fits } = designBoltedTab(Vu, row?.tw ?? 6, aMm, undefined, support, hMax)
+        const tooBig = fits ? undefined
+          : `Vu ${Vu.toFixed(1)} kN needs more than one bolt column fits in the ${row?.shape ?? 'beam'} web (tab ≤ ${Math.round(hMax)} mm between the flanges${useMoment ? ' and their weld access holes' : ''}): a deeper beam or a two-column / double-angle detail.`
 
         // Moment path per the FACE the flanges meet: direct CJP into a column
         // flange; extension plates into a column web (CJP into the thin web
@@ -558,7 +585,8 @@ export function designSteelJoints(
           bearing,
           plate, weld,
           flange: flangeConn,
-          ok: bolts.ok && plate.ok && weld.ok && flangeOk,
+          ...(tooBig ? { note: tooBig } : {}),
+          ok: bolts.ok && plate.ok && weld.ok && flangeOk && !tooBig,
         })
       }
 
@@ -679,8 +707,11 @@ export function designBeamBeamJoints(
         lengthMm: Math.round((girderShp.bf ?? 150) / 2 + 12),
         depthMm: Math.round((girderShp.tf ?? 12) + 12),
       }
-      const { bolts, tab, bearing, webBlockShear, plate, weld } = designBoltedTab(Vu, row?.tw ?? 6, undefined,
-        { beamD: row?.d ?? 300, depthMm: cope.depthMm }, { t: girderShp.tw ?? 8, Fu: girderSec?.steelFu ?? FU_PLATE })
+      const hMax = row ? tabHeightLimit(row, 'simple', cope.depthMm) : Infinity
+      const { bolts, tab, bearing, webBlockShear, plate, weld, fits } = designBoltedTab(Vu, row?.tw ?? 6, undefined,
+        { beamD: row?.d ?? 300, depthMm: cope.depthMm }, { t: girderShp.tw ?? 8, Fu: girderSec?.steelFu ?? FU_PLATE }, hMax)
+      const tooBig = fits ? undefined
+        : `Vu ${Vu.toFixed(1)} kN needs more than one bolt column fits in the coped ${row?.shape ?? 'beam'} web (tab ≤ ${Math.round(hMax)} mm below the cope): a deeper beam or a two-column / double-angle detail.`
       const beamSec = secOf.get(mem.section)
       const beamShp = beamSec?.shape ? shapeByName(beamSec.shape) : undefined
       const copedBeam = copedBeamChecks(
@@ -693,8 +724,8 @@ export function designBeamBeamJoints(
         beamId: mem.id, role: mem.role, spanDir: spanDirOf(ni, nj),
         faceType: 'web', beamElement: 'web', connType: 'shear-tab',
         pinned: true, Vu, Mu: 0, bolts, tab, bearing, cope, plate, weld, copedBeam, ...(webBlockShear ? { webBlockShear } : {}),
-        ...(note ? { note } : {}),
-        ok: bolts.ok && plate.ok && weld.ok && copedBeam.ok && !note,
+        ...(note || tooBig ? { note: [note, tooBig].filter(Boolean).join(' ') } : {}),
+        ok: bolts.ok && plate.ok && weld.ok && copedBeam.ok && !note && !tooBig,
       })
     }
 
