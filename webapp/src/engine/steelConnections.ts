@@ -11,10 +11,11 @@
  */
 import type { StructuralModel, Node as ModelNode } from './model'
 import type { StructureDesign, SteelBeamScheduleRow } from './pipeline'
-import { boltFnv, boltGeomFromPositions, eccentricBoltGroup, plyBearing, type BoltPos } from './steelDesign'
+import { boltFnv, boltGeomFromPositions, eccentricBoltGroup, plyBearing, type BoltPos, type PlyBearing } from './steelDesign'
 import { shapeByName } from './aiscSections'
 import { localAxes, defaultAxisRotation, type V3 } from './frame3d'
 import { resolveSteelConnections, throughCarrier } from './steelJoints'
+import { tabPlateChecks, sizeTabWeld, tabWeldCheck, copedBeamChecks, type TabPlateChecks, type TabWeldCheck, type CopedBeamChecks } from './shearTabChecks'
 
 // ── Material constants ──────────────────────────────────────────────────────
 const PHI_SHEAR_BOLT = 0.75           // AISC §J3.6
@@ -25,7 +26,7 @@ export const FNV_A325 = boltFnv('A325M', false)
 const PHI_PLATE_YIELD = 1.0           // AISC §J4.2 shear yielding
 const FY_PLATE = 248                  // MPa  A36
 const FU_PLATE = 400                  // MPa
-const FEXX = 480                      // MPa  E70XX electrode
+const FEXX = 482                      // MPa  E70XX electrode (70 ksi, FEXX_BY_CLASS)
 const PHI_WELD = 0.75
 
 /** Capacity of a single fillet weld (one side) per unit length: kN/mm */
@@ -34,7 +35,7 @@ const phiWeldPerMm = (w: number) => PHI_WELD * 0.6 * FEXX * 0.707 * w / 1000
 const PHI_CJP = 0.9                   // AISC Table J2.5 complete-joint-penetration
 
 // ── Plate stock ──────────────────────────────────────────────────────────────
-const PLATE_STOCK = [6, 8, 10, 12, 16, 19, 22, 25] // mm, standard stock
+export const PLATE_STOCK = [6, 8, 10, 12, 16, 19, 22, 25] // mm, standard stock
 function adoptPlate(t: number): number {
   return PLATE_STOCK.find((s) => s >= t - 1e-6) ?? PLATE_STOCK[PLATE_STOCK.length - 1]
 }
@@ -126,6 +127,13 @@ export interface BeamConnection {
   bearing: TabBearing
   /** §J4.3 block shear of the coped web (beam-to-girder fin plates). */
   webBlockShear?: CopedWebBlockShear
+  /** Every plate limit state of the tab (`shearTabChecks`). */
+  plate: TabPlateChecks
+  /** The tab's fillets by the elastic line method, their minimum size and
+   *  the base metal of the tab and the support. */
+  weld: TabWeldCheck
+  /** The coped beam's reduced section at the cope (beam-to-girder only). */
+  copedBeam?: CopedBeamChecks
   /** Why the connection fails for a reason its capacities do not show. */
   note?: string
   ok: boolean
@@ -145,6 +153,10 @@ export interface TabBearing {
   governingBolt: string
   /** What limits the governing bolt. */
   governedBy: 'bolt shear' | 'tab bearing' | 'tab tear-out' | 'web bearing' | 'web tear-out'
+  /** Each bolt on each ply (lc, nominal tear-out and bearing, kN) — what the
+   *  drawing labels, never recomputes. */
+  tabBolts: PlyBearing[]
+  webBolts: PlyBearing[]
   ok: boolean
 }
 
@@ -271,7 +283,7 @@ export function tabBearing(bolts: BoltGroup, tab: ShearTab, Vu: number, tw: numb
     phiRnTab: PHI_BEARING * Math.min(...onTab.map((b) => b.Rn)),
     phiRnWeb: PHI_BEARING * Math.min(...onWeb.map((b) => b.Rn)),
     lcTabMin: Math.min(...onTab.map((b) => b.lc)),
-    tw, FuWeb, util, governingBolt, governedBy, ok: util <= 1 + 1e-9,
+    tw, FuWeb, util, governingBolt, governedBy, tabBolts: onTab, webBolts: onWeb, ok: util <= 1 + 1e-9,
   }
 }
 
@@ -312,18 +324,51 @@ export function copedWebBlockShear(
  */
 export function designBoltedTab(
   Vu: number, tw: number, aMm = A_WELD_TO_BOLT, cope?: { beamD: number; depthMm: number },
-): { bolts: BoltGroup; tab: ShearTab; bearing: TabBearing; webBlockShear?: CopedWebBlockShear } {
+  support: { t: number; Fu: number } = { t: 10, Fu: FU_PLATE },
+): { bolts: BoltGroup; tab: ShearTab; bearing: TabBearing; webBlockShear?: CopedWebBlockShear; plate: TabPlateChecks; weld: TabWeldCheck } {
   let bolts = designBolts(Vu, { dia: 20, aMm })
   for (;;) {
-    const tab = designShearTab(Vu, bolts.n, bolts.pitchMm, bolts.edgeMm, aMm)
+    const base = designShearTab(Vu, bolts.n, bolts.pitchMm, bolts.edgeMm, aMm)
+    // thicken the plate through stock until every plate limit state passes
+    // (shear rupture, block shear and flexure at the bolt line, not only the
+    // shear yielding that picked `base.t`) and the tab can take its welds
+    let tab = base, plate = tabPlateChecks(bolts, tab, Vu, FY_PLATE, FU_PLATE)
+    let weld = sizeTabWeld(bolts, tab, Vu, support, FEXX, FU_PLATE)
+    for (const t of PLATE_STOCK) {
+      if (t <= base.t || (plate.ok && weld.governs !== 'tab base metal')) continue
+      tab = { ...base, t, phiVn: (PHI_PLATE_YIELD * 0.6 * FY_PLATE * t * base.hMm) / 1000 }
+      plate = tabPlateChecks(bolts, tab, Vu, FY_PLATE, FU_PLATE)
+      weld = sizeTabWeld(bolts, tab, Vu, support, FEXX, FU_PLATE)
+    }
     const webTop = cope ? tab.hMm / 2 + cope.beamD / 2 - cope.depthMm : undefined
     const bearing = tabBearing(bolts, tab, Vu, tw, FU_PLATE, webTop)
     const webBlockShear = webTop != null ? copedWebBlockShear(bolts, Vu, tw, webTop) : undefined
-    const ok = bearing.ok && (!webBlockShear || webBlockShear.ok)
+    // a longer tab spreads the weld force too, so a weld (or support) the
+    // plate thickness cannot fix still gets another bolt
+    const ok = bearing.ok && plate.ok && weld.ok && (!webBlockShear || webBlockShear.ok)
     if (ok || bolts.n >= 24) {
-      return { bolts: { ...bolts, ok: bolts.ok && ok }, tab, bearing, ...(webBlockShear ? { webBlockShear } : {}) }
+      tab = { ...tab, weldSizeMm: weld.w, phiWeldVn: weld.fMax > 0 ? (Vu * weld.phiWeld) / weld.fMax : Infinity }
+      return { bolts: { ...bolts, ok: bolts.ok && bearing.ok && (!webBlockShear || webBlockShear.ok) }, tab, bearing, plate, weld, ...(webBlockShear ? { webBlockShear } : {}) }
     }
     bolts = designBolts(Vu, { dia: 20, aMm, locations: boltColumn(bolts.n + 1, bolts.pitchMm, bolts.edgeMm, aMm) })
+  }
+}
+
+/** Two tabs welded to opposite faces of ONE support element (a column web, or
+ *  a girder web with beams framing in from both sides) put both weld forces
+ *  through that element's thickness: re-check each tab's support base metal
+ *  with the other's force added. `dirs`: each connection's beam direction
+ *  away from the node (plan unit vector). */
+function pairOpposite(conns: BeamConnection[], dirs: [number, number][], onSameElement: (c: BeamConnection) => boolean) {
+  for (let a = 0; a < conns.length; a++) {
+    if (!onSameElement(conns[a])) continue
+    for (let b = 0; b < conns.length; b++) {
+      if (a === b || !onSameElement(conns[b])) continue
+      if (dirs[a][0] * dirs[b][0] + dirs[a][1] * dirs[b][1] > -0.9) continue
+      const c = conns[a]
+      const w = tabWeldCheck(c.bolts, c.tab, c.Vu, c.weld.w, { t: c.weld.tSupport, Fu: c.weld.FuSupport }, c.weld.FEXX, FU_PLATE, conns[b].weld.fMax)
+      conns[a] = { ...c, weld: w, ok: c.ok && w.ok }
+    }
   }
 }
 
@@ -378,6 +423,7 @@ export function designSteelJoints(
   const beamRow  = new Map<string, SteelBeamScheduleRow>(design.steelBeams.map((b) => [b.id, b]))
   const colIds   = new Set<string>(design.steelColumns.map((c) => c.id))
   const resolved = resolveSteelConnections(model)
+  const secOf = new Map(model.sections.map((sec) => [sec.id, sec]))
 
   // Build adj: node → list of member ids that touch it
   const adj = new Map<string, string[]>()
@@ -436,6 +482,8 @@ export function designSteelJoints(
       const aWebMm = A_WELD_TO_BOLT + Math.max(0, ((colShp?.bf ?? 0) - (colShp?.tw ?? 0)) / 2)
 
       const connections: BeamConnection[] = []
+      const dirs: [number, number][] = []
+      const colFu = secOf.get(colMemAtNode.section)?.steelFu ?? FU_PLATE
 
       for (const mid of beamMems) {
         const mem = memMap.get(mid)!
@@ -464,7 +512,10 @@ export function designSteelJoints(
         // Elastic eccentric bolt group (each bolt placed & checked individually).
         // Web-face tabs carry the larger extended-plate eccentricity.
         const aMm = faceType === 'web' ? aWebMm : A_WELD_TO_BOLT
-        const { bolts, tab, bearing } = designBoltedTab(Vu, row?.tw ?? 6, aMm)
+        const support = faceType === 'flange'
+          ? { t: colShp?.tf ?? 12, Fu: colFu }
+          : { t: colShp?.tw ?? 8, Fu: colFu }
+        const { bolts, tab, bearing, plate, weld } = designBoltedTab(Vu, row?.tw ?? 6, aMm, undefined, support)
 
         // Moment path per the FACE the flanges meet: direct CJP into a column
         // flange; extension plates into a column web (CJP into the thin web
@@ -482,8 +533,8 @@ export function designSteelJoints(
         // web (shear) + both flanges (moment path) for a moment connection.
         const beamElement: BeamAttachment = useMoment ? 'web+flanges' : 'web'
 
-        const tabOk  = tab.phiVn >= Vu - 1e-6 && tab.phiWeldVn >= Vu - 1e-6
         const flangeOk = !flangeConn || flangeConn.ok
+        dirs.push(bl > 1e-9 ? [(mem.i === nodeId ? 1 : -1) * bdx / bl, (mem.i === nodeId ? 1 : -1) * bdz / bl] : [0, 0])
 
         connections.push({
           beamId: mid,
@@ -497,12 +548,15 @@ export function designSteelJoints(
           bolts,
           tab,
           bearing,
+          plate, weld,
           flange: flangeConn,
-          ok: bolts.ok && tabOk && flangeOk,
+          ok: bolts.ok && plate.ok && weld.ok && flangeOk,
         })
       }
 
       if (connections.length === 0) continue
+      // web-face tabs from both sides load the one column web
+      pairOpposite(connections, dirs, (c) => c.faceType === 'web')
 
       joints.push({
         nodeId,
@@ -580,6 +634,7 @@ export function designBeamBeamJoints(
     if (supported.length === 0) continue
 
     const connections: BeamConnection[] = []
+    const dirs: [number, number][] = []
     for (const mem of supported) {
       const ni = nodeMap.get(mem.i)!, nj = nodeMap.get(mem.j)!
       const row = beamRow.get(mem.id)
@@ -598,18 +653,27 @@ export function designBeamBeamJoints(
         lengthMm: Math.round((girderShp.bf ?? 150) / 2 + 12),
         depthMm: Math.round((girderShp.tf ?? 12) + 12),
       }
-      const { bolts, tab, bearing, webBlockShear } = designBoltedTab(Vu, row?.tw ?? 6, undefined,
-        { beamD: row?.d ?? 300, depthMm: cope.depthMm })
-      const tabOk = tab.phiVn >= Vu - 1e-6 && tab.phiWeldVn >= Vu - 1e-6
+      const { bolts, tab, bearing, webBlockShear, plate, weld } = designBoltedTab(Vu, row?.tw ?? 6, undefined,
+        { beamD: row?.d ?? 300, depthMm: cope.depthMm }, { t: girderShp.tw ?? 8, Fu: girderSec?.steelFu ?? FU_PLATE })
+      const beamSec = secOf.get(mem.section)
+      const beamShp = beamSec?.shape ? shapeByName(beamSec.shape) : undefined
+      const copedBeam = copedBeamChecks(
+        { d: row?.d ?? beamShp?.d ?? 300, bf: row?.bf ?? beamShp?.bf ?? 150, tf: row?.tf ?? beamShp?.tf ?? 10, tw: row?.tw ?? beamShp?.tw ?? 6 },
+        cope, bolts, Vu, beamSec?.steelFy ?? FY_PLATE, beamSec?.steelFu ?? FU_PLATE)
+      const bdx = nj.x - ni.x, bdz = nj.z - ni.z, bl = Math.hypot(bdx, bdz)
+      const sgn = mem.i === node.id ? 1 : -1
+      dirs.push(bl > 1e-9 ? [sgn * bdx / bl, sgn * bdz / bl] : [0, 0])
       connections.push({
         beamId: mem.id, role: mem.role, spanDir: spanDirOf(ni, nj),
         faceType: 'web', beamElement: 'web', connType: 'shear-tab',
-        pinned: true, Vu, Mu: 0, bolts, tab, bearing, cope, ...(webBlockShear ? { webBlockShear } : {}),
+        pinned: true, Vu, Mu: 0, bolts, tab, bearing, cope, plate, weld, copedBeam, ...(webBlockShear ? { webBlockShear } : {}),
         ...(note ? { note } : {}),
-        ok: bolts.ok && tabOk && !note,
+        ok: bolts.ok && plate.ok && weld.ok && copedBeam.ok && !note,
       })
     }
 
+    // beams framing in from both sides weld to the one girder web
+    pairOpposite(connections, dirs, () => true)
     joints.push({
       nodeId: node.id,
       girderId: carrier[0].id,

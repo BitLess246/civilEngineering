@@ -61,8 +61,16 @@ export interface ShearTabMechanicsProps {
   bearing?: { id: string; lc: number; Rn_tear: number; Rn_bear: number; availBearing: number }[]
   /** The same on the beam web, when the page checked it. */
   webBearing?: { id: string; lc: number; Rn_tear: number; Rn_bear: number; availBearing: number }[] | null
-  /** The tab welds as the engine checked them. */
-  weld?: { w: number; FEXX: number; L: number; fMax: number; availPerLen: number; util: number; wMin: number; wMax: number; sizeOk: boolean; ok: boolean } | null
+  /** The tab welds as the engine checked them. `wMax` only where the page
+   *  checked one; `baseMetal`, N/mm, where the engine checked the tab and the
+   *  support behind the weld. */
+  weld?: { w: number; FEXX: number; L: number; fMax: number; availPerLen: number; util: number; wMin: number; wMax?: number; sizeOk: boolean; ok: boolean;
+    baseMetal?: { tab: number; support: number; tSupport: number; governs: string } } | null
+  /** What the tab is welded to, when it is not a column flange: its name
+   *  ('column web', 'girder web') and thickness, mm. */
+  support?: { name: string; t: number; kind?: 'girder' }
+  /** Top-flange cope of the supported beam, mm — drawn in the elevation. */
+  cope?: { lengthMm: number; depthMm: number }
 }
 
 export function ShearTabMechanics(p: ShearTabMechanicsProps) {
@@ -85,7 +93,8 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
 
   // ── shapes, mm ─────────────────────────────────────────────────────────
   const bd = p.beam.d ?? 310, btf = p.beam.tf ?? 10, btw = p.beam.tw ?? 6
-  const cd = p.column.d ?? 260, ctf = p.column.tf ?? 14, cbf = p.column.bf ?? 255
+  const cd = p.column.d ?? 260, ctf = p.support?.t ?? p.column.tf ?? 14, cbf = p.column.bf ?? 255
+  const supportName = p.support?.name ?? 'column flange'
   // The tab-to-column weld: a fillet on BOTH faces of the tab, drawn at the
   // leg the page checked (the Table J2.4 minimum only if none was given).
   // the fillets drawn at the size the page checked them at
@@ -94,17 +103,30 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
   const setback = 13
   const beamEnd = W + 170
   const yTop = yc + bd / 2, yBot = yc - bd / 2
-  const colTop = yTop + 70, colBot = yBot - 70
+  // a GIRDER runs across the beam, so this elevation cuts it: an I of its own
+  // d and bf, web on the weld line, top of steel flush with the beam's
+  const girder = p.support?.kind === 'girder'
+  const gd = p.column.d ?? bd + 50, gbf = p.column.bf ?? 170, gtf = p.column.tf ?? 11
+  const colTop = girder ? yTop + 30 : yTop + 70, colBot = girder ? Math.min(yBot, yTop - gd) - 30 : yBot - 70
+  // a coped beam: the top flange stops cl from the end, dc down
+  const cl = p.cope?.lengthMm ?? 0, dc = p.cope?.depthMm ?? 0
 
   // ── elevation frame ────────────────────────────────────────────────────
   // the column is cut off 120 mm back from its flange: the joint is at the
   // flange face, and the full depth only pushed the tab into a corner
   const cdv = Math.min(cd, 120)
   const EW = 380, EH = 400
-  const xMin = -cdv - 12, xMax = beamEnd + 10
+  const xMin = girder ? -ctf / 2 - gbf / 2 - 12 : -cdv - 12, xMax = beamEnd + 10
   const s = Math.min(EW / (xMax - xMin), EH / (colTop - colBot))
   const ox = 20 - xMin * s, oy = 36 + colTop * s
   const X = (x: number) => ox + x * s, Y = (y: number) => oy - y * s
+  // the beam's outline: cut by the break line at the far end, notched by the
+  // cope at the near end — the fill is clipped to it, so the drawn edges ARE
+  // the member's edges
+  const beamOutline = p.cope
+    ? [[X(setback), Y(yTop - dc)], [X(setback + cl), Y(yTop - dc)], [X(setback + cl), Y(yTop)],
+        ...zigPts(X(beamEnd), Y(yTop), Y(yBot)), [X(setback), Y(yBot)]].map((q) => q.join(',')).join(' ')
+    : cutOutline(X(setback), X(beamEnd), Y(yTop), Y(yBot))
   const elevBottom = Y(colBot)
 
   // ── section A–A frame: through the critical bolt's row, looking down ──
@@ -161,12 +183,18 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
             </pattern>
           </defs>
 
-          <text x={20} y={20} fontSize={11} fontWeight={700} fill={INK}>ELEVATION — shear tab to column flange</text>
+          <text x={20} y={20} fontSize={11} fontWeight={700} fill={INK}>ELEVATION — shear tab to {supportName}</text>
 
           {/* column: flanges edge-on, web between */}
           {/* the fill is cut BY the break line — one outline — so the zigzag
               is the member's edge, not a line drawn over a rectangle */}
-          {cd > cdv
+          {girder ? <>
+              <rect x={X(-ctf)} y={Y(yTop)} width={ctf * s} height={gd * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
+              {[yTop, yTop - gd + gtf].map((yf) => (
+                <rect key={yf} x={X(-ctf / 2 - gbf / 2)} y={Y(yf)} width={gbf * s} height={gtf * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
+              ))}
+            </>
+            : cd > cdv
             ? <>
                 <polygon points={cutOutline(X(0), X(-cdv), Y(colTop), Y(colBot))} fill={STEEL_FILL} stroke="none" />
                 <path d={zig(X(-cdv), Y(colTop), Y(colBot))} fill="none" stroke={INK} strokeWidth={0.9} />
@@ -175,19 +203,23 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
                 <rect x={X(-cd)} y={Y(colTop)} width={cd * s} height={(colTop - colBot) * s} fill={STEEL_FILL} stroke="none" />
                 <rect x={X(-cd)} y={Y(colTop)} width={ctf * s} height={(colTop - colBot) * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
               </>}
-          <rect x={X(-ctf)} y={Y(colTop)} width={ctf * s} height={(colTop - colBot) * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
-          <text x={X(-cdv / 2)} y={Y(colBot) + 14} fontSize={9.5} fill={NOTE} textAnchor="middle">{p.column.name} column</text>
+          {!girder && <rect x={X(-ctf)} y={Y(colTop)} width={ctf * s} height={(colTop - colBot) * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />}
+          <text x={girder ? X(-ctf / 2) : X(-cdv / 2)} y={Y(colBot) + 14} fontSize={9.5} fill={NOTE} textAnchor="middle">{p.column.name} {p.support ? supportName : 'column'}</text>
 
           {/* beam: flanges and web, broken at the far end */}
           <defs>
-            <clipPath id={`${uid}-beam`}><polygon points={cutOutline(X(setback), X(beamEnd), Y(yTop), Y(yBot))} /></clipPath>
+            <clipPath id={`${uid}-beam`}><polygon points={beamOutline} /></clipPath>
           </defs>
           <g clipPath={`url(#${uid}-beam)`}>
             <rect x={X(setback)} y={Y(yTop)} width={(beamEnd - setback) * s + 8} height={bd * s} fill={STEEL_FILL} stroke="none" />
             <rect x={X(setback)} y={Y(yTop)} width={(beamEnd - setback) * s + 8} height={btf * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
             <rect x={X(setback)} y={Y(yBot + btf)} width={(beamEnd - setback) * s + 8} height={btf * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
           </g>
-          <line x1={X(setback)} y1={Y(yTop)} x2={X(setback)} y2={Y(yBot)} stroke={INK} strokeWidth={0.9} />
+          <line x1={X(setback)} y1={Y(yTop - dc)} x2={X(setback)} y2={Y(yBot)} stroke={INK} strokeWidth={0.9} />
+          {p.cope && <>
+            <polyline points={`${X(setback)},${Y(yTop - dc)} ${X(setback + cl)},${Y(yTop - dc)} ${X(setback + cl)},${Y(yTop)}`} fill="none" stroke={INK} strokeWidth={0.9} />
+            <text x={X(setback + cl / 2)} y={Y(yTop - dc) - 4} fontSize={8.5} fill={NOTE} textAnchor="middle">cope {cl}×{dc}</text>
+          </>}
           <path d={zig(X(beamEnd), Y(yTop), Y(yBot))} fill="none" stroke={INK} strokeWidth={0.9} />
           <text x={X(beamEnd) - 4} y={Y(yTop) - 6} fontSize={9.5} fill={NOTE} textAnchor="end">{p.beam.name} beam · tw {btw} mm</text>
 
@@ -263,7 +295,7 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
             </g>
           ))}
           <text x={SX(W) + 3} y={SZ(btw / 2 + t) - 3} fontSize={8.5} fill={NOTE}>tab t {t}</text>
-          <text x={SX(-ctf / 2)} y={secBottom + 12} fontSize={8.5} fill={NOTE} textAnchor="middle">col. flange (bf {Math.round(cbf)}, cut)</text>
+          <text x={SX(-ctf / 2)} y={secBottom + 12} fontSize={8.5} fill={NOTE} textAnchor="middle">{p.support ? `${supportName} t ${ctf}` : `col. flange (bf ${Math.round(cbf)}, cut)`}</text>
           {/* the bolts of the row, through every ply */}
           {rowBolts.map((b) => {
             const zTopB = btw / 2 + t, zBotB = p.nShear === 2 ? -btw / 2 - t : -btw / 2
@@ -329,7 +361,10 @@ function readout(
   const wd = p.weld
   if (wd) {
     L.push({ text: `Tab welds §J2.4: 2 × ${wd.w} mm fillets, ${wd.L.toFixed(0)} mm long, for V, H and the moment about the weld line — f max ${wd.fMax.toFixed(0)} vs ${p.R} ${wd.availPerLen.toFixed(0)} N/mm (${(wd.util * 100).toFixed(0)} %).`, color: wd.util <= 1 ? WELD : CRIT, bold: true })
-    L.push({ text: `Size §J2.2b: ${wd.wMin} mm min (Table J2.4) ≤ w = ${wd.w} ≤ ${wd.wMax} mm max along the ${p.t} mm tab edge — ${wd.sizeOk ? 'OK' : 'out of range'}.`, color: wd.sizeOk ? WELD : CRIT })
+    L.push({ text: wd.wMax != null
+      ? `Size §J2.2b: ${wd.wMin} mm min (Table J2.4) ≤ w = ${wd.w} ≤ ${wd.wMax} mm max along the ${p.t} mm tab edge — ${wd.sizeOk ? 'OK' : 'out of range'}.`
+      : `Size: w = ${wd.w} mm ≥ ${wd.wMin} mm minimum (Table J2.4, thinner part) — ${wd.sizeOk ? 'OK' : 'too small'}.`, color: wd.sizeOk ? WELD : CRIT })
+    if (wd.baseMetal) L.push({ text: `Base metal §J4.2(b): tab ${wd.baseMetal.tab.toFixed(0)} N/mm, ${p.support?.name ?? 'support'} (t ${wd.baseMetal.tSupport}, two planes) ${wd.baseMetal.support.toFixed(0)} N/mm — governs: ${wd.baseMetal.governs}.`, color: wd.ok ? WELD : CRIT })
   }
   if (on.has('forces')) {
     const c = p.forces.find((f) => f.id === p.critical)

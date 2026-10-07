@@ -6,6 +6,7 @@ import { connectionMarks, type ConnectionType } from '../lib/steelMarks'
 import { buildSheetSet } from '../lib/planSheets'
 import type { PlanPrimitive } from './planRenderer'
 import { STEEL } from './sheetInk'
+import { shapeByName } from './aiscSections'
 import type { RectSection } from './model'
 
 const steel: RectSection = { id: 'S', name: 'W310x79', b: 254, h: 307, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40, material: 'steel', shape: 'W310x79', steelFy: 345, steelFu: 448 }
@@ -79,6 +80,23 @@ describe('buildConnectionDetail — the designed connection, drawn', () => {
     expect(fp.sample.cope).toBeTruthy()
     const cope = fp.sample.cope!
     expect(fpd.primitives.some((p) => p.kind === 'dim' && p.text === `COPE ${cope.lengthMm}×${cope.depthMm}`)).toBe(true)
+  })
+
+  it('names the column face with a leader whose arrow lands ON that face', () => {
+    const col = shapeByName('W310x79')!
+    const tipOf = (label: string, t: ConnectionType) => {
+      const ps = draw(t).primitives
+      const k = ps.findIndex((p) => p.kind === 'text' && p.text === label)
+      const arrow = ps[k - 2]
+      return arrow.kind === 'path' ? arrow.cmds[0] : null
+    }
+    // the flange the plate welds to is the band's beam-side strip, d − tf … d
+    const f = tipOf('COLUMN FLANGE', byKind('moment-flange-weld'))!
+    expect(f.x).toBeGreaterThan(col.d - col.tf - 1e-9)
+    expect(f.x).toBeLessThan(col.d + 1e-9)
+    // the web sits on the band's centre line, bf/2
+    const w = tipOf('COLUMN WEB', byKind('moment-web-plate'))!
+    expect(w.x).toBeCloseTo(col.bf / 2, 9)
   })
 
   it('cuts the girder as an I with its top flush with the beam (top of steel)', () => {

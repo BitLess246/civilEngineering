@@ -40,6 +40,8 @@ import { Ec as concreteE } from './slabDeflection'
 import { solveBoltedConnection } from './boltedConnection'
 import { solveWeldedConnection } from './weldedConnection'
 import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './steelDesign'
+import { designBolts } from './steelConnections'
+import { tabPlateChecks, copedTee } from './shearTabChecks'
 import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDesign'
 import { designWoodSlab } from './woodSlab'
 import { designSlabOpening } from './slabOpening'
@@ -642,6 +644,25 @@ const boltOop = (() => {
   return { manual: (100 * 100 * 200) / 100_000, software: r.Tmax }
 })()
 
+const tabInteraction = (() => {
+  // 3-M20 tab, 230 × 10 mm, bolt line 60 mm off the weld, Vu = 200 kN, A36:
+  // Manual Part 10 Eq. 10-5 (Vu/φVy)² + (Vu·a/0.9FyZ)², by hand.
+  const bolts = designBolts(200, { dia: 20, aMm: 60, locations: [0, 1, 2].map((k) => ({ id: `B${k + 1}`, x: 60, y: 40 + 75 * k })) })
+  const r = tabPlateChecks(bolts, { t: 10, wMm: 140, hMm: 230, weldSizeMm: 6, phiVn: 0, phiWeldVn: 0 }, 200)
+  const phiVy = 0.6 * 248 * 10 * 230 / 1000, phiMy = 0.9 * 248 * 10 * 230 ** 2 / 4 / 1000
+  return { manual: (200 / phiVy) ** 2 + (12000 / phiMy) ** 2, software: r.flexure.interaction }
+})()
+
+const copedTeeS = (() => {
+  // W310x38.7 coped 22 mm: the tee of ho = 288, tw 5.8, bf 165, tf 9.7 — S to
+  // the cut edge from ȳ and I by parallel axes.
+  const ho = 288, tw = 5.8, bf = 165, tf = 9.7, hw = ho - tf
+  const Af = bf * tf, Aw = tw * hw
+  const yb = (Af * tf / 2 + Aw * (tf + hw / 2)) / (Af + Aw)
+  const I = bf * tf ** 3 / 12 + Af * (yb - tf / 2) ** 2 + tw * hw ** 3 / 12 + Aw * (tf + hw / 2 - yb) ** 2
+  return { manual: I / (ho - yb), software: copedTee(ho, tw, bf, tf).S }
+})()
+
 const pryingT0 = (() => {
   // Minimum fitting thickness that eliminates prying (AISC Part 9):
   // t₀ = √(4·φBn·b′/(φf·Fy·p)) with φBn = 60 kN, b′ = 45 − 20/2 = 35 mm,
@@ -1142,6 +1163,16 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'bolt-oop-tension', category: 'Connections', title: 'Out-of-plane bolt group — top-row tension',
     reference: 'AISC 360 §J3.7', formula: 'Tᵢ = M_op·yᵢ / Σyᵢ²',
     manual: boltOop.manual, software: boltOop.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'shear-tab-interaction', category: 'Connections', title: 'Shear tab — flexure + shear at the bolt line',
+    reference: 'AISC Manual Part 10, Eq. 10-5', formula: '(Vu/φVy)² + (Vu·a / 0.9·Fy·Z)²,  Z = t·h²/4',
+    manual: tabInteraction.manual, software: tabInteraction.software, unit: '—', tol: 1e-9,
+  },
+  {
+    id: 'coped-tee-S', category: 'Connections', title: 'Coped beam — elastic modulus of the tee at the cope',
+    reference: 'AISC Manual Part 9 (coped beams)', formula: 'S = I / (ho − ȳ),  I by parallel axes',
+    manual: copedTeeS.manual, software: copedTeeS.software, unit: 'mm³', tol: 1e-9,
   },
   {
     id: 'prying-t0', category: 'Connections', title: 'Prying — thickness eliminating prying',

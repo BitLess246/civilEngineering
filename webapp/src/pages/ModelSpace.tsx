@@ -75,6 +75,7 @@ import { JointConnections3D } from '../components/JointConnections3D'
 import { ConnectionDetail2D } from '../components/ConnectionDetail2D'
 import { connectionMarks, markAt } from '../lib/steelMarks'
 import { connectionRowSolution } from '../lib/connectionSolution'
+import { ModelConnectionMechanics } from '../components/ModelConnectionMechanics'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { ConstructionSchedule } from '../components/ConstructionSchedule'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
@@ -6689,10 +6690,13 @@ export default function ModelSpace() {
                             </div>
                           )}
                         </td>
-                        <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
+                        <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm
+                          <div className={`text-[10px] ${c.plate.ok ? 'text-muted' : 'text-fail'}`}>{Math.round(c.plate.util * 100)}% · {c.plate.governs}</div>
+                        </td>
                         <td className="py-1 pr-2 text-[11px]">
                           {c.tab.weldSizeMm}mm E70
                           {c.flange && <span className="ml-1 text-brand">{c.flange.webPlate ? '+ ext. plates' : '+ CJP flg'}</span>}
+                          <div className={`text-[10px] ${c.weld.ok ? 'text-muted' : 'text-fail'}`}>{Math.round(c.weld.util * 100)}% · {c.weld.governs}</div>
                         </td>
                         <td className="py-1 text-[11px]">
                           <span className={c.ok ? 'text-ok' : 'text-fail'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
@@ -6708,6 +6712,7 @@ export default function ModelSpace() {
                             <div className="grid w-full grid-cols-1 gap-3">
                               {/* two views side by side: the detail takes the row, the solution follows */}
                               <ConnectionDetail2D conn={c} hostShape={j.columnShape} hostKind="column" faceType={c.faceType} beamShape={beamShapeName} mark={connMarks ? markAt(connMarks, c.beamId, j.nodeId) : undefined} />
+                              {wantDraw && <ModelConnectionMechanics conn={c} host={{ kind: 'column', shape: j.columnShape, faceType: c.faceType }} beamShape={beamShapeName} />}
                               {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'column', shape: j.columnShape, faceType: c.faceType })} title={`Connection ${j.nodeId} · ${c.beamId} — worked solution`} />}
                             </div>
                           </td>
@@ -6759,8 +6764,13 @@ export default function ModelSpace() {
                             </div>
                           )}
                         </td>
-                        <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
-                        <td className="py-1 pr-2 text-[11px]">{c.tab.weldSizeMm}mm E70</td>
+                        <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm
+                          <div className={`text-[10px] ${c.plate.ok ? 'text-muted' : 'text-fail'}`}>{Math.round(c.plate.util * 100)}% · {c.plate.governs}</div>
+                          {c.copedBeam && <div className={`text-[10px] ${c.copedBeam.ok ? 'text-muted' : 'text-fail'}`}>cope {Math.round(c.copedBeam.util * 100)}% · {c.copedBeam.governs}</div>}
+                        </td>
+                        <td className="py-1 pr-2 text-[11px]">{c.tab.weldSizeMm}mm E70
+                          <div className={`text-[10px] ${c.weld.ok ? 'text-muted' : 'text-fail'}`}>{Math.round(c.weld.util * 100)}% · {c.weld.governs}</div>
+                        </td>
                         <td className="py-1 text-[11px]">
                           <span className={c.ok ? 'text-ok' : 'text-fail'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
                         </td>
@@ -6772,6 +6782,7 @@ export default function ModelSpace() {
                             <div className="grid w-full grid-cols-1 gap-3">
                               {/* two views side by side: the detail takes the row, the solution follows */}
                               <ConnectionDetail2D conn={c} hostShape={bj.girderShape} hostKind="girder" faceType="web" beamShape={beamShapeName} mark={connMarks ? markAt(connMarks, c.beamId, bj.nodeId) : undefined} />
+                              {wantDraw && <ModelConnectionMechanics conn={c} host={{ kind: 'girder', shape: bj.girderShape, faceType: 'web' }} beamShape={beamShapeName} />}
                               {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'girder', shape: bj.girderShape })} title={`Connection ${bj.nodeId} · ${c.beamId} — worked solution`} />}
                             </div>
                           </td>
@@ -6783,9 +6794,10 @@ export default function ModelSpace() {
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-muted">
-                Shear tab: A36 plate (Fy=248, Fu=400 MPa), M20 A325 bolts @ 75 mm pitch, 40 mm edge. Plate shear yielding φ=1.0 (§J4.2).
-                Moment connection: CJP groove weld at beam flanges, φFu·A_flange (§J2.6). Weld = E70XX fillet both sides of shear tab.
-                Beam-to-beam: fin plate welded to the girder web, supported-beam top flange coped to clear the girder flange (SCM Pt 9/10).
+                Shear tab: A36 plate (Fy=248, Fu=400 MPa), M20 A325-X bolts @ 75 mm pitch, 40 mm edge. Plate: §J4.2 shear yielding and rupture, §J4.3 block shear, flexure at the bolt line (Manual Part 10 Eq. 10-5, net-section rupture, Part 9 plate buckling).
+                Welds: E70XX fillets both faces of the tab by the elastic line method (V and V·a), Table J2.4 minimum, §J4.2(b) base metal of the tab and the support.
+                Moment connection: CJP groove weld at beam flanges (§J2.6).
+                Beam-to-beam: fin plate welded to the girder web, supported-beam top flange coped to clear the girder flange; the coped section is checked for shear, flexural rupture and local web buckling (Manual Part 9). Click a row for the detail, the mechanics drawing and the worked solution.
               </p>
             </div>
           )}
