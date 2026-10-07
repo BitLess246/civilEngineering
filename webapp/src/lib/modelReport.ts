@@ -16,6 +16,7 @@ import type { Drawing } from '../engine/planRenderer'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
   woodBeamRowSolution, woodColumnRowSolution, woodSlabRowSolution } from './modelSpaceSolutions'
 import { connectionRowSolution } from './connectionSolution'
+import { basePlateRowSolution, basePlateContext } from './basePlateSolution'
 import { buildPrestressedSolution } from './prestressedSolution'
 import type { SolutionStep, SolutionLine } from './solution'
 import { estimateTakeoff, barKgPerM, type TakeoffResult } from '../engine/takeoff'
@@ -631,6 +632,17 @@ export function buildModelReport(
     }))),
   ]
   if (connItems.length) groups.push({ title: 'Steel connections', items: connItems })
+  if (design.basePlates.length && model) groups.push({
+    title: 'Column base plates',
+    items: design.basePlates.map((p) => {
+      const ctx = basePlateContext(model, p)
+      return {
+        title: `Base plate at ${p.node}`,
+        sub: `PL ${f0(p.design.N)}×${f0(p.design.B)}×${p.tAdopt} under ${p.shape}`,
+        steps: basePlateRowSolution(p, ctx.col, ctx.fc, ctx.Fy),
+      }
+    }),
+  })
   if (design.footings.length) groups.push({
     title: 'Isolated footings',
     items: design.footings.map((f) => ({

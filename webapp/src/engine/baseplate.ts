@@ -43,6 +43,9 @@ export interface BasePlateInput {
   nRods?: number          // anchor-rod count — default 4
   rodGrade?: AnchorGrade  // default A307
   rodDia?: number         // anchor-rod diameter, mm — default 25
+  /** Least plate length / width, mm — what an axial + moment check
+   *  (`basePlateMoment`) found the plate needs along each axis. */
+  Nmin?: number; Bmin?: number
 }
 
 export interface BasePlateResult {
@@ -91,10 +94,10 @@ export function designBasePlate(i: BasePlateInput): BasePlateResult {
   // start from a square-ish plate that respects the column footprint
   const dia = i.rodDia ?? 25
   const Nrods = i.d + 2 * (rodFlangeClearance(dia) + rodEdge(dia))   // rods outside the flanges
-  const Nstart = Math.max(Math.sqrt(A1req) + delta, 0.95 * i.d + 40, i.d + 50, Nrods)
+  const Nstart = Math.max(Math.sqrt(A1req) + delta, 0.95 * i.d + 40, i.d + 50, Nrods, i.Nmin ?? 0)
   let N = Math.ceil(Nstart / 10) * 10
   // …and wide enough for the rods across it to stand 4·da apart (ACI §17.7.1)
-  let B = Math.max(A1req / N, 0.8 * i.bf + 40, i.bf + 50, 4 * dia + 2 * rodEdge(dia))
+  let B = Math.max(A1req / N, 0.8 * i.bf + 40, i.bf + 50, 4 * dia + 2 * rodEdge(dia), i.Bmin ?? 0)
   B = Math.ceil(B / 10) * 10
   // grow to satisfy bearing if the rounded plate is short
   while (N * B < A1req && N < 4000) { N += 10; B = Math.ceil(Math.max(B, A1req / N) / 10) * 10 }
@@ -137,4 +140,141 @@ export function designBasePlate(i: BasePlateInput): BasePlateResult {
 export const PLATE_STOCK = [10, 12, 16, 20, 22, 25, 28, 32, 36, 40, 45, 50]
 export function adoptPlateThickness(tReq: number): number {
   return PLATE_STOCK.find((t) => t >= tReq - 1e-6) ?? Math.ceil(tReq / 5) * 5
+}
+
+// ─── Axial load + moment — AISC Design Guide 1 (2nd ed.) §3.3/§3.4 ────────
+// The uniform-bearing method: the bearing block under the compression side is
+// Y long at qmax = fp(max)·B (N/mm). Below the critical eccentricity
+// ecrit = N/2 − Pu/(2·qmax) the plate bears over Y = N − 2e and the rods stay
+// slack; above it, the rods on the tension side (at f from the plate centre)
+// pull Tu = qmax·Y − Pu, with
+//   Y = (f + N/2) − √((f + N/2)² − 2(Mu + Pu·f)/qmax)
+// (no real root ⇒ the plate is too short for the moment). Thickness on the
+// bearing side is the cantilever m under fp (1.5·m·√(fp/Fy) once Y ≥ m, else
+// 2.11·√(fp·Y·(m − Y/2)/Fy)), and on the tension side the rods bend the plate
+// about the flange: 2.11·√(Tu·x/(B·Fy)), x = f − d/2 + tf/2. Both constants
+// carry φb = 0.90. Written with Mu rather than e, so a moment with no axial
+// load (e → ∞) and a net uplift are the same equations.
+// N here is the plate's length ALONG the bending; B across it, d and bf the
+// column's depth and width in those directions, m its cantilever along N.
+
+export interface BasePlateMomentInput {
+  Pu: number            // kN, compression +
+  Mu: number            // kN·m, magnitude
+  N: number; B: number  // mm
+  m: number             // cantilever along N, mm
+  dBend: number         // column dimension along N (d, or bf for the weak axis), mm
+  tfBend: number        // flange (or web) thickness that the rods bend the plate about, mm
+  f: number             // plate centre → tension rod line, mm
+  fc: number; Fy?: number; a2OverA1?: number
+}
+
+export interface BasePlateMomentResult {
+  e: number                 // Mu/Pu, mm (Infinity with no compression)
+  qmax: number; fpMax: number
+  ecrit: number
+  regime: 'small' | 'large' | 'uplift' | 'too short'
+  Y: number                 // bearing length, mm
+  fp: number                // bearing pressure, MPa
+  Tu: number                // tension-side rods, total, kN
+  x: number                 // rod line to the flange centre, mm
+  tReqBearing: number; tReqTension: number; tReq: number
+  ok: boolean               // solvable within the plate
+}
+
+export function basePlateMoment(i: BasePlateMomentInput): BasePlateMomentResult {
+  const Fy = i.Fy ?? 248
+  const sqrtRatio = Math.min(Math.sqrt(Math.max(1, i.a2OverA1 ?? 1)), 2)
+  const fpMax = PHI_C * 0.85 * i.fc * sqrtRatio
+  const qmax = fpMax * i.B                          // N/mm
+  const P = i.Pu * 1000, M = Math.abs(i.Mu) * 1e6  // N, N·mm
+  const x = i.f - i.dBend / 2 + i.tfBend / 2
+  const bearingT = (fp: number, Y: number) =>
+    Y >= i.m ? 1.5 * i.m * Math.sqrt(fp / Fy) : 2.11 * Math.sqrt((fp * Y * (i.m - Y / 2)) / Fy)
+  const tensionT = (T: number) => (T > 0 ? 2.11 * Math.sqrt((T * Math.max(x, 0)) / (i.B * Fy)) : 0)
+  const out = (r: Omit<BasePlateMomentResult, 'qmax' | 'fpMax' | 'x' | 'tReq'>): BasePlateMomentResult =>
+    ({ ...r, qmax, fpMax, x, tReq: Math.max(r.tReqBearing, r.tReqTension) })
+
+  if (P <= 0) {
+    // net uplift (or none): the rods take the couple about their two lines
+    // and half the uplift each side — no bearing
+    const T = M / (2 * i.f) + -P / 2
+    return out({ e: Infinity, ecrit: 0, regime: 'uplift', Y: 0, fp: 0, Tu: T / 1000, tReqBearing: 0, tReqTension: tensionT(T), ok: true })
+  }
+  const e = M / P
+  const ecrit = i.N / 2 - P / (2 * qmax)
+  if (e <= ecrit) {
+    const Y = i.N - 2 * e
+    const fp = P / (Y * i.B)
+    return out({ e, ecrit, regime: 'small', Y, fp, Tu: 0, tReqBearing: bearingT(fp, Y), tReqTension: 0, ok: true })
+  }
+  const a = i.f + i.N / 2
+  const disc = a * a - (2 * (M + P * i.f)) / qmax
+  if (disc < 0) return out({ e, ecrit, regime: 'too short', Y: NaN, fp: fpMax, Tu: NaN, tReqBearing: NaN, tReqTension: NaN, ok: false })
+  const Y = a - Math.sqrt(disc)
+  const T = qmax * Y - P
+  return out({ e, ecrit, regime: 'large', Y, fp: fpMax, Tu: T / 1000, tReqBearing: bearingT(fpMax, Y), tReqTension: tensionT(T), ok: true })
+}
+
+/** One load case at a column base: axial (compression +, kN) and the base
+ *  moment about the column's strong and weak axes, kN·m. */
+export interface BaseCase { name: string; P: number; Ms: number; Mw: number }
+export type BaseMomentCase = BasePlateMomentResult & { name: string }
+
+export interface BasePlateMomentCheck {
+  /** The case that needs the thickest plate about each axis. */
+  strong: BaseMomentCase
+  weak: BaseMomentCase
+  /** The thickest the moments ask for, mm, and the largest single-rod
+   *  tension they put in the rods (two rods each side), kN. */
+  tReq: number
+  rodTu: number
+  /** A case the plate is too short for, about either axis. */
+  shortN: boolean; shortB: boolean
+}
+
+/** `basePlateMoment` for every case about both axes of a designed plate.
+ *  Strong axis: along N, cantilever m, rods at ±rodX, bending about the
+ *  flange. Weak axis: along B, cantilever n, rods at ±rodY, bending about the
+ *  flange tips (x = rodY − bf/2, nothing where the rods sit inside them). */
+export function basePlateMoments(
+  p: BasePlateResult, col: { d: number; bf: number; tf: number }, cases: BaseCase[], fc: number, Fy = 248, a2OverA1 = 1,
+): BasePlateMomentCheck {
+  const run = (c: BaseCase, axis: 'strong' | 'weak'): BaseMomentCase => ({
+    name: c.name,
+    ...(axis === 'strong'
+      ? basePlateMoment({ Pu: c.P, Mu: c.Ms, N: p.N, B: p.B, m: p.m, dBend: col.d, tfBend: col.tf, f: p.rodX, fc, Fy, a2OverA1 })
+      : basePlateMoment({ Pu: c.P, Mu: c.Mw, N: p.B, B: p.N, m: p.n, dBend: col.bf, tfBend: 0, f: p.rodY, fc, Fy, a2OverA1 })),
+  })
+  const worst = (rs: BaseMomentCase[]) => rs.reduce((a, b) =>
+    (!b.ok && a.ok) || (b.ok === a.ok && (b.tReq > a.tReq || (!(a.tReq > 0) && b.Tu > a.Tu))) ? b : a)
+  const S = cases.map((c) => run(c, 'strong')), W = cases.map((c) => run(c, 'weak'))
+  const all = [...S, ...W].filter((r) => r.ok)
+  return {
+    strong: worst(S), weak: worst(W),
+    tReq: Math.max(0, ...all.map((r) => r.tReq)),
+    rodTu: Math.max(0, ...all.map((r) => r.Tu / 2)),
+    shortN: S.some((r) => !r.ok), shortB: W.some((r) => !r.ok),
+  }
+}
+
+/** The column-to-plate fillets (AISC §J2.4): under a base moment or uplift
+ *  the tension flange pulls on the plate with T = Ms/(d − tf) − Pu/2 (the
+ *  compression a flange still carries in bearing subtracts; uplift adds), so
+ *  each flange is welded on both faces over its width — two lines of bf, less
+ *  the web — to carry T at φ·0.6·FEXX·0.707·w. The Table J2.4 minimum for the
+ *  thinner of flange and plate is the floor; a column in bearing alone still
+ *  gets it, the plate is set on the column, not hung from it. */
+export interface ColumnBaseWeld { T: number; L: number; w: number; wMin: number; phiRn: number; ok: boolean }
+export function columnBaseWeld(
+  col: { d: number; bf: number; tf: number; tw?: number }, tPlate: number, cases: BaseCase[], FEXX = 482,
+): ColumnBaseWeld {
+  const T = Math.max(0, ...cases.map((c) => (c.Ms * 1000) / (col.d - col.tf) - c.P / 2))
+  const L = 2 * col.bf - (col.tw ?? 0)
+  const per = (w: number) => (0.75 * 0.6 * FEXX * 0.707 * w * L) / 1000
+  const tMin = Math.min(col.tf, tPlate)
+  const wMin = tMin <= 6 ? 3 : tMin <= 13 ? 5 : tMin <= 19 ? 6 : 8
+  let w = wMin
+  while (per(w) < T && w < 25) w++
+  return { T, L, w, wMin, phiRn: per(w), ok: per(w) >= T - 1e-9 }
 }
