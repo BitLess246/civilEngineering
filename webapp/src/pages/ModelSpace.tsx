@@ -6678,6 +6678,16 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-[11px]">
                           {c.bolts.n} × M{c.bolts.dia} A325 <span className="text-[10px] text-muted">(single shear)</span>
                           <div className="text-[10px] text-muted">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN/bolt · e={Math.round(c.bolts.ecc)}mm</div>
+                          <div className={`text-[10px] ${c.bearing.ok ? 'text-muted' : 'text-fail'}`}
+                            title={`§J3.10(a): each bolt against the least of its shear, bearing/tear-out on the tab (φRn ${f1(c.bearing.phiRnTab)} kN, edge lc ${Math.round(c.bearing.lcTabMin)} mm) and on the beam web (tw ${c.bearing.tw}, φRn ${f1(c.bearing.phiRnWeb)} kN)`}>
+                            bearing/tear-out {Math.round(c.bearing.util * 100)}% · {c.bearing.governingBolt} {c.bearing.governedBy}
+                          </div>
+                          {c.webBlockShear && (
+                            <div className={`text-[10px] ${c.webBlockShear.ok ? 'text-muted' : 'text-fail'}`}
+                              title={`§J4.3 coped web: Agv ${Math.round(c.webBlockShear.Agv)}, Anv ${Math.round(c.webBlockShear.Anv)}, Ant ${Math.round(c.webBlockShear.Ant)} mm²`}>
+                              coped-web block shear φRn {f1(c.webBlockShear.phiRn)} kN ({Math.round((c.Vu / Math.max(c.webBlockShear.phiRn, 1e-9)) * 100)}%)
+                            </div>
+                          )}
                         </td>
                         <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
                         <td className="py-1 pr-2 text-[11px]">
@@ -6738,6 +6748,16 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-[11px]">
                           {c.bolts.n} × M{c.bolts.dia} A325 <span className="text-[10px] text-muted">(single shear)</span>
                           <div className="text-[10px] text-muted">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN/bolt · e={Math.round(c.bolts.ecc)}mm</div>
+                          <div className={`text-[10px] ${c.bearing.ok ? 'text-muted' : 'text-fail'}`}
+                            title={`§J3.10(a): each bolt against the least of its shear, bearing/tear-out on the tab (φRn ${f1(c.bearing.phiRnTab)} kN, edge lc ${Math.round(c.bearing.lcTabMin)} mm) and on the beam web (tw ${c.bearing.tw}, φRn ${f1(c.bearing.phiRnWeb)} kN)`}>
+                            bearing/tear-out {Math.round(c.bearing.util * 100)}% · {c.bearing.governingBolt} {c.bearing.governedBy}
+                          </div>
+                          {c.webBlockShear && (
+                            <div className={`text-[10px] ${c.webBlockShear.ok ? 'text-muted' : 'text-fail'}`}
+                              title={`§J4.3 coped web: Agv ${Math.round(c.webBlockShear.Agv)}, Anv ${Math.round(c.webBlockShear.Anv)}, Ant ${Math.round(c.webBlockShear.Ant)} mm²`}>
+                              coped-web block shear φRn {f1(c.webBlockShear.phiRn)} kN ({Math.round((c.Vu / Math.max(c.webBlockShear.phiRn, 1e-9)) * 100)}%)
+                            </div>
+                          )}
                         </td>
                         <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
                         <td className="py-1 pr-2 text-[11px]">{c.tab.weldSizeMm}mm E70</td>

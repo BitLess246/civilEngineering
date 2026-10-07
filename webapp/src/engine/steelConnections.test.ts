@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { designStructure } from './pipeline'
-import { designSteelJoints, designBolts } from './steelConnections'
+import { designSteelJoints, designBolts, designBoltedTab, copedWebBlockShear, tabBearing } from './steelConnections'
 import { shapeByName } from './aiscSections'
 import type { BoltPos } from './steelDesign'
 import type { RectSection } from './model'
@@ -258,5 +258,65 @@ describe('designBeamBeamJoints — beams framing into a girder web (fin plates)'
     const d = designStructure(m, soil)!
     expect(d.beamJoints).toHaveLength(0)
     expect(d.joints.length).toBeGreaterThan(0)  // those are beam-to-COLUMN joints
+  })
+})
+
+describe('shear tab §J3.10(a): bearing and tear-out on the tab and the beam web', () => {
+  it('a thin web and the tab edge bolt now size the bolt column, not bolt shear alone', () => {
+    const shearOnly = designBolts(300, { dia: 20 })
+    const d = designBoltedTab(300, 5.08)
+    // every bolt passes against the least of its shear, tab and web strengths
+    expect(d.bearing.ok).toBe(true)
+    expect(d.bearing.util).toBeLessThanOrEqual(1 + 1e-9)
+    expect(d.bolts.ok).toBe(true)
+    // web bearing 0.75·2.4·20·5.08·400 = 73.15 kN < bolt shear ≈ 116.6 kN → more bolts
+    expect(d.bearing.phiRnWeb).toBeCloseTo(0.75 * 2.4 * 20 * 5.08 * 400 / 1000, 6)
+    expect(d.bolts.n).toBeGreaterThan(shearOnly.n)
+    // the tab's edge bolt tears out along its INCLINED push (the reaction is
+    // 60 mm off the bolt line, so the edge bolts carry a horizontal share):
+    // lc is at least the straight-down 40 − 11 = 29 mm, and the tab strength
+    // is the tear-out over exactly that lc
+    expect(d.bearing.lcTabMin).toBeGreaterThanOrEqual(29 - 1e-9)
+    expect(d.bearing.lcTabMin).toBeLessThan(2 * 20)
+    expect(d.bearing.phiRnTab).toBeCloseTo(0.75 * 1.2 * d.bearing.lcTabMin * d.tab.t * 400 / 1000, 6)
+  })
+
+  it('a stocky web and light reaction stay governed by bolt shear', () => {
+    const d = designBoltedTab(60, 12)
+    expect(d.bearing.ok).toBe(true)
+    expect(d.bolts.n).toBe(designBolts(60, { dia: 20 }).n)
+  })
+})
+
+describe('coped beam web: tear-out toward the cope and §J4.3 block shear', () => {
+  const cope = { beamD: 310, depthMm: 25 }
+  it('the coped web has a free top edge the top bolt tears toward', () => {
+    const d = designBoltedTab(150, 6, undefined, cope)
+    const webTop = d.tab.hMm / 2 + cope.beamD / 2 - cope.depthMm
+    const uncoped = tabBearing(d.bolts, d.tab, 150, 6)
+    const coped = tabBearing(d.bolts, d.tab, 150, 6, 400, webTop)
+    // the cope can only take strength away
+    expect(coped.phiRnWeb).toBeLessThanOrEqual(uncoped.phiRnWeb + 1e-9)
+    expect(d.bearing.ok).toBe(true)
+  })
+
+  it('block shear of the coped web, by hand: Lv cope→bottom bolt, Lt bolt line→beam end', () => {
+    const d = designBoltedTab(150, 6, undefined, cope)
+    const webTop = d.tab.hMm / 2 + cope.beamD / 2 - cope.depthMm
+    const b = copedWebBlockShear(d.bolts, 150, 6, webTop)
+    const n = d.bolts.n, dh = 22
+    const Lv = webTop - d.bolts.edgeMm, Lt = 60 - 13
+    const Agv = 6 * Lv, Anv = Agv - (n - 0.5) * dh * 6, Ant = 6 * Lt - 0.5 * dh * 6
+    expect(b.Agv).toBeCloseTo(Agv, 9)
+    expect(b.Anv).toBeCloseTo(Anv, 9)
+    expect(b.Ant).toBeCloseTo(Ant, 9)
+    expect(b.Rn).toBeCloseTo((Math.min(0.6 * 400 * Anv, 0.6 * 248 * Agv) + 400 * Ant) / 1000, 9)
+    expect(d.webBlockShear!.ok).toBe(b.phiRn >= 150)
+  })
+
+  it('a heavy reaction on a thin coped web grows the bolt column until the block passes', () => {
+    const d = designBoltedTab(320, 5, undefined, { beamD: 460, depthMm: 25 })
+    expect(d.webBlockShear!.ok).toBe(true)
+    expect(d.webBlockShear!.phiRn).toBeGreaterThanOrEqual(320)
   })
 })

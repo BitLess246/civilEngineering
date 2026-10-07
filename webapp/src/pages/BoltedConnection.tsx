@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 // type-only imports — no engine code bundled into the browser from here
-import type { BoltGrade } from '../engine/steelDesign'
+import type { BoltGrade, ElectrodeClass } from '../engine/steelDesign'
+import { FEXX_BY_CLASS } from '../engine/steelDesign'
 import { calcConnection } from '../lib/calcApi'
 import type { ConnectionCalcResult } from '../lib/calcApi'
 import { useCalcResult } from '../lib/useCalcResult'
@@ -45,11 +46,15 @@ export default function BoltedConnection() {
   // itself FROM the grid on the way in, so switching to custom starts from the
   // pattern already on screen rather than from an empty table.
   const [custom, setCustom] = useState<{ id: string; x: number; y: number }[] | null>(null)
-  // DRAWING ONLY: the W-shapes the tab is drawn between. 'auto' picks a beam
-  // whose clear web takes the tab and a W250-class column; the calculation
-  // checks the tab and its bolts, not these members.
+  // The supported beam: its WEB is a ply the bolts bear on (§J3.10(a)), so it
+  // is an input to the check, not decoration. 'auto' picks the lightest W
+  // whose clear web takes the tab. The column is drawn (W250 class by default).
   const [beamName, setBeamName] = useState('auto')
+  const [FuWeb, setFuWeb] = useState(450)
   const [colName, setColName] = useState('auto')
+  // Tab-to-support fillets, one on each face of the tab (§J2.4).
+  const [weldSize, setWeldSize] = useState(6)
+  const [electrode, setElectrode] = useState<ElectrodeClass>('E70')
 
   const gridBolts = useMemo(() => {
     const out: { id: string; x: number; y: number }[] = []
@@ -65,17 +70,27 @@ export default function BoltedConnection() {
   const delBolt = (i: number) =>
     setCustom((bs) => (bs ?? []).filter((_, j) => j !== i).map((b, k) => ({ ...b, id: `B${k + 1}` })))
 
+  // the tab height straight from the pattern, so the auto beam does not wait on the result
+  const tabH = useMemo(() => {
+    const ys = (custom && custom.length > 0 ? custom : gridBolts).map((b) => b.y)
+    return Math.max(...ys) + ey
+  }, [custom, gridBolts, ey])
+  const beam = (beamName !== 'auto' && shapeByName(beamName)) || defaultBeamFor(tabH)!
+  const column = (colName !== 'auto' && shapeByName(colName)) || defaultColumn()!
+  const FEXX = FEXX_BY_CLASS[electrode]
+
   const input = useMemo(
     () => ({
       Vu, Hu,
       boltGrade, db, nRows, nCols, sy, sx, ey, ex_edge,
       threads: threads === 'yes',
       tPlate, FuPlate, FyPlate,
+      twWeb: beam.tw ?? 0, FuWeb, weldSize, FEXX,
       ex_load, ey_load, e_out, b_gage,
       nShear, basis, ...(custom && custom.length > 0 ? { bolts: custom } : {}),
     }),
     [Vu, Hu, boltGrade, db, nRows, nCols, sy, sx, ey, ex_edge, threads,
-     tPlate, FuPlate, FyPlate, ex_load, ey_load, e_out, b_gage, nShear, basis, custom]
+     tPlate, FuPlate, FyPlate, beam, FuWeb, weldSize, FEXX, ex_load, ey_load, e_out, b_gage, nShear, basis, custom]
   )
   const { data: res, loading, error, cause } = useCalcResult<ConnectionCalcResult>(
     // No debounce: the connection solver is cheap and the 250 ms default just
@@ -113,10 +128,24 @@ export default function BoltedConnection() {
         ],
       },
       {
-        title: `Bearing on plate §J3.10 — t = ${tPlate} mm, F_u = ${FuPlate} MPa`,
+        title: `Bearing and tear-out on the tab §J3.10(a) — t = ${tPlate} mm, F_u = ${FuPlate} MPa`,
         lines: [
-          { tex: `R_{n,\\text{br}} = 2.4 F_u d_b t = 2.4 \\times ${FuPlate} \\times ${db} \\times ${tPlate} / 1000 = ${sn2(Rn_bearing)}\\text{ kN/bolt}` },
-          { tex: `\\text{Available (governing)} = \\min(${sn2(avail.shear)},\\;${sn2(avail.bearing)}) = ${sn2(avail.governing)}\\text{ kN/bolt}` },
+          { text: 'Per bolt, in the direction it pushes the tab: lc is the clear distance from the hole edge to the free edge or the next hole (hole d + 2).' },
+          { tex: `R_n = 1.2\\,l_c\\,t\\,F_u \\le 2.4\\,d_b\\,t\\,F_u = ${sn2(Rn_bearing)}\\text{ kN}` },
+          ...res.bearing.map((b) => ({
+            tex: Number.isFinite(b.lc)
+              ? `${b.id}:\\; l_c = ${sn1(b.lc)},\\; 1.2 \\times ${sn1(b.lc)} \\times ${tPlate} \\times ${FuPlate} / 1000 = ${sn2(b.Rn_tear)} \\Rightarrow R_n = ${sn2(b.Rn)},\\; ${fTex}R_n = ${sn2(b.availBearing)}\\text{ kN}`
+              : `${b.id}:\\; \\text{nothing in front of the bolt} \\Rightarrow R_n = 2.4 d_b t F_u = ${sn2(b.Rn)},\\; ${fTex}R_n = ${sn2(b.availBearing)}\\text{ kN}`,
+          })),
+          ...(res.webBearing ? [
+            { text: `Beam web (${beam.name}, tw ${beam.tw} mm, Fu ${FuWeb} MPa), pushed UP by the bolts — it runs on into the flanges, so it tears only toward the next hole:` },
+            ...res.webBearing.map((b) => ({
+              tex: Number.isFinite(b.lc)
+                ? `${b.id}:\\; l_c = ${sn1(b.lc)} \\Rightarrow R_n = \\min(${sn2(b.Rn_tear)},\\; ${sn2(b.Rn_bear)}) = ${sn2(b.Rn)},\\; ${fTex}R_n = ${sn2(b.availBearing)}\\text{ kN}`
+                : `${b.id}:\\; R_n = 2.4 d_b t_w F_u = ${sn2(b.Rn)},\\; ${fTex}R_n = ${sn2(b.availBearing)}\\text{ kN}`,
+            })),
+          ] : []),
+          { tex: `\\text{Each bolt: available} = \\min(\\text{shear } ${sn2(avail.shear)},\\;\\text{tab},\\;\\text{web})` },
         ],
       },
       {
@@ -127,7 +156,12 @@ export default function BoltedConnection() {
           { text: `Direct shear per bolt: Vx = Hu/n = ${(Hu/n).toFixed(2)} kN,  Vy = Vu/n = ${(Vu/n).toFixed(2)} kN` },
           { tex: `V_{x,i} = H_u/n - M y_i / I_p\\quad V_{y,i} = V_u/n + M x_i / I_p` },
           { tex: `R_{\\max} = ${sn2(eccentric.Rmax)}\\text{ kN on bolt }\\textit{${eccentric.critical}}` },
-          { tex: `\\text{Utilisation} = ${sn2(eccentric.Rmax)} / ${sn2(avail.governing)} = ${sn2(eccentric.Rmax/avail.governing)}\\quad ${eccentric.Rmax<=avail.governing?'\\checkmark':'\\times'}` },
+          { text: 'Each bolt is checked against its OWN available strength — an edge bolt can govern by tear-out while carrying less than the most-loaded one.' },
+          ...(() => {
+            const g = res.bearing.find((b) => b.id === res.boltGoverning)
+            const f = eccentric.bolts.find((b) => b.id === res.boltGoverning)
+            return g && f ? [{ tex: `\\text{Governing } ${g.id}:\\; R = ${sn2(f.R)} / ${sn2(g.avail)} = ${sn2(res.boltUtil)}\\quad ${res.boltUtil <= 1 ? '\\checkmark' : '\\times'}` }] : []
+          })(),
         ],
       },
       {
@@ -137,11 +171,18 @@ export default function BoltedConnection() {
           if (!crit) return []
           const Ab2 = (Math.PI/4)*db*db
           return [
-            { tex: `f_{br} = \\frac{R_{\\max}}{d_b \\cdot t} = \\frac{${sn2(eccentric.Rmax)} \\times 1000}{${db} \\times ${tPlate}} = ${sn1(crit.fbr)}\\text{ MPa}\\quad \\text{available } F_{br} = ${F.toFixed(3)} \\times 2.4 \\times ${FuPlate} = ${sn1(F*2.4*FuPlate)}\\text{ MPa}\\quad ${crit.fbr <= F*2.4*FuPlate ? '\\checkmark':'\\times'}` },
             { tex: `f_v = \\frac{R_{\\max}}{A_b} = \\frac{${sn2(eccentric.Rmax)} \\times 1000}{${Ab2.toFixed(0)}} = ${sn1(crit.fv)}\\text{ MPa}\\quad \\text{available } F_{nv} = ${F.toFixed(3)} \\times ${Fnv} = ${sn1(F*Fnv)}\\text{ MPa}\\quad ${crit.fv <= F*Fnv ? '\\checkmark':'\\times'}` },
           ]
         })(),
       },
+      ...(res.weld ? [{
+        title: `Tab welds §J2.4 — 2 × ${res.weld.w} mm fillets, ${electrode}XX (F_EXX ${res.weld.FEXX} MPa)`,
+        lines: [
+          { text: `Both fillets run the tab height at the support face, L = ${sn1(res.weld.L)} mm, and carry the bolt group's load where it acts — so V, H and the moment about the weld line (elastic weld-line method, as on Welded Connection). Two fillets on one line = twice the throat.` },
+          { tex: `f_{\\max} = ${sn1(res.weld.fMax)}\\text{ N/mm}\\quad ${fTex}\\,0.60 F_{EXX}\\,(0.707 \\times 2 \\times ${res.weld.w}) = ${sn1(res.weld.availPerLen)}\\text{ N/mm}\\quad ${res.weld.util <= 1 ? '\\checkmark' : '\\times'}` },
+          { tex: `w_{\\min} = ${res.weld.wMin}\\ (\\text{Table J2.4}) \\le w = ${res.weld.w} \\le w_{\\max} = t - 2 = ${res.weld.wMax}\\quad ${res.weld.sizeOk ? '\\checkmark' : '\\times'}` },
+        ],
+      }] : []),
       ...(outOfPlane ? [{
         title: `Out-of-plane eccentricity §J3.7 — e_out = ${e_out} mm`,
         lines: [
@@ -178,26 +219,28 @@ export default function BoltedConnection() {
         ]),
       },
     ]
-  }, [res, boltGrade, db, nRows, nCols, sy, ex_edge, tPlate, FuPlate, threads, Vu, Hu, ex_load, ey_load, e_out, b_gage])
+  }, [res, boltGrade, db, nRows, nCols, sy, ex_edge, tPlate, FuPlate, threads, Vu, Hu, ex_load, ey_load, e_out, b_gage, FuWeb, beam.name, beam.tw, electrode])
 
-  const boltRatio = res && res.avail.governing > 0 ? res.eccentric.Rmax / res.avail.governing : undefined
+  // each bolt against its own §J3.6/§J3.10 strength — the worst ratio governs
+  const availOf = (id: string) => res?.bearing.find((x) => x.id === id)?.avail ?? res?.avail.governing ?? 0
+  const boltRatio = res ? res.boltUtil : undefined
   const boltOK = boltRatio != null && boltRatio <= 1
   const bsOK = govAvailBlockShear == null || Vu <= govAvailBlockShear
   const oop = res?.outOfPlane ?? null
   const pry = res?.prying ?? null
-  const allOK = boltOK && bsOK && (oop ? oop.ok : true) && (pry ? pry.ok : true)
+  const allOK = boltOK && bsOK && (oop ? oop.ok : true) && (pry ? pry.ok : true) && (res?.weld ? res.weld.ok : true)
   const R = res ? capacityLabel(res.basis, 'R') : ''
   const report = res ? {
     docCode: 'S-BC',
     ok: allOK,
-    governing: `critical bolt ${res.eccentric.critical}: R ${f2(res.eccentric.Rmax)} / ${R} ${f2(res.avail.governing)} kN · ${res.geom.n} × ⌀${db} ${boltGrade}`,
+    governing: `governing bolt ${res.boltGoverning}: R ${f2(res.eccentric.bolts.find((b) => b.id === res.boltGoverning)?.R ?? 0)} / ${R} ${f2(availOf(res.boltGoverning))} kN · ${res.geom.n} × ⌀${db} ${boltGrade}`,
     stats: [
       { label: `${R} per bolt`, value: f2(res.avail.governing), unit: 'kN' },
       { label: `Maximum ${demandLabel(res.basis, 'V')}`, value: f2(res.maxVu), unit: 'kN' },
       { label: 'In-plane M', value: res.eccentric.M.toFixed(0), unit: 'kN·mm' },
     ],
     checks: [
-      { name: 'Critical bolt R ≤ available §J3.6/§J3.10', ratio: boltRatio ?? 0, ok: boltOK },
+      { name: 'Each bolt R ≤ its own available §J3.6/§J3.10(a)', ratio: boltRatio ?? 0, ok: boltOK },
       ...(govAvailBlockShear != null ? [{ name: 'Block shear §J4.3', ratio: govAvailBlockShear > 0 ? Vu / govAvailBlockShear : 0, ok: bsOK }] : []),
       ...(oop ? [{ name: 'Tension–shear interaction §J3.7', ratio: oop.phiTn_crit > 0 ? oop.Tmax / oop.phiTn_crit : 0, ok: oop.ok }] : []),
       ...(pry ? [{ name: 'Prying §J3.9', ratio: null, ok: pry.ok }] : []),
@@ -214,9 +257,9 @@ export default function BoltedConnection() {
 
   const boltForceRows: ResultRow[] = res ? res.eccentric.bolts.map((b) => ({
     check: b.id, basis: `Vx ${f2(b.Vx)} · Vy ${f2(b.Vy)} kN · fbr ${f1(b.fbr)} MPa`,
-    demand: `${f2(b.R)} kN`, limit: `${f2(res.avail.governing)} kN`,
-    ratio: res.avail.governing > 0 ? b.R / res.avail.governing : undefined,
-    status: b.id === res.eccentric.critical ? (boltOK ? 'pass' : 'fail') : 'info',
+    demand: `${f2(b.R)} kN`, limit: `${f2(availOf(b.id))} kN`,
+    ratio: availOf(b.id) > 0 ? b.R / availOf(b.id) : undefined,
+    status: b.R > availOf(b.id) + 1e-9 ? 'fail' : b.id === res.boltGoverning ? 'pass' : 'info',
   })) : []
   const oopRows: ResultRow[] = oop ? oop.bolts.map((b) => ({
     check: b.id, basis: `yi ${b.yi.toFixed(0)} mm · frv ${f1(b.frv)} MPa`, demand: `T ${f2(b.T)} kN`,
@@ -309,21 +352,30 @@ export default function BoltedConnection() {
           <Num label="Fy" unit="MPa" value={FyPlate} onChange={setFyPlate} />
           <Num label="Fu" unit="MPa" value={FuPlate} onChange={setFuPlate} />
         </InputGroup>
-        <InputGroup title="Drawing">
-          <Pick label="Supported beam" value={beamName} onChange={setBeamName}
-            options={[['auto', 'Auto — web fits the tab'], ...W_OPTIONS]} />
+        <InputGroup title="Supported beam">
+          <Pick label="Beam" value={beamName} onChange={setBeamName}
+            options={[['auto', `Auto — ${defaultBeamFor(tabH)?.name ?? '—'}`], ...W_OPTIONS]} />
+          <Num label={`Web Fu · tw ${beam.tw ?? '—'} mm`} unit="MPa" value={FuWeb} onChange={setFuWeb} />
           <Pick label="Supporting column" value={colName} onChange={setColName}
             options={[['auto', 'Auto — W250 class'], ...W_OPTIONS]} />
         </InputGroup>
+        <InputGroup title="Tab welds">
+          <Num label="Fillet leg w" unit="mm" value={weldSize} onChange={setWeldSize} />
+          <Pick label="Electrode" value={electrode} onChange={(v) => setElectrode(v as ElectrodeClass)}
+            options={(Object.keys(FEXX_BY_CLASS) as ElectrodeClass[]).map((k) => [k, `${k}XX (${FEXX_BY_CLASS[k]} MPa)`])} />
+        </InputGroup>
       </>}
       checks={res ? <>
-        <CheckCard title="Critical bolt" basis={`${res.eccentric.critical} · elastic method · ${factorLabel(res.basis, 'connection')}`} status={boltOK ? 'pass' : 'fail'}
-          value={f2(res.eccentric.Rmax)} unit="kN" ratio={boltRatio} ratioLabel={`R ÷ ${R}`}
+        <CheckCard title="Governing bolt" basis={`${res.boltGoverning} · elastic method · own shear/bearing/tear-out · ${factorLabel(res.basis, 'connection')}`} status={boltOK ? 'pass' : 'fail'}
+          value={f2(res.eccentric.bolts.find((b) => b.id === res.boltGoverning)?.R ?? res.eccentric.Rmax)} unit="kN" ratio={boltRatio} ratioLabel={`R ÷ ${R} (that bolt)`}
           pairs={[{ label: `${R} shear / bearing`, value: `${f2(res.avail.shear)} / ${f2(res.avail.bearing)} kN` }, { label: `Max ${demandLabel(res.basis, 'V')}`, value: `${f2(res.maxVu)} kN` }]} />
         <CheckCard title="Block shear §J4.3" basis="shear tab, one bolt line" status={govAvailBlockShear == null ? 'info' : bsOK ? 'pass' : 'fail'}
           pillLabel={govAvailBlockShear == null ? 'NOT RUN' : undefined}
           value={govAvailBlockShear == null ? '—' : f1(govAvailBlockShear)} unit={govAvailBlockShear == null ? '' : 'kN'}
           ratio={govAvailBlockShear ? Vu / govAvailBlockShear : undefined} ratioLabel={`${demandLabel(res.basis, 'V')} ÷ ${R}`} />
+        {res.weld && <CheckCard title="Tab welds §J2.4" basis={`2 × ${res.weld.w} mm ${electrode}XX · V, H and V·a about the weld line`} status={res.weld.ok ? 'pass' : 'fail'}
+          value={f1(res.weld.fMax)} unit="N/mm" ratio={res.weld.util} ratioLabel={`f ÷ ${R}`}
+          pairs={[{ label: `${R} (2 fillets)`, value: `${f1(res.weld.availPerLen)} N/mm` }, { label: 'Size range §J2.2b', value: `${res.weld.wMin}–${res.weld.wMax} mm ${res.weld.sizeOk ? '✓' : '✗'}` }]} />}
         {oop && <CheckCard title="Out-of-plane §J3.7" basis={`critical ${oop.critical}`} status={oop.ok ? 'pass' : 'fail'}
           value={f2(oop.Tmax)} unit="kN" ratio={oop.phiTn_crit > 0 ? oop.Tmax / oop.phiTn_crit : undefined} ratioLabel="T ÷ reduced Tn"
           pairs={[{ label: 'M_op', value: `${oop.M_op.toFixed(0)} kN·mm` }, { label: 'Reduced Tn', value: `${f2(oop.phiTn_crit)} kN` }]} />}
@@ -342,15 +394,20 @@ export default function BoltedConnection() {
           forces={res.eccentric.bolts} critical={res.eccentric.critical}
           blockShear={res.blockShear} availBlockShear={res.availBlockShear}
           avail={res.avail} R={R} Vu={Vu} Hu={Hu} ex_load={ex_load} ey_load={ey_load}
-          beam={(beamName !== 'auto' && shapeByName(beamName)) || defaultBeamFor(res.geom.plateH)!}
-          column={(colName !== 'auto' && shapeByName(colName)) || defaultColumn()!} />
+          beam={beam} column={column} weld={res.weld} webBearing={res.webBearing}
+          bearing={res.bearing} />
       </div> } : undefined}
       results={res ? [
         { check: 'Bolt shear', basis: `§J3.6 · ${nShear === 2 ? 'double' : 'single'} shear`, demand: `${f2(res.avail.shear)} kN`, status: 'info' as const },
-        { check: 'Bearing on plate', basis: '§J3.10', demand: `${f2(res.avail.bearing)} kN`, status: 'info' as const },
+        { check: 'Bearing / tear-out', basis: '§J3.10(a) · weakest bolt on tab or web, 1.2·lc·t·Fu ≤ 2.4·d·t·Fu', demand: `${f2(res.avail.bearing)} kN`, status: 'info' as const },
+        ...(res.webBearing ? [{ check: 'Beam web bearing', basis: `§J3.10(a) · ${beam.name}, tw ${beam.tw} mm, Fu ${FuWeb} MPa`, demand: `${f2(Math.min(...res.webBearing.map((b) => b.availBearing)))} kN`, status: 'info' as const }] : []),
+        ...(res.weld ? [
+          { check: 'Tab welds', basis: `§J2.4 · 2 × ${res.weld.w} mm, ${f1(res.weld.L)} mm long, elastic weld-line`, demand: `${f1(res.weld.fMax)} N/mm`, limit: `${f1(res.weld.availPerLen)} N/mm`, ratio: res.weld.util, status: res.weld.util <= 1 ? 'pass' as const : 'fail' as const },
+          { check: 'Weld size', basis: '§J2.2b · Table J2.4 min, t − 2 max along the tab edge', demand: `${res.weld.w} mm`, limit: `${res.weld.wMin}–${res.weld.wMax} mm`, status: res.weld.sizeOk ? 'pass' as const : 'fail' as const },
+        ] : []),
         { check: 'Polar moment', basis: 'Ip = Σ(x² + y²)', demand: `${res.geom.Ip.toFixed(0)} mm²`, status: 'info' as const },
         { check: 'In-plane moment', basis: 'about the centroid', demand: `${res.eccentric.M.toFixed(0)} kN·mm`, status: 'info' as const },
-        { check: 'Critical bolt', basis: `${res.eccentric.critical} · τmax ${f1(res.tauMax)} MPa`, demand: `${f2(res.eccentric.Rmax)} kN`, limit: `${f2(res.avail.governing)} kN`, ratio: boltRatio, status: boltOK ? 'pass' as const : 'fail' as const },
+        { check: 'Governing bolt', basis: `${res.boltGoverning} · most loaded ${res.eccentric.critical}, τmax ${f1(res.tauMax)} MPa`, demand: `${f2(res.eccentric.bolts.find((b) => b.id === res.boltGoverning)?.R ?? 0)} kN`, limit: `${f2(availOf(res.boltGoverning))} kN`, ratio: boltRatio, status: boltOK ? 'pass' as const : 'fail' as const },
         ...res.blockShear.map((c, k) => ({ check: 'Block shear', basis: c.label.replace('§J4.3 ', ''), demand: `${f2(Vu)} kN`, limit: `${f1(res.availBlockShear[k]!)} kN`, ratio: res.availBlockShear[k]! > 0 ? Vu / res.availBlockShear[k]! : undefined, status: Vu <= res.availBlockShear[k]! ? 'pass' as const : 'fail' as const })),
         ...(pry ? [
           { check: 'Prying geometry', basis: "b' · a' · ρ · δ · β", demand: `${pry.b_prime.toFixed(1)} · ${pry.a_prime.toFixed(1)} · ${f3(pry.rho)} · ${f3(pry.delta)} · ${f3(pry.beta)}`, status: 'info' as const },

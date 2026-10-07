@@ -243,3 +243,74 @@ describe('localConnection — design basis', () => {
     expect(asd.prying!.t_req).toBeGreaterThan(lrfd.prying!.t_req)
   })
 })
+
+describe('localConnection — §J3.10(a) bearing and tear-out per bolt', () => {
+  it('the bottom bolt tears out over lc = ey − dh/2; inner bolts hit the 2.4·d·t·Fu cap', () => {
+    const r = localConnection(BASE)
+    const by = (id: string) => r.bearing.find((b) => b.id === id)!
+    // B1 at y = 40, pushed down: lc = 40 − 22/2 = 29 → 1.2·29·10·400 = 139.2 kN
+    expect(by('B1').lc).toBeCloseTo(29, 9)
+    expect(by('B1').Rn_tear).toBeCloseTo(139.2, 9)
+    expect(by('B1').Rn).toBeCloseTo(139.2, 9)
+    // B2, B3: lc = 70 − 22 = 48 → 230.4 > 192 = 2.4·20·10·400
+    expect(by('B2').lc).toBeCloseTo(48, 9)
+    expect(by('B2').Rn).toBeCloseTo(192, 9)
+    expect(r.avail.bearing).toBeCloseTo(0.75 * 139.2, 9)
+  })
+
+  it('a thin tab: tear-out at the edge bolt governs over bolt shear, and the check says so', () => {
+    const r = localConnection({ ...BASE, tPlate: 6 })
+    // 0.75·1.2·29·6·400/1000 = 62.64 kN < bolt shear 0.75·310·π·10²/1000 = 73.04 kN
+    const b1 = r.bearing.find((b) => b.id === 'B1')!
+    expect(b1.avail).toBeCloseTo(62.64, 2)
+    expect(r.avail.shear).toBeCloseTo(73.04, 2)
+    expect(r.boltGoverning).toBe('B1')
+    expect(r.boltUtil).toBeCloseTo(50 / 62.64, 3)
+    // and the largest load scales by the WORST bolt, not the shear strength
+    expect(r.maxVu).toBeCloseTo(150 / r.boltUtil, 6)
+  })
+
+  it('bolts pushing toward the welded face have nothing to tear out through', () => {
+    const r = localConnection({ ...BASE, Vu: 0, Hu: -60 })
+    for (const b of r.bearing) {
+      expect(b.lc).toBe(Infinity)
+      expect(b.Rn).toBeCloseTo(192, 9)
+    }
+  })
+})
+
+describe('localConnection — the beam web and the tab welds are checked, not assumed', () => {
+  it('a web thinner than the tab can govern: 2.4·20·3·450 = 64.8 kN, φ 48.6 < R 50', () => {
+    const r = localConnection({ ...BASE, twWeb: 3, FuWeb: 450 })
+    expect(r.webBearing).not.toBeNull()
+    // the web is pushed UP: the top bolt has nothing above it, the others tear toward the next hole
+    expect(r.webBearing!.find((b) => b.id === 'B3')!.lc).toBe(Infinity)
+    expect(r.webBearing!.find((b) => b.id === 'B1')!.lc).toBeCloseTo(70 - 22, 9)
+    expect(r.webBearing!.find((b) => b.id === 'B3')!.Rn).toBeCloseTo(2.4 * 20 * 3 * 450 / 1000, 9)
+    expect(r.boltGovernedBy).toBe('web bearing')
+    expect(r.boltUtil).toBeCloseTo(50 / (0.75 * 64.8), 6)
+    expect(r.boltUtil).toBeGreaterThan(1)
+  })
+
+  it('a stout web leaves bolt shear in charge', () => {
+    const r = localConnection({ ...BASE, twWeb: 10, FuWeb: 450 })
+    expect(r.boltGovernedBy).toBe('bolt shear')
+    expect(r.boltUtil).toBeCloseTo(50 / r.avail.shear, 9)
+  })
+
+  it('tab welds: V and V·a about the weld line, two fillets — hand check', () => {
+    const r = localConnection({ ...BASE, weldSize: 6, FEXX: 482 })
+    const w = r.weld!
+    // tab 220 tall; load at the bolt line, 35 mm off the weld
+    const fd = 150_000 / 220
+    const ft = (150 * 35 * 1000 * 110) / (220 ** 3 / 12)
+    expect(w.L).toBeCloseTo(220, 9)
+    expect(w.fMax).toBeCloseTo(Math.hypot(fd, ft), 6)
+    expect(w.availPerLen).toBeCloseTo(0.75 * 0.6 * 482 * 0.707 * 12, 6)
+    expect(w.util).toBeCloseTo(Math.hypot(fd, ft) / (0.75 * 0.6 * 482 * 0.707 * 12), 6)
+    // Table J2.4 for a 10 mm tab: 5 min; §J2.2b along its 10 mm edge: 8 max
+    expect([w.wMin, w.wMax, w.sizeOk, w.ok]).toEqual([5, 8, true, true])
+    expect(localConnection({ ...BASE, weldSize: 3 }).weld!.sizeOk).toBe(false)
+    expect(localConnection({ ...BASE, weldSize: 10 }).weld!.sizeOk).toBe(false)
+  })
+})

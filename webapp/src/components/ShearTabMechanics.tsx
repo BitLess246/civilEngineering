@@ -19,7 +19,7 @@
 // that tears first. Geometry from `lib/connectionMechanics`; nothing here
 // recomputes a strength.
 // ─────────────────────────────────────────────────────────────────────────
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import type { BoltGroupGeom, BoltForce, BlockShearCase } from '../engine/steelDesign'
 import type { AiscShape } from '../engine/aiscSections'
 import { blockShearPath, clearDistance, holeDia, minFilletSize, type Pt } from '../lib/connectionMechanics'
@@ -56,12 +56,20 @@ export interface ShearTabMechanicsProps {
   ey_load: number
   beam: AiscShape
   column: AiscShape
+  /** The engine's §J3.10(a) result per bolt on the tab (lc, tear-out, cap,
+   *  available bearing, kN) — labelled, never recomputed. */
+  bearing?: { id: string; lc: number; Rn_tear: number; Rn_bear: number; availBearing: number }[]
+  /** The same on the beam web, when the page checked it. */
+  webBearing?: { id: string; lc: number; Rn_tear: number; Rn_bear: number; availBearing: number }[] | null
+  /** The tab welds as the engine checked them. */
+  weld?: { w: number; FEXX: number; L: number; fMax: number; availPerLen: number; util: number; wMin: number; wMax: number; sizeOk: boolean; ok: boolean } | null
 }
 
 export function ShearTabMechanics(p: ShearTabMechanicsProps) {
   const [on, setOn] = useState<Set<Overlay>>(new Set(['forces', 'block']))
   const [bsCase, setBsCase] = useState<0 | 1>(0)
   const [hover, setHover] = useState<string | null>(null)
+  const uid = useId().replace(/:/g, '')
   const toggle = (o: Overlay) => setOn((s) => { const n = new Set(s); if (n.has(o)) n.delete(o); else n.add(o); return n })
 
   const { geom, db, t } = p
@@ -78,10 +86,10 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
   // ── shapes, mm ─────────────────────────────────────────────────────────
   const bd = p.beam.d ?? 310, btf = p.beam.tf ?? 10, btw = p.beam.tw ?? 6
   const cd = p.column.d ?? 260, ctf = p.column.tf ?? 14, cbf = p.column.bf ?? 255
-  // The tab-to-column weld is NOT designed on this page — it is drawn at the
-  // Table J2.4 minimum for the thinner part, on BOTH faces of the tab, and
-  // labelled as exactly that.
-  const wWeld = minFilletSize(Math.min(t, ctf))
+  // The tab-to-column weld: a fillet on BOTH faces of the tab, drawn at the
+  // leg the page checked (the Table J2.4 minimum only if none was given).
+  // the fillets drawn at the size the page checked them at
+  const wWeld = p.weld?.w ?? minFilletSize(Math.min(t, ctf))
   const yc = H / 2
   const setback = 13
   const beamEnd = W + 170
@@ -156,26 +164,38 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
           <text x={20} y={20} fontSize={11} fontWeight={700} fill={INK}>ELEVATION — shear tab to column flange</text>
 
           {/* column: flanges edge-on, web between */}
-          <rect x={X(-cdv)} y={Y(colTop)} width={cdv * s} height={(colTop - colBot) * s} fill={STEEL_FILL} stroke="none" />
-          <rect x={X(-ctf)} y={Y(colTop)} width={ctf * s} height={(colTop - colBot) * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
+          {/* the fill is cut BY the break line — one outline — so the zigzag
+              is the member's edge, not a line drawn over a rectangle */}
           {cd > cdv
-            ? <path d={zig(X(-cdv), Y(colTop), Y(colBot))} fill="none" stroke={INK} strokeWidth={0.9} />
-            : <rect x={X(-cd)} y={Y(colTop)} width={ctf * s} height={(colTop - colBot) * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />}
+            ? <>
+                <polygon points={cutOutline(X(0), X(-cdv), Y(colTop), Y(colBot))} fill={STEEL_FILL} stroke="none" />
+                <path d={zig(X(-cdv), Y(colTop), Y(colBot))} fill="none" stroke={INK} strokeWidth={0.9} />
+              </>
+            : <>
+                <rect x={X(-cd)} y={Y(colTop)} width={cd * s} height={(colTop - colBot) * s} fill={STEEL_FILL} stroke="none" />
+                <rect x={X(-cd)} y={Y(colTop)} width={ctf * s} height={(colTop - colBot) * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
+              </>}
+          <rect x={X(-ctf)} y={Y(colTop)} width={ctf * s} height={(colTop - colBot) * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
           <text x={X(-cdv / 2)} y={Y(colBot) + 14} fontSize={9.5} fill={NOTE} textAnchor="middle">{p.column.name} column</text>
 
           {/* beam: flanges and web, broken at the far end */}
-          <rect x={X(setback)} y={Y(yTop)} width={(beamEnd - setback) * s} height={bd * s} fill={STEEL_FILL} stroke="none" />
-          <rect x={X(setback)} y={Y(yTop)} width={(beamEnd - setback) * s} height={btf * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
-          <rect x={X(setback)} y={Y(yBot + btf)} width={(beamEnd - setback) * s} height={btf * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
+          <defs>
+            <clipPath id={`${uid}-beam`}><polygon points={cutOutline(X(setback), X(beamEnd), Y(yTop), Y(yBot))} /></clipPath>
+          </defs>
+          <g clipPath={`url(#${uid}-beam)`}>
+            <rect x={X(setback)} y={Y(yTop)} width={(beamEnd - setback) * s + 8} height={bd * s} fill={STEEL_FILL} stroke="none" />
+            <rect x={X(setback)} y={Y(yTop)} width={(beamEnd - setback) * s + 8} height={btf * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
+            <rect x={X(setback)} y={Y(yBot + btf)} width={(beamEnd - setback) * s + 8} height={btf * s} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
+          </g>
           <line x1={X(setback)} y1={Y(yTop)} x2={X(setback)} y2={Y(yBot)} stroke={INK} strokeWidth={0.9} />
-          <path d={zig(X(beamEnd), Y(yTop) - 4, Y(yBot) + 4)} fill="none" stroke={INK} strokeWidth={0.9} />
+          <path d={zig(X(beamEnd), Y(yTop), Y(yBot))} fill="none" stroke={INK} strokeWidth={0.9} />
           <text x={X(beamEnd) - 4} y={Y(yTop) - 6} fontSize={9.5} fill={NOTE} textAnchor="end">{p.beam.name} beam · tw {btw} mm</text>
 
           {/* the tab, welded to the flange */}
           <rect x={X(0)} y={Y(H)} width={W * s} height={H * s} fill={PLATE} fillOpacity={0.92} stroke={INK} strokeWidth={1.2} />
           <line x1={X(0)} y1={Y(H)} x2={X(0)} y2={Y(0)} stroke={WELD} strokeWidth={3.2} />
           <line x1={X(0) + 2} y1={Y(H) + 6} x2={X(0) + 22} y2={Y(H) - 16} stroke={WELD} strokeWidth={0.8} />
-          <text x={X(0) + 24} y={Y(H) - 18} fontSize={9} fill={WELD}>fillets both faces, w {wWeld} (J2.4 min.) — not checked</text>
+          <text x={X(0) + 24} y={Y(H) - 18} fontSize={9} fill={p.weld && !p.weld.ok ? CRIT : WELD}>fillets both faces, w {wWeld}{p.weld ? ` · ${Math.round(p.weld.util * 100)} % used` : ''}</text>
           <text x={X(W) + 6} y={Y(0) - 2} fontSize={9.5} fill={NOTE}>PL {Math.round(W)}×{Math.round(H)}×{t}</text>
 
           {/* block shear */}
@@ -209,7 +229,9 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
                 {lc && (
                   <g>
                     <line x1={X(b.x) + Math.cos(ang) * r} y1={Y(b.y) + Math.sin(ang) * r} x2={X(lc.to.x)} y2={Y(lc.to.y)} stroke={BEAR} strokeWidth={1.6} />
-                    <text x={(X(b.x) + X(lc.to.x)) / 2 + 5} y={(Y(b.y) + Y(lc.to.y)) / 2 + 3} fontSize={9} fill={BEAR} fontWeight={700}>lc {Math.round(lc.lc)}</text>
+                    <text x={(X(b.x) + X(lc.to.x)) / 2 + 5} y={(Y(b.y) + Y(lc.to.y)) / 2 + 3} fontSize={9} fill={BEAR} fontWeight={700}>
+                      lc {Math.round(lc.lc)}{(() => { const e = p.bearing?.find((q) => q.id === b.id); return e ? ` · ${p.R} ${e.availBearing.toFixed(0)} kN${e.Rn_tear < e.Rn_bear ? ' (tear-out)' : ''}` : '' })()}
+                    </text>
                   </g>
                 )}
                 {on.has('forces') && f && f.R > 0 && (() => {
@@ -228,7 +250,7 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
           {/* column flange (cut), web of the beam, plate(s) */}
           <rect x={SX(-ctf)} y={SZ(zFar)} width={ctf * ss} height={(zFar - zNear) * ss} fill={STEEL_DARK} stroke={INK} strokeWidth={0.9} />
           <rect x={SX(setback)} y={SZ(btw / 2)} width={(sxMax - setback) * ss} height={btw * ss} fill={STEEL_FILL} stroke={INK} strokeWidth={0.9} />
-          <text x={SX(sxMax) - 2} y={SZ(-btw / 2) + 11} fontSize={8.5} fill={NOTE} textAnchor="end">beam web {btw}</text>
+          <text x={SX(sxMax) - 2} y={SZ(btw / 2) - 3} fontSize={8.5} fill={NOTE} textAnchor="end">beam web {btw}</text>
           {plies.map((q, k) => (
             <g key={k}>
               <rect x={SX(0)} y={SZ(q.z1)} width={W * ss} height={t * ss} fill={PLATE} stroke={INK} strokeWidth={1} />
@@ -271,7 +293,7 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
       </DrawingFrame>
       <p className="mt-1 min-h-[1.25rem] text-[12px] text-muted" aria-live="polite">
         {hb && hf
-          ? `${hb.id}: R = ${hf.R.toFixed(2)} kN (Vx ${hf.Vx.toFixed(2)}, Vy ${hf.Vy.toFixed(2)}) · ${p.R} per bolt ${Math.min(p.avail.shear, p.avail.bearing).toFixed(2)} kN · fv ${hf.fv.toFixed(0)} MPa · fbr ${hf.fbr.toFixed(0)} MPa${hlc ? ` · lc ${Math.round(hlc.lc)} mm` : ''}`
+          ? `${hb.id}: R = ${hf.R.toFixed(2)} kN (Vx ${hf.Vx.toFixed(2)}, Vy ${hf.Vy.toFixed(2)}) · ${p.R} this bolt ${Math.min(p.avail.shear, p.bearing?.find((q) => q.id === hb.id)?.availBearing ?? p.avail.bearing).toFixed(2)} kN · fv ${hf.fv.toFixed(0)} MPa · fbr ${hf.fbr.toFixed(0)} MPa${hlc ? ` · lc ${Math.round(hlc.lc)} mm` : ''}`
           : 'Hover or focus a bolt to read its force, stresses and clear distance.'}
       </p>
     </div>
@@ -285,13 +307,18 @@ function halfDisc(cx: number, cy: number, r: number, ang: number): string {
   return `M${cx} ${cy} L${p0[0]} ${p0[1]} A${r} ${r} 0 0 1 ${p1[0]} ${p1[1]} Z`
 }
 
-/** A vertical break line. */
-function zig(x: number, y0: number, y1: number): string {
+/** A vertical break line's vertices, page px, from y0 to y1 at x. */
+function zigPts(x: number, y0: number, y1: number): [number, number][] {
   const n = 6, h = (y1 - y0) / n
-  let d = `M${x} ${y0}`
-  for (let k = 1; k <= n; k++) d += ` L${x + (k % 2 ? 5 : -5)} ${y0 + h * (k - 0.5)} L${x} ${y0 + h * k}`
-  return d
+  const out: [number, number][] = [[x, y0]]
+  for (let k = 1; k <= n; k++) out.push([x + (k % 2 ? 5 : -5), y0 + h * (k - 0.5)], [x, y0 + h * k])
+  return out
 }
+const zig = (x: number, y0: number, y1: number) => zigPts(x, y0, y1).map(([a, b], k) => `${k ? 'L' : 'M'}${a} ${b}`).join(' ')
+/** A member cut by a break line: the outline whose broken edge IS the zigzag,
+ *  so the fill and the line agree. `x0` is the unbroken side. */
+const cutOutline = (x0: number, xBreak: number, y0: number, y1: number) =>
+  [[x0, y0] as [number, number], ...zigPts(xBreak, y0, y1), [x0, y1] as [number, number]].map((q) => q.join(',')).join(' ')
 
 interface Line { text: string; color: string; bold?: boolean }
 function readout(
@@ -299,8 +326,11 @@ function readout(
   block: { Lv: number; Lt: number; holes: Pt[] }, k: 0 | 1, dh: number,
 ): Line[] {
   const L: Line[] = []
-  const wWeld = minFilletSize(Math.min(p.t, p.column.tf ?? p.t))
-  L.push({ text: `Tab weld: a fillet on each face at the Table J2.4 minimum w = ${wWeld} mm — its strength is NOT checked here (size it on Welded Connection).`, color: WELD })
+  const wd = p.weld
+  if (wd) {
+    L.push({ text: `Tab welds §J2.4: 2 × ${wd.w} mm fillets, ${wd.L.toFixed(0)} mm long, for V, H and the moment about the weld line — f max ${wd.fMax.toFixed(0)} vs ${p.R} ${wd.availPerLen.toFixed(0)} N/mm (${(wd.util * 100).toFixed(0)} %).`, color: wd.util <= 1 ? WELD : CRIT, bold: true })
+    L.push({ text: `Size §J2.2b: ${wd.wMin} mm min (Table J2.4) ≤ w = ${wd.w} ≤ ${wd.wMax} mm max along the ${p.t} mm tab edge — ${wd.sizeOk ? 'OK' : 'out of range'}.`, color: wd.sizeOk ? WELD : CRIT })
+  }
   if (on.has('forces')) {
     const c = p.forces.find((f) => f.id === p.critical)
     if (c) L.push({ text: `Bolt forces — Vu ${p.Vu.toFixed(1)} kN down, Hu ${p.Hu.toFixed(1)} kN at e = (${p.ex_load}, ${p.ey_load}) mm; critical ${p.critical}: R = ${c.R.toFixed(2)} kN.`, color: FORCE })
@@ -310,10 +340,13 @@ function readout(
     L.push({ text: `Agv = ${bc.Agv.toFixed(0)}, Anv = ${bc.Anv.toFixed(0)}, Ant = ${bc.Ant.toFixed(0)} mm² · Rn = min(0.6FuAnv, 0.6FyAgv) + Ubs·Fu·Ant = ${bc.Rn.toFixed(1)} kN · ${p.R} = ${(bcAvail ?? 0).toFixed(1)} kN vs Vu ${p.Vu.toFixed(1)} kN.`, color: SHEAR })
   }
   if (on.has('bearing')) {
-    L.push({ text: `Bearing §J3.10: each bolt bears on d × t = ${p.db} × ${p.t} = ${p.db * p.t} mm² of tab on the side it pushes (amber); Rn = 2.4·d·t·Fu → ${p.R} = ${p.avail.bearing.toFixed(1)} kN per bolt.`, color: BEAR, bold: true })
-    L.push({ text: `lc = clear distance from the hole edge to the free edge or next hole along the push — the steel the bolt would tear out through.`, color: BEAR })
-    const tw = p.beam.tw ?? 0
-    if (tw > 0 && tw < p.t) L.push({ text: `The beam web bears too — d × tw = ${p.db} × ${tw} = ${(p.db * tw).toFixed(0)} mm², thinner than the tab, so it governs bearing there. This page checks the tab only: check the web.`, color: CRIT })
+    L.push({ text: `Bearing & tear-out §J3.10(a), per bolt: Rn = min(1.2·lc·t·Fu, 2.4·d·t·Fu); d × t = ${p.db} × ${p.t} = ${p.db * p.t} mm² of tab on the side it pushes (amber).`, color: BEAR, bold: true })
+    const worst = p.bearing?.reduce((a, b) => (b.availBearing < a.availBearing ? b : a))
+    L.push({ text: worst
+      ? `Weakest: ${worst.id}, lc ${Number.isFinite(worst.lc) ? worst.lc.toFixed(0) : '—'} mm → ${worst.Rn_tear < worst.Rn_bear ? `tear-out 1.2·lc·t·Fu = ${worst.Rn_tear.toFixed(1)} kN governs over the 2.4·d·t·Fu cap ${worst.Rn_bear.toFixed(1)}` : `the 2.4·d·t·Fu cap ${worst.Rn_bear.toFixed(1)} kN`}; ${p.R} = ${worst.availBearing.toFixed(1)} kN.`
+      : `lc = clear distance from the hole edge to the free edge or next hole along the push — the steel the bolt would tear out through.`, color: BEAR })
+    const ww = p.webBearing?.reduce((a, b) => (b.availBearing < a.availBearing ? b : a))
+    if (ww) L.push({ text: `Beam web (tw ${p.beam.tw}, pushed up): weakest ${ww.id}, ${Number.isFinite(ww.lc) ? `lc ${ww.lc.toFixed(0)} mm → ` : ''}${ww.Rn_tear < ww.Rn_bear ? `tear-out ${ww.Rn_tear.toFixed(1)}` : `2.4·d·tw·Fu ${ww.Rn_bear.toFixed(1)}`} kN; ${p.R} = ${ww.availBearing.toFixed(1)} kN.`, color: BEAR })
   }
   if (on.has('shear')) {
     const Ab = (Math.PI / 4) * p.db * p.db
