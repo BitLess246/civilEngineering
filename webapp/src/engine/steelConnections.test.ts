@@ -373,3 +373,37 @@ describe('model-space bolt shear reads Table J3.2', () => {
     expect(phiBoltShear(20)).toBeCloseTo(110.5, 1)
   })
 })
+
+describe('moment connections: the CJP is base metal, the column is checked under §J10', () => {
+  const m = makeModel()
+  // every beam end rigid: a moment connection at every column flange
+  for (const mem of m.members) if (mem.role !== 'column') mem.connections = { iEnd: 'moment', jEnd: 'moment' }
+  const d = designStructure(m, soil)!
+  const flangeMoments = d.joints.flatMap((j) => j.connections.map((c) => ({ j, c }))).filter(({ c }) => c.connType === 'moment-flange-weld')
+
+  it('the CJP flange weld is the beam flange in tension yielding: 0.9·Fy·bf·tf (Table J2.5), not Fu', () => {
+    expect(flangeMoments.length).toBeGreaterThan(0)
+    for (const { c } of flangeMoments) {
+      const b = d.steelBeams.find((r) => r.id === c.beamId)!
+      expect(c.flange!.Fy).toBe(345)
+      expect(c.flange!.phiCapKn).toBeCloseTo(0.9 * 345 * b.bf * b.tf / 1000, 9)
+    }
+  })
+
+  it('every flange-face moment connection carries the §J10 check of its column, shared per joint', () => {
+    for (const { j, c } of flangeMoments) {
+      expect(c.j10).toBeTruthy()
+      expect(c.j10!.col.name).toBe(j.columnShape)
+      expect(c.j10!.Ru).toBeGreaterThanOrEqual(c.flange!.Tf - 1e-9)
+      const others = j.connections.filter((x) => x.connType === 'moment-flange-weld')
+      for (const o of others) expect(o.j10).toBe(c.j10)
+      // a one-storey frame: every beam-column joint is at the column top
+      expect(c.j10!.atEnd).toBe(true)
+      expect(c.ok).toBe(c.bolts.ok && c.plate.ok && c.weld.ok && c.flange!.ok && c.j10!.ok)
+    }
+  })
+
+  it('web-face moment connections carry no §J10 (the extension plates span to the flanges)', () => {
+    for (const j of d.joints) for (const c of j.connections) if (c.faceType === 'web') expect(c.j10).toBeUndefined()
+  })
+})

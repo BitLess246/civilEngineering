@@ -7,6 +7,7 @@ import { buildSheetSet } from '../lib/planSheets'
 import type { PlanPrimitive } from './planRenderer'
 import { STEEL } from './sheetInk'
 import { shapeByName } from './aiscSections'
+import { columnJ10 } from './columnJointChecks'
 import type { RectSection } from './model'
 
 const steel: RectSection = { id: 'S', name: 'W310x79', b: 254, h: 307, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40, material: 'steel', shape: 'W310x79', steelFy: 345, steelFu: 448 }
@@ -98,6 +99,22 @@ describe('buildConnectionDetail — the designed connection, drawn', () => {
     // the web sits on the band's centre line, bf/2
     const w = tipOf('COLUMN WEB', byKind('moment-web-plate'))!
     expect(w.x).toBeCloseTo(col.bf / 2, 9)
+  })
+
+  it('draws the column stiffening the design calls for: continuity plates and a doubler, called out', () => {
+    const t = byKind('moment-flange-weld')
+    const j10 = columnJ10({ name: 'W310x79', d: 307, bf: 254, tf: 14.6, tw: 8.76, A: 10100, Fy: 345 },
+      [{ beamId: 'L', Pf: 300, bfb: 165, tfb: 9.7 }, { beamId: 'R', Pf: 300, bfb: 165, tfb: 9.7 }],
+      { atEnd: false, twoSided: true, Pr: 500, beamDepth: 310 })
+    const plain = texts(draw(t).primitives).join(' | ')
+    expect(plain).not.toMatch(/CONTINUITY|DOUBLER/)
+    const d = buildConnectionDetail({ conn: { ...t.sample, j10 }, hostShape: t.hostShape, hostKind: t.hostKind, faceType: t.faceType, beamShape: t.beamShape, mark: t.mark })
+    const all = texts(d.primitives).join(' | ')
+    expect(all).toContain(`CONTINUITY PL ${j10.stiffeners!.ts}×${Math.round(j10.stiffeners!.bs)}`)
+    expect(all).toContain(`DOUBLER PL ${j10.doubler!.td}`)
+    // two plates of thickness ts, edge-on, at the beam-flange levels
+    const plates = d.primitives.filter((p) => p.kind === 'rect' && Math.abs(p.h - j10.stiffeners!.ts) < 1e-9)
+    expect(plates.length).toBeGreaterThanOrEqual(2)
   })
 
   it('cuts the girder as an I with its top flush with the beam (top of steel)', () => {

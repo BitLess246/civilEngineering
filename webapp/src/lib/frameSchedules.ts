@@ -37,6 +37,8 @@ const connType = (c: BeamConnection, beamToBeam = false): string =>
 
 const weldOf = (c: BeamConnection): string =>
   `${c.tab.weldSizeMm} E70XX${c.connType === 'moment-flange-weld' ? ' + CJP flg' : c.connType === 'moment-web-plate' ? ' + ext. plates' : ''}`
+    + (c.j10?.stiffeners ? `; cont. PL ${c.j10.stiffeners.ts}×${Math.round(c.j10.stiffeners.bs)}` : '')
+    + (c.j10?.doubler ? `; dbl PL ${c.j10.doubler.td}` : '')
 
 /** The RC pedestals under one material's columns, one line per PD mark —
  *  the marks the footing sheets carry. Null where there are none. */
@@ -103,7 +105,7 @@ export function steelScheduleDrawings(design: StructureDesign, model?: Structura
   ]
   const connTable: ScheduleTable | null = conns.length ? {
     heading: 'STEEL CONNECTION SCHEDULE',
-    columns: [{ head: 'NODE', w: 9 }, { head: 'BEAM', w: 10 }, { head: 'MARK', w: 6 }, { head: 'TYPE', w: 22 }, { head: 'BOLTS', w: 14 }, { head: 'PLATE t×h', w: 11 }, { head: 'WELD mm', w: 18 }, { head: 'Vu kN', w: 8, align: 'end' }, { head: 'Mu kN·m', w: 9, align: 'end' }, { head: 'STATUS', w: 9 }],
+    columns: [{ head: 'NODE', w: 9 }, { head: 'BEAM', w: 10 }, { head: 'MARK', w: 6 }, { head: 'TYPE', w: 22 }, { head: 'BOLTS', w: 14 }, { head: 'PLATE t×h', w: 11 }, { head: 'WELD mm', w: 26 }, { head: 'Vu kN', w: 8, align: 'end' }, { head: 'Mu kN·m', w: 9, align: 'end' }, { head: 'STATUS', w: 9 }],
     rows: conns.map(({ node, c, bb }) => [node, c.beamId, markAt(marks, c.beamId, node), connType(c, bb), `${c.bolts.n}×M${c.bolts.dia} A325`, `${c.tab.t}×${f0(c.tab.hMm)}`, weldOf(c), f1(c.Vu), c.pinned ? '—' : f1(c.Mu), status(c.ok)]),
     failRows: conns.flatMap((x, i) => (x.c.ok ? [] : [i])),
     note: 'Each end is built as analysed: a moment connection unless the end is Simple (a pin, released in the analysis). Plates Fy 248 MPa; bolts single shear.',
@@ -140,7 +142,7 @@ export function steelScheduleDrawings(design: StructureDesign, model?: Structura
   }
   if (marks.types.length) memberTables.push({
     heading: 'CONNECTION TYPES',
-    columns: [{ head: 'MARK', w: 6 }, { head: 'TYPE', w: 22 }, { head: 'BOLTS', w: 13 }, { head: 'PLATE t×h', w: 10 }, { head: 'WELD mm', w: 16 }, { head: 'ENDS', w: 6, align: 'end' }, { head: 'Vu kN', w: 7, align: 'end' }, { head: 'Mu kN·m', w: 8, align: 'end' }, { head: 'STATUS', w: 8 }],
+    columns: [{ head: 'MARK', w: 6 }, { head: 'TYPE', w: 22 }, { head: 'BOLTS', w: 13 }, { head: 'PLATE t×h', w: 10 }, { head: 'WELD mm', w: 24 }, { head: 'ENDS', w: 6, align: 'end' }, { head: 'Vu kN', w: 7, align: 'end' }, { head: 'Mu kN·m', w: 8, align: 'end' }, { head: 'STATUS', w: 8 }],
     rows: marks.types.map((t) => [t.mark, connType(t.sample, t.kind === 'fin-plate'), `${t.sample.bolts.n}×M${t.sample.bolts.dia} A325`,
       `${t.sample.tab.t}×${f0(t.sample.tab.hMm)}`, weldOf(t.sample), `${t.ends.length}`, f1(t.Vu), t.Mu > 0 ? f1(t.Mu) : '—', status(t.ok)]),
     failRows: marks.types.flatMap((t, i) => (t.ok ? [] : [i])),

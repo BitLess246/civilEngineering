@@ -6703,6 +6703,14 @@ export default function ModelSpace() {
                           {c.flange && (
                             <div className="text-[10px] text-muted">Tf={f1(c.flange.Tf)} kN</div>
                           )}
+                          {c.j10 && (
+                            <div className={`text-[10px] ${c.j10.ok ? 'text-muted' : 'text-fail'}`}
+                              title={`§J10 on ${c.j10.col.name}: Ru ${f1(c.j10.Ru)} kN vs ${f1(c.j10.phiRnMin)} kN (${c.j10.governs}); panel zone ${f1(c.j10.panel.Vu)} / ${f1(c.j10.panel.phiRv)} kN`}>
+                              col. §J10 {Math.round((c.j10.Ru / c.j10.phiRnMin) * 100)}%
+                              {c.j10.stiffeners && <> · cont. PL {c.j10.stiffeners.ts}×{Math.round(c.j10.stiffeners.bs)}</>}
+                              {c.j10.doubler && <> · doubler PL {c.j10.doubler.td}</>}
+                            </div>
+                          )}
                         </td>
                       </tr>
                       ),
@@ -6796,7 +6804,7 @@ export default function ModelSpace() {
               <p className="mt-1 text-[11px] text-muted">
                 Shear tab: A36 plate (Fy=248, Fu=400 MPa), M20 A325-X bolts @ 75 mm pitch, 40 mm edge. Plate: §J4.2 shear yielding and rupture, §J4.3 block shear, flexure at the bolt line (Manual Part 10 Eq. 10-5, net-section rupture, Part 9 plate buckling).
                 Welds: E70XX fillets both faces of the tab by the elastic line method (V and V·a), Table J2.4 minimum, §J4.2(b) base metal of the tab and the support.
-                Moment connection: CJP groove weld at beam flanges (§J2.6).
+                Moment connection: CJP groove welds at the beam flanges, base-metal strength 0.9·Fy·Af (Table J2.5); the column is checked under the flange forces (§J10.1 flange bending, §J10.2 web yielding, §J10.3 crippling, §J10.5 web buckling with beams both sides, §J10.6 panel zone) and stiffened where short — continuity plates (§J10.7/§J10.8) and a web doubler (§J10.9).
                 Beam-to-beam: fin plate welded to the girder web, supported-beam top flange coped to clear the girder flange; the coped section is checked for shear, flexural rupture and local web buckling (Manual Part 9). Click a row for the detail, the mechanics drawing and the worked solution.
               </p>
             </div>

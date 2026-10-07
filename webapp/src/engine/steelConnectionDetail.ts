@@ -123,6 +123,27 @@ export function buildConnectionDetail(i: ConnectionDetailInput, opts: Connection
   P.push({ kind: 'rect', x: weldX - u * 0.25, y: plateTop, w: u * 0.5, h: tab.hMm, fill: SHEET_INK })
   P.push(...leader({ x: weldX, y: plateTop + u, tx: weldX + tab.wMm + u * 3.5, ty: plateTop - u * 2.4,
     text: `${tab.weldSizeMm} E70XX FILLET, BOTH SIDES, FULL HEIGHT`, size: u * 0.8 }))
+  // §J10 stiffening of the column: continuity plates at both beam-flange
+  // levels (edge-on, between the flanges — the web is in the plane of this
+  // view) and the doubler on the web, outlined over the panel
+  const j = conn.j10
+  if (conn.connType === 'moment-flange-weld' && j && i.hostKind === 'column') {
+    const xIn = x0 + hostTf, xOut = x0 + hostW - hostTf
+    const tw2 = (t: string) => t.length * 0.6 * u * 0.78
+    if (j.doubler) {
+      P.push({ kind: 'rect', x: xIn, y: beamTop - u * 0.6, w: xOut - xIn, h: dB + u * 1.2, fill: 'none', stroke: SHEET_INK, width: 0.9, dash: [u * 0.6, u * 0.3] })
+      const t = `DOUBLER PL ${j.doubler.td}`, t2 = `${j.doubler.weld} FILLET TO FLANGES`
+      P.push(...leader({ x: xIn + (xOut - xIn) * 0.85, y: cy + u, tx: xIn + Math.max(tw2(t), tw2(t2)) + u * 0.5, ty: beamBot + u * 4.4, text: t, text2: t2, size: u * 0.78 }))
+    }
+    if (j.stiffeners) {
+      const st = j.stiffeners
+      const xFrom = st.fullDepth ? xIn : x0 + hostW / 2
+      for (const yc of [beamTop + tfB / 2, beamBot - tfB / 2])
+        P.push({ kind: 'rect', x: xFrom, y: yc - st.ts / 2, w: xOut - xFrom, h: st.ts, fill: SHEET_INK })
+      const t = `CONTINUITY PL ${st.ts}×${Math.round(st.bs)}`, t2 = `BOTH SIDES, ${st.weld} FILLET`
+      P.push(...leader({ x: xFrom + (xOut - xFrom) * 0.8, y: beamBot - tfB / 2, tx: xIn + Math.max(tw2(t), tw2(t2)) + u * 0.5, ty: beamBot + u * 2, text: t, text2: t2, size: u * 0.78 }))
+    }
+  }
   if (conn.connType === 'moment-flange-weld') {
     weldTri(faceX, beamTop, 1); weldTri(faceX, beamBot, -1)
     P.push(...leader({ x: faceX + u * 0.4, y: beamBot + u * 0.5, tx: faceX + u * 4, ty: beamBot + u * 2.6, text: 'CJP FLANGE WELDS, TOP AND BOTTOM', size: u * 0.8 }))

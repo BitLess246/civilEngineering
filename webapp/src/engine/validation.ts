@@ -42,6 +42,7 @@ import { solveWeldedConnection } from './weldedConnection'
 import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './steelDesign'
 import { designBolts } from './steelConnections'
 import { tabPlateChecks, copedTee } from './shearTabChecks'
+import { columnJ10 } from './columnJointChecks'
 import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDesign'
 import { designWoodSlab } from './woodSlab'
 import { designSlabOpening } from './slabOpening'
@@ -663,6 +664,14 @@ const copedTeeS = (() => {
   return { manual: I / (ho - yb), software: copedTee(ho, tw, bf, tf).S }
 })()
 
+const j10WebYield = (() => {
+  // W310x79 (tf 14.6, tw 8.76), Fy 345, a 9.7 mm beam flange, interior:
+  // §J10.2 Eq. J10-2, Rn = Fy·tw·(5k + lb), k taken as tf.
+  const r = columnJ10({ name: 'W310x79', d: 307, bf: 254, tf: 14.6, tw: 8.76, A: 10100, Fy: 345 },
+    [{ beamId: 'B', Pf: 100, bfb: 165, tfb: 9.7 }], { atEnd: false, twoSided: false, Pr: 0, beamDepth: 310 })
+  return { manual: 345 * 8.76 * (5 * 14.6 + 9.7) / 1000, software: r.webLocalYielding.phiRn }
+})()
+
 const pryingT0 = (() => {
   // Minimum fitting thickness that eliminates prying (AISC Part 9):
   // t₀ = √(4·φBn·b′/(φf·Fy·p)) with φBn = 60 kN, b′ = 45 − 20/2 = 35 mm,
@@ -1173,6 +1182,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'coped-tee-S', category: 'Connections', title: 'Coped beam — elastic modulus of the tee at the cope',
     reference: 'AISC Manual Part 9 (coped beams)', formula: 'S = I / (ho − ȳ),  I by parallel axes',
     manual: copedTeeS.manual, software: copedTeeS.software, unit: 'mm³', tol: 1e-9,
+  },
+  {
+    id: 'j10-web-yielding', category: 'Connections', title: 'Column web local yielding under a beam flange',
+    reference: 'AISC 360-16 §J10.2, Eq. J10-2', formula: 'φRn = 1.0·Fy·tw·(5k + lb)',
+    manual: j10WebYield.manual, software: j10WebYield.software, unit: 'kN', tol: 1e-9,
   },
   {
     id: 'prying-t0', category: 'Connections', title: 'Prying — thickness eliminating prying',
