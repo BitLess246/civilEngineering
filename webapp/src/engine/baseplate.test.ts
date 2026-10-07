@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { designBasePlate, adoptPlateThickness } from './baseplate'
+import { basePlateMoment, designBasePlate, adoptPlateThickness } from './baseplate'
 
 describe('designBasePlate §J8 / DG1', () => {
   // W250x67-ish column: d≈257, bf≈204; Pu = 1500 kN; f'c = 28; A36 plate.
@@ -83,5 +83,51 @@ describe('base plate — the rods can be installed', () => {
   })
   it('is wide enough for the rods across it to be 4·da apart (ACI §17.7.1)', () => {
     expect(2 * r.rodY).toBeGreaterThanOrEqual(4 * 25 - 1e-9)
+  })
+})
+
+describe('basePlateMoment — DG1 uniform bearing, axial + moment', () => {
+  // N 500 × B 400 plate, f′c 21, A2 = A1: fp(max) = 0.65·0.85·21 = 11.6025 MPa,
+  // qmax = 4 641 N/mm. Pu = 500 kN; m = 100 mm; rods 200 mm off the centre.
+  const base = { Pu: 500, N: 500, B: 400, m: 100, dBend: 310, tfBend: 15, f: 200, fc: 21, Fy: 248 }
+
+  it('small moment (e 100 ≤ ecrit 196.13): Y = N − 2e = 300, fp = 4.17 MPa, tp = 1.5·m·√(fp/Fy) = 19.44', () => {
+    const r = basePlateMoment({ ...base, Mu: 50 })
+    expect(r.qmax).toBeCloseTo(4641, 6)
+    expect(r.ecrit).toBeCloseTo(196.1323, 3)
+    expect(r.regime).toBe('small')
+    expect(r.Y).toBeCloseTo(300, 9)
+    expect(r.fp).toBeCloseTo(500000 / (300 * 400), 9)
+    expect(r.tReq).toBeCloseTo(19.4428, 3)
+    expect(r.Tu).toBe(0)
+    // the bearing block's centroid IS the load line: N/2 − Y/2 = e
+    expect(500 / 2 - r.Y / 2).toBeCloseTo(r.e, 9)
+  })
+
+  it('large moment (e 300): Y = 142.16, rods Tu = qmax·Y − Pu = 159.77 kN', () => {
+    const r = basePlateMoment({ ...base, Mu: 150 })
+    expect(r.regime).toBe('large')
+    expect(r.Y).toBeCloseTo(142.1614, 3)
+    expect(r.Tu).toBeCloseTo(159.7711, 3)
+    // equilibrium, independently of how Y was solved: ΣV and ΣM about the rod line
+    expect(r.qmax * r.Y / 1000).toBeCloseTo(500 + r.Tu, 6)
+    expect(r.qmax * r.Y * (200 + 250 - r.Y / 2)).toBeCloseTo(500000 * (300 + 200), 0)
+    // bearing side at fp(max) over Y ≥ m, tension side about the flange: x = 200 − 155 + 7.5
+    expect(r.x).toBeCloseTo(52.5, 9)
+    expect(r.tReqBearing).toBeCloseTo(1.5 * 100 * Math.sqrt(11.6025 / 248), 9)
+    expect(r.tReqTension).toBeCloseTo(2.11 * Math.sqrt(159771.0989 * 52.5 / (400 * 248)), 3)
+  })
+
+  it('a plate too short for the moment has no real Y and says so', () => {
+    const r = basePlateMoment({ ...base, Mu: 900 })
+    expect(r.regime).toBe('too short')
+    expect(r.ok).toBe(false)
+  })
+
+  it('net uplift with moment: rods take the couple over 2f plus half the uplift', () => {
+    const r = basePlateMoment({ ...base, Pu: -100, Mu: 80 })
+    expect(r.regime).toBe('uplift')
+    expect(r.Tu).toBeCloseTo(80e6 / 400 / 1000 + 50, 9)
+    expect(r.tReqTension).toBeCloseTo(24.2704, 3)
   })
 })

@@ -215,6 +215,29 @@ describe('steel design pipeline (AISC routing + base plates)', () => {
     }
   })
 
+  it('fixed bases: every plate answers to its base moments too (DG1 uniform bearing, both axes)', () => {
+    for (const p of r.basePlates) {
+      expect(p.moment).toBeTruthy()
+      const mo = p.moment!
+      // the moment check uses the designed plate's own geometry
+      expect(mo.strong.ok && mo.weak.ok).toBe(true)
+      expect(mo.shortN || mo.shortB).toBe(false)
+      expect(p.tAdopt).toBeGreaterThanOrEqual(Math.max(p.design.tReq, mo.tReq) - 1e-9)
+    }
+  })
+
+  it('a lateral load at the roof grows the base moments, and with them the plate and its rods', () => {
+    const lat = steelModel()
+    const roof = lat.nodes.filter((n) => n.y > 0)
+    lat.loads = [...lat.loads, ...roof.map((n) => ({ kind: 'node' as const, node: n.id, Fx: 40, cat: 'D' as const }))]
+    const rl = designStructure(lat, soil)!
+    const worst = (d: typeof r) => Math.max(...d.basePlates.map((p) => p.moment?.strong.e ?? 0))
+    expect(worst(rl)).toBeGreaterThan(worst(r))
+    const t0 = Math.max(...r.basePlates.map((p) => p.tAdopt)), t1 = Math.max(...rl.basePlates.map((p) => p.tAdopt))
+    expect(t1).toBeGreaterThanOrEqual(t0)
+    for (const p of rl.basePlates) expect(p.tAdopt).toBeGreaterThanOrEqual(p.moment!.tReq - 1e-9)
+  })
+
   it('reports steel tonnage and no concrete member volume', () => {
     expect(r.totals.steelKg).toBeGreaterThan(0)
     expect(r.totals.concreteMembers).toBeCloseTo(0, 6)

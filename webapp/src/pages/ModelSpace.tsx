@@ -76,6 +76,8 @@ import { ConnectionDetail2D } from '../components/ConnectionDetail2D'
 import { connectionMarks, markAt } from '../lib/steelMarks'
 import { connectionRowSolution } from '../lib/connectionSolution'
 import { ModelConnectionMechanics } from '../components/ModelConnectionMechanics'
+import { BasePlateDetail2D } from '../components/BasePlateDetail2D'
+import { basePlateRowSolution, basePlateContext } from '../lib/basePlateSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { ConstructionSchedule } from '../components/ConstructionSchedule'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
@@ -6460,27 +6462,51 @@ export default function ModelSpace() {
                   </tr>
                 </thead>
                 <tbody>
-                  {design.basePlates.map((p) => (
-                    <tr key={p.node} className={`sched-row border-t border-hairline-2 ${p.ok ? '' : 'bg-fail-tint text-fail'}`}>
-                      <td className="py-1 pr-2 font-medium">{p.node}</td>
+                  {design.basePlates.flatMap((p) => {
+                    const key = `bp:${p.node}`
+                    const open = expanded === key || reportOpen
+                    const ctx = model ? basePlateContext(model, p) : null
+                    return [(
+                    <tr key={p.node} onClick={() => setExpanded(expanded === key ? null : key)}
+                      className={`sched-row cursor-pointer border-t border-hairline-2 hover:bg-brand-tint/40 ${p.ok ? '' : 'bg-fail-tint text-fail'}`}>
+                      <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {p.node}</td>
                       <td className="py-1 pr-2">{p.shape}</td>
                       <td className="py-1 pr-2 text-right">{f1(p.Pu)}</td>
                       <td className="py-1 pr-2 text-right">{p.Tu > 0 ? f1(p.Tu) : '—'}</td>
-                      <td className="py-1 pr-2">{f1(p.design.B)} × {f1(p.design.N)} × {p.tAdopt}</td>
+                      <td className="py-1 pr-2">{f1(p.design.B)} × {f1(p.design.N)} × {p.tAdopt}
+                        {p.moment && <div className="text-[10px] text-muted">base M: e {Number.isFinite(p.moment.strong.e) ? Math.round(p.moment.strong.e) : '∞'} mm ({p.moment.strong.regime}) · t {p.moment.tReq.toFixed(1)} mm</div>}
+                        <div className={`text-[10px] ${p.weld.ok ? 'text-muted' : 'text-fail'}`}>{p.weld.w} mm fillets to column</div>
+                      </td>
                       <td className="py-1 pr-2 text-right">{(p.design.bearingUtil * 100).toFixed(0)}%</td>
                       <td className="py-1 pr-2">
                         {p.anchors
                           ? <>{p.anchors.n}-⌀{p.anchors.da} headed, hef {p.anchors.hef} · {(p.anchors.check.util * 100).toFixed(0)}% <span className="text-muted">({p.anchors.check.governs})</span></>
                           : '—'}
+                        {p.moment && p.moment.rodTu > 0 && <div className="text-[10px] text-muted">rod T from base M {f1(p.moment.rodTu)} kN</div>}
                       </td>
                       <td className="py-1">{p.ok ? '✓ OK' : '✗ check'}</td>
                     </tr>
-                  ))}
+                    ),
+                    open && ctx && (
+                      <tr key={`${key}:detail`}>
+                        <td colSpan={8} className="bg-sheet-2/60 px-2 pb-2">
+                          <div className="grid w-full grid-cols-1 gap-3">
+                            {wantDraw && <BasePlateDetail2D row={p} col={ctx.col} />}
+                            {wantSol && <WorkedSolution steps={basePlateRowSolution(p, ctx.col, ctx.fc, ctx.Fy)} title={`Base plate ${p.node} — worked solution`} />}
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                    ]
+                  })}
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-muted">
                 Bearing §J8: φc·0.85f′c·√(A2/A1), φc = 0.65. Plate thickness from cantilever bending
-                t = ℓ√(2fp/(0.9Fy)); ℓ = max(m, n, n′). Uplift sizes anchor rods (φt·0.75·Fu).
+                t = ℓ√(2fp/(0.9Fy)); ℓ = max(m, n, n′). Base moments of every case, about both column axes, by DG1's
+                uniform-bearing method: the plate is lengthened where a moment finds it too short, thickened for the bearing
+                and the rod-tension sides, and the rods carry the tension side's pull. Column-to-plate fillets carry the flange tension (§J2.4).
+                Click a row for the plan/section detail and the worked solution. Uplift sizes anchor rods (φt·0.75·Fu).
                 Adopted t rounded to plate stock. On an RC pedestal, A2 is the pedestal top.
                 Anchors: headed rods outside the flanges, checked per load case for steel, breakout, pullout,
                 side-face blowout, steel shear, shear breakout, pryout and the §17.6 interaction — cracked

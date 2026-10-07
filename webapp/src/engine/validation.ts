@@ -43,6 +43,7 @@ import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './stee
 import { designBolts } from './steelConnections'
 import { tabPlateChecks, copedTee } from './shearTabChecks'
 import { columnJ10 } from './columnJointChecks'
+import { basePlateMoment } from './baseplate'
 import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDesign'
 import { designWoodSlab } from './woodSlab'
 import { designSlabOpening } from './slabOpening'
@@ -672,6 +673,17 @@ const j10WebYield = (() => {
   return { manual: 345 * 8.76 * (5 * 14.6 + 9.7) / 1000, software: r.webLocalYielding.phiRn }
 })()
 
+const basePlateLargeM = (() => {
+  // DG1 uniform bearing, N 500 × B 400, f′c 21, Pu 500 kN, Mu 150 kN·m, rods at
+  // f = 200: the rods' pull by moment equilibrium about the rod line (independent
+  // of the closed form for Y): qmax·Y·(f + N/2 − Y/2) = Pu·(e + f), T = qmax·Y − Pu.
+  const r = basePlateMoment({ Pu: 500, Mu: 150, N: 500, B: 400, m: 100, dBend: 310, tfBend: 15, f: 200, fc: 21, Fy: 248 })
+  const q = 0.65 * 0.85 * 21 * 400, a = 450, M = 500000 * 500
+  // solve the quadratic q·Y·(a − Y/2) = M by hand
+  const Y = a - Math.sqrt(a * a - (2 * M) / q)
+  return { manual: (q * Y - 500000) / 1000, software: r.Tu }
+})()
+
 const pryingT0 = (() => {
   // Minimum fitting thickness that eliminates prying (AISC Part 9):
   // t₀ = √(4·φBn·b′/(φf·Fy·p)) with φBn = 60 kN, b′ = 45 − 20/2 = 35 mm,
@@ -1187,6 +1199,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'j10-web-yielding', category: 'Connections', title: 'Column web local yielding under a beam flange',
     reference: 'AISC 360-16 §J10.2, Eq. J10-2', formula: 'φRn = 1.0·Fy·tw·(5k + lb)',
     manual: j10WebYield.manual, software: j10WebYield.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'baseplate-moment-rods', category: 'Connections', title: 'Base plate, large moment — rod tension',
+    reference: 'AISC Design Guide 1 (2nd ed.) §3.4', formula: 'q·Y·(f + N/2 − Y/2) = Pu(e + f);  Tu = q·Y − Pu',
+    manual: basePlateLargeM.manual, software: basePlateLargeM.software, unit: 'kN', tol: 1e-9,
   },
   {
     id: 'prying-t0', category: 'Connections', title: 'Prying — thickness eliminating prying',
