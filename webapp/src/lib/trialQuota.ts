@@ -63,7 +63,7 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/hydrostatic-force', '/curved-gate', '/buoyancy', '/manometer', '/relative-equilibrium', '/bernoulli', '/jet-on-vane',
   // mechanics: dynamics — one calculator per page
   '/rectilinear-motion', '/projectile-motion', '/curvilinear-motion', '/kinetics', '/work-energy', '/impulse-momentum', '/friction', '/belt-friction',
-  // mathematics mini-calculators: statics resultant, right-triangle solver, spherical triangle
+  // mathematics mini-calculators: statics resultant, triangle solver, spherical triangle
   '/method-of-joints', '/trigonometry', '/spherical-triangle',
   // drafting: 2D floor plans → 3D
   '/drafting3d',

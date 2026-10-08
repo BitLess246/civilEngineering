@@ -284,7 +284,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/friction', name: 'Friction', sub: 'Block on an incline · holds or slides', group: 'Mathematics' },
   { route: '/belt-friction', name: 'Belt Friction', sub: 'Capstan T₁ = T₂e^(μβ)', group: 'Mathematics' },
   { route: '/method-of-joints', name: 'Method of Joints', sub: 'Concurrent forces · Rx, Ry, R', group: 'Mathematics' },
-  { route: '/trigonometry', name: 'Trigonometry', sub: 'Right triangle · any two knowns', group: 'Mathematics' },
+  { route: '/trigonometry', name: 'Trigonometry', sub: 'Any triangle · any three knowns', group: 'Mathematics' },
   { route: '/spherical-triangle', name: 'Spherical Triangle', sub: 'Cosines · excess · Girard area', group: 'Mathematics' },
 ]
 
