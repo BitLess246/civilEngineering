@@ -81,7 +81,9 @@ export const SITE: SiteConfig = {
   // NOTHING RENDERS IT, and publishing it is a deliberate choice rather than a
   // default — see `missingSiteFields`, which excludes it on purpose.
   tin: '684281205',
-  siteUrl: 'https://civil-engineering-zeta.vercel.app',
+  // The custom domain the apex and every canonical link use (lib/sitemap.ts
+  // carries the same origin). The vercel.app address predates it.
+  siteUrl: 'https://www.zetastruct.app',
 
   // A dedicated support inbox rather than the owner's personal address. It is
   // the address printed in the Terms, the Privacy Policy, the Refund Policy,
