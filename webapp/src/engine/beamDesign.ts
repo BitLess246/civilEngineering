@@ -16,7 +16,7 @@ import { compact, positive, nonNegative, atLeast, finite, effectiveDepth } from 
 import { beta1 } from './loads'
 import { Ec as concreteEc } from './slabDeflection'
 import { crackedInertia, deflCoeff, longTermMultiplier, minBeamThickness, type BeamSupport } from './beamDeflection'
-import { splitLayers, centroidRise, barLayoutWidth } from './barLayers'
+import { splitLayers, centroidRise, barLayoutWidth, LAYER_CLEAR } from './barLayers'
 import { oneWayVc } from './shear'
 
 export interface BeamDesignInput {
@@ -259,7 +259,7 @@ export interface BeamDesignResult {
 
 const PHI_FLEX = 0.90
 const PHI_SHEAR = 0.75
-const LAYER_CLEAR = 25       // §407.7.2 clear distance between layers, mm
+
 // The lone-bar pairing rule and the Varignon centroid live in `barLayers` so
 // the T-beam engine uses the SAME rule — it used to have its own greedy loop
 // and could detail a single bar alone in the top layer.

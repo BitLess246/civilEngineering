@@ -783,3 +783,50 @@ describe('beam lap splices keep out of the critical sections', () => {
     else expect((cage.notes ?? []).filter((n) => /critical section/.test(n))).toEqual([])
   })
 })
+
+describe('buildStructureCages — the design layers reach the cage', () => {
+  // The sample frame's beams are two-bar faces — one row each. A heavier
+  // frame makes the design stack bars into layers, and the cage has to place
+  // those layers: a single row of the same count drew steel at a depth the
+  // design's own d did not name, and a clear spacing it had ruled out.
+  const heavySection = { ...section, id: 'sh', name: 'CH' }
+  const heavyModel = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3, 3], section: heavySection })
+  heavyModel.loads = buildGravityLoads(heavyModel, 22, 10)
+  const heavyDesign = designStructure(heavyModel, soil as never)!
+  const heavyCages = buildStructureCages(heavyModel, heavyDesign).cages
+
+  it('places one row per designed layer, and no second row without a design', () => {
+    let checked = 0
+    for (const b of heavyDesign.beams) {
+      const hog = b.sections.filter((s) => s.hogging)
+      const sag = b.sections.filter((s) => !s.hogging)
+      const gov = (rows: typeof hog, n: number) => {
+        const ls = rows.find((s) => s.design.bars === n)?.design.layers
+        return ls && ls.length > 0 && ls.reduce((a, k) => a + k, 0) === n ? ls : undefined
+      }
+      const hogL = gov(hog, Math.max(0, ...hog.map((s) => s.design.bars)))
+      const sagL = gov(sag, Math.max(0, ...sag.map((s) => s.design.bars)))
+      const cage = heavyCages.find((c) => c.member === b.id)
+      if (!cage) continue
+      const mem = memOf(b.id)
+      const secGeom = heavyModel.sections.find((s) => s.id === mem.section)!
+      const yNode = nodeOf(mem.i).y
+      const inset = (secGeom.cover + secGeom.tieDia + secGeom.barDia / 2) / 1000
+      const yBot = yNode - secGeom.h / 1000 + inset
+      const yTop = yNode - inset
+      const pitch = (secGeom.barDia + 25) / 1000
+      const ys = (role: string) => new Set(cage.runs.filter((r) => r.role === role)
+        .flatMap((r) => r.path.map((p) => Math.round(p[1] * 1e6))))
+      const has = (set: Set<number>, y: number) => set.has(Math.round(y * 1e6))
+      expect(has(ys('bottom'), yBot)).toBe(true)
+      expect(has(ys('bottom'), yBot + pitch)).toBe(!!sagL && sagL.length > 1)
+      expect(has(ys('top'), yTop)).toBe(true)
+      expect(has(ys('top'), yTop - pitch)).toBe(!!hogL && hogL.length > 1)
+      checked++
+    }
+    // the heavy frame really does ask for layers somewhere, or this checks nothing
+    expect(checked).toBeGreaterThan(0)
+    expect(heavyDesign.beams.some((b) =>
+      b.sections.some((s) => s.design.layers.length > 1))).toBe(true)
+  })
+})

@@ -516,3 +516,88 @@ describe('buildBeamCage — cranked into the joint', () => {
     for (const r of fm) expect(new Set(r.path.map((p) => p[2].toFixed(9))).size).toBe(1)
   })
 })
+
+describe('buildBeamCage — faces in layers', () => {
+  // A 300 web cannot hold six ⌀28 at the §407.7.1 clear spacing in one row, so
+  // the design stacks the face 4+2 and measures d to the layered centroid. The
+  // cage has to place the same stack: a single row of six drew an arrangement
+  // the design had ruled out, at a depth its d did not name.
+  const stacked: BeamCageInput = {
+    ...beam, barDia: 28, botLayers: [4, 2], topLayers: [4, 2],
+  }
+  const pitch = (28 + 25) / 1000
+  const yBot = 3 + (40 + 12 + 14) / 1000
+  const yTop = 3 + 0.55 - (40 + 12 + 14) / 1000
+  const half = 0.15 - (40 + 12 + 14) / 1000
+  const ys = (cage: ReturnType<typeof buildBeamCage>, role: string) =>
+    new Set(cage.runs.filter((r) => r.role === role).flatMap((r) => r.path.map((p) => Math.round(p[1] * 1e6))))
+  const at = (y: number) => Math.round(y * 1e6)
+
+  it('sits the second layer one §407.7.2 pitch inside the extreme layer', () => {
+    const cage = buildBeamCage(stacked)
+    expect(ys(cage, 'bottom').has(at(yBot))).toBe(true)
+    expect(ys(cage, 'bottom').has(at(yBot + pitch))).toBe(true)
+    // and the top face stacks DOWNWARD from its own extreme layer
+    expect(ys(cage, 'top').has(at(yTop))).toBe(true)
+    expect(ys(cage, 'top').has(at(yTop - pitch))).toBe(true)
+  })
+
+  it('aligns the upper layer over the extreme layer\'s inner bars — §407.7.2', () => {
+    // 4 bottom bars spread on the even grid; the 2 above sit over the inner
+    // slots, where the stirrup's corner bend still leaves room.
+    const cage = buildBeamCage(stacked)
+    const upper = cage.runs.filter((r) => r.role === 'bottom'
+      && r.path.some((p) => Math.round(p[1] * 1e6) === at(yBot + pitch)))
+    expect(upper).toHaveLength(2)
+    for (const r of upper) expect(Math.abs(r.path[0][2])).toBeCloseTo(half / 3, 9)
+  })
+
+  it('gives the continuous bars the extreme layer\'s outermost places', () => {
+    // The corners run through; the curtailed bars are the inner ones of the
+    // extreme row and the whole upper layer — the bars the span can spare.
+    const cage = buildBeamCage(stacked)
+    const thru = cage.runs.filter((r) => /^B1-B\d+$/.test(r.mark))
+    expect(thru).toHaveLength(2)
+    for (const r of thru) {
+      expect(r.path[0][1]).toBeCloseTo(yBot, 9)
+      expect(Math.abs(r.path[0][2])).toBeCloseTo(half, 9)
+    }
+    const extras = cage.runs.filter((r) => r.mark.startsWith('B1-XB'))
+    expect(extras).toHaveLength(4)
+    // running y: an extra's straight portion is its 2nd and 3rd path point
+    const upper = extras.filter((r) => Math.round(r.path[1][1] * 1e6) === at(yBot + pitch))
+    const inner = extras.filter((r) => Math.round(r.path[1][1] * 1e6) === at(yBot))
+    expect(upper).toHaveLength(2)
+    expect(inner).toHaveLength(2)
+    for (const r of inner) expect(Math.abs(r.path[1][2])).toBeCloseTo(half / 3, 9)
+  })
+
+  it('cranks an upper-layer extra from its own row, and no further than the opposite steel', () => {
+    // The crank used to rise from the extreme row whatever layer the bar sat
+    // in — drawn steel the section did not have.
+    const cage = buildBeamCage(stacked)
+    const upper = cage.runs.filter((r) => r.mark.startsWith('B1-XB')
+      && Math.round(r.path[1][1] * 1e6) === at(yBot + pitch))
+    for (const r of upper) {
+      const crankRise = r.path[0][1] - r.path[1][1]
+      expect(crankRise).toBeGreaterThan(0)
+      expect(r.path[0][1]).toBeLessThanOrEqual(yTop + 1e-9)
+    }
+  })
+
+  it('falls back to one row when the layers do not sum to the face\'s count', () => {
+    const cage = buildBeamCage({ ...stacked, botLayers: [4, 1] })   // sums to 5, face has 6
+    expect(ys(cage, 'bottom').has(at(yBot + pitch))).toBe(false)
+  })
+
+  it('draws one row, as before, when no layers are given', () => {
+    const cage = buildBeamCage(beam)
+    const running = cage.runs.filter((r) => r.role === 'bottom'
+      && (r.mark.startsWith('B1-B') || r.mark.startsWith('B1-XB')))
+    expect(running).toHaveLength(6)
+    for (const r of running) {
+      const y = r.mark.startsWith('B1-XB') ? r.path[1][1] : r.path[0][1]
+      expect(y).toBeCloseTo(3 + (40 + 12 + 10) / 1000, 9)
+    }
+  })
+})

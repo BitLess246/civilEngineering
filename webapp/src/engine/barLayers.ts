@@ -18,6 +18,14 @@
 // count never drops below the demand: pairing is conservative on As.
 // ─────────────────────────────────────────────────────────────────────────
 
+/**
+ * Clear distance between successive layers, mm — §407.7.2. The layer pitch the
+ * design's Varignon centroid, the cage's placed runs and the flanged-section
+ * drawing all share: one number, so the d the design reports is the d the
+ * drawing shows.
+ */
+export const LAYER_CLEAR = 25
+
 export interface BarLayers {
   /** Total bars after any pairing bump — use THIS for As provided, not the
    *  count that went in, or the section is reported with steel it does not have. */

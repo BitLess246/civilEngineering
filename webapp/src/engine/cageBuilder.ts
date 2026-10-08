@@ -416,6 +416,18 @@ export function buildStructureCages(
       bottom: smf ? hingeEnds
         : [{ from: 0.25, to: 0.75, why: 'the midspan positive-moment region' }],
     })
+    const topBarsN = Math.max(0, ...hog.map((s) => s.design.bars))
+    const botBarsN = Math.max(0, ...sag.map((s) => s.design.bars))
+    // The row that supplied the face's bar count supplies its layers too —
+    // the design stacked them and measured d to their centroid. A row whose
+    // layers do not sum to the count it reports is handed over as no layers at
+    // all, and the cage draws one row.
+    const faceLayers = (rows: typeof hog, n: number): number[] | undefined => {
+      const ls = rows.find((s) => s.design.bars === n)?.design.layers
+      return ls && ls.length > 0 && ls.reduce((a, k) => a + k, 0) === n ? ls : undefined
+    }
+    const hogLayers = faceLayers(hog, topBarsN)
+    const sagLayers = faceLayers(sag, botBarsN)
     add('beam', spliceCage(buildBeamCage({
       // The cage is told how its bars WILL be lapped, so it can close the
       // stirrups up through each lap before it places them.
@@ -428,8 +440,16 @@ export function buildStructureCages(
         beamBarRoomAt(mem.j, sec.barDia, beamAlongX),
       ),
       b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, stirrupDia: sec.tieDia,
-      topBars: Math.max(0, ...hog.map((s) => s.design.bars)),
-      botBars: Math.max(0, ...sag.map((s) => s.design.bars)),
+      topBars: topBarsN,
+      botBars: botBarsN,
+      // The arrangement the winning design laid each face out in — the layers
+      // its own d and d′ were measured to. Without them the cut draws a single
+      // row of the same count at a depth the section does not have, and the
+      // callout's "(4+2)" describes steel the picture contradicts. The row that
+      // supplied the count supplies the layers; the cage falls back to one row
+      // wherever the two disagree.
+      ...(hogLayers ? { topLayers: hogLayers } : {}),
+      ...(sagLayers ? { botLayers: sagLayers } : {}),
       sEnd: sEndMm,
       sMid: sMidMm,
       // Which §418 curtailment the faces obey — see `BeamCageInput.system`.
