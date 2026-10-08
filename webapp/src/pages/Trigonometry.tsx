@@ -165,7 +165,8 @@ function buildSteps(known: RightTriangleKnown, k: Partial<Record<Field, number |
   ] })
 
   // 3 — the angles: either given, or from the inverse function
-  if (!given('A') || !given('B')) {
+  if (inv.from) {
+    // A side-side pair: one angle comes out of the inverse, its complement follows.
     const target = inv.target === 'A' ? 'A' : 'B'
     const fnTex = inv.fn === 'arcsin' ? '\\arcsin' : inv.fn === 'arccos' ? '\\arccos' : '\\arctan'
     const fromTex = inv.from
@@ -181,6 +182,14 @@ function buildSteps(known: RightTriangleKnown, k: Partial<Record<Field, number |
     out.push({ title: `Angle ${other} by complement`, lines: [
       { tex: `${other} = 90^{\\circ} - ${target} = 90^{\\circ} - ${f2(value)}^{\\circ} = ${f2(target === 'A' ? r.B : r.A)}^{\\circ}` },
       { text: 'The acute angles of a right triangle are complements — no further function needed.' },
+    ] })
+  } else if (!given('A') || !given('B')) {
+    // A side-angle pair: the given angle solves the sides, the missing angle is its complement.
+    const missing = given('A') ? 'B' : 'A'
+    const value = missing === 'A' ? r.A : r.B
+    out.push({ title: `Angle ${missing} by complement`, lines: [
+      { tex: `${missing} = 90^{\\circ} - ${missing === 'A' ? 'B' : 'A'} = 90^{\\circ} - ${f2(missing === 'A' ? r.B : r.A)}^{\\circ} = ${f2(value)}^{\\circ}` },
+      { text: 'The acute angles of a right triangle are complements; the given angle needed no inverse — it was never unknown.' },
     ] })
   } else {
     out.push({ title: 'The third angle by complement', lines: [

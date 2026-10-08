@@ -40,59 +40,57 @@ const Arrow = ({ x1, y1, x2, y2, w = 2, op = 1, dash }: { x1: number; y1: number
 // ── Method of Joints ────────────────────────────────────────────────────────
 
 /** The joint with every force as an arrow, each split into dashed x/y
- *  components, and the resultant drawn bold. The drawing IS the method: the
- *  arrows are the forces, the dashed legs are the components being summed. */
+ *  components, and the resultant drawn bold. Name tags ride the arrow tips —
+ *  the VALUES stay in the results table and the cards, where the reader is
+ *  already looking; a value block drawn into this viewBox would land in the
+ *  DrawingFrame's panned region on a phone-width card. */
 export function JointForceSketch({ forces, R, thetaDeg, equilibrium }: {
   forces: ForceComponents[]; R: number; thetaDeg: number; equilibrium: boolean
 }) {
-  const JX = 150, JY = 158
+  const JX = 150, JY = 170
   const maxF = Math.max(...forces.map((f) => f.magnitude), 1e-9)
-  const k = 118 / maxF // longest force arrow, px per kN
+  const k = 92 / maxF // longest force arrow, px per kN
   const dir = (deg: number) => ({ c: Math.cos((deg * Math.PI) / 180), s: -Math.sin((deg * Math.PI) / 180) })
-  const Rk = (R / maxF) * 118
+  const Rk = (R / maxF) * 92
   const rd = dir(thetaDeg)
 
   return (
     <Sheet label="Forces at the joint">
       {/* reference axes, bottom-left */}
-      <Arrow x1={44} y1={266} x2={92} y2={266} w={1.2} op={0.55} />
-      <Arrow x1={44} y1={266} x2={44} y2={222} w={1.2} op={0.55} />
-      <T x={98} y={270} size={10}>x</T>
-      <T x={40} y={214} size={10}>y</T>
+      <Arrow x1={44} y1={272} x2={92} y2={272} w={1.2} op={0.55} />
+      <Arrow x1={44} y1={272} x2={44} y2={228} w={1.2} op={0.55} />
+      <T x={98} y={276} size={10}>x</T>
+      <T x={40} y={220} size={10}>y</T>
 
       {/* the joint itself */}
       <circle cx={JX} cy={JY} r={5} fill="currentColor" />
-      <T x={JX - 10} y={JY + 20} size={11} bold>joint</T>
+      <T x={JX - 10} y={JY + 22} size={11} bold>joint</T>
 
-      {/* each force: solid arrow + dashed components onto the axes */}
+      {/* each force: solid arrow, dashed components, name tag at the tip */}
       {forces.map((f, i) => {
         const d = dir(((f.angleDeg % 360) + 360) % 360)
         const len = f.magnitude * k
         const ex = JX + d.c * len, ey = JY + d.s * len
-        // stagger the second line of the label so near-parallel forces read apart
-        const lx = ex + d.c * (i % 2 ? 34 : 16), ly = ey + d.s * (i % 2 ? 34 : 16)
+        const tx = ex + d.c * 16, ty = ey + d.s * 16
         return (
           <g key={`${f.name}-${i}`}>
             <Arrow x1={JX} y1={JY} x2={ex} y2={ey} w={2.2} />
             {Math.abs(f.fx) > maxF * 0.005 && <line x1={ex} y1={ey} x2={ex} y2={JY} {...ink} strokeWidth={1} opacity={0.4} strokeDasharray="4 3" />}
             {Math.abs(f.fy) > maxF * 0.005 && <line x1={ex} y1={ey} x2={JX} y2={ey} {...ink} strokeWidth={1} opacity={0.4} strokeDasharray="4 3" />}
-            <T x={lx} y={ly} anchor={d.c >= 0 ? 'start' : 'end'} bold>{f.name} = {f2(f.magnitude)}</T>
-            <T x={lx} y={ly + 13} anchor={d.c >= 0 ? 'start' : 'end'} size={10}>∠{f2(f.angleDeg)}° · {f2(f.fx)}, {f2(f.fy)}</T>
+            <T x={tx} y={ty + 4} anchor={d.c >= 0 ? 'start' : 'end'} bold>{f.name}</T>
           </g>
         )
       })}
 
-      {/* the resultant, bold and longer-scaled so it reads as the sum */}
+      {/* the resultant, bold; its tag rides the tip like the forces' do */}
       {!equilibrium && Rk > 2 && (
         <>
           <Arrow x1={JX} y1={JY} x2={JX + rd.c * Rk} y2={JY + rd.s * Rk} w={3.4} />
-          <T x={JX + rd.c * (Rk + 18)} y={JY + rd.s * (Rk + 18) + 4} anchor={rd.c >= 0 ? 'start' : 'end'} bold>
-            R = {f2(R)} ∠{f2(thetaDeg)}°
-          </T>
+          <T x={JX + rd.c * (Rk + 16)} y={JY + rd.s * (Rk + 16) + 4} anchor={rd.c >= 0 ? 'start' : 'end'} bold>R</T>
         </>
       )}
       {equilibrium && (
-        <T x={JX + 130} y={JY - 96} size={12} bold>ΣFx = ΣFy = 0 — the joint is in equilibrium</T>
+        <T x={JX + 96} y={JY - 78} size={11.5} bold>ΣFx = ΣFy = 0 — the joint holds</T>
       )}
     </Sheet>
   )
@@ -140,34 +138,35 @@ export function RightTriangleSketch({ a, b, c, A, B }: { a: number; b: number; c
 export function SphericalTriangleSketch({ a, b, c, A, B, C }: {
   a: number; b: number; c: number; A: number; B: number; C: number
 }) {
-  const ax = 320, ay = 68, bx = 196, by = 208, cx = 452, cy = 192
+  const ax = 258, ay = 74, bx = 150, by = 208, cx = 368, cy = 196
   return (
     <Sheet label="Spherical triangle">
       {/* the sphere and its equator */}
-      <circle cx={320} cy={168} r={122} {...ink} strokeWidth={1.4} opacity={0.5} />
-      <ellipse cx={320} cy={168} rx={122} ry={30} {...ink} strokeWidth={1} opacity={0.3} strokeDasharray="5 4" />
+      <circle cx={258} cy={170} r={108} {...ink} strokeWidth={1.4} opacity={0.5} />
+      <ellipse cx={258} cy={170} rx={108} ry={27} {...ink} strokeWidth={1} opacity={0.3} strokeDasharray="5 4" />
 
       {/* the three great-circle edges, bowed outward */}
-      <path d={`M${bx},${by} Q320,266 ${cx},${cy}`} {...ink} strokeWidth={2.4} />
-      <path d={`M${cx},${cy} Q486,118 ${ax},${ay}`} {...ink} strokeWidth={2.4} />
-      <path d={`M${ax},${ay} Q158,116 ${bx},${by}`} {...ink} strokeWidth={2.4} />
+      <path d={`M${bx},${by} Q260,272 ${cx},${cy}`} {...ink} strokeWidth={2.4} />
+      <path d={`M${cx},${cy} Q408,124 ${ax},${ay}`} {...ink} strokeWidth={2.4} />
+      <path d={`M${ax},${ay} Q110,118 ${bx},${by}`} {...ink} strokeWidth={2.4} />
 
       {/* vertices */}
       <circle cx={ax} cy={ay} r={4.5} fill="currentColor" />
       <circle cx={bx} cy={by} r={4.5} fill="currentColor" />
       <circle cx={cx} cy={cy} r={4.5} fill="currentColor" />
 
-      {/* vertex angles */}
-      <T x={ax + 14} y={ay - 4} size={11} bold>A = {f2(A)}°</T>
-      <T x={bx - 14} y={by + 18} anchor="end" size={11} bold>B = {f2(B)}°</T>
-      <T x={cx + 14} y={cy + 16} size={11} bold>C = {f2(C)}°</T>
+      {/* vertex angles — placed inside the sphere so they survive a narrow card */}
+      <T x={ax + 12} y={ay - 6} size={11} bold>A = {f2(A)}°</T>
+      <T x={bx - 12} y={by + 20} anchor="end" size={11} bold>B = {f2(B)}°</T>
+      <T x={cx - 8} y={cy - 30} anchor="end" size={11} bold>C = {f2(C)}°</T>
 
       {/* opposite sides */}
-      <T x={320} y={252} anchor="middle" bold>a = {f2(a)}°</T>
-      <T x={486} y={150} size={11} bold>b = {f2(b)}°</T>
-      <T x={152} y={150} anchor="end" size={11} bold>c = {f2(c)}°</T>
+      <T x={262} y={252} anchor="middle" bold>a = {f2(a)}°</T>
+      <T x={352} y={116} anchor="end" size={11} bold>b = {f2(b)}°</T>
+      <T x={126} y={146} anchor="end" size={11} bold>c = {f2(c)}°</T>
 
-      <T x={320} y={288} anchor="middle" size={10}>schematic — great-circle arcs; A + B + C exceeds 180° by the spherical excess E</T>
+      <T x={258} y={284} anchor="middle" size={10}>schematic — great-circle arcs</T>
+      <T x={258} y={296} anchor="middle" size={10}>A + B + C − 180° = the spherical excess E</T>
     </Sheet>
   )
 }
