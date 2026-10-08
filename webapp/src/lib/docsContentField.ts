@@ -1228,6 +1228,60 @@ export const FIELD_TOOLS: DocTool[] = [
     ],
   },
   {
+    id: 'method-of-joints',
+    name: 'Method of Joints',
+    route: '/method-of-joints',
+    group: 'Mathematics',
+    summary: 'The forces meeting at a joint, resolved: x/y components per force, the sums Rx and Ry, and the resultant R with its direction.',
+    basis: 'Fx = F·cosθ, Fy = F·sinθ; Rx = ΣFx, Ry = ΣFy; R = √(Rx² + Ry²), θR = atan2(Ry, Rx); equilibrium when R ≈ 0.',
+    sections: [
+      {
+        id: 'method-of-joints-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Forces at the joint', what: 'Any number of forces, each with a name, a magnitude in kN and a direction in degrees counter-clockwise from the +x axis.' },
+          { kind: 'output', name: 'Resultant and equilibrium', what: 'Per-force components, the sums Rx/Ry, the resultant R with its direction, and whether the joint balances; the joint diagram draws every arrow and its dashed components.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'trigonometry',
+    name: 'Trigonometry',
+    route: '/trigonometry',
+    group: 'Mathematics',
+    summary: 'A right-triangle solver: fill any two of a, b, c, A, B and the calculator picks the relation each unknown needs, inverses included, writing every step.',
+    basis: 'a² + b² = c²; sin A = a/c, cos A = b/c, tan A = a/b, inverted for the angles; A + B = 90°.',
+    sections: [
+      {
+        id: 'trigonometry-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Two knowns', what: 'Exactly two of the five fields — legs a and b, hypotenuse c, acute angles A and B in degrees; blank means unknown.' },
+          { kind: 'output', name: 'Solved triangle', what: 'All three sides and angles, the worked steps naming the function and inverse used, and the triangle drawn with live values.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'spherical-triangle',
+    name: 'Spherical Triangle',
+    route: '/spherical-triangle',
+    group: 'Mathematics',
+    summary: 'Three great-circle arcs on a sphere: all three angles from the spherical law of cosines, the spherical excess, and the area by Girard.',
+    basis: 'cos A = (cos a − cos b cos c)/(sin b sin c); E = A + B + C − 180°; Δ = R²·E with E in radians.',
+    sections: [
+      {
+        id: 'spherical-triangle-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Sides or side-side-angle', what: 'Three sides in degrees of arc, or two sides and their included angle; the sphere radius for arc lengths and area, Earth by default.' },
+          { kind: 'output', name: 'Angles, excess, area', what: 'The three angles, the excess over 180°, arc lengths on the surface and the Girard area; the sphere and its triangle are drawn.' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'drafting3d',
     name: 'Drafting3D',
     route: '/drafting3d',

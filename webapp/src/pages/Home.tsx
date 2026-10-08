@@ -55,6 +55,11 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
     anchor: `dir-${i}`,
     tools: g.tools,
   })), [prefs])
+  // The catalogue carries three Reference pages (docs, validation, pricing)
+  // that are not calculators. The hero claims "N code-checked calculators",
+  // so the number it prints must EXCLUDE them — otherwise the claim inflates
+  // by exactly the tools that are not calculations.
+  const calcCount = ALL_TOOLS.filter((t) => t.groupLabel !== 'Reference').length
   const toolCount = ALL_TOOLS.length
   const shownCount = useMemo(() => groups.reduce((n, g) => n + g.tools.length, 0), [groups])
   const trimmed = shownCount < toolCount
@@ -119,7 +124,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         <div className="mx-auto max-w-[1200px] px-6 pb-14 pt-16">
           <p className="font-mono text-[11px] font-medium tracking-[.2em] text-rail-accent">NSCP 2015 · ACI 318-14 · AISC 360-16</p>
           <h1 className="mt-3.5 max-w-[720px] text-4xl font-extrabold leading-[1.04] tracking-tight text-rail-ink sm:text-[52px]">The structural workbench for Philippine practice.</h1>
-          <p className="mt-4 max-w-[600px] text-base leading-relaxed text-rail-muted">{toolCount} code-checked calculators, 3D analysis and quantity take-off on a typed engine — every result traced to its clause, every report ready to sign.</p>
+          <p className="mt-4 max-w-[600px] text-base leading-relaxed text-rail-muted">{calcCount} code-checked calculators, 3D analysis and quantity take-off on a typed engine — every result traced to its clause, every report ready to sign.</p>
           <div className="mt-7 flex max-w-[640px] flex-col items-stretch gap-2.5 sm:flex-row sm:items-center">
             {searchBox(true)}
             {/* The ask depends on who is reading: a member goes to the model,
