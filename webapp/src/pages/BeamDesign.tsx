@@ -186,6 +186,9 @@ export default function BeamDesign() {
     const section = calcBeamSection({
       ...rect, stirrupDia: fd.stirrupDia,
       bars: r.bars, comprBars: r.comprBars, hogging, spacing: r.sAdopt,
+      // The arrangement the design measured d to — the cut has to show the
+      // layers the note "(4+2)" and the d dimension both speak for.
+      layers: r.layers, comprLayers: r.comprLayers,
       title: `SECTION — ${f0(fd.b)}×${f0(fd.h)}`,
       notes: [],
     })

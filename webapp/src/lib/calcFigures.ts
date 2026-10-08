@@ -48,6 +48,12 @@ export interface CalcBeamSectionInput {
   spacing?: number
   /** Effective depth, mm — dimensioned from the compression face. */
   d?: number
+  /** The design's own layer arrangement, EXTREME tension-face layer first —
+   *  `beamDesign`'s `layers`. Absent, the tension face draws in one row. */
+  layers?: number[]
+  /** The compression face's layers, EXTREME compression-face layer first —
+   *  `beamDesign`'s `comprLayers`. Absent, that face draws in one row. */
+  comprLayers?: number[]
   title?: string
   notes?: string[]
 }
@@ -63,10 +69,23 @@ export function calcBeamSection(i: CalcBeamSectionInput): SectionDetailDrawing {
   const L = NOMINAL_SPAN
   const s = i.spacing && i.spacing > 0 ? i.spacing : Math.max(50, Math.round(i.h / 2))
   const hM = i.h / 1000
+  // The design's `layers` belong to the TENSION face and `comprLayers` to the
+  // compression face, each listed extreme-first. The cage wants bottom layers
+  // bottom-first and top layers top-first — and a stack listed extreme-first
+  // on one face reads extreme-first on the mirrored face UNCHANGED, because
+  // mirroring maps the layer nearest one face onto the layer nearest the
+  // other (reversing the array would flip the stack and move the centroid).
+  // So a hogging cut only swaps which face each array describes. Without any
+  // of this the section draws a single-row cage while the note says "(4+2)"
+  // and d measures a centroid the picture does not have.
+  const botLayers = i.hogging ? i.comprLayers : i.layers
+  const topLayers = i.hogging ? i.layers : i.comprLayers
   const cage = buildBeamCage({
     mark: 'B', L, b: i.b, h: i.h, cover: i.cover, barDia: i.barDia, stirrupDia: i.stirrupDia,
     topBars: i.hogging ? i.bars : (i.comprBars ?? 0),
     botBars: i.hogging ? (i.comprBars ?? 0) : i.bars,
+    ...(botLayers ? { botLayers } : {}),
+    ...(topLayers ? { topLayers } : {}),
     sEnd: s, sMid: s,
     axis: { x0: 0, z0: 0, x1: L, z1: 0 }, ySoffit: 0,
     continuousLeft: false, continuousRight: false,
