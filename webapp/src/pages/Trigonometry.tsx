@@ -38,7 +38,7 @@ const CASE_FORMULA: Record<TriangleCase, string> = {
 }
 
 export default function Trigonometry() {
-  const [k, setK] = useState<Known>({ a: 3, b: 4, c: null, A: null, B: null, C: null })
+  const [k, setK] = useState<Known>({ a: 8, b: 5, c: null, A: null, B: null, C: 60 })
   const [solIdx, setSolIdx] = useState(0)
 
   const set = (f: TriangleField) => (v: number) => { setSolIdx(0); setK((s) => ({ ...s, [f]: Number.isFinite(v) ? v : null })) }
@@ -91,7 +91,7 @@ export default function Trigonometry() {
           <Num label="Angle C (opposite c)" value={k.C ?? NaN} onChange={set('C')} step="1" />
         </InputGroup>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => sample({ a: 3, b: 4, c: null, A: null, B: null, C: null })}
+          <button type="button" onClick={() => sample({ a: 3, b: 4, c: 5, A: null, B: null, C: null })}
             className="rounded-md border border-field-line px-2.5 py-1.5 text-[12px] font-semibold text-brand hover:bg-brand-tint">
             Sample 3-4-5 (SSS)
           </button>
