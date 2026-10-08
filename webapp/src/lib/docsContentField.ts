@@ -1250,15 +1250,15 @@ export const FIELD_TOOLS: DocTool[] = [
     name: 'Trigonometry',
     route: '/trigonometry',
     group: 'Mathematics',
-    summary: 'A right-triangle solver: fill any two of a, b, c, A, B and the calculator picks the relation each unknown needs, inverses included, writing every step.',
-    basis: 'a² + b² = c²; sin A = a/c, cos A = b/c, tan A = a/b, inverted for the angles; A + B = 90°.',
+    summary: 'A solver for any triangle — right or oblique: fill any three of a, b, c, A, B, C (a side required) and the calculator picks the Law of Sines, the Law of Cosines or the angle sum for each unknown, inverses included, writing every step; the ambiguous SSA case returns both triangles.',
+    basis: 'A + B + C = 180°; a/sin A = b/sin B = c/sin C; c² = a² + b² − 2ab·cos C (Pythagoras at 90°); two sides with a non-included angle may solve twice.',
     sections: [
       {
         id: 'trigonometry-inputs',
         title: 'Inputs and results',
         controls: [
-          { kind: 'field', name: 'Two knowns', what: 'Exactly two of the five fields — legs a and b, hypotenuse c, acute angles A and B in degrees; blank means unknown.' },
-          { kind: 'output', name: 'Solved triangle', what: 'All three sides and angles, the worked steps naming the function and inverse used, and the triangle drawn with live values.' },
+          { kind: 'field', name: 'Three knowns', what: 'Exactly three of the six fields — sides a, b, c and angles A, B, C in degrees; blank means unknown, at least one side required. No angle is assumed to be 90°.' },
+          { kind: 'output', name: 'Solved triangle', what: 'All six values with the law each came from, the worked steps naming the function and inverse used, the triangle drawn in its true shape — and both triangles when the SSA knowns fit two.' },
         ],
       },
     ],

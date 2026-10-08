@@ -347,7 +347,7 @@ export default function App() {
         <Route path="/impulse-momentum" element={<ImpulseMomentum />} />
         <Route path="/friction" element={<Friction />} />
         <Route path="/belt-friction" element={<BeltFriction />} />
-        {/* mathematics mini-calculators: statics resultant, right-triangle solver, spherical triangle */}
+        {/* mathematics mini-calculators: statics resultant, triangle solver, spherical triangle */}
         <Route path="/method-of-joints" element={<MethodOfJoints />} />
         <Route path="/trigonometry" element={<Trigonometry />} />
         <Route path="/spherical-triangle" element={<SphericalTriangle />} />

@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 // Live schematics for the mathematics mini-calculators (joints, trigonometry,
-// spherical triangles). Schematic, not to scale unless a graph says otherwise:
+// spherical triangles). Schematic, not to scale unless a graph says otherwise —
+// the one exception is the triangle solver's sketch, drawn in its true shape:
 // each shows what the numbers mean and redraws from the live inputs. Ink is
 // `currentColor`, so they theme. Same methodology as dynamicsSketches: one
 // Sheet wrapper (DrawingFrame + viewBox + arrow marker), one T text helper.
@@ -96,35 +97,86 @@ export function JointForceSketch({ forces, R, thetaDeg, equilibrium }: {
   )
 }
 
-// ── Trigonometry (right triangle) ───────────────────────────────────────────
+// ── Trigonometry (any triangle) ─────────────────────────────────────────────
 
-/** The right triangle with C = 90°: side a opposite A (horizontal, bottom),
- *  side b opposite B (vertical, left), c the hypotenuse. Live side and angle
- *  labels — the picture the solver's inverse functions refer to. */
-export function RightTriangleSketch({ a, b, c, A, B }: { a: number; b: number; c: number; A: number; B: number }) {
-  const CX = 150, CY = 248           // C — the right angle, bottom-left
-  const wa = (a / Math.max(a, b)) * 330
-  const hb = (b / Math.max(a, b)) * 200
-  const AX = CX, AY = CY - hb, BX = CX + wa, BY = CY
-  const mid = { x: (AX + BX) / 2, y: (AY + BY) / 2 }
-  const len = Math.hypot(hb, wa) || 1
-  const nx = hb / len, ny = -wa / len // outward (up-right) normal of the hypotenuse
+/** The solved triangle in its TRUE shape — uniformly scaled to the sheet,
+ *  never skewed: side a runs along the bottom from C, A sits wherever the
+ *  solved angles put it. Values ride their edges and vertices; a right
+ *  angle gets the square mark, every other angle an arc on the bisector.
+ *  The right angle is drawn, not assumed — that is the whole point. */
+export function TriangleSketch({ a, b, c, A, B, C }: { a: number; b: number; c: number; A: number; B: number; C: number }) {
+  const rad = (d: number) => (d * Math.PI) / 180
+  // geometry: C at the origin, B down-range on +x at distance a, A placed from C
+  const raw = {
+    C: { x: 0, y: 0 },
+    B: { x: a, y: 0 },
+    A: { x: b * Math.cos(rad(C)), y: b * Math.sin(rad(C)) },
+  }
+  // uniform fit into the sheet, margins left for the labels
+  const W = 640, H = 300, MX = 82, MT = 50, MB = 36
+  const xs = [raw.A.x, raw.B.x, raw.C.x], ys = [raw.A.y, raw.B.y, raw.C.y]
+  const w = Math.max(...xs) - Math.min(...xs) || 1, h = Math.max(...ys) - Math.min(...ys) || 1
+  const k = Math.min((W - 2 * MX) / w, (H - MT - MB) / h)
+  const cx = (W - 2 * MX - w * k) / 2, cy = (H - MT - MB - h * k) / 2
+  const sx = (p: { x: number; y: number }) => MX + cx + (p.x - Math.min(...xs)) * k
+  const sy = (p: { x: number; y: number }) => H - MB - cy - (p.y - Math.min(...ys)) * k
+  const V = { A: { x: sx(raw.A), y: sy(raw.A) }, B: { x: sx(raw.B), y: sy(raw.B) }, C: { x: sx(raw.C), y: sy(raw.C) } }
+
+  const sub = (p: { x: number; y: number }, q: { x: number; y: number }) => ({ x: p.x - q.x, y: p.y - q.y })
+  const add = (p: { x: number; y: number }, q: { x: number; y: number }) => ({ x: p.x + q.x, y: p.y + q.y })
+  const mul = (p: { x: number; y: number }, s: number) => ({ x: p.x * s, y: p.y * s })
+  const unit = (p: { x: number; y: number }) => { const l = Math.hypot(p.x, p.y) || 1; return { x: p.x / l, y: p.y / l } }
+  const perp = (p: { x: number; y: number }) => ({ x: -p.y, y: p.x })
+  const dot = (p: { x: number; y: number }, q: { x: number; y: number }) => p.x * q.x + p.y * q.y
+  const anchorOf = (v: { x: number; y: number }): 'start' | 'middle' | 'end' => (Math.abs(v.x) < 0.35 ? 'middle' : v.x > 0 ? 'start' : 'end')
+
+  const angles = [
+    { name: 'A', deg: A, at: V.A, n1: V.B, n2: V.C },
+    { name: 'B', deg: B, at: V.B, n1: V.C, n2: V.A },
+    { name: 'C', deg: C, at: V.C, n1: V.A, n2: V.B },
+  ]
+  const sides = [
+    { label: 'a', value: a, from: V.B, to: V.C, opp: V.A },
+    { label: 'b', value: b, from: V.C, to: V.A, opp: V.B },
+    { label: 'c', value: c, from: V.A, to: V.B, opp: V.C },
+  ]
 
   return (
-    <Sheet label="Right triangle">
-      <path d={`M${CX},${CY} L${BX},${BY} L${AX},${AY} Z`} {...ink} strokeWidth={2.4} />
-      {/* the right-angle mark at C */}
-      <path d={`M${CX + 18},${CY} L${CX + 18},${CY - 18} L${CX},${CY - 18}`} {...ink} strokeWidth={1.2} />
-      <T x={CX + 24} y={CY - 6} size={11} bold>C = 90°</T>
+    <Sheet label="The solved triangle — true shape">
+      <path d={`M${V.A.x},${V.A.y} L${V.B.x},${V.B.y} L${V.C.x},${V.C.y} Z`} {...ink} strokeWidth={2.4} />
 
-      {/* sides */}
-      <T x={CX + wa / 2} y={CY + 20} anchor="middle" bold>a = {f2(a)}</T>
-      <T x={CX - 12} y={CY - hb / 2} anchor="end" bold>b = {f2(b)}</T>
-      <T x={mid.x + nx * 20} y={mid.y + ny * 20} anchor="middle" bold>c = {f2(c)}</T>
+      {/* the angle marks: a square where 90° actually fell, arcs elsewhere */}
+      {angles.map((g) => {
+        const u = unit(sub(g.n1, g.at)), v = unit(sub(g.n2, g.at))
+        const bis = unit(add(u, v))
+        const r = Math.max(8, Math.min(20, 0.38 * Math.min(Math.hypot(g.n1.x - g.at.x, g.n1.y - g.at.y), Math.hypot(g.n2.x - g.at.x, g.n2.y - g.at.y))))
+        const isRight = Math.abs(g.deg - 90) < 0.1
+        const p1 = add(g.at, mul(u, r)), p2 = add(g.at, mul(v, r))
+        return (
+          <g key={g.name}>
+            {isRight
+              ? <path d={`M${p1.x},${p1.y} L${add(add(g.at, mul(u, r)), mul(v, r)).x},${add(add(g.at, mul(u, r)), mul(v, r)).y} L${p2.x},${p2.y}`} {...ink} strokeWidth={1.2} />
+              : (() => {
+                  const pm = add(g.at, mul(bis, r))
+                  const ctrl = sub(mul(pm, 2), mul(add(p1, p2), 0.5))
+                  return <path d={`M${p1.x},${p1.y} Q${ctrl.x},${ctrl.y} ${p2.x},${p2.y}`} {...ink} strokeWidth={1.2} />
+                })()}
+            <T x={g.at.x + bis.x * (r + 15)} y={g.at.y + bis.y * (r + 15) + 4} anchor="middle" size={11} bold>{g.name} = {f2(g.deg)}°</T>
+            {/* vertex name, outside */}
+            {(() => { const out = mul(bis, -1); const p = add(g.at, mul(out, 19))
+              return <T x={p.x} y={p.y + 4} anchor={anchorOf(out)} size={11}>{g.name}</T> })()}
+          </g>
+        )
+      })}
 
-      {/* angles at their vertices */}
-      <T x={AX + 14} y={AY + 20} size={11} bold>A = {f2(A)}°</T>
-      <T x={BX - 16} y={BY - 12} anchor="end" size={11} bold>B = {f2(B)}°</T>
+      {/* side values, riding their edges' outward normals */}
+      {sides.map((s) => {
+        const mid = mul(add(s.from, s.to), 0.5)
+        let n = perp(unit(sub(s.to, s.from)))
+        if (dot(n, sub(mid, s.opp)) < 0) n = mul(n, -1)
+        const p = add(mid, mul(n, 17))
+        return <T key={s.label} x={p.x} y={p.y + 4} anchor="middle" bold>{s.label} = {f2(s.value)}</T>
+      })}
     </Sheet>
   )
 }
