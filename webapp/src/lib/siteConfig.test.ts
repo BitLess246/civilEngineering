@@ -113,6 +113,14 @@ describe('the shipped configuration is complete', () => {
     // It is concatenated into canonical links; a trailing slash produces '//'.
     expect(SITE.siteUrl).toMatch(/^https:\/\/[^/]+$/)
   })
+
+  it('prints the custom domain, not the staging vercel.app address', () => {
+    // The legal pages state the site address; a policy that names the old
+    // vercel.app deployment is wrong in the one place a dispute reads first.
+    // lib/sitemap.ts carries the same origin — pinned here so the two cannot
+    // drift apart silently.
+    expect(SITE.siteUrl).toBe('https://www.zetastruct.app')
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────
