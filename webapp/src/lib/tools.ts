@@ -129,6 +129,9 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/impulse-momentum', name: 'Impulse–Momentum', sub: 'I = m(v₂ − v₁) = F·t', group: 'Mechanics' },
       { to: '/friction', name: 'Friction', sub: 'Block on an incline · holds or slides', group: 'Mechanics' },
       { to: '/belt-friction', name: 'Belt Friction', sub: 'Capstan T₁ = T₂e^(μβ)', group: 'Mechanics' },
+      { to: '/method-of-joints', name: 'Method of Joints', sub: 'Concurrent forces · Rx, Ry, R', group: 'Mechanics' },
+      { to: '/trigonometry', name: 'Trigonometry', sub: 'Right triangle · any two knowns', group: 'Geometry & Trig' },
+      { to: '/spherical-triangle', name: 'Spherical Triangle', sub: 'Cosines · excess · Girard area', group: 'Geometry & Trig' },
     ],
   },
   {

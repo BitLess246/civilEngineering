@@ -96,6 +96,9 @@ const WorkEnergy = lazy(() => import('./pages/WorkEnergy'))
 const ImpulseMomentum = lazy(() => import('./pages/ImpulseMomentum'))
 const Friction = lazy(() => import('./pages/Friction'))
 const BeltFriction = lazy(() => import('./pages/BeltFriction'))
+const MethodOfJoints = lazy(() => import('./pages/MethodOfJoints'))
+const Trigonometry = lazy(() => import('./pages/Trigonometry'))
+const SphericalTriangle = lazy(() => import('./pages/SphericalTriangle'))
 const Drafting3D = lazy(() => import('./pages/Drafting3D'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const Validation = lazy(() => import('./pages/Validation'))
@@ -344,6 +347,10 @@ export default function App() {
         <Route path="/impulse-momentum" element={<ImpulseMomentum />} />
         <Route path="/friction" element={<Friction />} />
         <Route path="/belt-friction" element={<BeltFriction />} />
+        {/* mathematics mini-calculators: statics resultant, right-triangle solver, spherical triangle */}
+        <Route path="/method-of-joints" element={<MethodOfJoints />} />
+        <Route path="/trigonometry" element={<Trigonometry />} />
+        <Route path="/spherical-triangle" element={<SphericalTriangle />} />
         {/* drafting: 2D floor plans → 3D viewport → ModelSpace export */}
         <Route path="/drafting3d" element={<Drafting3D />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected
