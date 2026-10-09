@@ -140,6 +140,19 @@ export interface BeamCageInput {
    * before anything knew a lap existed. Omitted, the layout is as before.
    */
   splice?: SpliceOptions
+  /**
+   * Bars per layer on each face, EXTREME layer first — the design's `layers`
+   * and `comprLayers` (e.g. [3, 3] for six bars stacked two deep).
+   *
+   * Given, the face stacks into rows: layer 0 keeps the extreme-face line and
+   * layer k sits a bar Ø + max(25, Ø) clear from the row before it (§407.7.2).
+   * Omitted, every bar of the face spreads across the web on ONE row — the
+   * historic behaviour, and wrong whenever the design stacked: a 6-bar face
+   * in [3, 3] drew six bars shoulder to shoulder on a line the section does
+   * not have, and the section cut showed the same fiction.
+   */
+  topLayers?: number[]
+  botLayers?: number[]
   /** Beam centreline in plan, m, and the level of its SOFFIT. */
   axis: { x0: number; z0: number; x1: number; z1: number }
   ySoffit: number
@@ -441,25 +454,58 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   // there, and two hooks given the same embedment stand their legs on the same
   // line and run at each other.
   const spread = (n: number, k: number) => (n === 1 ? 0 : -half + (2 * half * k) / (n - 1))
+  /** Centreline pitch between stacked layers, m — bar Ø clear + max(25, Ø),
+   *  the §407.7.2 minimum between layers of bars. */
+  const layerPitch = (i.barDia + Math.max(25, i.barDia)) / 1000
+  /** Every place a face offers, extreme layer first: `v` across the web, `dy`
+   *  down (top face) or up (bottom face) from the extreme line. With layers
+   *  given the bars stack row by row; without them the historic single row. */
+  const facePos = (n: number, layers?: number[]): { v: number; dy: number }[] => {
+    if (n <= 0) return []
+    if (!layers || layers.length === 0) {
+      return Array.from({ length: n }, (_, k) => ({ v: spread(n, k), dy: 0 }))
+    }
+    const pos: { v: number; dy: number }[] = []
+    let left = n
+    for (let row = 0; row < layers.length && left > 0; row++) {
+      const take = Math.max(0, Math.min(layers[row]!, left))
+      for (let k = 0; k < take; k++) pos.push({ v: spread(take, k), dy: row * layerPitch })
+      left -= take
+    }
+    // More bars than the layers named: the leftovers stack one row further in.
+    for (let k = 0; k < left; k++) pos.push({ v: spread(left, k), dy: layers.length * layerPitch })
+    return pos
+  }
   /**
    * ONE LAYOUT FOR THE FACE — where all `n` bars of it sit, and which of those
    * places the `t` CONTINUOUS ones take.
    *
-   * Every bar in a face sits on the same even grid; the continuous ones take
-   * the outermost places, working inward, because a corner bar is the one that
-   * runs through. Laid out separately — the through bars spread over −half…
-   * +half and the curtailed ones spread over it again — the two sets shared a
-   * range and could land on one another: a 4-bar face with 2 continuous and 2
-   * curtailed put all four on two lines, and the section drew two dots under a
-   * callout that said four. Swept over every count pair from 2 to 10 a side,
-   * 18 of 5562 bar pairs were coincident; with one layout, none can be.
+   * Every bar in a face sits on one even grid per layer; the continuous ones
+   * take the outermost places, working inward, because a corner bar is the one
+   * that runs through. Layered, the extreme layer is filled first, so the
+   * corners — and everything else that runs through — stay on the face the
+   * crack actually opens at as long as the layer has room for them. Laid out
+   * separately — the through bars spread over −half…+half and the curtailed
+   * ones spread over it again — the two sets shared a range and could land on
+   * one another: a 4-bar face with 2 continuous and 2 curtailed put all four
+   * on two lines, and the section drew two dots under a callout that said
+   * four. Swept over every count pair from 2 to 10 a side, 18 of 5562 bar
+   * pairs were coincident; with one layout, none can be.
    */
-  const faceLayout = (n: number, t: number): { thru: number[]; extra: number[] } => {
+  const faceLayout = (
+    n: number, t: number, layers?: number[],
+  ): { thru: { v: number; dy: number }[]; extra: { v: number; dy: number }[] } => {
     if (n <= 0) return { thru: [], extra: [] }
-    const pos = Array.from({ length: n }, (_, k) => spread(n, k))
+    const pos = facePos(n, layers)
+    const take = Math.max(0, Math.min(n, t))
+    const byPlace = (x: { v: number; dy: number }, y: { v: number; dy: number }) =>
+      x.dy - y.dy || x.v - y.v
+    if (layers && layers.length > 0) {
+      const sorted = [...pos].sort(byPlace)       // layer 0 outer→inner, then the next
+      return { thru: sorted.slice(0, take), extra: sorted.slice(take) }
+    }
     const order: number[] = []
     for (let a = 0, b = n - 1; a <= b; a++, b--) { order.push(a); if (b !== a) order.push(b) }
-    const take = Math.max(0, Math.min(n, t))
     const asc = (x: number, y: number) => x - y
     return {
       thru: order.slice(0, take).sort(asc).map((k) => pos[k]!),
@@ -469,11 +515,11 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   // The face holds at least the bars that run through it: `keep` floors the
   // continuous count at the corner bars even when the analysis asked for none,
   // and a face of fewer places than that would drop them.
-  const topFace = faceLayout(Math.max(i.topBars, thruTop), thruTop)
-  const botFace = faceLayout(Math.max(i.botBars, thruBot), thruBot)
+  const topFace = faceLayout(Math.max(i.topBars, thruTop), thruTop, i.topLayers)
+  const botFace = faceLayout(Math.max(i.botBars, thruBot), thruBot, i.botLayers)
   const thru: (AnchorBar & { role: 'top' | 'bottom' })[] = [
-    ...topFace.thru.map((v) => ({ role: 'top' as const, y: yTop, v, dia: i.barDia, tail })),
-    ...botFace.thru.map((v) => ({ role: 'bottom' as const, y: yBot, v, dia: i.barDia, tail })),
+    ...topFace.thru.map((p) => ({ role: 'top' as const, y: yTop - p.dy, v: p.v, dia: i.barDia, tail })),
+    ...botFace.thru.map((p) => ({ role: 'bottom' as const, y: yBot + p.dy, v: p.v, dia: i.barDia, tail })),
   ]
   const roomAt = (colB: number, above: boolean, below: boolean, side?: 1 | -1): JointRoom => ({
     above, below, side,
@@ -540,11 +586,11 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
     ] as const) {
       const dir = to > from ? 1 : -1
       for (let k = 0; k < extraTop; k++) {
-        const v = topFace.extra[k] ?? 0
+        const p = topFace.extra[k] ?? { v: 0, dy: 0 }
         runs.push({
           mark: `${i.mark}-XT${end}${k + 1}`,
           dia: i.barDia, role: 'top', member: i.mark,
-          path: [at(from, v, yTop), at(to, v, yTop), at(to + dir * crankRun, v, yTop - crankRun)],
+          path: [at(from, p.v, yTop - p.dy), at(to, p.v, yTop - p.dy), at(to + dir * crankRun, p.v, yTop - p.dy - crankRun)],
           bendDia: [crankD], count: 1,
         })
       }
@@ -553,13 +599,13 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   if (extraBot > 0) {
     const a = cut.botL, b2 = cut.botR
     for (let k = 0; k < extraBot; k++) {
-      const v = botFace.extra[k] ?? 0
+      const p = botFace.extra[k] ?? { v: 0, dy: 0 }
       runs.push({
         mark: `${i.mark}-XB${k + 1}`,
         dia: i.barDia, role: 'bottom', member: i.mark,
         path: [
-          at(a - crankRun, v, yBot + crankRun), at(a, v, yBot),
-          at(b2, v, yBot), at(b2 + crankRun, v, yBot + crankRun),
+          at(a - crankRun, p.v, yBot + p.dy + crankRun), at(a, p.v, yBot + p.dy),
+          at(b2, p.v, yBot + p.dy), at(b2 + crankRun, p.v, yBot + p.dy + crankRun),
         ],
         bendDia: [crankD, crankD], count: 1,
       })

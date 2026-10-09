@@ -47,6 +47,25 @@ describe('calcBeamSection', () => {
     }
   })
 
+  it('stacks a multi-layer face the design detailed — [3, 3] draws two rows', () => {
+    // A 6-bar face in [3, 3] used to draw six dots on ONE line — the section
+    // the cage cut was not the section the design detailed. The pitch is the
+    // §407.7.2 minimum: bar Ø clear + max(25, Ø) between layer centrelines.
+    const d = calcBeamSection({ ...base, bars: 6, layers: [3, 3], spacing: 220, d: 425 })
+    const bottom = d.result.bars.filter((b) => b.role === 'bottom')
+    expect(bottom).toHaveLength(6)
+    const rows = [...new Set(bottom.map((b) => b.v.toFixed(4)))].map(Number).sort((a, b) => a - b)
+    expect(rows).toHaveLength(2)
+    expect(rows[1] - rows[0]).toBeCloseTo((base.barDia + 25) / 1000, 9)
+  })
+
+  it('stacks the hogging face the same way', () => {
+    const d = calcBeamSection({ ...base, bars: 6, layers: [3, 3], hogging: true })
+    const top = d.result.bars.filter((b) => b.role === 'top')
+    expect(top).toHaveLength(6)
+    expect(new Set(top.map((b) => b.v.toFixed(4))).size).toBe(2)
+  })
+
   it('prints d and whatever the caller says under it', () => {
     const d = calcBeamSection({ ...base, bars: 4, d: 440, notes: ['4-⌀20 BOT'] })
     const text = d.primitives.filter((p) => p.kind === 'text').map((p) => (p as { text: string }).text)

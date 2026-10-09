@@ -131,6 +131,13 @@ export interface ComplianceCheck {
   label: string
   pass: boolean
   detail?: string
+  /**
+   * The requirement does not APPLY to this design — a compression-steel check
+   * on a singly reinforced beam, say. Gate outcome is unchanged (it passes),
+   * but a report should print it as not-applicable rather than as a PASS,
+   * which reads as if the thing had been checked and held.
+   */
+  na?: boolean
 }
 
 /** Limits the member type supplies. Everything here is a property of the
@@ -485,11 +492,25 @@ function marginText(
     `(${pair(best)} vs ${pair(next)})`
 }
 
-/** Which weighted term contributed most of the winner's lead. */
+/** Which weighted term contributed most of the winner's lead.
+ *
+ *  Named after what the term MEASURES, not after the weight's key: the
+ *  selection's "serviceability" score is the §24.3.2 crack-control ranking,
+ *  and a report that says "decided on serviceability" beside a §24.2
+ *  deflection card still marked NOT CHECKED invites the reader to think the
+ *  deflection check decided this. It did not.
+ */
+const TERM_LABELS: Record<keyof LayoutScores, string> = {
+  serviceability: 'crack control (§24.3.2 serviceability)',
+  constructability: 'constructability',
+  economy: 'economy',
+  simplicity: 'simplicity',
+}
+
 function biggestGain(best: ScoredLayout, next: ScoredLayout): string {
   const terms: [keyof LayoutScores, number][] = (
     Object.keys(PRIORITY_WEIGHTS) as (keyof LayoutScores)[]
   ).map((k) => [k, PRIORITY_WEIGHTS[k] * (best.scores[k] - next.scores[k])])
   terms.sort((x, y) => y[1] - x[1])
-  return terms[0][1] > 0 ? terms[0][0] : 'the weighted total'
+  return terms[0][1] > 0 ? TERM_LABELS[terms[0][0]] : 'the weighted total'
 }

@@ -168,6 +168,9 @@ export default function BeamDesign() {
     return calcBeamSection({
       ...rect, stirrupDia: fd.stirrupDia,
       bars: r.bars, comprBars: r.comprBars, hogging, spacing: r.sAdopt, d: r.d,
+      // The stack the design detailed, so a [3, 3] face draws two rows and
+      // not six bars shoulder to shoulder on a line the section does not have.
+      layers: r.layers, comprLayers: r.comprLayers,
       title: `SECTION — ${f0(fd.b)}×${f0(fd.h)}`,
       notes: [
         ...beamSectionNotes(
@@ -301,7 +304,13 @@ export default function BeamDesign() {
       ['Max. aggregate size', `${f.aggregate ?? 20} mm`],
       ['Bar ⌀ / stirrup ⌀', `${fd.barDia} / ${fd.stirrupDia} mm (${fd.legs}-leg)`],
       ['Moment Mu', `${f1(demand.Mu)} kN·m${hogging ? ' (hogging)' : ''}`],
-      ['Shear Vu', `${f1(demand.Vu)} kN`], ['ρ / ρmin / ρmax', `${r.rho.toFixed(4)} / ${r.rhoMin.toFixed(4)} / ${r.rhoMax.toFixed(4)}`],
+      ['Shear Vu', `${f1(demand.Vu)} kN`],
+      // ρ off the engine is the REQUIRED ratio (As,req / b·d); the bars the
+      // schedule actually carries give a larger ρ_prov. Unlabelled, the two
+      // were indistinguishable and a checker could not tell which one the
+      // ρmax comparison used.
+      ['ρ_req / ρ,min / ρ,max', `${r.rho.toFixed(4)} / ${r.rhoMin.toFixed(4)} / ${r.rhoMax.toFixed(4)}`],
+      ['ρ_prov (provided bars)', `${(r.AsProv / (fd.b * r.d)).toFixed(4)} (As,prov = ${f0(r.AsProv)} mm²)`],
     ] as [string, string][],
     steps: solution,
     drawingTitle: 'Beam Section',

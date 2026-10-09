@@ -181,7 +181,12 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     title: 'Shear strength of concrete',
     lines: [
       txt('Concrete one-way shear strength per NSCP 2015 §422.5.5.1 with φ = 0.75 (§421.2). Half of φVc marks the threshold below which no stirrups are required (§409.6.3).'),
-      eq(String.raw`V_c = \tfrac{1}{6}\lambda\sqrt{f'_c}\,b d = \tfrac{1}{6}\sqrt{${sn0(i.fc)}}(${sn0(i.b)})(${sn1(d)})/1000 = ${sn1(r.Vc)}\ \text{kN}`),
+      // 0.17 is the SI print of the code's own Vc (NSCP 2015 §422.5.5.1 / ACI
+      // 318-14 Table 22.5.5.1 = 2λ√f'c in psi). It used to print 1/6 — a stale
+      // coefficient from the older √f'c/6 form — while SUBSTITUTING the
+      // engine's 0.17 result, so the sheet's formula and its own number
+      // disagreed by 2%: (1/6)√28·300·440 = 116.4, printed next to 118.7.
+      eq(String.raw`V_c = 0.17\lambda\sqrt{f'_c}\,b d = 0.17\sqrt{${sn0(i.fc)}}(${sn0(i.b)})(${sn1(d)})/1000 = ${sn1(r.Vc)}\ \text{kN}`),
       eq(String.raw`\phi V_c = ${sn1(r.phiVc)}\ \text{kN},\quad \tfrac{1}{2}\phi V_c = ${sn1(r.phiVc / 2)}\ \text{kN}`),
     ],
   })
@@ -227,12 +232,22 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
       note: `Provide ⌀${i.stirrupDia} mm, ${legs}-leg stirrups @ ${sn0(r.sAdopt)} mm.`,
     })
   } else if (r.region === 'designed') {
+    // The two §409.7.6.2.2 caps evaluated, not just named: which branch governs
+    // decides the spacing the sheet adopts, so the sheet has to say which one
+    // fired. And Av,min is APPLIED by the engine (it floors the adopted
+    // spacing through sMinArea) — a check that silently shaped the answer
+    // belongs on the sheet.
+    const thirdRoot = Math.sqrt(i.fc) * i.b * d / 3 / 1000        // ⅓√f'c·b·d, kN
+    const capHalved = r.VsReq > thirdRoot
+    const avMinAtAdopted = Math.max(0.062 * Math.sqrt(i.fc), 0.35) * i.b * r.sAdopt / fyt
     steps.push({
       title: 'Stirrup design',
       lines: [
-        txt('Vu exceeds φVc — design stirrups for Vs = Vu/φ − Vc (§422.5.10.5.3). The spacing cap halves once Vs exceeds ⅓√f′c·b·d (§409.7.6.2.2).'),
+        txt('Vu exceeds φVc — design stirrups for Vs = Vu/φ − Vc (§422.5.10.5.3). The §409.7.6.2.2 spacing cap halves to min(d/4, 300) once Vs exceeds ⅓√f′c·b·d — the branch is evaluated here, not left to the reader.'),
         eq(String.raw`V_s = \tfrac{V_u}{\phi} - V_c = \tfrac{${sn1(i.Vu)}}{0.75} - ${sn1(r.Vc)} = ${sn1(r.VsReq)}\ \text{kN} \;(\le V_{s,max} = \tfrac{2}{3}\sqrt{f'_c}\,bd = ${sn1(r.VsMax)})`),
+        eq(String.raw`V_s = ${sn1(r.VsReq)}\ \text{kN} ${capHalved ? '>' : '\\le'} \tfrac{1}{3}\sqrt{f'_c}\,bd = ${sn1(thirdRoot)}\ \text{kN} \Rightarrow s_{max} = ${capHalved ? String.raw`\min(d/4,\,300)` : String.raw`\min(d/2,\,600)`} = \mathbf{${sn0(r.sMax)}}\ \text{mm}${capHalved ? String.raw`\ (\text{cap halved})` : String.raw`\ (\text{cap not halved})`}`),
         eq(String.raw`s = \dfrac{A_v f_{yt} d}{V_s} = \dfrac{${sn0(r.Av)}(${sn0(fyt)})(${sn1(d)})}{${sn1(r.VsReq)}\times 10^3} = ${sn0(r.sReq)}\ \text{mm},\quad s_{max} = ${sn0(r.sMax)}\ \text{mm}`),
+        eq(String.raw`A_{v,min} = \max(0.062\sqrt{f'_c},\,0.35)\tfrac{b\,s}{f_{yt}}\big|_{s=s_{adopt}} = ${sn0(avMinAtAdopted)}\ \text{mm}^2 \le A_v = ${sn0(r.Av)}\ \text{mm}^2\ \checkmark`),
       ],
       note: `Provide ⌀${i.stirrupDia} mm, ${legs}-leg stirrups @ ${sn0(r.sAdopt)} mm.`,
     })
@@ -258,21 +273,25 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
   })
 
   // Margin clauses + PASS chips for the calc-report layout: title-keyed so the
-  // step-building branches above stay untouched.
+  // step-building branches above stay untouched. Every chip cites NSCP 2015
+  // (the concrete chapter's 4-prefixed numbering); ACI 318-14's number is the
+  // same one minus the chapter-4 prefix. The sheet used to mix both spellings
+  // — §22.5 beside §407.7 — and read as two different codes.
   const notes: [string, string, boolean | undefined][] = [
-    ['Effective depth', '§20.6.1 cover', undefined],
-    ['Reinforcement-ratio limits', '§9.6.1.2 · §21.2.2', r.rho <= r.rhoMax + 1e-9 || r.mode === 'DRRB'],
-    ['SRRB / DRRB classification', 'ACI 318-14 §22.2', undefined],
-    ['Tension steel', 'ACI 318-14 §22.2', r.flexOK],
-    ['Compression steel', '§22.2.2', r.comprEffective && r.comprNAOK],
-    ['Bar layout', '§407.7', r.sClear >= r.sMinClear - 1e-9],
-    ['Shear strength of concrete', '§22.5.5.1', undefined],
-    ['Stirrup requirement', '§22.5', undefined],
-    ['Minimum stirrups', '§9.6.3', r.region !== 'inadequate'],
-    ['Stirrup design', '§22.5 · §9.7.6.2.2', r.region !== 'inadequate'],
-    ['Section check (shear)', '§22.5.1.2', r.region !== 'inadequate'],
-    ['Stirrup detailing', '§407.3.2 · §425.3.2', undefined],
-    ['Hinge-zone confinement', '§418.6.4.4 · §418.4.2.4', undefined],
+    ['Effective depth', 'NSCP 2015 §420.6.1 cover', undefined],
+    ['Reinforcement-ratio limits', 'NSCP 2015 §409.6.1.2 · §421.2.2', r.rho <= r.rhoMax + 1e-9 || r.mode === 'DRRB'],
+    ['SRRB / DRRB classification', 'NSCP 2015 §422.2', undefined],
+    ['Tension steel', 'NSCP 2015 §422.2', r.flexOK],
+    ['Compression steel', 'NSCP 2015 §422.2.2', r.comprEffective && r.comprNAOK],
+    ['Bar layout', 'NSCP 2015 §407.7', r.sClear >= r.sMinClear - 1e-9],
+    ['Shear strength of concrete', 'NSCP 2015 §422.5.5.1', undefined],
+    ['Stirrup requirement', 'NSCP 2015 §422.5', undefined],
+    ['Minimum stirrups', 'NSCP 2015 §409.6.3', r.region !== 'inadequate'],
+    ['Stirrup design', 'NSCP 2015 §422.5 · §409.7.6.2.2', r.region !== 'inadequate'],
+    ['Section check (shear)', 'NSCP 2015 §422.5.1.2', r.region !== 'inadequate'],
+    ['Stirrup detailing', 'NSCP 2015 §407.3.2 · §425.3.2', undefined],
+    ['Hinge-zone confinement', 'NSCP 2015 §418.6.4.4 · §418.4.2.4', undefined],
+    ['Provided capacities', 'NSCP 2015 §422.2 · §422.5', r.flexOK && r.region !== 'inadequate'],
   ]
   // The 2h zone at each support is confined by DETAILING, not by Vu: on a
   // lightly loaded beam the shear rules are satisfied at d/2 and say nothing
@@ -285,6 +304,28 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
         eq(String.raw`s_{hinge} = \min(s_{adopt},\ ${sn0(r.seismicSConf)}) = \mathbf{${sn0(r.sHinge)}}\ \text{mm}`),
       ],
       note: `Governed by ${r.hingeGovern}. Outside the zone, ⌀${i.stirrupDia} @ ${sn0(r.sAdopt)} mm.`,
+    })
+  }
+
+  // The sheet used to STOP at the design: As required, stirrups required — and
+  // the verdict chip on the page quoted a φMn the sheet never derived. This is
+  // the closing step a checker looks for: the section as BUILT (provided bars,
+  // adopted stirrup spacing) against the demand. Solved by strain
+  // compatibility through `rectCapacity`, so an over-reinforced section shows
+  // the steel stress it really reaches and the φ that goes with it, instead of
+  // the yield formula's optimistic 0.90.
+  {
+    const cap = beamProvidedCapacities({ ...i, fyt, legs }, r)
+    const sol = rectCapacity(i.b, r.d, r.dt, r.AsProv, i.fc, i.fy)
+    const tensionOnly = r.mode !== 'DRRB' || r.comprBars === 0
+    steps.push({
+      title: 'Provided capacities — the section as built',
+      lines: [
+        txt(`The demand re-checked against the bars and stirrups actually detailed (${r.bars} ⌀${i.barDia} mm, ⌀${i.stirrupDia} @ ${sn0(r.sAdopt)} mm), not against the required areas the design solved for. Capacity is solved from strain compatibility, so the steel stress and φ come out of the section rather than being assumed.${tensionOnly ? '' : ' Tension steel only — the compression steel holds the neutral axis lower, so the figure below understates on the safe side.'}`),
+        eq(String.raw`a = \dfrac{A_{s,prov} f_y}{0.85 f'_c b} = \dfrac{${sn0(r.AsProv)}(${sn0(i.fy)})}{0.85(${sn0(i.fc)})(${sn0(i.b)})} = ${sn1(sol.a)}\ \text{mm},\qquad \rho_{prov} = \dfrac{A_{s,prov}}{b\,d} = ${sn4(r.AsProv / (i.b * r.d))}\ \text{(required } ${sn4(r.rho)}\text{)}`),
+        eq(String.raw`M_n = A_{s,prov} f_s (d - a/2) = ${sn0(r.AsProv)}(${sn1(sol.fs)})(${sn1(r.d)} - ${sn1(sol.a / 2)})/10^6 = ${sn1(sol.Mn)}\ \text{kN·m} \Rightarrow \phi M_n = ${sn2(sol.phi)}\times ${sn1(sol.Mn)} = \mathbf{${sn1(cap.phiMn)}}\ \text{kN·m}\ ${cap.phiMn >= i.Mu ? '\\ge' : '<'}\ M_u = ${sn1(i.Mu)}\ \text{kN·m}\ ${cap.phiMn >= i.Mu ? '\\checkmark' : '\\times'}`),
+        eq(String.raw`\phi V_n = \phi V_c + \phi V_s = ${sn1(r.phiVc)} + \dfrac{0.75\,A_v f_{yt} d}{s} = ${sn1(r.phiVc)} + ${sn1(cap.phiVn - r.phiVc)} = \mathbf{${sn1(cap.phiVn)}}\ \text{kN}\ ${cap.phiVn >= i.Vu ? '\\ge' : '<'}\ V_u = ${sn1(i.Vu)}\ \text{kN}\ ${cap.phiVn >= i.Vu ? '\\checkmark' : '\\times'}`),
+      ],
     })
   }
   return steps.map((st) => {

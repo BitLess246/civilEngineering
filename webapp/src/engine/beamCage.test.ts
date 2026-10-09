@@ -38,6 +38,17 @@ describe('buildBeamCage — longitudinal steel', () => {
     expect(bare.runs.filter((r) => r.role === 'bottom')).toHaveLength(CORNER_BARS_PER_FACE)
   })
 
+  it('spreads a face on ONE row when the design gave no layers', () => {
+    // The historic behaviour — and still right for a single-layer design.
+    // Measured on the bars' LINE, not the crank tips: a curtailed bar's path
+    // climbs/descends as it cranks, which is not a second layer.
+    const lineY = (r: { mark: string; path: readonly (readonly [number, number, number])[] }) =>
+      r.mark.startsWith('B1-X') ? r.path[1]![1] : r.path[0]![1]
+    const oneRow = new Set(cage.runs.filter((x) => x.role === 'bottom').map(lineY).map((y) => y.toFixed(4)))
+    expect(oneRow.size).toBe(1)
+  })
+
+
   it('runs a through bar to the SUPPORT CENTRELINE at a continuous support', () => {
     // A bar at a continuous support is not anchored, it carries on. Stopping at
     // the column face left the joint with no steel through it at all and made
@@ -163,6 +174,73 @@ describe('buildBeamCage — longitudinal steel', () => {
         }
       }
     }
+  })
+})
+
+describe('buildBeamCage — the face stacks into the layers the design detailed (§407.7.2)', () => {
+  // 6 bars a side, arranged [3, 3] — what designBeam reports for a face that
+  // needs two rows. Without layers the cage drew all six shoulder to shoulder
+  // on one line the section does not have.
+  const layered = buildBeamCage({ ...beam, botLayers: [3, 3], topLayers: [3, 3] })
+  // The layer a bar sits on, read at its straight segment — a curtailed bar's
+  // crank tip climbs/descends off the line, and that is not a second layer.
+  const lineY = (r: { mark: string; path: readonly (readonly [number, number, number])[] }) =>
+    r.mark.startsWith('B1-X') ? r.path[1]![1] : r.path[0]![1]
+  const layerYs = (role: string) =>
+    [...new Set(layered.runs.filter((x) => x.role === role).map(lineY).map((y) => y.toFixed(4)))].map(Number)
+
+  it('puts each face on TWO rows, not six bars on one line', () => {
+    expect(layerYs('bottom')).toHaveLength(2)
+    expect(layerYs('top')).toHaveLength(2)
+    const pitch = (beam.barDia + Math.max(25, beam.barDia)) / 1000
+    const [botLo, botHi] = layerYs('bottom').sort((a, b) => a - b)
+    const [topLo, topHi] = layerYs('top').sort((a, b) => a - b)
+    expect(botHi - botLo).toBeCloseTo(pitch, 9)
+    expect(topHi - topLo).toBeCloseTo(pitch, 9)   // the top stacks DOWNWARD from its face
+  })
+
+  it('keeps the extreme-layer line where the single-row cage put it', () => {
+    // Layer 0 is unchanged — the stack grows INTO the section, not off its face.
+    const plainY = cage.runs.find((x) => x.role === 'bottom')!.path[0][1]
+    expect(Math.min(...layerYs('bottom'))).toBeCloseTo(plainY, 9)
+    const plainTopY = cage.runs.find((x) => x.role === 'top')!.path[0][1]
+    expect(Math.max(...layerYs('top'))).toBeCloseTo(plainTopY, 9)
+  })
+
+  it('keeps the CONTINUOUS bars in the extreme layer', () => {
+    // Corner bars run through — they belong on the face the crack opens at.
+    const extremeBot = Math.min(...layerYs('bottom'))
+    const extremeTop = Math.max(...layerYs('top'))
+    for (const t of layered.runs.filter((x) => x.mark.startsWith('B1-T'))) {
+      expect(lineY(t)).toBeCloseTo(extremeTop, 9)
+    }
+    for (const b of layered.runs.filter((x) => x.mark.startsWith('B1-B'))) {
+      expect(lineY(b)).toBeCloseTo(extremeBot, 9)
+    }
+  })
+
+  it('splits the curtailed extras across the rows too', () => {
+    // 6 bars, [3, 3], 2 continuous → 4 extras: layer 0's last place, then the
+    // three of layer 1. Both rows must show up among the XB runs (read at the
+    // line — the crank tips climb off it and are not a third row).
+    const ys = [...new Set(layered.runs.filter((x) => x.mark.startsWith('B1-XB'))
+      .map(lineY).map((y) => y.toFixed(4)))]
+    expect(ys).toHaveLength(2)
+  })
+
+  it('a layered face still fits the stirrup — every bar inside the tie', () => {
+    const tieTop = 3 + (beam.h - beam.cover) / 1000
+    const tieBot = 3 + beam.cover / 1000
+    for (const y of [...layerYs('top'), ...layerYs('bottom')]) {
+      expect(y).toBeGreaterThan(tieBot - 1e-9)
+      expect(y).toBeLessThan(tieTop + 1e-9)
+    }
+  })
+
+  it('more bars than the layers name still get a row (nothing dropped)', () => {
+    const stuffed = buildBeamCage({ ...beam, botBars: 7, botLayers: [3, 3] })
+    const ys = [...new Set(stuffed.runs.filter((x) => x.role === 'bottom').map(lineY).map((y) => y.toFixed(4)))]
+    expect(ys).toHaveLength(3)     // 3 + 3 + 1 leftover row
   })
 })
 

@@ -56,7 +56,7 @@ export function buildRebarSelectionSolution(
   // ── 1. What was searched ────────────────────────────────────────────────
   steps.push({
     title: 'Layouts considered',
-    clause: 'ACI 318-14 §25.2 · §9.7.2',
+    clause: 'NSCP 2015 §425.2 · §409.7.2',
     lines: [
       {
         text: kind === 'mat'
@@ -77,28 +77,32 @@ export function buildRebarSelectionSolution(
     const checks = sel.best.compliance
     steps.push({
       title: 'Code compliance — a gate, not a score',
-      clause: sel.best.compliance[0]?.clause ?? 'ACI 318-14 §25.2',
+      clause: checks[0]?.clause ?? 'NSCP 2015 §425.2',
       pass: true,
       lines: [
         {
           text: `A layout failing any one check is infeasible and is never ranked, however ` +
             `well it scores on everything else. The adopted ${thing} passes all ` +
             `${checks.length} of them; ${sel.rejected.length} of the ${total} layouts ` +
-            `generated did not and were discarded.`,
+            `generated did not and were discarded. Clauses are cited to NSCP 2015 — ` +
+            `the concrete chapter's 4-prefixed numbering; ACI 318-14's number is the ` +
+            `same one without the chapter-4 prefix.`,
         },
         // One item per check, not one paragraph per check — see SolutionLine.
         // 'Satisfied' is dropped from each line: the step's own PASS chip
         // already says every one of them passed, and repeating the word ten
-        // times buried the labels that differ.
+        // times buried the labels that differ. A check that does not APPLY to
+        // this design (compression steel on a singly reinforced beam) says so,
+        // rather than riding on the step's PASS chip as if it had been checked.
         ...checks.map((c) => ({
-          item: `${c.label} per ${c.clause}${c.detail ? `, ${c.detail}` : ''}.`,
+          item: `${c.na ? 'n/a — ' : ''}${c.label} per ${c.clause}${c.detail ? `, ${c.detail}` : ''}.`,
         })),
       ],
     })
   } else {
     steps.push({
       title: 'Code compliance — no layout satisfies every check',
-      clause: gates[0]?.check.clause ?? 'ACI 318-14 §25.2',
+      clause: gates[0]?.check.clause ?? 'NSCP 2015 §425.2',
       pass: false,
       lines: [
         {
@@ -114,9 +118,17 @@ export function buildRebarSelectionSolution(
 
   // ── 3. The weighted score ───────────────────────────────────────────────
   const w = PRIORITY_WEIGHTS
+  // EVERY ranked layout, not the first four. The step above announces
+  // n_generated = ranked + rejected; silently printing four score lines under
+  // a six-deep ranking dropped the two worst-scoring layouts from the sheet —
+  // exactly the ones a checker wants to see to agree with the LAST place, and
+  // exactly what truncation hid. A long list stays bounded, but by an EXPLICIT
+  // overflow line, not a silent slice.
+  const SHOWN = 8
+  const overflow = sel.ranked.length - SHOWN
   steps.push({
     title: 'Weighted score of the compliant layouts',
-    clause: 'ACI 318-14 §24.3.2 · §25.2 (serviceability & detailing basis)',
+    clause: 'NSCP 2015 §424.3.2 · §425.2 (serviceability & detailing basis)',
     lines: [
       {
         text: 'Each dimension is scored 0 to 1 relative to the layouts generated here, ' +
@@ -127,14 +139,19 @@ export function buildRebarSelectionSolution(
         tex: `S = ${sn2(w.serviceability)}\\,S_{serv} + ${sn2(w.constructability)}\\,S_{con} + ` +
           `${sn2(w.economy)}\\,S_{eco} + ${sn2(w.simplicity)}\\,S_{simp}`,
       },
-      ...sel.ranked.slice(0, 4).map((s) => ({ tex: scoreLine(s, name) })),
+      ...sel.ranked.slice(0, SHOWN).map((s) => ({ tex: scoreLine(s, name) })),
+      ...(overflow > 0 ? [{
+        text: `…and ${sn0(overflow)} lower-scored compliant layout${overflow === 1 ? '' : 's'}, best-first, ` +
+          `ending at S = ${sn3(sel.ranked[sel.ranked.length - 1].total)} — omitted here to keep the sheet ` +
+          `readable; the full ranking is in the bar-selection table above the worked solution.`,
+      }] : []),
     ],
   })
 
   // ── 4. What was adopted, and why ────────────────────────────────────────
   steps.push({
     title: `Adopted — ${name(sel.best.layout)}`,
-    clause: 'ACI 318-14 §25.2 · good detailing practice',
+    clause: 'NSCP 2015 §425.2 · good detailing practice',
     pass: true,
     lines: [
       { text: `${sel.best.reason} ${sel.margin.charAt(0).toUpperCase()}${sel.margin.slice(1)}.` },

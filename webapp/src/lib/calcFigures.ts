@@ -42,6 +42,14 @@ export interface CalcBeamSectionInput {
   bars: number
   /** Compression bars, where the check placed any. */
   comprBars?: number
+  /**
+   * Bars per layer, extreme layer first — the design's `layers` (tension
+   * face) and `comprLayers`. Given, the section cut draws the stack the
+   * design detailed; left out, every bar of a face sits on one row, which is
+   * a fiction a [3, 3] face exposes immediately.
+   */
+  layers?: number[]
+  comprLayers?: number[]
   /** −Mu: the tension steel is at the TOP and the cut is taken at a support. */
   hogging?: boolean
   /** Adopted stirrup spacing, mm. Zero or absent → the cage's own minimum. */
@@ -63,10 +71,18 @@ export function calcBeamSection(i: CalcBeamSectionInput): SectionDetailDrawing {
   const L = NOMINAL_SPAN
   const s = i.spacing && i.spacing > 0 ? i.spacing : Math.max(50, Math.round(i.h / 2))
   const hM = i.h / 1000
+  // The tension face carries the designed layers; the compression face, if it
+  // carries anything, carries the compression layers — each face only when it
+  // is the one this cut looks at (a face with no bars gets its corner bars
+  // back from the cage's own floor, on one row, which is what hangers are).
+  const tensionLayers = i.layers && i.layers.length > 1 ? i.layers : undefined
+  const comprFaceLayers = i.comprLayers && i.comprLayers.length > 1 ? i.comprLayers : undefined
   const cage = buildBeamCage({
     mark: 'B', L, b: i.b, h: i.h, cover: i.cover, barDia: i.barDia, stirrupDia: i.stirrupDia,
     topBars: i.hogging ? i.bars : (i.comprBars ?? 0),
     botBars: i.hogging ? (i.comprBars ?? 0) : i.bars,
+    topLayers: i.hogging ? tensionLayers : comprFaceLayers,
+    botLayers: i.hogging ? comprFaceLayers : tensionLayers,
     sEnd: s, sMid: s,
     axis: { x0: 0, z0: 0, x1: L, z1: 0 }, ySoffit: 0,
     continuousLeft: false, continuousRight: false,
