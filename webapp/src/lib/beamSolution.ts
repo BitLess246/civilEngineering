@@ -157,6 +157,8 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
       ...(multiLayer ? [
         txt('With more than one layer (25 mm clear between layers, §407.7.2) the bar-group centroid rises above the extreme layer — Varignon: ȳ = Σnᵢyᵢ/Σnᵢ — which reduces d, so the design re-runs at the new d until the layer arrangement stops changing.'),
         eq(String.raw`\bar{y} = \dfrac{\sum n_i y_i}{\sum n_i} = ${sn1(r.yBar)}\ \text{mm} \Rightarrow d = d_t - \bar{y} = ${sn1(r.dt)} - ${sn1(r.yBar)} = \mathbf{${sn1(r.d)}}\ \text{mm}`),
+        txt('Neutral-axis check: the TOP tension layer is the one nearest the N.A., and a bar at or above the axis develops no tension — it must stay below the c the provided steel reads (a_prov/β1, or the DRRB design c).'),
+        eq(String.raw`d_{top} = d_t - (n_{layers} - 1)(d_b + 25) = ${sn1(r.dTopLayer)}\ \text{mm} \;${r.tensionNAOK ? '<' : '\\ge'}\; c = ${sn1(r.cProv)}\ \text{mm}\;${r.tensionNAOK ? '\\checkmark' : '\\times'}`),
       ] : [
         txt('All tension bars fit in one layer, so d = d_t for the tension side.'),
       ]),
@@ -168,13 +170,15 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
           eq(String.raw`\bar{y}' = ${sn1(r.comprYBar)}\ \text{mm} \Rightarrow d' = ${sn1(r.dPrime - r.comprYBar)} + ${sn1(r.comprYBar)} = \mathbf{${sn1(r.dPrime)}}\ \text{mm}`),
         ] : []),
       ] : []),
-      ...(multiLayer || r.comprLayers.length > 1 ? [
+      ...(r.flexOK && (multiLayer || r.comprLayers.length > 1) ? [
         txt(`Both faces converged after ${r.layerIters} passes — the ρ limits, classification, and steel above are already evaluated at the final d and d′.`),
       ] : []),
     ],
-    note: r.flexOK
-      ? `Provide ${r.bars} ⌀${i.barDia} mm in ${r.layers.length} layer${r.layers.length > 1 ? 's' : ''} (${r.layers.join(' + ')})${r.mode === 'DRRB' && r.comprEffective ? ` + ${r.comprBars} ⌀${dbC} mm compression bars` : ''}.`
-      : '⚠ The layout diverges (d collapses as layers stack up) — the section cannot accommodate the required steel. Enlarge b or h.',
+    note: !r.flexOK
+      ? '⚠ The layout diverges (d collapses as layers stack up) — the section cannot accommodate the required steel. Enlarge b or h.'
+      : !r.tensionNAOK
+        ? `⚠ The top tension layer crosses the neutral axis (c = ${sn1(r.cProv)} mm) — the deepest layers do not develop. Use a larger bar (fewer layers) or enlarge the section.`
+        : `Provide ${r.bars} ⌀${i.barDia} mm in ${r.layers.length} layer${r.layers.length > 1 ? 's' : ''} (${r.layers.join(' + ')})${r.mode === 'DRRB' && r.comprEffective ? ` + ${r.comprBars} ⌀${dbC} mm compression bars` : ''}.`,
   })
 
   steps.push({
@@ -281,7 +285,7 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     ['Effective depth', 'NSCP 2015 §420.6.1 cover', undefined],
     ['Reinforcement-ratio limits', 'NSCP 2015 §409.6.1.2 · §421.2.2', r.rho <= r.rhoMax + 1e-9 || r.mode === 'DRRB'],
     ['SRRB / DRRB classification', 'NSCP 2015 §422.2', undefined],
-    ['Tension steel', 'NSCP 2015 §422.2', r.flexOK],
+    ['Tension steel', 'NSCP 2015 §422.2', r.flexOK && r.tensionNAOK],
     ['Compression steel', 'NSCP 2015 §422.2.2', r.comprEffective && r.comprNAOK],
     ['Bar layout', 'NSCP 2015 §407.7', r.sClear >= r.sMinClear - 1e-9],
     ['Shear strength of concrete', 'NSCP 2015 §422.5.5.1', undefined],

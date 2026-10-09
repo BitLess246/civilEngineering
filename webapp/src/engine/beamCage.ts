@@ -469,13 +469,12 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
    *
    * IN LAYERS, the same rule per layer, stacked: §407.7.2 puts upper-layer
    * bars directly over bottom-layer bars, so each layer above the first takes
-   * a centred run of the extreme layer's grid instead of spreading on a grid
-   * of its own — a second layer of 2 over a bottom layer of 4 sits over the
-   * two inner bars, which is where the stirrup's corner bend still leaves
-   * room, and the callout's "(4+2)" becomes a picture the cut agrees with.
-   * The continuous bars still take the outermost places first, walking inward
-   * and up (down, for top steel), so the corners remain the bars that run
-   * through.
+   * its places FROM the extreme layer's grid — starting at the stirrups on
+   * both faces and filling inward, the way a stacked bar is actually placed:
+   * it rests on, and ties to, the corner bar beneath it, instead of floating
+   * centred over the middle of the web. The continuous bars still take the
+   * outermost places first, walking inward and up (down, for top steel), so
+   * the corners remain the bars that run through.
    */
   const faceSlots = (layers: number[]): { v: number; layer: number }[] => {
     const n0 = Math.max(1, layers[0] ?? 1)
@@ -486,6 +485,11 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
       for (let a = 0, b = pos.length - 1; a <= b; a++, b--) { order.push(a); if (b !== a) order.push(b) }
       return order.map((k) => pos[k]!)
     }
+    /** Upper-layer places, FROM THE STIRRUPS IN: the extreme grid's outermost
+     *  slots first, alternating left and right, so every place is one the
+     *  lower layer actually holds a bar at. */
+    const fromStirrupsIn = (n: number): number[] =>
+      Array.from({ length: n }, (_, k) => grid[k % 2 === 0 ? k / 2 : n0 - 1 - (k - 1) / 2]!)
     const out: { v: number; layer: number }[] = []
     layers.forEach((n, li) => {
       // The extreme layer owns the grid. A layer fuller than it (a caller that
@@ -493,7 +497,7 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
       // the honest layout for the count it was handed.
       const pos = li === 0 || n >= n0
         ? (li === 0 ? grid : Array.from({ length: n }, (_, k) => spread(n, k)))
-        : grid.slice(Math.floor((n0 - n) / 2), Math.floor((n0 - n) / 2) + n)
+        : fromStirrupsIn(n)
       out.push(...outermostFirst(pos).map((v) => ({ v, layer: li })))
     })
     return out

@@ -176,6 +176,28 @@ describe('beam design — DRRB (compression steel)', () => {
     const r = designBeam({ ...base, b: 250, h: 400, Mu: 450 })
     expect(r.flexOK).toBe(false)
   })
+
+  it('reads the neutral axis off the provided steel, and keeps the top tension layer below it', () => {
+    // SRRB: c = a_prov/β1, one number for the drawing's N.A. line and the check.
+    const r = designBeam(base)
+    expect(r.mode).toBe('SRRB')
+    expect(r.cProv).toBeCloseTo(r.a / beta1(28), 9)
+    expect(r.tensionNAOK).toBe(true)
+    // [n] bars in one layer: the top layer IS the extreme layer, at dt.
+    expect(r.dTopLayer).toBeCloseTo(r.dt, 9)
+    // and the layer the check turns on is the one the Varignon stack reaches
+    const stacked = designBeam({ ...base, barDia: 28, Mu: 420 })
+    expect(stacked.layers.length).toBeGreaterThan(1)
+    expect(stacked.dTopLayer).toBeCloseTo(stacked.dt - (stacked.layers.length - 1) * (28 + 25), 9)
+    expect(stacked.tensionNAOK).toBe(true)   // tension-controlled: c stays shallow
+  })
+
+  it('the DRRB neutral axis is the design c the compression side is read at', () => {
+    const r = designBeam({ ...base, Mu: 400 })
+    expect(r.mode).toBe('DRRB')
+    expect(r.cProv).toBeCloseTo(r.cNA, 9)
+    expect(r.tensionNAOK).toBe(true)
+  })
 })
 
 describe('stirrup legs — width-driven (hx limit) + shear bump', () => {

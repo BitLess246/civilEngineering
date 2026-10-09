@@ -4,7 +4,7 @@
 // tie to on either side. These tests belong to the rule, not to either engine.
 
 import { describe, it, expect } from 'vitest'
-import { splitLayers, centroidRise, jointBarRoom, barLayoutWidth, type BarLayers } from './barLayers'
+import { splitLayers, centroidRise, innerTensionDepth, jointBarRoom, barLayoutWidth, type BarLayers } from './barLayers'
 
 const total = (l: number[]) => l.reduce((s, k) => s + k, 0)
 
@@ -105,6 +105,21 @@ describe('centroidRise', () => {
 
   it('is safe on an empty group', () => {
     expect(centroidRise([], 45)).toBe(0)
+  })
+})
+
+describe('innerTensionDepth', () => {
+  it('is dt for a single layer — the extreme layer is the innermost', () => {
+    expect(innerTensionDepth([6], 45, 440)).toBeCloseTo(440, 9)
+  })
+
+  it('steps one pitch inside the extreme layer for each further layer', () => {
+    expect(innerTensionDepth([4, 2], 45, 440)).toBeCloseTo(440 - 45, 9)
+    expect(innerTensionDepth([3, 3, 3], 57, 434)).toBeCloseTo(434 - 2 * 57, 9)
+  })
+
+  it('never goes above the extreme layer, even on an empty group', () => {
+    expect(innerTensionDepth([], 45, 440)).toBe(440)
   })
 })
 
