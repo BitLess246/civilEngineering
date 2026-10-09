@@ -46,11 +46,11 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   // standalone analysis helpers
   '/load-combinations', '/load-path', '/influence-lines', '/plumbing',
   // surveying, transportation and water resources — the easy calculators wave
-  '/surveying', '/traffic-volume', '/signal-timing', '/traffic-queue', '/rational-method',
+  '/leveling', '/traverse', '/simple-curve', '/earthwork', '/traffic-volume', '/signal-timing', '/traffic-queue', '/rational-method',
   // wave two: hydraulics, mix design, section properties
-  '/open-channel', '/pipe-flow', '/concrete-mix', '/section-properties',
+  '/open-channel', '/critical-depth', '/hydraulic-jump', '/pipe-flow', '/concrete-mix', '/section-properties',
   // wave three: highway geometry, weirs, piles, bridges
-  '/geometric-design', '/weir-flow', '/pile-capacity', '/bridge-loading',
+  '/sight-distance', '/vertical-curves', '/superelevation', '/weir-flow', '/pile-capacity', '/bridge-loading',
   // wave four: culverts, pavement, SCS runoff, bridge rating
   '/culvert', '/pavement', '/runoff', '/bridge-rating',
   // wave five: GVF profiles, Muskingum routing, detention ponds, DO sag
@@ -58,11 +58,13 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   // wave six: rigid pavement, roundabouts, ESALs, storm sewers, pumping, water demand
   '/rigid-pavement', '/roundabout', '/esal', '/storm-sewer', '/pump-station', '/water-demand',
   // mathematics: engineering economy
-  '/eng-economy',
-  // fluid statics: hydrostatics
-  '/hydrostatics',
-  // mechanics: dynamics
-  '/dynamics',
+  '/interest-factors', '/cash-flow-analysis', '/depreciation', '/break-even',
+  // fluid statics and hydraulics — one calculator per page
+  '/hydrostatic-force', '/curved-gate', '/buoyancy', '/manometer', '/relative-equilibrium', '/bernoulli', '/jet-on-vane',
+  // mechanics: dynamics — one calculator per page
+  '/rectilinear-motion', '/projectile-motion', '/curvilinear-motion', '/kinetics', '/work-energy', '/impulse-momentum', '/friction', '/belt-friction',
+  // mathematics mini-calculators: statics resultant, triangle solver, spherical triangle
+  '/method-of-joints', '/trigonometry', '/spherical-triangle',
   // drafting: 2D floor plans → 3D
   '/drafting3d',
 ]
@@ -92,6 +94,15 @@ export const PUBLIC_ROUTES: readonly string[] = [
   // instead of the page that replaced it — and charging it here would bill the
   // same visit twice.
   '/steel', '/geotech',
+  // the combined Hydrostatics page, now a stub landing on /hydrostatic-force
+  '/hydrostatics',
+  // the tabbed Dynamics page, now a stub landing on /rectilinear-motion
+  '/dynamics',
+  // the Surveying Toolbox and Geometric Design shells, now stubs landing on
+  // /leveling and /sight-distance
+  '/surveying', '/geometric-design',
+  // the combined Engineering Economy page, now a stub landing on /interest-factors
+  '/eng-economy',
   '/signin', '/signup', '/forgot-password', '/reset-password',
   // Policy and contact pages. A customer must be able to read the terms and
   // find a way to complain WITHOUT an account — and a payment provider

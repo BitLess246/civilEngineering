@@ -21,60 +21,140 @@
 export const UPSTREAM_CHAT_COMPLETIONS_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 /**
- * Free models ONLY, most capable first. Anything not on this list is refused
- * with `model` before any upstream call is made, so a paid model id can never
- * ride this key.
+ * Preferred free models, in the order they START. Free endpoints come and go
+ * by the week — between Oct 1 and Oct 6 2026 two of the five then on this list
+ * started answering 404 and the assistant went dark for everyone — so this is
+ * no longer the allowlist itself. The allowlist is the LIVE catalogue
+ * (`selectFreeModels` over OpenRouter's /api/v1/models): anything free there
+ * is usable, these go first when they are present, and when the catalogue
+ * cannot be fetched this list is the fallback.
  *
- * Every id below was verified 0/0 pricing with `tools` in
- * `supported_parameters` on /api/v1/models — extend ONLY the same way, plus a
- * test row — AND answered a code question correctly through the live function.
+ * A paid model still can never ride the key: an id is used only when it is
+ * literally free in the catalogue (`:free` suffix AND 0/0 pricing), or it is
+ * one of these, each of which was verified that way.
  *
- * Order is MEASURED, not assumed (Oct 2026, through the deployed function):
- * the first two answer correctly in ~16 s and ~26 s; Lightning answers but
- * times out about half the time; Qwen and Gemma are capable but were
- * rate-limited (429) on every probe, so they sit behind the ones that answer.
- * The rotation is hedged (`callWithRotation`), so order decides who STARTS
- * first, not who is waited on.
- *
- * Removed, and why:
- *   inclusionai/ling-3.0-flash-fin:free — gone from OpenRouter (404).
- *   liquid/lfm-2.5-2.6b:free — a 2.6 B model that answered "minimum cover for
- *     a cast-in-place beam" with 4 in (102 mm) under a clause that does not say
- *     so. A confidently wrong code value is worse than no answer.
+ * Not preferred (still used if the catalogue lists it): inkling:free answered
+ * 403 on every request on 2026-10-06 — 403 hands over, so it costs ~25 ms.
  */
 export const FREE_CHAT_MODELS = [
-  'stealth/space-bunny-alpha',
   'nvidia/nemotron-3-ultra-550b-a55b:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
   'nvidia/nemotron-3.5-lightning:free',
-  'qwen/qwen3.8-27b:free',
   'google/gemma-4-31b-it:free',
 ] as const
 
-export type FreeChatModel = (typeof FREE_CHAT_MODELS)[number]
-export type FreeModel = FreeChatModel
+/** An OpenRouter model id that the catalogue (or the list above) says is free. */
+export type FreeModel = string
 
-/** Every model the rotation may offer. The widget no longer names one. */
+/** The fallback rotation when the live catalogue is unavailable. */
 export const FREE_MODELS: readonly FreeModel[] = [...FREE_CHAT_MODELS]
 
+/** The shape of a free id: `vendor/name:free`. Membership is decided by the catalogue. */
 export const isFreeModel = (m: unknown): m is FreeModel =>
-  typeof m === 'string' && (FREE_CHAT_MODELS as readonly string[]).includes(m)
+  typeof m === 'string' && /^[a-z0-9][\w.-]*\/[\w.:-]+:free$/i.test(m) && m.length <= 120
 
 /**
- * Context window per model, tokens. A long conversation can genuinely exceed
- * the small models, so rotation skips an entry that cannot fit the request —
- * capability routing by measurement, not by guessing strengths.
+ * Free models that are not general chat models, or that were measured giving
+ * wrong engineering answers. Pattern-matched so a new version of the same
+ * family stays out too.
+ *   lfm-2.5-2.6b — a 2.6 B model that answered "minimum cover for a
+ *     cast-in-place beam" with 4 in (102 mm) under a clause that does not say
+ *     so. A confidently wrong code value is worse than no answer.
+ *   content-safety — a classifier, not a chat model.
+ *   north-mini-code, laguna — code models.
  */
-const MODEL_CONTEXT_TOKENS: Readonly<Record<FreeModel, number>> = {
-  'stealth/space-bunny-alpha': 1000000,
+export const EXCLUDED_MODEL_PATTERNS: readonly RegExp[] = [/\/lfm-/i, /content-safety/i, /north-mini-code/i, /\/laguna-/i]
+
+/** Context window of a fallback entry, tokens, for when the catalogue is unavailable. */
+const FALLBACK_CONTEXT_TOKENS: Readonly<Record<string, number>> = {
   'nvidia/nemotron-3-ultra-550b-a55b:free': 1000000,
+  'nvidia/nemotron-3-super-120b-a12b:free': 262144,
   'nvidia/nemotron-3.5-lightning:free': 1000000,
-  'qwen/qwen3.8-27b:free': 262144,
   'google/gemma-4-31b-it:free': 262144,
 }
 
+/** One row of OpenRouter's /api/v1/models, as far as selection reads it. */
+export interface CatalogModel {
+  id: string
+  context_length?: number | null
+  pricing?: { prompt?: string; completion?: string; request?: string } | null
+  supported_parameters?: string[] | null
+  expiration_date?: string | null
+  created?: number
+}
+
+/** Rotation candidates from the live catalogue, and each one's context window. */
+export interface FreeModelSelection { models: FreeModel[]; context: Record<string, number> }
+
+/** Most candidates one request will walk. */
+export const MAX_CANDIDATES = 8
+
+const isZero = (v: string | undefined) => v === undefined || Number(v) === 0
+
+/**
+ * The rotation, from the live catalogue: every model that is free (`:free`
+ * id AND zero prompt/completion/request price), takes tools, has not expired
+ * and is not excluded — the preferred list first in its own order, then the
+ * rest by context window and recency. Pure, so the rule is unit-tested.
+ */
+export function selectFreeModels(
+  catalog: readonly CatalogModel[], preferred: readonly string[] = FREE_CHAT_MODELS, now = Date.now(),
+): FreeModelSelection {
+  const ok = catalog.filter((m) =>
+    typeof m?.id === 'string' && m.id.endsWith(':free') && isFreeModel(m.id)
+    && !!m.pricing && isZero(m.pricing.prompt) && isZero(m.pricing.completion) && isZero(m.pricing.request)
+    && (m.pricing.prompt !== undefined && m.pricing.completion !== undefined)
+    && (m.supported_parameters ?? []).includes('tools')
+    && !(m.expiration_date && Date.parse(m.expiration_date) <= now)
+    && !EXCLUDED_MODEL_PATTERNS.some((re) => re.test(m.id)))
+  const rank = (id: string) => { const i = preferred.indexOf(id); return i < 0 ? Infinity : i }
+  ok.sort((a, b) => rank(a.id) - rank(b.id)
+    || (b.context_length ?? 0) - (a.context_length ?? 0) || (b.created ?? 0) - (a.created ?? 0))
+  const models = ok.slice(0, MAX_CANDIDATES)
+  return { models: models.map((m) => m.id), context: Object.fromEntries(models.map((m) => [m.id, m.context_length ?? 0])) }
+}
+
+/** The fallback selection: the preferred list with its recorded windows. */
+export const FALLBACK_SELECTION: FreeModelSelection = { models: [...FREE_CHAT_MODELS], context: { ...FALLBACK_CONTEXT_TOKENS } }
+
+/** OpenRouter's public model catalogue — no key needed, so nothing secret goes with it. */
+export const CATALOG_URL = 'https://openrouter.ai/api/v1/models'
+/** How long one isolate trusts a fetched catalogue. */
+export const CATALOG_TTL_MS = 30 * 60_000
+/** A catalogue slower than this is skipped for this request; the last one (or the fallback) serves. */
+export const CATALOG_TIMEOUT_MS = 4000
+
+export type CatalogFetch = (url: string, init: { signal: AbortSignal }) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
+export type FreeModelSource = 'live' | 'cached' | 'stale' | 'fallback'
+
+/**
+ * The live free-model selection, cached per isolate for `CATALOG_TTL_MS`.
+ * A failed or empty fetch never takes the assistant down: the last good
+ * selection keeps serving ('stale'), and with none the preferred list does
+ * ('fallback'). A failed fetch is retried on the next request, not after a TTL.
+ */
+export function createFreeModelSource(fetchImpl: CatalogFetch, now: () => number = () => Date.now()) {
+  let last: { at: number; sel: FreeModelSelection } | null = null
+  return async (): Promise<FreeModelSelection & { source: FreeModelSource }> => {
+    if (last && now() - last.at < CATALOG_TTL_MS) return { ...last.sel, source: 'cached' }
+    try {
+      const res = await fetchImpl(CATALOG_URL, { signal: AbortSignal.timeout(CATALOG_TIMEOUT_MS) })
+      if (res.ok) {
+        const data = (await res.json() as { data?: unknown } | null)?.data
+        const sel = Array.isArray(data) ? selectFreeModels(data as CatalogModel[], FREE_CHAT_MODELS, now()) : null
+        if (sel && sel.models.length) {
+          last = { at: now(), sel }
+          return { ...sel, source: 'live' }
+        }
+      }
+    } catch { /* fall through: stale, then fallback */ }
+    return last ? { ...last.sel, source: 'stale' } : { ...FALLBACK_SELECTION, source: 'fallback' }
+  }
+}
+
 /** Rough chars-per-token headroom: skip a model the estimate cannot fit. */
-export function fitsContext(model: FreeModel, chars: number): boolean {
-  return chars <= (MODEL_CONTEXT_TOKENS[model] ?? 0) * 3
+export function fitsContext(model: FreeModel, chars: number, context: Readonly<Record<string, number>> = FALLBACK_CONTEXT_TOKENS): boolean {
+  return chars <= (context[model] ?? 0) * 3
 }
 
 /** A calculator the assistant may reference or open. Mirrors `ALL_TOOLS`. */
@@ -107,6 +187,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/dev-length', name: 'Dev & Splice', sub: 'ACI 318-14 §25.4–25.5', group: 'Concrete' },
   { route: '/punching-shear', name: 'Punching Shear', sub: 'Two-way §22.6 · ACI 318', group: 'Concrete' },
   { route: '/model', name: '3D Model Space', sub: 'BIM-lite viewer', group: 'Analysis' },
+  { route: '/drafting3d', name: 'Drafting3D', sub: 'Floor plans → 3D → ModelSpace', group: 'Analysis' },
   { route: '/frame', name: 'Frame Analysis', sub: '2D stiffness method', group: 'Analysis' },
   { route: '/beam-analysis', name: 'Beam Analysis', sub: 'FEM multi-span', group: 'Analysis' },
   { route: '/truss', name: 'Truss Space', sub: 'Plane truss solver', group: 'Analysis' },
@@ -134,15 +215,22 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/load-combinations', name: 'Load Combinations', sub: 'NSCP 2015 §203.3 LRFD', group: 'Seismic & Loads' },
   { route: '/wood-slab', name: 'Wood Slab', sub: 'Deck-on-joist · NDS §3 / NSCP §6', group: 'Timber' },
   { route: '/plumbing', name: 'Plumbing Design', sub: 'Water · DWV · septic · RNPCP', group: 'Plumbing & Sanitary' },
-  { route: '/surveying', name: 'Surveying Toolbox', sub: 'Leveling · traverse · curves · earthwork', group: 'Surveying' },
-  { route: '/open-channel', name: 'Open Channel Flow', sub: 'Manning · critical · jump', group: 'Water' },
+  { route: '/leveling', name: 'Differential Leveling', sub: 'HI · rise & fall · misclosure', group: 'Surveying' },
+  { route: '/traverse', name: 'Traverse', sub: 'Bowditch · transit · DMD area', group: 'Surveying' },
+  { route: '/simple-curve', name: 'Simple Curve', sub: 'Elements · deflection staking', group: 'Surveying' },
+  { route: '/earthwork', name: 'Earthwork', sub: 'End area · prismoidal · mass haul', group: 'Surveying' },
+  { route: '/open-channel', name: 'Normal Depth', sub: 'Manning · uniform flow · Fr', group: 'Water' },
+  { route: '/critical-depth', name: 'Critical Depth', sub: 'Specific energy · E–y curve', group: 'Water' },
+  { route: '/hydraulic-jump', name: 'Hydraulic Jump', sub: 'Sequent depth · ΔE · power', group: 'Water' },
   { route: '/pipe-flow', name: 'Pipe Flow', sub: 'Hazen–Williams · Darcy', group: 'Water' },
   { route: '/concrete-mix', name: 'Concrete Mix Design', sub: 'ACI 211 · absolute volume', group: 'Concrete' },
   { route: '/section-properties', name: 'Section Properties', sub: 'A · I · S · r · built-up', group: 'Analysis' },
   { route: '/bridge-loading', name: 'Bridge Loading', sub: 'HL-93 · lever rule · envelope', group: 'Bridge' },
   { route: '/bridge-rating', name: 'Bridge Rating', sub: 'MBE · RF · HL-93 rated', group: 'Bridge' },
   { route: '/pile-capacity', name: 'Pile Capacity', sub: 'α method · Meyerhof · layers', group: 'Geotechnical' },
-  { route: '/geometric-design', name: 'Geometric Design', sub: 'SSD · vertical curves · superelevation', group: 'Transportation' },
+  { route: '/sight-distance', name: 'Stopping Sight Distance', sub: 'Reaction · braking · grade', group: 'Transportation' },
+  { route: '/vertical-curves', name: 'Vertical Curves', sub: 'Crest · sag · K · sight checks', group: 'Transportation' },
+  { route: '/superelevation', name: 'Superelevation', sub: 'e + f = V²/127R · Rmin', group: 'Transportation' },
   { route: '/pavement', name: 'Flexible Pavement', sub: 'AASHTO 93 · ESALs · SN', group: 'Transportation' },
   { route: '/weir-flow', name: 'Weir Flow', sub: 'Francis · Cipolletti · V-notch', group: 'Water' },
   { route: '/culvert', name: 'Culvert Hydraulics', sub: 'HDS-5 · inlet & outlet control', group: 'Water' },
@@ -176,10 +264,28 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/storm-sewer', name: 'Storm Sewer', sub: 'Rational · Manning · tc chain', group: 'Water' },
   { route: '/water-demand', name: 'Water Demand', sub: 'Forecast · peaking · storage', group: 'Water' },
   { route: '/pump-station', name: 'Pump Station', sub: 'System × pump · NPSH · power', group: 'Water' },
-  { route: '/eng-economy', name: 'Engineering Economy', sub: 'Time value · NPV/IRR · depreciation', group: 'Mathematics' },
-  { route: '/hydrostatics', name: 'Hydrostatics', sub: 'Plane force · gates · buoyancy · vessels', group: 'Mathematics' },
-  { route: '/dynamics', name: 'Dynamics', sub: 'Kinematics · kinetics · work-energy · impulse', group: 'Mathematics' },
-  { route: '/drafting3d', name: 'Drafting3D', sub: 'Floor plans → 3D → ModelSpace', group: 'Mathematics' },
+  { route: '/interest-factors', name: 'Interest Factors', sub: 'P/F · P/A · gradients · i_eff', group: 'Mathematics' },
+  { route: '/cash-flow-analysis', name: 'Cash-Flow Analysis', sub: 'NPV · IRR · B/C · payback', group: 'Mathematics' },
+  { route: '/depreciation', name: 'Depreciation', sub: 'SL · SYD · declining balance', group: 'Mathematics' },
+  { route: '/break-even', name: 'Break-Even Analysis', sub: 'Q = F/(p − v) · margin of safety', group: 'Mathematics' },
+  { route: '/hydrostatic-force', name: 'Hydrostatic Force', sub: 'Plane surfaces · center of pressure', group: 'Water' },
+  { route: '/curved-gate', name: 'Curved Gate', sub: 'Quarter circle · Fh · Fv · resultant', group: 'Water' },
+  { route: '/buoyancy', name: 'Buoyancy & Stability', sub: 'Displacement · metacentric height', group: 'Water' },
+  { route: '/manometer', name: 'Manometer', sub: 'Multi-fluid pressure walk', group: 'Water' },
+  { route: '/relative-equilibrium', name: 'Accelerating & Rotating Vessels', sub: 'Surface tilt · paraboloid', group: 'Water' },
+  { route: '/bernoulli', name: 'Energy Equation', sub: 'Bernoulli · pumps · turbines · losses', group: 'Water' },
+  { route: '/jet-on-vane', name: 'Jet on a Vane', sub: 'Impulse–momentum · power · efficiency', group: 'Water' },
+  { route: '/rectilinear-motion', name: 'Rectilinear Motion', sub: 'Constant acceleration · any three of u, a, t, v, s', group: 'Mathematics' },
+  { route: '/projectile-motion', name: 'Projectile Motion', sub: 'Range · height · time of flight', group: 'Mathematics' },
+  { route: '/curvilinear-motion', name: 'Curvilinear Motion', sub: 'Normal & tangential acceleration', group: 'Mathematics' },
+  { route: '/kinetics', name: 'Kinetics', sub: 'ΣF = ma · velocity · displacement', group: 'Mathematics' },
+  { route: '/work-energy', name: 'Work–Energy', sub: 'ΔKE = W + Wnc − ΔPE', group: 'Mathematics' },
+  { route: '/impulse-momentum', name: 'Impulse–Momentum', sub: 'I = m(v₂ − v₁) = F·t', group: 'Mathematics' },
+  { route: '/friction', name: 'Friction', sub: 'Block on an incline · holds or slides', group: 'Mathematics' },
+  { route: '/belt-friction', name: 'Belt Friction', sub: 'Capstan T₁ = T₂e^(μβ)', group: 'Mathematics' },
+  { route: '/method-of-joints', name: 'Method of Joints', sub: 'Concurrent forces · Rx, Ry, R', group: 'Mathematics' },
+  { route: '/trigonometry', name: 'Trigonometry', sub: 'Any triangle · any three knowns', group: 'Mathematics' },
+  { route: '/spherical-triangle', name: 'Spherical Triangle', sub: 'Cosines · excess · Girard area', group: 'Mathematics' },
 ]
 
 /** The refusal the model is instructed to give off-topic questions, verbatim. */
@@ -278,9 +384,9 @@ export function cleanPageContext(v: unknown): string | null {
 
 export function validateAssistantRequest(body: unknown): {
   ok: true
-  /** A client-named model is honoured ONLY when allowlisted (old widget
-   *  during the deploy window); otherwise the rotation picks. Never trusted
-   *  for anything but membership in the list below. */
+  /** A client-named model, shape-checked here (`vendor/name:free`). The
+   *  function honours it ONLY if the live selection contains it; otherwise
+   *  the rotation picks. Never trusted for anything but that membership. */
   model: FreeModel | null
   messages: AssistantChatMessage[]
   page: string | null
@@ -423,6 +529,8 @@ export interface RotationOptions {
   now?: () => number
   /** Whether a 200 body is an answer; one that is not hands over like a 5xx. */
   accept?: (json: unknown) => boolean
+  /** Context window per model, tokens (the live catalogue's); defaults to the fallback table. */
+  context?: Readonly<Record<string, number>>
 }
 
 /** Free endpoints answer in 15–30 s when they answer at all (measured Oct 2026). */
@@ -450,10 +558,16 @@ type AttemptOutcome =
  * Per model the policy is unchanged: skip it when the request cannot fit its
  * context window; POST with tools; on 400 retry ONCE without tools (an entry
  * can list tool support the serving endpoint does not honour); on 404
- * (rotated away), 408, 429, 5xx, a transport failure, or a 200 that `accept`
- * says is no answer, move on. Fail FAST on
- * 401 (bad key), 402 (no credit) and 403 (forbidden) — those describe the
- * account, not the model — and on any other 4xx, which is our request.
+ * (rotated away), 403, 408, 429, 5xx, a transport failure, or a 200 that
+ * `accept` says is no answer, move on. Fail FAST on 401 (bad key) and 402 (no
+ * credit) — those describe the account, not the model — and on any other 4xx,
+ * which is our request.
+ *
+ * 403 is per MODEL on OpenRouter (moderation, or a provider whose data policy
+ * the account has not opted into), not per account: measured on the live
+ * function, `inkling:free` answered 403 in 25 ms on every request while the
+ * nemotrons were fine, and treating it as fatal aborted them mid-answer. A key
+ * that is forbidden everywhere still ends as 403 — every model says so.
  *
  * `fetchImpl` is injected so the whole policy is unit-testable; the function
  * passes the real fetch.
@@ -470,7 +584,7 @@ export function callWithRotation(
   const maxParallel = Math.max(1, opts.maxParallel ?? MAX_PARALLEL)
   const deadlineMs = opts.deadlineMs ?? ROTATION_DEADLINE_MS
   const now = opts.now ?? (() => Date.now())
-  const queue = models.filter((m) => fitsContext(m, chars))
+  const queue = models.filter((m) => fitsContext(m, chars, opts.context))
   const controllers: AbortController[] = []
   let lastStatus: number | null = null
 
@@ -478,35 +592,44 @@ export function callWithRotation(
     for (const withTools of [true, false]) {
       const t0 = now()
       let res: UpstreamResponse
+      const timeout = AbortSignal.timeout(timeoutMs)
+      // why a fetch or a body read stopped: we cancelled it, it ran out of time, or the wire broke
+      const failure = (e: unknown) =>
+        ctl.signal.aborted ? 'aborted' as const : timeout.aborted || (e as Error)?.name === 'TimeoutError' ? 'timeout' as const : 'transport' as const
       try {
         const call = buildCall(model, withTools)
         res = await fetchImpl(call.url, {
           method: call.method, headers: call.headers, body: call.body,
-          signal: AbortSignal.any([ctl.signal, AbortSignal.timeout(timeoutMs)]),
+          signal: AbortSignal.any([ctl.signal, timeout]),
         })
       } catch (e) {
-        const status = ctl.signal.aborted ? 'aborted' : (e as Error)?.name === 'TimeoutError' ? 'timeout' : 'transport'
-        opts.log?.({ model, withTools, status, ms: now() - t0 })
+        opts.log?.({ model, withTools, status: failure(e), ms: now() - t0 })
         return { kind: 'next', status: null } // tools are not the suspect
       }
       if (res.ok) {
         let json: unknown
         try {
           json = await res.json()
-        } catch {
-          opts.log?.({ model, withTools, status: 'empty', ms: now() - t0 })
-          return { kind: 'next', status: null } // unparseable body
+        } catch (e) {
+          // a body that stopped arriving is a timeout, not an empty answer
+          const f = failure(e)
+          opts.log?.({ model, withTools, status: f === 'transport' ? 'empty' : f, ms: now() - t0 })
+          return { kind: 'next', status: null }
         }
+        // OpenRouter can report a provider failure INSIDE a 200: { error: { code } }.
+        // The code is a number, never content, so it is what gets logged.
+        const code = (json as { error?: { code?: unknown } } | null)?.error?.code
         const usable = opts.accept ? opts.accept(json) : true
-        opts.log?.({ model, withTools, status: usable ? res.status : 'empty', ms: now() - t0 })
-        return usable ? { kind: 'ok', json } : { kind: 'next', status: null }
+        opts.log?.({ model, withTools, status: usable ? res.status : typeof code === 'number' ? code : 'empty', ms: now() - t0 })
+        if (usable) return { kind: 'ok', json }
+        return { kind: 'next', status: typeof code === 'number' && code >= 400 ? code : null }
       }
       opts.log?.({ model, withTools, status: res.status, ms: now() - t0 })
       if (res.status === 400 && withTools) continue // downgrade: same model, no tools
-      if (res.status === 404 || res.status === 408 || res.status === 429 || res.status >= 500) {
+      if (res.status === 403 || res.status === 404 || res.status === 408 || res.status === 429 || res.status >= 500) {
         return { kind: 'next', status: res.status }
       }
-      return { kind: 'fatal', status: res.status } // 401/402/403/other 4xx
+      return { kind: 'fatal', status: res.status } // 401/402/other 4xx
     }
     return { kind: 'next', status: 400 }
   }

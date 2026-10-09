@@ -1,14 +1,13 @@
 import { useMemo, useState } from 'react'
 import { calcDevLength, hookFit, type DevLengthInput, type EpoxyCase } from '../engine/devLength'
-import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
-import { ReportControls } from '../components/ReportControls'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { buildDevLengthSolution } from '../lib/devLengthSolution'
 import { f0, f1, f2 } from '../lib/format'
-import { WorkedSolution } from '../components/WorkedSolution'
 import { CodeHint } from '../components/CodeHint'
 import { DevLengthDetail } from '../components/DevLengthDetail'
 import { DEV_HINTS } from '../lib/devLengthHints'
-import { PageHeader } from '../components/calc'
 
 const BAR_SIZES: [string, string][] = [
   ['10', '10 mm (ø10)'],
@@ -129,178 +128,97 @@ export default function DevLength() {
     steps: solution ?? undefined,
   } : undefined
 
+  const db = parseFloat(f.db)
+  const full = 'col-span-2'
   return (
-        <div>
-      <PageHeader title="Development & Splice Lengths" badges={['ACI 318-14 §25.4', 'NSCP 2015']} />
-      <div className="mx-auto max-w-[1500px] p-6">
-      <p className="no-print mt-1 text-muted">
-        ACI 318-14 §25.4 development + §25.5 splices. SI units (mm, MPa).
-        Tension §25.4.2.3 · Compression §25.4.9.2 · Splices §25.5.2/5.
-      </p>
-      <ReportControls title="Development & Splice Lengths" badges={['ACI 318-14 §25.4', 'NSCP 2015']} report={report} />
-
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
-        {/* ── INPUTS ── */}
-        <div className="flex flex-col gap-6">
-          <Card title="Bar &amp; Concrete">
-            <Pick label={<>Bar diameter db<CodeHint spec={DEV_HINTS.db} /></>}
-              value={f.db} onChange={set('db')} options={BAR_SIZES} />
-            <Num  label={<>f'c<CodeHint spec={DEV_HINTS.fc} /></>}
-              unit="MPa" value={f.fc} onChange={set('fc')} />
-            <Num  label={<>fy<CodeHint spec={DEV_HINTS.fy} /></>}
-              unit="MPa" value={f.fy} onChange={set('fy')} />
-            <Pick label={<>Lightweight concrete λ<CodeHint spec={DEV_HINTS.lambda} /></>}
-              value={f.lambda} onChange={set('lambda')}
-              options={[
-                ['1', '1.0 — Normalweight'],
-                ['0.85', '0.85 — Sand-lightweight'],
-                ['0.75', '0.75 — All-lightweight'],
-              ]} />
-          </Card>
-
-          <Card title="Modification Factors §25.4.2.4">
-            <Pick label={<>Bar position<CodeHint spec={DEV_HINTS.psiT} /></>}
-              value={f.topBar ? 'top' : 'other'}
-              onChange={(v) => set('topBar')(v === 'top')}
-              options={[['other', 'Other bars (ψt = 1.0)'], ['top', 'Top bar >300 mm (ψt = 1.3)']]} />
-            <Pick label={<>Epoxy coating<CodeHint spec={DEV_HINTS.psiE} /></>}
-              value={f.epoxy} onChange={set('epoxy')} options={EPOXY_OPTS} />
-          </Card>
-
-          <Card title="Confinement §25.4.2.3">
+    <WorkspacePage title="Development and Splice Lengths" badges={['Concrete', 'ACI 318-14 §25.4–25.5 · NSCP 2015']}
+      intro="Straight development in tension and compression, the standard hook, and lap splices for one bar. These are REQUIRED lengths, not a check — except the hook-fit check, which asks whether the member the hook anchors into has room for ℓdh."
+      report={report}
+      inputs={<>
+        <InputGroup title="Bar and concrete">
+          <Pick label={<>Bar diameter db<CodeHint spec={DEV_HINTS.db} /></>}
+            value={f.db} onChange={set('db')} options={BAR_SIZES} />
+          <Num label={<>f′c<CodeHint spec={DEV_HINTS.fc} /></>} unit="MPa" value={f.fc} onChange={set('fc')} />
+          <Num label={<>fy<CodeHint spec={DEV_HINTS.fy} /></>} unit="MPa" value={f.fy} onChange={set('fy')} />
+          <Pick label={<>Lightweight λ<CodeHint spec={DEV_HINTS.lambda} /></>}
+            value={f.lambda} onChange={set('lambda')}
+            options={[['1', '1.0 normalweight'], ['0.85', '0.85 sand-lightweight'], ['0.75', '0.75 all-lightweight']]} />
+        </InputGroup>
+        <InputGroup title="Modification factors §25.4.2.4">
+          <Pick label={<>Bar position<CodeHint spec={DEV_HINTS.psiT} /></>}
+            value={f.topBar ? 'top' : 'other'} onChange={(v) => set('topBar')(v === 'top')}
+            options={[['other', 'Other bars (ψt 1.0)'], ['top', 'Top bar > 300 mm (ψt 1.3)']]} />
+          <Pick label={<>Epoxy coating<CodeHint spec={DEV_HINTS.psiE} /></>}
+            value={f.epoxy} onChange={set('epoxy')} options={EPOXY_OPTS} />
+          <div className={full}>
             <Num label={<>(cb + Ktr) / db<CodeHint spec={DEV_HINTS.confine} /></>}
-              value={f.cbKtr_db} onChange={set('cbKtr_db')} step="0.1" />
-            <div className="col-span-full text-xs text-muted -mt-2">
-              cb = smaller of cover-to-bar-CL or half cc spacing · Ktr = 40Atr/(s·n) · cap 2.5.
-              Use 1.5 when in doubt (conservative), 2.5 with adequate cover and ties.
-            </div>
-          </Card>
-
-          <Card title={<>Standard Hook §25.4.3<CodeHint spec={DEV_HINTS.hook} /></>}>
-            <Pick label="Side / tail cover ψc" value={f.hookCover ? 'yes' : 'no'}
-              onChange={(v) => set('hookCover')(v === 'yes')}
-              options={[['no', 'Not satisfied (ψc = 1.0)'], ['yes', 'Cover ≥ 65/50 mm (ψc = 0.7)']]} />
-            <Pick label="Confining ties ψr" value={f.hookTies ? 'yes' : 'no'}
-              onChange={(v) => set('hookTies')(v === 'yes')}
-              options={[['no', 'Not satisfied (ψr = 1.0)'], ['yes', 'Ties at s ≤ 3db (ψr = 0.8)']]} />
-            <div className="col-span-full -mt-2 text-xs text-muted">
-              ψc and ψr apply to ⌀36 and smaller only. ψt does NOT apply to hooks.
-            </div>
-          </Card>
-
-          <Card title="Does the Hook Fit? — the member it anchors into">
-            <Pick label="Check the anchoring member" value={f.checkFit ? 'yes' : 'no'}
+              value={f.cbKtr_db} onChange={set('cbKtr_db')} step="0.1"
+              hint="capped at 2.5; 1.5 when in doubt" />
+          </div>
+        </InputGroup>
+        <InputGroup title="Standard hook §25.4.3" hint="ψc and ψr apply to ⌀36 and smaller; ψt does not apply to hooks.">
+          <Pick label={<>Side / tail cover ψc<CodeHint spec={DEV_HINTS.hook} /></>} value={f.hookCover ? 'yes' : 'no'}
+            onChange={(v) => set('hookCover')(v === 'yes')}
+            options={[['no', 'Not satisfied (1.0)'], ['yes', '≥ 65 / 50 mm (0.7)']]} />
+          <Pick label="Confining ties ψr" value={f.hookTies ? 'yes' : 'no'}
+            onChange={(v) => set('hookTies')(v === 'yes')}
+            options={[['no', 'Not satisfied (1.0)'], ['yes', 'Ties at s ≤ 3db (0.8)']]} />
+        </InputGroup>
+        <InputGroup title="Does the hook fit?" hint={f.checkFit ? 'The hook turns down behind the far-face bar, so the embedment available is depth − cover − tie − bar.' : undefined}>
+          <div className={full}>
+            <Pick label="Anchoring member" value={f.checkFit ? 'yes' : 'no'}
               onChange={(v) => set('checkFit')(v === 'yes')}
               options={[['no', 'Not checked'], ['yes', 'Check ℓdh against the member']]} />
-            {f.checkFit && (<>
-              <Num label="Member depth ∥ bar" unit="mm" value={f.memberDepth} onChange={set('memberDepth')} />
-              <Num label="Member cover" unit="mm" value={f.memberCover} onChange={set('memberCover')} />
-              <Num label="Tie / hoop ⌀" unit="mm" value={f.memberTieDia} onChange={set('memberTieDia')} />
-              <Num label="Far-face bar ⌀" unit="mm" value={f.memberBarDia} onChange={set('memberBarDia')} />
-              <div className="col-span-full -mt-2 text-xs text-muted">
-                The hook turns down BEHIND the far-face longitudinal bar, so the embedment
-                available is depth − cover − tie ⌀ − bar ⌀, not the member depth.
-              </div>
-            </>)}
-          </Card>
-        </div>
-
-        {/* ── RESULTS ── */}
-        {r ? (
-          <div className="flex flex-col gap-6">
-            <ResultCard title="Modification Factors">
-              <Row label="ψt — casting position" value={f2(r.psi_t)} />
-              <Row label="ψe — epoxy coating"    value={f2(r.psi_e)} />
-              <Row label="ψs — bar size"         value={f2(r.psi_s)} />
-              <Row label="ψt × ψe (≤ 1.7)"       value={f2(r.psi_te)}
-                alert={r.psi_t * r.psi_e > 1.7} />
-              <Row label="(cb+Ktr)/db used"      value={f2(r.confine)}
-                sub={r.confine < f.cbKtr_db ? 'capped at 2.5' : ''} />
-              <Row label="√f'c used" value={f2(r.sqrtFc)}
-                sub={r.sqrtFcCapped ? '§25.4.1.4 cap 8.3 applied' : ''}
-                alert={r.sqrtFcCapped} />
-            </ResultCard>
-
-            <ResultCard title="Development Length — Tension §25.4.2.3">
-              <Row label="ℓd (formula)" value={`${f0(r.ld_raw)} mm`} />
-              <Row label="ℓd (adopted ≥ 300 mm)" value={`${f0(r.ld)} mm`}
-                sub={`${f1(r.ld / parseFloat(f.db))} db`} />
-            </ResultCard>
-
-            <ResultCard title="Standard Hook — Tension §25.4.3">
-              <Row label="ψc — cover" value={f2(r.psi_c)} />
-              <Row label="ψr — confining ties" value={f2(r.psi_r)} />
-              <Row label="ℓdh (formula)" value={`${f0(r.ldh_raw)} mm`} />
-              <Row label="ℓdh (adopted)" value={`${f0(r.ldh)} mm`}
-                sub={`${f1(r.ldh / parseFloat(f.db))} db · floor max(8db, 150)`} />
-              <Row label="Tail 12db (not part of ℓdh)" value={`${f0(r.hookTail)} mm`} />
-              <Row label="Min inside bend ⌀" value={`${f0(r.hookBendDia)} mm`} />
-            </ResultCard>
-
-            {fit && (
-              <ResultCard title="Hook Fit — is there room for it?">
-                <Row label="Embedment available" value={`${f0(fit.avail)} mm`}
-                  sub={`${f.memberDepth} − ${f.memberCover} cover − ${f.memberTieDia} tie − ${f.memberBarDia} bar`} />
-                <Row label="ℓdh required" value={`${f0(r.ldh)} mm`} />
-                <Row label={fit.fits ? 'Fits' : 'DOES NOT FIT'}
-                  value={fit.fits ? `${f0(fit.avail - r.ldh)} mm spare` : `${f0(fit.shortfall)} mm short`}
-                  alert={!fit.fits} />
-                <Row label="Depth that would develop it" value={`${f0(fit.depthNeeded)} mm`} />
-                {!fit.fits && (
-                  <div className="mt-2 rounded-md bg-fail-tint p-2 text-[11.5px] leading-relaxed text-fail">
-                    Deepen the member to {f0(fit.depthNeeded)} mm, use a smaller bar, raise f'c,
-                    earn ψc/ψr (§25.4.3.2), or anchor with a headed bar or mechanical device
-                    (§25.4.4). <strong>Lengthening the tail does not help</strong> — ℓdh is
-                    measured to the outside of the bend, and the 12db tail runs across it.
-                  </div>
-                )}
-              </ResultCard>
-            )}
-
-            <ResultCard title="Development Length — Compression §25.4.9.2">
-              <Row label="ℓdc" value={`${f0(r.ldc)} mm`}
-                sub={`${f1(r.ldc / parseFloat(f.db))} db`} />
-            </ResultCard>
-
-            <ResultCard title="Tension Splices §25.5.2">
-              <Row label="Class A  (1.0 × ℓd)" value={`${f0(r.ls_A)} mm`}
-                sub="≤ 50% spliced, As ≥ 2·As,req" />
-              <Row label="Class B  (1.3 × ℓd)" value={`${f0(r.ls_B)} mm`}
-                sub="All other cases" />
-            </ResultCard>
-
-            <ResultCard title="Compression Splice §25.5.5">
-              <Row label="ℓsc" value={`${f0(r.lsc)} mm`}
-                sub={parseFloat(f.fc as unknown as string) < 21 ? '×4/3 low-f\'c applied' : ''} />
-            </ResultCard>
           </div>
-        ) : (
-          <p className="self-start rounded-xl border border-hairline bg-sheet p-6 text-sm text-muted">
-            Fill in all inputs to see results.
-          </p>
-        )}
-      </div>
-      {/* What the four lengths are measured BETWEEN — the part the numbers
-          on their own cannot carry. */}
-      {r && (
-        <div className="mt-6 rounded-lg border border-hairline bg-sheet p-4 print-avoid-break">
-          <h2 className="mb-3 text-[13.5px] font-bold text-ink">
-            Detail — where each length is measured from
-          </h2>
-          <DevLengthDetail
-            db={parseFloat(f.db)} ld={r.ld} ldh={r.ldh} ls_B={r.ls_B}
-            hookTail={r.hookTail} hookBendDia={r.hookBendDia}
-          />
-        </div>
-      )}
-
-      {/* The step-by-step already existed and only ever reached the PDF. */}
-      {solution && solution.length > 0 && (
-        <div className="mt-5">
-          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
-        </div>
-      )}
-    </div>
-    </div>
+          {f.checkFit && (<>
+            <Num label="Depth ∥ bar" unit="mm" value={f.memberDepth} onChange={set('memberDepth')} />
+            <Num label="Cover" unit="mm" value={f.memberCover} onChange={set('memberCover')} />
+            <Num label="Tie / hoop ⌀" unit="mm" value={f.memberTieDia} onChange={set('memberTieDia')} />
+            <Num label="Far-face bar ⌀" unit="mm" value={f.memberBarDia} onChange={set('memberBarDia')} />
+          </>)}
+        </InputGroup>
+      </>}
+      checks={r ? <>
+        <CheckCard title="Tension development" basis="§25.4.2.3, ≥ 300 mm" status="info"
+          value={f0(r.ld)} unit="mm"
+          pairs={[{ label: 'In bar ⌀', value: `${f1(r.ld / db)} db` }, { label: 'Class B lap', value: `${f0(r.ls_B)} mm` }]} />
+        <CheckCard title="Standard hook" basis="§25.4.3" status={fit ? (fit.fits ? 'pass' : 'fail') : 'info'}
+          pillLabel={fit ? undefined : 'NOT CHECKED'} value={f0(r.ldh)} unit="mm"
+          ratio={fit && fit.avail > 0 ? r.ldh / fit.avail : undefined} ratioLabel="ℓdh ÷ available"
+          pairs={fit
+            ? [{ label: 'Available', value: `${f0(fit.avail)} mm` }, { label: fit.fits ? 'Spare' : 'Short', value: `${f0(fit.fits ? fit.avail - r.ldh : fit.shortfall)} mm` }]
+            : [{ label: 'Tail', value: `${f0(r.hookTail)} mm` }, { label: 'Bend ⌀', value: `${f0(r.hookBendDia)} mm` }]} />
+        <CheckCard title="Compression" basis="§25.4.9.2 · §25.5.5" status="info"
+          value={f0(r.ldc)} unit="mm"
+          pairs={[{ label: 'Lap ℓsc', value: `${f0(r.lsc)} mm` }, { label: 'In bar ⌀', value: `${f1(r.ldc / db)} db` }]} />
+      </> : <p className="text-sm text-muted">Fill in all inputs to see results.</p>}
+      summary={[
+        { label: 'Bar', value: `⌀${f.db}, fy ${f.fy} MPa` },
+        { label: 'Concrete', value: `f′c ${f.fc} MPa, λ ${f.lambda}` },
+        { label: 'Factors', value: `${f.topBar ? 'top bar' : 'other bar'}, ${f.epoxy}, (cb+Ktr)/db ${f2(f.cbKtr_db)}` },
+      ]}
+      drawing={r ? { title: 'Where each length is measured', node: <div data-pdf-drawing>
+        <DevLengthDetail db={db} ld={r.ld} ldh={r.ldh} ls_B={r.ls_B} hookTail={r.hookTail} hookBendDia={r.hookBendDia} />
+      </div> } : undefined}
+      resultsCaption={fit && !fit.fits ? `The hook is ${f0(fit.shortfall)} mm short. Deepen the member to ${f0(fit.depthNeeded)} mm, use a smaller bar, raise f′c, earn ψc / ψr (§25.4.3.2), or anchor with a headed bar (§25.4.4). Lengthening the tail does not help: ℓdh is measured to the outside of the bend.` : undefined}
+      results={r ? [
+        { check: 'ψt · ψe · ψs', basis: `ψt·ψe ≤ 1.7 → ${f2(r.psi_te)}`, demand: `${f2(r.psi_t)} · ${f2(r.psi_e)} · ${f2(r.psi_s)}`, status: 'info' as const },
+        { check: 'Confinement (cb+Ktr)/db', basis: r.confine < f.cbKtr_db ? 'capped at 2.5' : '§25.4.2.3', demand: f2(r.confine), status: 'info' as const },
+        { check: '√f′c used', basis: r.sqrtFcCapped ? '§25.4.1.4 cap 8.3 applied' : '§25.4.1.4', demand: `${f2(r.sqrtFc)} MPa`, status: r.sqrtFcCapped ? 'warn' as const : 'info' as const },
+        { check: 'ℓd tension', basis: `formula ${f0(r.ld_raw)} mm, ≥ 300`, demand: `${f0(r.ld)} mm`, status: 'info' as const },
+        { check: 'ℓdh hook', basis: `ψc ${f2(r.psi_c)} · ψr ${f2(r.psi_r)}; ≥ max(8db, 150)`, demand: `${f0(r.ldh)} mm`, limit: fit ? `${f0(fit.avail)} mm available` : undefined, ratio: fit && fit.avail > 0 ? r.ldh / fit.avail : undefined, status: fit ? (fit.fits ? 'pass' as const : 'fail' as const) : 'info' as const },
+        { check: 'Hook tail · bend ⌀', basis: '12db tail, not part of ℓdh', demand: `${f0(r.hookTail)} · ${f0(r.hookBendDia)} mm`, status: 'info' as const },
+        { check: 'ℓdc compression', basis: '§25.4.9.2', demand: `${f0(r.ldc)} mm`, status: 'info' as const },
+        { check: 'Class A splice', basis: '1.0ℓd · ≤ 50% spliced, As ≥ 2As,req', demand: `${f0(r.ls_A)} mm`, status: 'info' as const },
+        { check: 'Class B splice', basis: '1.3ℓd · all other cases', demand: `${f0(r.ls_B)} mm`, status: 'info' as const },
+        { check: 'Compression splice', basis: f.fc < 21 ? '§25.5.5, ×4/3 for f′c < 21' : '§25.5.5', demand: `${f0(r.lsc)} mm`, status: 'info' as const },
+      ] : []}
+      steps={solution ?? []}
+      references={[
+        { topic: 'Development in tension and compression', basis: 'detailed equation; ψ factors', source: 'ACI 318-14 §25.4.2, §25.4.9 · NSCP 2015 §425.4' },
+        { topic: 'Standard hooks', basis: 'ℓdh, ψc, ψr; hook geometry', source: 'ACI 318-14 §25.4.3, Table 25.3.1' },
+        { topic: 'Lap splices', basis: 'Class A / B tension; compression', source: 'ACI 318-14 §25.5.2, §25.5.5' },
+      ]}
+    />
   )
 }

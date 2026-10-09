@@ -3,11 +3,10 @@ import 'katex/dist/katex.min.css'
 import {
   designMix, type MixInput, type MixResult, type MaxAgg, type SlumpBand, type Exposure,
 } from '../engine/mixDesign'
-import { Card, Num, Pick, ResultCard, Row } from '../components/qty'
-import { DrawingCard } from '../components/calc'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
 import type { SolutionStep } from '../lib/solution'
 import { INK, MUTED, f2, f3 } from '../lib/influenceStyle'
 
@@ -118,100 +117,90 @@ export default function MixDesign() {
     },
   ] : []
 
+  const report = res ? {
+    docCode: 'C-MX',
+    ok: true,
+    governing: `w/c ${f3(res.wc)} · ${f2(res.cement)} kg cement per m³ · ${f2(res.airPct)}% air`,
+    stats: [
+      { label: 'Cement', value: f2(res.cement), unit: 'kg/m³' },
+      { label: 'Water to add', value: f2(res.batchWater), unit: 'kg/m³' },
+      { label: 'Bags (40 kg)', value: String(res.totals.bags40), unit: `for ${f2(volume)} m³` },
+    ],
+    data: [
+      ["Target mean strength f'cr", `${f2(fcr)} MPa`],
+      ['Slump band', `${slumpBand} mm`],
+      ['Max aggregate', `${f2(maxAgg)} mm`],
+      ['Exposure', exposure],
+      ['Fineness modulus', f2(FM)],
+      ['DRUW coarse', `${f2(druwc)} kg/m³`],
+      ['SG coarse / fine', `${f2(sgCA)} / ${f2(sgFA)}`],
+      ['Moisture CA / FA', `${f2(mcCA)} / ${f2(mcFA)} %`],
+      ['Absorption CA / FA', `${f2(absCA)} / ${f2(absFA)} %`],
+      ['Batch volume', `${f2(volume)} m³`],
+    ] as [string, string][],
+    steps,
+  } : undefined
+
   return (
-    <div>
-      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <ReportControls title="Concrete Mix Design Report" badges={['ACI 211.1']} />
-        <p className="mt-2 max-w-3xl text-sm text-muted">
-          The absolute-volume batch design: strength to w/c, slump table to water and air, rock from
-          the dry-rodded table, sand fills the remainder — then moisture corrections so the stockpile
-          weights actually deliver the design water.
-        </p>
-
-        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-          <div className="space-y-5">
-            <Card title="Design targets">
-              <div className="sm:col-span-2 lg:col-span-3">
-                <button type="button" onClick={loadSample}
-                  className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                  Load the sample — 28 MPa structural mix, 25 mm rock
-                </button>
-              </div>
-              <Num label="Target mean strength f'cr" unit="MPa" value={fcr} onChange={setFcr} min={14} max={45} step="1" />
-              <Pick label="Slump band" value={slumpBand} onChange={(v) => setSlumpBand(v as SlumpBand)}
-                options={[['25-50', '25–50 mm — vibrated'],
-                  ['75-100', '75–100 mm — normal reinforced work'],
-                  ['125-150', '125–150 mm — high flow']]} />
-              <Pick label="Max aggregate size" value={String(maxAgg)} onChange={(v) => setMaxAgg(Number(v))}
-                options={[['9.5', '9.5 mm'], ['12.5', '12.5 mm'], ['19', '19 mm'], ['25', '25 mm'],
-                  ['37.5', '37.5 mm'], ['50', '50 mm']]} />
-              <Pick label="Exposure" value={exposure} onChange={(v) => setExposure(v as Exposure)}
-                options={[['mild', 'Mild — entrapped air only'],
-                  ['moderate', 'Moderate — air-entrained'],
-                  ['severe', 'Severe — air-entrained, more air']]} />
-            </Card>
-
-            <Card title="Aggregates">
-              <Num label="Fineness modulus FM" value={FM} onChange={setFM} min={2.3} max={3.1} step="0.05" />
-              <Num label="DRUW of coarse agg." unit="kg/m³" value={druwc} onChange={setDruwc} min={1300} max={1750} step="10" />
-              <Num label="SG coarse (SSD)" value={sgCA} onChange={setSgCA} min={2.1} max={3.1} step="0.01" />
-              <Num label="SG fine (SSD)" value={sgFA} onChange={setSgFA} min={2.1} max={3.1} step="0.01" />
-            </Card>
-
-            <Card title="Moisture (percent)" hint="stockpile moisture and absorption">
-              <Num label="CA moisture" unit="%" value={mcCA} onChange={setMcCA} min={0} max={10} step="0.1" />
-              <Num label="CA absorption" unit="%" value={absCA} onChange={setAbsCA} min={0} max={10} step="0.1" />
-              <Num label="FA moisture" unit="%" value={mcFA} onChange={setMcFA} min={0} max={12} step="0.1" />
-              <Num label="FA absorption" unit="%" value={absFA} onChange={setAbsFA} min={0} max={12} step="0.1" />
-              <Num label="Batch volume" unit="m³" value={volume} onChange={setVolume} min={0.1} max={100} step="0.5" />
-            </Card>
-          </div>
-
-          <div className="space-y-5">
-            {res ? (
-              <>
-                <ResultCard title="Batch weights — per m³ (wet stockpile)">
-                  <Row label="Cement" value={`${f2(res.cement)} kg`} sub={`w/c = ${f3(res.wc)}`} />
-                  <Row label="Water to add" value={`${f2(res.batchWater)} kg`} sub={`design ${f2(res.water)} kg minus ${f2(res.freeWater)} kg free moisture`} />
-                  <Row label="Coarse aggregate" value={`${f2(res.batchCA)} kg`} sub={`dry ${f2(res.caDry)} kg at ${f3(mcCA / 100)} moisture`} />
-                  <Row label="Fine aggregate" value={`${f2(res.batchFA)} kg`} sub={`dry ${f2(res.faDry)} kg at ${f3(mcFA / 100)} moisture`} />
-                  <Row label="Air content" value={`${f2(res.airPct)}%`} sub={res.airEntrained ? 'entrained (exposure)' : 'entrapped only'} />
-                </ResultCard>
-
-                <ResultCard title={`Totals for ${f2(volume)} m³`}>
-                  <Row label="Cement" value={`${f2(res.totals.cement)} kg`} sub={`${res.totals.bags40} bags @ 40 kg`} />
-                  <Row label="Water" value={`${f2(res.totals.water)} kg`} sub={`${f2(res.totals.water)} litres`} />
-                  <Row label="Coarse" value={`${f2(res.totals.ca)} kg`} sub={`≈ ${f2(res.totals.ca / 1000)} m³ loose`} />
-                  <Row label="Fine" value={`${f2(res.totals.fa)} kg`} sub={`≈ ${f2(res.totals.fa / 1000)} m³ loose`} />
-                </ResultCard>
-
-                {res.warnings.length > 0 && (
-                  <ResultCard title="Notes">
-                    <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
-                      {res.warnings.map((w) => <li key={w}>{w}</li>)}
-                    </ul>
-                  </ResultCard>
-                )}
-
-                <DrawingCard title="Absolute volume budget" meta={`1 m³ of concrete, by ingredient (SG cement 3.15)`}>
-                  <VolumeBars res={res} />
-                </DrawingCard>
-
-                <WorkedSolution steps={steps} title="Mix design — step-by-step" />
-              </>
-            ) : (
-              <ResultCard title="Check the inputs">
-                <p className="text-sm text-fail">
-                  f'cr must sit in 14–45 MPa, FM in 2.3–3.1, DRUW in 1200–1800 kg/m³, and the
-                  specific gravities in 2.0–3.2. The 150 mm water table only covers the two smaller
-                  slump bands.
-                </p>
-              </ResultCard>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    <WorkspacePage title="Concrete Mix Design" badges={['Materials', 'ACI 211.1']}
+      intro="The absolute-volume batch design: strength gives w/c, the slump table gives water and air, rock comes from the dry-rodded table and sand fills the remainder — then moisture corrections, so the wet stockpile weights still deliver the design water."
+      report={report}
+      actions={<button type="button" onClick={loadSample}
+        className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
+        Load the 28 MPa sample
+      </button>}
+      inputs={<>
+        <InputGroup title="Design targets">
+          <Num label="Target mean f′cr" unit="MPa" value={fcr} onChange={setFcr} min={14} max={45} step="1" />
+          <Pick label="Slump band" value={slumpBand} onChange={(v) => setSlumpBand(v as SlumpBand)}
+            options={[['25-50', '25–50 mm vibrated'], ['75-100', '75–100 mm normal'], ['125-150', '125–150 mm high flow']]} />
+          <Pick label="Max aggregate" value={String(maxAgg)} onChange={(v) => setMaxAgg(Number(v))}
+            options={[['9.5', '9.5 mm'], ['12.5', '12.5 mm'], ['19', '19 mm'], ['25', '25 mm'], ['37.5', '37.5 mm'], ['50', '50 mm']]} />
+          <Pick label="Exposure" value={exposure} onChange={(v) => setExposure(v as Exposure)}
+            options={[['mild', 'Mild — entrapped air'], ['moderate', 'Moderate — air-entrained'], ['severe', 'Severe — more air']]} />
+        </InputGroup>
+        <InputGroup title="Aggregates">
+          <Num label="Fineness modulus" value={FM} onChange={setFM} min={2.3} max={3.1} step="0.05" />
+          <Num label="DRUW coarse" unit="kg/m³" value={druwc} onChange={setDruwc} min={1300} max={1750} step="10" />
+          <Num label="SG coarse (SSD)" value={sgCA} onChange={setSgCA} min={2.1} max={3.1} step="0.01" />
+          <Num label="SG fine (SSD)" value={sgFA} onChange={setSgFA} min={2.1} max={3.1} step="0.01" />
+        </InputGroup>
+        <InputGroup title="Moisture and batch" hint="stockpile moisture and absorption, percent">
+          <Num label="CA moisture" unit="%" value={mcCA} onChange={setMcCA} min={0} max={10} step="0.1" />
+          <Num label="CA absorption" unit="%" value={absCA} onChange={setAbsCA} min={0} max={10} step="0.1" />
+          <Num label="FA moisture" unit="%" value={mcFA} onChange={setMcFA} min={0} max={12} step="0.1" />
+          <Num label="FA absorption" unit="%" value={absFA} onChange={setAbsFA} min={0} max={12} step="0.1" />
+          <Num label="Batch volume" unit="m³" value={volume} onChange={setVolume} min={0.1} max={100} step="0.5" />
+        </InputGroup>
+      </>}
+      checks={res ? <>
+        <CheckCard title="Water–cement ratio" basis="Table 6.3.4(a)" status="info" value={f3(res.wc)}
+          pairs={[{ label: 'Air', value: `${f2(res.airPct)}% ${res.airEntrained ? 'entrained' : 'entrapped'}` }, { label: 'Water', value: `${f2(res.water)} kg/m³` }]} />
+        <CheckCard title="Cement" basis="c = w ÷ (w/c)" status="info" value={f2(res.cement)} unit="kg/m³"
+          pairs={[{ label: `For ${f2(volume)} m³`, value: `${f2(res.totals.cement)} kg` }, { label: 'Bags', value: `${res.totals.bags40} × 40 kg` }]} />
+        <CheckCard title="Fresh density" basis="sum of the batch" status="info" value={f2(res.freshDensity)} unit="kg/m³"
+          pairs={[{ label: 'ACI estimate', value: `${res.densityEstimate} kg/m³` }]} />
+      </> : <p className="text-sm text-fail">f′cr must sit in 14–45 MPa, FM in 2.3–3.1, DRUW in 1200–1800 kg/m³ and the specific gravities in 2.0–3.2. The 150 mm slump band is not tabulated for every aggregate size.</p>}
+      summary={[
+        { label: 'Target', value: `f′cr ${f2(fcr)} MPa, slump ${slumpBand} mm, ${exposure}` },
+        { label: 'Aggregates', value: `${f2(maxAgg)} mm max, FM ${f2(FM)}, DRUW ${f2(druwc)} kg/m³` },
+        { label: 'Batch', value: `${f2(volume)} m³` },
+      ]}
+      drawing={res ? { title: 'Absolute volume budget', node: <div data-pdf-drawing><VolumeBars res={res} /></div> } : undefined}
+      resultsCaption={res && res.warnings.length > 0 ? res.warnings.join(' ') : undefined}
+      results={res ? [
+        { check: 'Cement', basis: `w/c ${f3(res.wc)}`, demand: `${f2(res.cement)} kg/m³`, limit: `${f2(res.totals.cement)} kg total`, status: 'info' as const },
+        { check: 'Water to add', basis: `design ${f2(res.water)} − free ${f2(res.freeWater)}`, demand: `${f2(res.batchWater)} kg/m³`, limit: `${f2(res.totals.water)} L total`, status: 'info' as const },
+        { check: 'Coarse aggregate (wet)', basis: `dry ${f2(res.caDry)} at ${f2(mcCA)}%`, demand: `${f2(res.batchCA)} kg/m³`, limit: `${f2(res.totals.ca)} kg total`, status: 'info' as const },
+        { check: 'Fine aggregate (wet)', basis: `dry ${f2(res.faDry)} at ${f2(mcFA)}%`, demand: `${f2(res.batchFA)} kg/m³`, limit: `${f2(res.totals.fa)} kg total`, status: 'info' as const },
+        { check: 'Air', basis: res.airEntrained ? 'entrained (exposure)' : 'entrapped only', demand: `${f2(res.airPct)} %`, status: 'info' as const },
+      ] : []}
+      steps={steps}
+      references={[
+        { topic: 'Proportioning', basis: 'absolute-volume method, Tables 6.3.3–6.3.6', source: 'ACI 211.1-91 (Reapproved 2009)' },
+        { topic: 'Moisture correction', basis: 'stockpile moisture less absorption', source: 'ACI 211.1 §6.3.9' },
+      ]}
+    />
   )
 }
 
@@ -220,7 +209,7 @@ export default function MixDesign() {
 function VolumeBars({ res }: { res: MixResult }) {
   const W = 640
   const H = 268
-  const x0 = 190
+  const x0 = 30
   const x1 = W - 60
   const y0 = 42
   const h = 64
@@ -230,7 +219,8 @@ function VolumeBars({ res }: { res: MixResult }) {
     { label: 'Fine agg.', v: res.vFA, fill: 'rgba(15,76,146,0.55)' },
     { label: 'Cement', v: res.vCement, fill: 'rgba(15,76,146,0.3)' },
     { label: 'Water', v: res.vWater, fill: 'rgba(15,76,146,0.16)' },
-    { label: 'Air', v: res.vAir, fill: 'repeating-linear-gradient(45deg,transparent 0 3px,rgba(15,76,146,0.25) 3px 5px)' },
+    // an SVG fill cannot take a CSS gradient — the hatch is a <pattern>
+    { label: 'Air', v: res.vAir, fill: 'url(#mix-air)' },
   ]
 
   let cursor = x0
@@ -246,6 +236,11 @@ function VolumeBars({ res }: { res: MixResult }) {
   return (
     <DrawingFrame label="Absolute volume budget of one cubic metre">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Absolute volume budget">
+        <defs>
+          <pattern id="mix-air" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="5" stroke="rgba(15,76,146,0.45)" strokeWidth="2" />
+          </pattern>
+        </defs>
         {/* the bar */}
         <rect x={x0 - 1} y={y0 - 1} width={x1 - x0 + 2} height={h + 2} fill="none" stroke={INK} strokeWidth="1.4" />
         {rects.map((r, i) => (

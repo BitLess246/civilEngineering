@@ -1,15 +1,13 @@
 import { useState } from 'react'
-import 'katex/dist/katex.min.css'
 import {
   scsRunoffSuite, type RunoffSuite, type CnPart,
 } from '../engine/runoffHydrology'
-import { Card, Num, ResultCard, Row } from '../components/qty'
-import { DrawingCard } from '../components/calc'
-import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { Num } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { TriHydrograph } from '../components/waterCharts'
 import type { SolutionStep } from '../lib/solution'
-import { INK, MUTED, f2, f3 } from '../lib/influenceStyle'
+import { f2, f3 } from '../lib/influenceStyle'
 
 // SCS Runoff — the NRCS curve-number chain: composite CN from land covers,
 // retention S and initial abstraction Ia, runoff depth Q from the storm P,
@@ -75,150 +73,74 @@ export default function Runoff() {
       ],
     },
     ...s.runoff.notes.map((nt) => ({ title: 'Note', lines: [{ text: nt }] })),
-  ] : []
+  ] : [{ title: 'Check the inputs', lines: [{ text: 'Keep each cover area positive and its CN between 30 and 100; give a positive hydraulic length and slope.' }] }]
 
+  const noRunoff = !!s && s.runoff.Q <= 0
   return (
-    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <ReportControls title="SCS Runoff Report" badges={[s ? `CN ${f2(s.composite.cn)}` : 'NRCS CN']} />
-      <p className="mt-2 max-w-3xl text-sm text-muted">
-        The NRCS curve-number chain for a design storm: an area-weighted composite CN,
-        retention S and initial abstraction Ia, the runoff depth and its volume, the
-        TR-55 lag-method time of concentration, and the triangular unit-hydrograph
-        peak discharge for the catchment.
-      </p>
-
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <Card title="Catchment">
-            <div className="sm:col-span-2 lg:col-span-3">
-              <button type="button"
-                onClick={() => { setParts(SAMPLE.map((p) => ({ ...p }))); setP(120); setL(500); setSlopePct(3); setDtMin(10) }}
-                className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                Load the sample — 50 ha · CN 81 · 120 mm storm
-              </button>
-            </div>
-            <Num label="Storm depth P" unit="mm" value={P} onChange={setP} min={0} max={800} step="5" />
-            <Num label="Hydraulic length L" unit="m" value={L} onChange={setL} min={20} max={20000} step="10" />
-            <Num label="Watershed slope Y" unit="%" value={slopePct} onChange={setSlopePct} min={0.1} max={50} step="0.1" />
-            <Num label="Computation interval Δt" unit="min" value={dtMin} onChange={setDtMin} min={2} max={60} step="1" />
-          </Card>
-
-          <Card title="Land covers (area · curve number)">
+    <WorkspacePage title="SCS Runoff" badges={['Hydrology', s ? `CN ${f2(s.composite.cn)}` : 'NRCS curve number']}
+      intro="The NRCS curve-number chain for a design storm: a composite CN, the retention S and initial abstraction Ia, the runoff depth and its volume, the TR-55 lag-method time of concentration, and the triangular unit-hydrograph peak."
+      inputs={<>
+        <InputGroup title="Land covers" hint="Area in hectares, curve number 30–100.">
+          <div className="col-span-2 space-y-1.5">
             {parts.map((p, i) => (
-              <div key={i} className="grid grid-cols-[minmax(0,1fr)_84px_74px_32px] items-center gap-2 sm:col-span-2 lg:col-span-3">
-                <input
-                  value={p.name}
-                  onChange={(e) => setPart(i, { name: e.target.value })}
-                  className="w-full rounded-md border border-field-line bg-surface px-2 py-1.5 text-sm"
-                  aria-label={`Cover ${i + 1} name`}
-                />
-                <input
-                  type="number" value={p.area} min={0.1} step={1}
-                  onChange={(e) => setPart(i, { area: Number(e.target.value) })}
-                  className="w-full rounded-md border border-field-line bg-surface px-2 py-1.5 text-sm"
-                  aria-label={`Cover ${i + 1} area (ha)`}
-                />
-                <input
-                  type="number" value={p.cn} min={30} max={100} step={1}
-                  onChange={(e) => setPart(i, { cn: Number(e.target.value) })}
-                  className="w-full rounded-md border border-field-line bg-surface px-2 py-1.5 text-sm"
-                  aria-label={`Cover ${i + 1} CN`}
-                />
-                <button type="button" aria-label={`Remove cover ${i + 1}`}
-                  onClick={() => setParts((ps) => ps.filter((_, j) => j !== i))}
-                  className="rounded-md border border-field-line px-1 py-1 text-xs text-muted hover:text-fail">
-                  ✕
-                </button>
+              <div key={i} className="space-y-1 rounded-md border border-hairline-2 p-2">
+                <div className="flex items-center gap-2">
+                  <input value={p.name} onChange={(e) => setPart(i, { name: e.target.value })} aria-label={`Cover ${i + 1} name`} className="min-w-0 flex-1 text-[13px]" />
+                  <button type="button" aria-label={`Remove cover ${i + 1}`} onClick={() => setParts((ps) => ps.filter((_, j) => j !== i))} disabled={parts.length <= 1}
+                    className="text-muted hover:text-fail disabled:opacity-30">✕</button>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Num label="Area" unit="ha" value={p.area} onChange={(v) => setPart(i, { area: v })} min={0.1} step="1" />
+                  <Num label="CN" value={p.cn} onChange={(v) => setPart(i, { cn: v })} min={30} max={100} step="1" />
+                </div>
               </div>
             ))}
-            <div className="flex gap-2 sm:col-span-2 lg:col-span-3">
-              <button type="button"
-                onClick={() => setParts((ps) => [...ps, { name: 'New cover', area: 10, cn: 80 }])}
-                className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                + Add cover
-              </button>
-              <span className="self-center text-xs text-muted">area in hectares · CN 30–100</span>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setParts((ps) => [...ps, { name: 'New cover', area: 10, cn: 80 }])}
+                className="rounded-md border border-field-line px-2 py-0.5 text-[11px] font-semibold text-brand hover:bg-brand-tint">+ Add cover</button>
+              <button type="button" onClick={() => { setParts(SAMPLE.map((p) => ({ ...p }))); setP(120); setL(500); setSlopePct(3); setDtMin(10) }}
+                className="rounded-md border border-field-line px-2 py-0.5 text-[11px] font-semibold text-brand hover:bg-brand-tint">Sample: 50 ha, 120 mm storm</button>
             </div>
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          {s ? (
-            <>
-              <ResultCard title="Runoff depth & volume">
-                <Row label="Composite CN" value={f2(s.composite.cn)} sub={`${f3(s.composite.area)} ha total`} />
-                <Row label="Retention S" value={`${f2(s.runoff.S)} mm`} sub={`Ia = 0.2S = ${f2(s.runoff.Ia)} mm`} />
-                <Row label="Runoff depth Q" value={`${f2(s.runoff.Q)} mm`} sub={`of P = ${f2(P)} mm · Q/P = ${f3(s.runoff.coefficient)}`} />
-                <Row label="Runoff volume" value={`${f3(s.volumeM3)} m³`} sub={`10·Q·A = ${(s.volumeM3 / 1000).toFixed(1)} × 10³ m³`} />
-              </ResultCard>
-
-              <ResultCard title="Timing & peak (TR-55)">
-                <Row label="Lag time" value={`${f3(s.lag.lagHr)} h`} sub={`${f2(s.lag.lagHr * 60)} min`} />
-                <Row label="Time of concentration Tc" value={`${f3(s.lag.tcHr)} h`} sub={`${f2(s.lag.tcHr * 60)} min (Tlag/0.6)`} />
-                <Row label="Time to peak Tp" value={`${f3(s.uh.tp)} h`} sub={`Δt/2 + 0.6·Tc = ${f2(s.uh.tp * 60)} min`} />
-                <Row label="Peak discharge Qp" value={`${f2(s.uh.qp)} m³/s`} sub={`0.208·A·Q/Tp on ${(s.composite.area / 100).toFixed(2)} km² · base ${f2(s.uh.tb)} h`} />
-              </ResultCard>
-
-              <DrawingCard title="Triangular hydrograph" meta="TR-55 triangular UH of the storm">
-                <DrawingFrame label="Runoff hydrograph">
-                  <Hydrograph tp={s.uh.tp} qp={s.uh.qp} tb={s.uh.tb} P={P} Q={s.runoff.Q} />
-                </DrawingFrame>
-              </DrawingCard>
-
-              <WorkedSolution steps={steps} title="SCS runoff — step by step" />
-            </>
-          ) : (
-            <ResultCard title="Check the inputs">
-              <p className="text-sm text-fail">
-                Keep every cover area positive and its CN between 30 and 100, give a positive
-                hydraulic length and watershed slope. A storm below the initial abstraction
-                simply produces zero runoff — the page still shows the retention numbers.
-              </p>
-            </ResultCard>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── triangular hydrograph drawing ────────────────────────────────────────
-
-function Hydrograph({ tp, qp, tb, P, Q }: { tp: number; qp: number; tb: number; P: number; Q: number }) {
-  const W = 640, Hh = 300
-  const x0 = 70, x1 = W - 60
-  const baseY = Hh - 52
-  const topY = 46
-  const qpPix = Math.min(baseY - topY - 24, 150)
-  const tpX = x0 + ((x1 - x0) * tp) / Math.max(tb, 1e-9)
-  const tbX = x0 + (x1 - x0)
-
-  return (
-    <svg viewBox={`0 0 ${W} ${Hh}`} className="w-full" role="img" aria-label="Triangular hydrograph">
-      {/* axes */}
-      <line x1={x0} x2={x1} y1={baseY} y2={baseY} stroke={INK} strokeWidth="1.2" />
-      <line x1={x0} x2={x0} y1={topY - 8} y2={baseY} stroke={INK} strokeWidth="1.2" />
-      {/* the triangle */}
-      <polygon points={`${x0},${baseY} ${tpX},${baseY - qpPix} ${tbX},${baseY}`}
-        fill="rgba(15,76,146,0.12)" stroke="rgba(15,76,146,0.85)" strokeWidth="1.8" />
-      {/* peak marker */}
-      <line x1={tpX} x2={tpX} y1={baseY - qpPix} y2={baseY} stroke={MUTED} strokeWidth="1" strokeDasharray="4 3" />
-      <text x={tpX + 6} y={baseY - qpPix + 2} fontSize="11" fill={INK} fontFamily="var(--font-mono, monospace)">
-        Qp = {f2(qp)} m³/s
-      </text>
-      <text x={tpX} y={baseY + 16} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-        Tp = {f3(tp)} h
-      </text>
-      <text x={tbX} y={baseY + 16} textAnchor="end" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-        tb = {f2(tb)} h
-      </text>
-      {/* axis labels */}
-      <text x={16} y={topY} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">Q (m³/s)</text>
-      <text x={x1} y={baseY + 30} textAnchor="end" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">t (h)</text>
-      {/* catchment note */}
-      <text x={x0 + 8} y={topY - 12} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">
-        P = {f2(P)} mm → Q = {f2(Q)} mm runoff · ΔQp triangle, base 2.67·Tp
-      </text>
-    </svg>
+          </div>
+        </InputGroup>
+        <InputGroup title="Storm and watershed">
+          <Num label="Storm depth P" unit="mm" value={P} onChange={setP} min={0} max={800} step="5" />
+          <Num label="Hydraulic length L" unit="m" value={L} onChange={setL} min={20} max={20000} step="10" />
+          <Num label="Watershed slope Y" unit="%" value={slopePct} onChange={setSlopePct} min={0.1} max={50} step="0.1" />
+          <Num label="Interval Δt" unit="min" value={dtMin} onChange={setDtMin} min={2} max={60} step="1" />
+        </InputGroup>
+      </>}
+      checks={s ? <>
+        <CheckCard title="Peak discharge" basis={`${f2(s.composite.area)} ha · TR-55 triangle`} status="info" value={f2(s.uh.qp)} unit="m³/s" formula="Qp = 0.208 A Q / Tp"
+          pairs={[{ label: 'Time to peak Tp', value: `${f3(s.uh.tp)} h` }, { label: 'Base time tb', value: `${f2(s.uh.tb)} h` }]} />
+        <CheckCard title="Runoff depth" basis={`P = ${f2(P)} mm`} status={noRunoff ? 'warn' : 'info'} pillLabel={noRunoff ? 'NONE' : undefined} value={f2(s.runoff.Q)} unit="mm"
+          formula="Q = (P − Ia)² / (P − Ia + S)" ratio={P > 0 ? s.runoff.Q / P : undefined} ratioLabel="Q / P"
+          pairs={[{ label: 'Retention S', value: `${f2(s.runoff.S)} mm` }, { label: 'Initial abstraction Ia', value: `${f2(s.runoff.Ia)} mm` }]} />
+        <CheckCard title="Volume and timing" basis="over the catchment" status="info" value={f2(s.volumeM3 / 1000)} unit="×10³ m³" formula="V = 10·Q·A"
+          pairs={[{ label: 'Lag', value: `${f2(s.lag.lagHr * 60)} min` }, { label: 'Tc', value: `${f2(s.lag.tcHr * 60)} min` }]} />
+      </> : (
+        <CheckCard title="Check the inputs" basis="covers, length and slope" status="warn" pillLabel="CHECK" value="—" formula="Positive areas, CN 30–100, positive length and slope." />
+      )}
+      summary={[
+        { label: 'Covers', value: `${parts.length}` }, { label: 'Composite CN', value: s ? f2(s.composite.cn) : '—' },
+        { label: 'Storm depth P', value: `${f2(P)} mm` }, { label: 'Hydraulic length', value: `${f2(L)} m at ${f2(slopePct)} %` },
+        { label: 'Interval Δt', value: `${f2(dtMin)} min` },
+      ]}
+      drawing={s ? { title: 'Triangular unit hydrograph', node: <div data-pdf-drawing><TriHydrograph tp={s.uh.tp} qp={s.uh.qp} tb={s.uh.tb} P={P} Q={s.runoff.Q} /></div> } : undefined}
+      resultsCaption={s && s.runoff.notes.length ? s.runoff.notes.join(' ') : undefined}
+      results={s ? [
+        { check: 'Composite CN', basis: 'Σ AᵢCNᵢ / Σ Aᵢ', demand: f2(s.composite.cn), status: 'info' },
+        { check: 'Runoff depth Q', basis: '(P − Ia)²/(P − Ia + S)', demand: `${f2(s.runoff.Q)} mm`, status: noRunoff ? 'warn' : 'info' },
+        { check: 'Runoff volume', basis: '10·Q·A', demand: `${f2(s.volumeM3)} m³`, status: 'info' },
+        { check: 'Time of concentration', basis: 'TR-55 lag / 0.6', demand: `${f2(s.lag.tcHr * 60)} min`, status: 'info' },
+        { check: 'Peak discharge Qp', basis: '0.208 A Q / Tp', demand: `${f2(s.uh.qp)} m³/s`, status: 'info' },
+      ] : [{ check: 'Runoff', basis: 'inputs out of range', demand: '—', status: 'warn' }]}
+      steps={steps}
+      references={[
+        { topic: 'Curve-number runoff', basis: 'S = 25400/CN − 254; Ia = 0.2S; Q = (P − Ia)²/(P − Ia + S) (mm)', source: 'USDA NRCS NEH Part 630 Ch. 10' },
+        { topic: 'Lag method', basis: 'T_lag = L^0.8 (S + 25.4)^0.7 / (7069 √Y); Tc = T_lag / 0.6', source: 'USDA TR-55 (1986)' },
+        { topic: 'Unit hydrograph', basis: 'Qp = 0.208 A Q / Tp (SI); tb = 2.67 Tp', source: 'NRCS NEH Part 630 Ch. 16' },
+      ]}
+    />
   )
 }

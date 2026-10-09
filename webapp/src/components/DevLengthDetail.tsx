@@ -120,7 +120,7 @@ function StraightPanel({ ld, db }: { ld: number; db: number }) {
       <line x1={x0 - 24} y1={yb} x2={xEnd} y2={yb} stroke={BAR} strokeWidth={3} strokeLinecap="round" />
 
       {/* ld, dimensioned between the two things it is actually measured between */}
-      <Dim x1={xCrit} x2={xEnd} y={128} label={`ℓd = ${Math.round(ld)} mm`} />
+      <Dim x1={xCrit} x2={xEnd} y={128} from2={yb} label={`ℓd = ${Math.round(ld)} mm`} />
       <text x={(xCrit + xEnd) / 2} y={144} fontSize={6.5} fill={FAINT} textAnchor="middle">
         = {(ld / db).toFixed(0)} db · NOT measured from the support face
       </text>
@@ -154,7 +154,7 @@ function HookPanel({ ldh, db, tail, bend }: { ldh: number; db: number; tail: num
         sub="measured to the OUTSIDE of the bend; the 12db tail is extra" />
 
       <rect x={20} y={48} width={PW - 40} height={68} fill={CONC} stroke={INK} strokeWidth={1.1} />
-      <line x1={xCrit} y1={40} x2={xCrit} y2={122} stroke={CRIT} strokeWidth={1.6} strokeDasharray="5 3" />
+      <line x1={xCrit} y1={40} x2={xCrit} y2={127} stroke={CRIT} strokeWidth={1.6} strokeDasharray="5 3" />
       <text x={xCrit + 4} y={38} fontSize={7} fill={CRIT}>critical section</text>
 
       {/* straight run, 90° bend, then the tail going DOWN */}
@@ -163,11 +163,15 @@ function HookPanel({ ldh, db, tail, bend }: { ldh: number; db: number; tail: num
         fill="none" stroke={BAR} strokeWidth={3} strokeLinecap="round" />
 
       {/* ldh stops at the OUTSIDE face of the bend — the point of the panel */}
-      <Dim x1={xCrit} x2={xOut} y={128} label={`ℓdh = ${Math.round(ldh)} mm`} />
+      <Dim x1={xCrit} x2={xOut} y={133} from2={yb + r + tailLen} label={`ℓdh = ${Math.round(ldh)} mm`} />
 
       {/* the tail, dimensioned separately so it cannot be read as part of ldh */}
       <g>
         <line x1={xOut + 12} y1={yb + r} x2={xOut + 12} y2={yb + r + tailLen} stroke={DIM} strokeWidth={0.9} />
+        {/* extension lines off the end of the bend and the end of the tail */}
+        {[yb + r, yb + r + tailLen].map((y) => (
+          <line key={`e${y}`} x1={xOut + 3} y1={y} x2={xOut + 16} y2={y} stroke={DIM} strokeWidth={0.6} />
+        ))}
         {[yb + r, yb + r + tailLen].map((y) => (
           <line key={y} x1={xOut + 9} y1={y + 3} x2={xOut + 15} y2={y - 3} stroke={DIM} strokeWidth={1.1} />
         ))}
@@ -198,7 +202,9 @@ function SplicePanel({ ls, db, cls }: { ls: number; db: number; cls: 'A' | 'B' }
       <line x1={20} y1={yA} x2={xLapR} y2={yA} stroke={BAR} strokeWidth={3} strokeLinecap="round" />
       <line x1={xLapL} y1={yB} x2={PW - 20} y2={yB} stroke={BAR} strokeWidth={3} strokeLinecap="round" />
 
-      <Dim x1={xLapL} x2={xLapR} y={120} label={`ℓst = ${Math.round(ls)} mm`} />
+      {/* the overlap runs from where the second bar STARTS to where the
+          first one ENDS — each end's extension line drops off that bar end */}
+      <Dim x1={xLapL} x2={xLapR} y={120} from1={yB} from2={yA} label={`ℓst = ${Math.round(ls)} mm`} />
       <text x={PW / 2} y={136} fontSize={6.5} fill={FAINT} textAnchor="middle">
         = {(ls / db).toFixed(0)} db · Class B = 1.3 × ℓd; Class A only if ≤50% spliced and As,prov ≥ 2As,req
       </text>
@@ -233,13 +239,26 @@ function ConfinePanel({ db }: { db: number }) {
         <line x1={l} y1={barY} x2={bars[0]} y2={barY} stroke={DIM} strokeWidth={0.9} />
         {[l, bars[0]].map((x) => <line key={x} x1={x - 3} y1={barY + 4} x2={x + 3} y2={barY - 4} stroke={DIM} strokeWidth={1.1} />)}
         <text x={(l + bars[0]) / 2} y={barY - 7} fontSize={7} fill={DIM} textAnchor="middle"
-          paintOrder="stroke" stroke="#fff" strokeWidth={2.4}>cb</text>
+          paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.4}>cb</text>
       </g>
-      {/* the other cb branch: half the bar spacing */}
-      <g>
-        <line x1={bars[0]} y1={barY + 15} x2={bars[1]} y2={barY + 15} stroke={DIM} strokeWidth={0.9} strokeDasharray="3 2" />
-        <text x={(bars[0] + bars[1]) / 2} y={barY + 26} fontSize={6.5} fill={DIM} textAnchor="middle">s → cb ≤ s/2</text>
-      </g>
+      {/* the other cb branch: half the bar spacing — a real dimension below
+          the section between bar CENTRES (it was a dashed line lying on the
+          soffit, which read as neither a dimension nor a bar) */}
+      {(() => {
+        const yd = t + bh + 9
+        return (
+          <g>
+            {[bars[0], bars[1]].map((x) => (
+              <g key={x}>
+                <line x1={x} y1={barY + 6} x2={x} y2={yd + 4} stroke={DIM} strokeWidth={0.6} />
+                <line x1={x - 3} y1={yd + 4} x2={x + 3} y2={yd - 4} stroke={DIM} strokeWidth={1.1} />
+              </g>
+            ))}
+            <line x1={bars[0]} y1={yd} x2={bars[1]} y2={yd} stroke={DIM} strokeWidth={0.9} />
+            <text x={(bars[0] + bars[1]) / 2} y={yd + 11} fontSize={6.5} fill={DIM} textAnchor="middle">s · cb ≤ s/2</text>
+          </g>
+        )
+      })()}
       <text x={l + bw + 6} y={t + 14} fontSize={7} fill={TIE}>tie → Ktr</text>
       <text x={l + bw + 6} y={t + 24} fontSize={6.5} fill={FAINT}>40Atr/(s·n)</text>
 
@@ -250,19 +269,23 @@ function ConfinePanel({ db }: { db: number }) {
   )
 }
 
-/** A horizontal dimension with slash ticks and the label above the line. */
-function Dim({ x1, x2, y, label }: { x1: number; x2: number; y: number; label: string }) {
+/** A horizontal dimension with slash ticks and the label above the line.
+ *  `from1` / `from2` are the heights of the features its ends measure to: the
+ *  extension line runs from there to the dimension, so neither end floats. */
+function Dim({ x1, x2, y, label, from1, from2 }: {
+  x1: number; x2: number; y: number; label: string; from1?: number; from2?: number
+}) {
   return (
     <g>
       <line x1={x1} y1={y} x2={x2} y2={y} stroke={DIM} strokeWidth={0.9} />
-      {[x1, x2].map((x) => (
+      {([[x1, from1], [x2, from2]] as const).map(([x, from]) => (
         <g key={x}>
           <line x1={x - 3} y1={y + 4} x2={x + 3} y2={y - 4} stroke={DIM} strokeWidth={1.2} />
-          <line x1={x} y1={y - 7} x2={x} y2={y + 4} stroke={DIM} strokeWidth={0.6} />
+          <line x1={x} y1={from != null ? from + 3 : y - 7} x2={x} y2={y + 4} stroke={DIM} strokeWidth={0.6} />
         </g>
       ))}
       <text x={(x1 + x2) / 2} y={y - 5} fontSize={8} fontWeight={700} fill={DIM} textAnchor="middle"
-        paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>{label}</text>
+        paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{label}</text>
     </g>
   )
 }

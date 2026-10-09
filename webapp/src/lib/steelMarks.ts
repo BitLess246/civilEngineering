@@ -55,6 +55,9 @@ export function signature(c: BeamConnection, bb: boolean): string {
     bb ? 'bb' : c.connType, c.faceType, c.bolts.n, c.bolts.dia, c.tab.t, Math.round(c.tab.hMm), c.tab.weldSizeMm,
     c.flange ? 'flange' : '', wp ? `${wp.tMm}x${Math.round(wp.wMm)}/${wp.weldMm}` : '',
     c.cope ? `${c.cope.lengthMm}x${c.cope.depthMm}` : '',
+    // the column stiffening the connection brings with it (§J10)
+    c.j10?.stiffeners ? `st${c.j10.stiffeners.ts}x${Math.round(c.j10.stiffeners.bs)}/${c.j10.stiffeners.weld}${c.j10.stiffeners.fullDepth ? 'F' : ''}` : '',
+    c.j10?.doubler ? `db${c.j10.doubler.td}/${c.j10.doubler.weld}` : '',
   ].join('|')
 }
 

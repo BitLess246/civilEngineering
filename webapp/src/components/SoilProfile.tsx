@@ -60,7 +60,7 @@ export interface SoilProfileProps {
 
 export function SoilProfile({ layers, Df, B, waterTable, q, governing }: SoilProfileProps) {
   const total = layers.reduce((a, l) => Math.max(a, l.zTop + l.H), 0) || 1
-  const ML = 118, MR = 96, MT = 46, MB = 44
+  const ML = 118, MR = 96, MT = 46, MB = 56
   const COL_W = 150, DEPTH = 250
   const s = DEPTH / total
   const W = ML + COL_W + MR, HT = MT + DEPTH + MB
@@ -142,8 +142,12 @@ export function SoilProfile({ layers, Df, B, waterTable, q, governing }: SoilPro
         </g>
 
         <text x={ML} y={MT - 26} fontSize={9} fontWeight={700} fill={INK}>SOIL PROFILE &amp; STRESS DECAY</text>
-        <text x={W / 2} y={HT - 6} fontSize={7.5} fill={FAINT} textAnchor="middle">
-  Δσ is zero above founding level, peaks just under the footing, then decays — a thick deep layer can settle less than a thin shallow one.
+        {/* two lines: one ran past both edges of the drawing */}
+        <text x={W / 2} y={HT - 18} fontSize={7.5} fill={FAINT} textAnchor="middle">
+          Δσ is zero above founding level, peaks just under the footing, then decays —
+        </text>
+        <text x={W / 2} y={HT - 7} fontSize={7.5} fill={FAINT} textAnchor="middle">
+          a thick deep layer can settle less than a thin shallow one.
         </text>
       </svg>
     </DrawingFrame>

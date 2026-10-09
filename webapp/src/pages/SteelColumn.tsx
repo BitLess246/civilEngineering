@@ -3,22 +3,22 @@ import { lazy, Suspense, useMemo, useState } from 'react'
 import { calcColumn } from '../lib/calcApi'
 import type { ColumnCalcResult } from '../lib/calcApi'
 import { useCalcResult } from '../lib/useCalcResult'
-import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import type { SolutionStep } from '../lib/solution'
-import { f1 } from '../lib/format'
+import { f1, f2 } from '../lib/format'
 import { sn1, sn2, sn3 } from '../lib/solution'
-import { PageHeader } from '../components/calc'
 import { ModelMemberResults } from '../components/ModelMemberResults'
 import type { MemberLoadRequest } from '../lib/modelMemberResults'
-import { ShapePick, CalcBadge, TrialWall, Spinner, Verdict, BasisPick, BasisNote } from '../components/steelUi'
+import { ShapePick, CalcBadge, TrialWall, Spinner, BasisPick, BasisNote } from '../components/steelUi'
+import { WShapeSection, SteelColumnElevation } from '../components/steelSketches'
 import { capacityLabel, demandLabel, factorLabel, comboLabel, requiredFromDL, SAFETY, type DesignBasis } from '../engine/designBasis'
 import { GRADES, shapeOrFirst, type Grade } from '../lib/steelShapes'
 
 const ColumnViewer3D = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.ColumnViewer3D })))
 
-function ColumnTab() {
+export default function SteelColumn() {
   const [shapeName, setShapeName] = useState('W250x67')
   const [grade, setGrade]         = useState<Grade>('A572G50')
   const [L,     setL]             = useState(4)
@@ -113,81 +113,101 @@ function ColumnTab() {
     setPuDir(c.Pu); setMux(c.Mu); setMuy(c.Muy)
   }
 
+  const axialRatio = res && res.avail.Pn > 0 ? Pu / res.avail.Pn : undefined
+  const report = res ? {
+    docCode: 'S-SC',
+    ok: res.comb.ok && res.axial.slenderOK,
+    governing: `${shapeName} · §${res.comb.equation} interaction ${(res.comb.ratio * 100).toFixed(0)}% · KL/r ${f1(res.axial.slenderness)}`,
+    stats: [
+      { label: capacityLabel(res.basis, 'P'), value: f1(res.avail.Pn), unit: 'kN' },
+      { label: capacityLabel(res.basis, 'M', 'x'), value: f1(res.avail.Mnx), unit: 'kN·m' },
+      { label: 'Fcr', value: f1(res.axial.Fcr), unit: 'MPa' },
+    ],
+    checks: [
+      { name: 'Slenderness KL/r ≤ 200', ratio: res.axial.slenderness / 200, ok: res.axial.slenderOK },
+      { name: `Combined §${res.comb.equation}`, ratio: res.comb.ratio, ok: res.comb.ok },
+    ],
+    data: [
+      ['Shape', shapeName], ['Grade', `${GRADES[grade].label} (Fy ${Fy} MPa)`], ['Design basis', res.basis],
+      ['Height L', `${f2(L)} m`], ['Kx / Ky', `${f2(Kx)} / ${f2(Ky)}`],
+      [demandLabel(res.basis, 'P'), `${f1(Pu)} kN${dlMode === 'DL' ? ` (D ${f1(dead)}, L ${f1(live)})` : ''}`],
+      ['Mux / Muy', `${f1(Mux)} / ${f1(Muy)} kN·m`],
+    ] as [string, string][],
+    steps,
+  } : undefined
+
   return (
-    <div>
-      <ModelMemberResults kind="steelColumn" onLoad={loadSaved} />
-      <TrialWall cause={cause} />
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
-      <div className="space-y-5">
-        <Card title={<>Section & grade<CalcBadge loading={loading} error={error} cause={cause} /></>}>
+    <WorkspacePage title="Steel Column" badges={['Steel', 'AISC 360-16 · NSCP 2015']}
+      intro="A rolled W column under axial load and biaxial bending: §E3 flexural buckling about each axis, §F2 strong-axis and §F6 weak-axis flexure, and the §H1-1 interaction. LRFD or ASD."
+      report={report}
+      inputs={<>
+        <div className="no-print"><ModelMemberResults kind="steelColumn" onLoad={loadSaved} /></div>
+        <TrialWall cause={cause} />
+        <InputGroup title="Section and grade">
           <ShapePick value={shapeName} onChange={setShapeName} />
           <BasisPick value={basis} onChange={setBasis} />
-          <BasisNote basis={basis} />
           <Pick label="Steel grade" value={grade} onChange={v => setGrade(v as Grade)}
             options={Object.entries(GRADES).map(([k, v]) => [k as Grade, v.label])} />
-        </Card>
-        <Card title="Column geometry">
+          <div className="col-span-2"><BasisNote basis={basis} /></div>
+        </InputGroup>
+        <InputGroup title="Column geometry">
           <Num label="Height L" unit="m" value={L} onChange={setL} />
           <Num label="Kx" value={Kx} onChange={setKx} />
           <Num label="Ky" value={Ky} onChange={setKy} />
-        </Card>
-        <Card title="Loads">
-          <Pick label="Axial input" value={dlMode} onChange={v => setDlMode(v as 'DL'|'direct')}
-            options={[['DL','Service D & L'],['direct', basis === 'LRFD' ? 'Factored Pu' : 'Service Pa']]} />
+        </InputGroup>
+        <InputGroup title="Loads">
+          <div className="col-span-2">
+            <Pick label="Axial input" value={dlMode} onChange={v => setDlMode(v as 'DL'|'direct')}
+              options={[['DL','Service D & L'],['direct', basis === 'LRFD' ? 'Factored Pu' : 'Service Pa']]} />
+          </div>
           {dlMode === 'DL' ? <>
             <Num label="Dead D" unit="kN" value={dead} onChange={setDead} />
             <Num label="Live L" unit="kN" value={live} onChange={setLive} />
           </> : <Num label={demandLabel(basis, 'P')} unit="kN" value={PuDir} onChange={setPuDir} />}
-          <Num label="Mux (strong-axis)" unit="kN·m" value={Mux} onChange={setMux} />
-          <Num label="Muy (weak-axis)" unit="kN·m" value={Muy} onChange={setMuy} />
-        </Card>
-      </div>
-
-      <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
+          <Num label="Mux (strong axis)" unit="kN·m" value={Mux} onChange={setMux} />
+          <Num label="Muy (weak axis)" unit="kN·m" value={Muy} onChange={setMuy} />
+        </InputGroup>
+      </>}
+      checks={res ? <>
+        <CheckCard title="Axial §E3" basis={`KL/r ${f1(res.axial.slenderness)} · Fcr ${f1(res.axial.Fcr)} MPa`}
+          status={res.axial.slenderOK ? (axialRatio != null && axialRatio <= 1 ? 'pass' : 'fail') : 'fail'}
+          value={f1(res.avail.Pn)} unit="kN" ratio={axialRatio} ratioLabel={`${demandLabel(res.basis, 'P')} ÷ ${capacityLabel(res.basis, 'P')}`}
+          pairs={[{ label: 'KL/rx', value: f1(res.axial.slendernessX) }, { label: 'KL/ry', value: f1(res.axial.slendernessY) }]} />
+        <CheckCard title="Flexure" basis={`strong axis ${res.flexX.ltbZone}`} status="info"
+          value={f1(res.avail.Mnx)} unit="kN·m"
+          pairs={[{ label: capacityLabel(res.basis, 'M', 'y'), value: `${f1(res.avail.Mny)} kN·m` }, { label: 'Mux / Muy', value: `${f1(Mux)} / ${f1(Muy)}` }]} />
+        <CheckCard title={`Combined §${res.comb.equation}`} basis="axial + biaxial bending" status={res.comb.ok ? 'pass' : 'fail'}
+          value={`${(res.comb.ratio * 100).toFixed(0)} %`} ratio={res.comb.ratio} ratioLabel="Interaction" />
+        <CalcBadge loading={loading} error={error} cause={cause} />
+      </> : <CalcBadge loading={loading} error={error} cause={cause} />}
+      summary={[
+        { label: 'Section', value: `${shapeName}, ${GRADES[grade].label}` },
+        { label: 'Length', value: `${f2(L)} m, Kx ${f2(Kx)}, Ky ${f2(Ky)}` },
+        { label: 'Demand', value: `${demandLabel(basis, 'P')} ${f1(Pu)} kN, Mux ${f1(Mux)}, Muy ${f1(Muy)} kN·m` },
+      ]}
+      drawing={{ title: 'Elevation and section', node: <div data-pdf-drawing className="grid items-end gap-3 sm:grid-cols-2">
+        <SteelColumnElevation L={L} Kx={Kx} Ky={Ky} P={Pu} Plabel={demandLabel(basis, 'P')} />
+        {shape.d && shape.bf && shape.tf && shape.tw
+          ? <WShapeSection name={shape.name} d={shape.d} bf={shape.bf} tf={shape.tf} tw={shape.tw} /> : null}
+      </div> }}
+      results={res ? [
+        { check: 'Slenderness', basis: 'KL/rx · KL/ry, ≤ 200', demand: `${f1(res.axial.slendernessX)} · ${f1(res.axial.slendernessY)}`, limit: '200', ratio: res.axial.slenderness / 200, status: res.axial.slenderOK ? 'pass' as const : 'fail' as const },
+        { check: 'Axial §E3', basis: `Pn ${f1(res.axial.Pn)} · ${factorLabel(res.basis, 'compression')}`, demand: `${f1(Pu)} kN`, limit: `${f1(res.avail.Pn)} kN`, ratio: axialRatio, status: axialRatio != null && axialRatio <= 1 ? 'pass' as const : 'fail' as const },
+        { check: 'Strong-axis flexure', basis: `§F2 · ${res.flexX.ltbZone}`, demand: `${f1(Mux)} kN·m`, limit: `${f1(res.avail.Mnx)} kN·m`, ratio: res.avail.Mnx > 0 ? Mux / res.avail.Mnx : undefined, status: 'info' as const },
+        { check: 'Weak-axis flexure', basis: '§F6', demand: `${f1(Muy)} kN·m`, limit: `${f1(res.avail.Mny)} kN·m`, ratio: res.avail.Mny > 0 ? Muy / res.avail.Mny : undefined, status: 'info' as const },
+        { check: `Combined §${res.comb.equation}`, basis: 'H1-1a / H1-1b', demand: res.comb.ratio.toFixed(3), limit: '1.000', ratio: res.comb.ratio, status: res.comb.ok ? 'pass' as const : 'fail' as const },
+      ] : []}
+      extraSections={[{ title: '3D view', node: (
         <Suspense fallback={<Spinner />}>
           <ColumnViewer3D shape={shape} L={L} Pu={Pu} Mux={Mux} Muy={Muy} />
         </Suspense>
-        {res && (<>
-          <ResultCard title="Axial §E3">
-            <Row label="KL/rx" value={f1(res.axial.slendernessX)} />
-            <Row label="KL/ry" value={f1(res.axial.slendernessY)} sub="governing" />
-            <Row alert={!res.axial.slenderOK} label="KL/r" value={`${f1(res.axial.slenderness)}${res.axial.slenderOK?'':' > 200 ✗'}`} />
-            <Row label="Fcr" value={`${f1(res.axial.Fcr)} MPa`} />
-            <Row label={capacityLabel(res.basis, 'P')} value={`${f1(res.avail.Pn)} kN`}
-              sub={`Pn = ${f1(res.axial.Pn)} · ${factorLabel(res.basis, 'compression')}`} />
-          </ResultCard>
-          <ResultCard title="Flexure">
-            <Row label={capacityLabel(res.basis, 'M', 'x')} value={`${f1(res.avail.Mnx)} kN·m`} sub={res.flexX.ltbZone} />
-            <Row label={`${capacityLabel(res.basis, 'M', 'y')} §F6`} value={`${f1(res.avail.Mny)} kN·m`} />
-          </ResultCard>
-          <ResultCard title={`Combined §${res.comb.equation}`}>
-            <Row alert={!res.comb.ok} label="Combined ratio" value={<Verdict pass={res.comb.ok} value={`${(res.comb.ratio*100).toFixed(0)} %`} />} />
-          </ResultCard>
-        </>)}
-      </div>
-
-      </div>
-
-      {res && (
-        <div>
-          <WorkedSolution steps={steps} title="Column Design — step-by-step (AISC 360-16 §E3, §H1-1)" />
-        </div>
-      )}
-    </div>
-  )
-}
-
-export default function SteelColumn() {
-  return (
-    <div>
-      <PageHeader title="Steel Column Design" badges={['AISC 360-16']} />
-      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <p className="no-print mt-1 text-muted">AISC 360-16 §E3 flexural buckling, weak-axis flexure, and the §H1-1 combined axial-plus-bending interaction. 3D scene and a step-by-step solution.</p>
-        <ReportControls title="Steel Column Design Report" />
-        <div className="mt-5">
-          <ColumnTab />
-        </div>
-      </div>
-    </div>
+      ) }]}
+      steps={steps}
+      references={[
+        { topic: 'Compression', basis: 'flexural buckling, Fcr', source: 'AISC 360-16 §E3 · NSCP 2015 §505' },
+        { topic: 'Flexure', basis: 'strong axis §F2, weak axis §F6', source: 'AISC 360-16 §F2, §F6' },
+        { topic: 'Combined forces', basis: 'doubly symmetric members', source: 'AISC 360-16 §H1.1' },
+      ]}
+    />
   )
 }

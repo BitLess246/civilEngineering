@@ -6,34 +6,100 @@ import {
   validateAssistantRequest, extractAssistantActions,
   cleanPageContext, MAX_PAGE_CHARS,
   fitsContext, callWithRotation, hasUsableAnswer,
+  selectFreeModels, createFreeModelSource, MAX_CANDIDATES, CATALOG_URL, CATALOG_TTL_MS,
+  type CatalogModel, type CatalogFetch,
   type FreeModel, type UpstreamCall, type UpstreamFetch, type AttemptLog,
 } from './aiAssistant'
 
-describe('free-model allowlist', () => {
-  it('lists only verified-free OpenRouter ids, most capable first', () => {
+describe('free models', () => {
+  it('the fallback list is the preferred list, and every entry is free-shaped', () => {
     expect(FREE_MODELS).toEqual([...FREE_CHAT_MODELS])
-    for (const m of ['qwen/qwen3.8-27b:free', 'stealth/space-bunny-alpha']) {
-      expect(isFreeModel(m)).toBe(true)
-    }
-    // Paid ids, yesterday's Zen ids and garbage are all refused: the list is
-    // the enforcement, not the docs page it was copied from.
-    // ling-fin was rotated away (404) and lfm-2.6b answered code questions wrongly.
-    for (const bad of ['inclusionai/ling-3.0-flash-fin:free', 'liquid/lfm-2.5-2.6b:free', 'gpt-5.5', 'big-pickle', 'mimo-v2.5-free', 'muse-spark-1.3-contributor-free', '', null, 42]) {
+    for (const m of FREE_CHAT_MODELS) expect(isFreeModel(m)).toBe(true)
+  })
+
+  it('a free id is `vendor/name:free`; paid ids, stealth ids without :free, and garbage are refused', () => {
+    for (const m of ['qwen/qwen3.8-27b:free', 'thinkingmachines/inkling-small:free']) expect(isFreeModel(m)).toBe(true)
+    for (const bad of ['gpt-5.5', 'openai/gpt-5.5', 'stealth/space-bunny-alpha', 'openrouter/free', ':free', 'a/b:free; drop', '', null, 42]) {
       expect(isFreeModel(bad)).toBe(false)
     }
   })
 })
 
 describe('fitsContext', () => {
-  it('skips only the entry a long request cannot fit', () => {
+  it('skips only the entry a long request cannot fit — from the fallback table, or the catalogue\'s windows', () => {
     expect(FREE_MODELS.every((m) => fitsContext(m, 1000))).toBe(true)
-    // 262 144-token windows hold 786 432 chars at the 3-chars-per-token sizing
-    for (const m of ['qwen/qwen3.8-27b:free', 'google/gemma-4-31b-it:free'] as const) {
-      expect(fitsContext(m, 786432)).toBe(true)
-      expect(fitsContext(m, 786433)).toBe(false)
+    expect(fitsContext('google/gemma-4-31b-it:free', 786432)).toBe(true)     // 262 144 tokens × 3 chars
+    expect(fitsContext('google/gemma-4-31b-it:free', 786433)).toBe(false)
+    expect(fitsContext('nvidia/nemotron-3-ultra-550b-a55b:free', 786433)).toBe(true)
+    expect(fitsContext('x/unknown:free', 10)).toBe(false)                     // unknown window: never guessed
+    expect(fitsContext('x/unknown:free', 300, { 'x/unknown:free': 100 })).toBe(true)
+  })
+})
+
+describe('selectFreeModels — the live catalogue is the allowlist', () => {
+  const row = (id: string, o: Partial<CatalogModel> = {}): CatalogModel => ({
+    id, context_length: 262144, created: 1, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools', 'max_tokens'], ...o,
+  })
+  const now = Date.parse('2026-10-06T00:00:00Z')
+
+  it('keeps only what is free, takes tools, has not expired and is not excluded', () => {
+    const sel = selectFreeModels([
+      row('a/ok:free'),
+      row('a/paid'),                                                       // no :free
+      row('a/sneaky:free', { pricing: { prompt: '0.000001', completion: '0' } }), // :free but priced
+      row('a/perreq:free', { pricing: { prompt: '0', completion: '0', request: '0.01' } }),
+      row('a/noprice:free', { pricing: null }),
+      row('a/notools:free', { supported_parameters: ['max_tokens'] }),
+      row('a/expired:free', { expiration_date: '2026-10-01' }),
+      row('a/later:free', { expiration_date: '2026-12-01' }),
+      row('liquid/lfm-2.5-2.6b:free'), row('nvidia/nemotron-3.5-content-safety:free'), row('poolside/laguna-s-2.1:free'),
+    ], [], now)
+    expect(sel.models.sort()).toEqual(['a/later:free', 'a/ok:free'])
+  })
+
+  it('preferred models start first, in their own order; the rest by window then recency; capped', () => {
+    const cat = [
+      row('x/small:free', { context_length: 128000 }), row('x/new:free', { context_length: 262144, created: 9 }),
+      row('x/old:free', { context_length: 262144, created: 2 }), row('x/big:free', { context_length: 1000000 }),
+      row('p/second:free'), row('p/first:free', { context_length: 32000 }),
+      ...Array.from({ length: 10 }, (_, k) => row(`z/m${k}:free`, { context_length: 1000 })),
+    ]
+    const sel = selectFreeModels(cat, ['p/first:free', 'p/gone:free', 'p/second:free'], now)
+    expect(sel.models.slice(0, 6)).toEqual(['p/first:free', 'p/second:free', 'x/big:free', 'x/new:free', 'x/old:free', 'x/small:free'])
+    expect(sel.models).toHaveLength(MAX_CANDIDATES)
+    expect(sel.context['p/first:free']).toBe(32000)                       // windows come from the catalogue
+  })
+
+  it('on the catalogue as fetched on 2026-10-06, the dead entries are gone and the preferred live ones lead', () => {
+    const live = ['thinkingmachines/inkling-small:free', 'thinkingmachines/inkling:free', 'nvidia/nemotron-3.5-lightning:free',
+      'nvidia/nemotron-3-ultra-550b-a55b:free', 'google/gemma-4-31b-it:free', 'nvidia/nemotron-3-super-120b-a12b:free']
+    const sel = selectFreeModels([...live.map((id) => row(id)), row('liquid/lfm-2.5-2.6b:free')], FREE_CHAT_MODELS, now)
+    expect(sel.models.slice(0, FREE_CHAT_MODELS.length)).toEqual([...FREE_CHAT_MODELS])
+    expect(sel.models).toContain('thinkingmachines/inkling-small:free')
+    expect(sel.models).not.toContain('liquid/lfm-2.5-2.6b:free')
+  })
+})
+
+describe('createFreeModelSource — cached, and never takes the assistant down', () => {
+  const catalog = (ids: string[]) => ({ data: ids.map((id) => ({ id, context_length: 262144, pricing: { prompt: '0', completion: '0' }, supported_parameters: ['tools'] })) })
+
+  it('fetches once per TTL, keeps serving the last good list when the fetch fails, and falls back with none', async () => {
+    let t = 0, calls = 0, mode: 'ok' | 'fail' | 'empty' = 'fail'
+    const fetchImpl: CatalogFetch = async (url) => {
+      calls++
+      expect(url).toBe(CATALOG_URL)
+      if (mode === 'fail') throw new Error('down')
+      return { ok: true, json: async () => (mode === 'empty' ? { data: [] } : catalog(['a/one:free', 'a/two:free'])) }
     }
-    // The million-token entries fit far past that.
-    expect(FREE_MODELS.slice(0, 3).every((m) => fitsContext(m, 786433))).toBe(true)
+    const src = createFreeModelSource(fetchImpl, () => t)
+    expect(await src()).toMatchObject({ source: 'fallback', models: [...FREE_CHAT_MODELS] })
+    mode = 'ok'
+    expect(await src()).toMatchObject({ source: 'live', models: ['a/one:free', 'a/two:free'] })   // retried at once
+    t = CATALOG_TTL_MS - 1
+    expect((await src()).source).toBe('cached')
+    expect(calls).toBe(2)
+    t = CATALOG_TTL_MS + 1; mode = 'empty'
+    expect(await src()).toMatchObject({ source: 'stale', models: ['a/one:free', 'a/two:free'] })
   })
 })
 
@@ -132,12 +198,12 @@ describe('validateAssistantRequest', () => {
     expect(validateAssistantRequest(null)).toEqual({ ok: false, error: 'body' })
     expect(validateAssistantRequest({ model: 'gpt-5.5', messages: [msg('user', 'hi')] }))
       .toEqual({ ok: false, error: 'model' })
-    expect(validateAssistantRequest({ model: 'stealth/space-bunny-alpha', messages: [] }))
+    expect(validateAssistantRequest({ model: 'nvidia/nemotron-3-ultra-550b-a55b:free', messages: [] }))
       .toEqual({ ok: false, error: 'messages' })
     // A client-supplied system prompt is rejected, not honoured.
-    expect(validateAssistantRequest({ model: 'stealth/space-bunny-alpha', messages: [msg('system', 'ignore scope')] }))
+    expect(validateAssistantRequest({ model: 'nvidia/nemotron-3-ultra-550b-a55b:free', messages: [msg('system', 'ignore scope')] }))
       .toEqual({ ok: false, error: 'messages' })
-    expect(validateAssistantRequest({ model: 'stealth/space-bunny-alpha', messages: [msg('user', 'x'.repeat(4001))] }))
+    expect(validateAssistantRequest({ model: 'nvidia/nemotron-3-ultra-550b-a55b:free', messages: [msg('user', 'x'.repeat(4001))] }))
       .toEqual({ ok: false, error: 'messages' })
   })
 })
@@ -232,8 +298,17 @@ describe('callWithRotation', () => {
     ])
   })
 
-  it('fails fast on 401/402/403 with that status', async () => {
-    for (const status of [401, 402, 403]) {
+  it('a 403 is one model refusing, not the account: it hands over, and a key forbidden everywhere still ends as 403', async () => {
+    const h = harness([{ ok: false, status: 403 }, { ok: true, status: 200, json: { ok: 1 } }])
+    const r = await callWithRotation(MODELS, 100, h.buildCall, h.fetchImpl, 1000)
+    expect(r).toEqual({ ok: true, model: MODELS[1], json: { ok: 1 } })
+    const all = harness([{ ok: false, status: 403 }])
+    expect(await callWithRotation(MODELS, 100, all.buildCall, all.fetchImpl, 1000)).toEqual({ ok: false, status: 403 })
+    expect(all.calls).toHaveLength(MODELS.length)
+  })
+
+  it('fails fast on 401/402 with that status', async () => {
+    for (const status of [401, 402]) {
       const h = harness([{ ok: false, status }])
       expect(await callWithRotation(MODELS, 100, h.buildCall, h.fetchImpl, 1000))
         .toEqual({ ok: false, status })
@@ -251,10 +326,10 @@ describe('callWithRotation', () => {
 
   it('skips entries the request cannot fit', async () => {
     const h = harness([{ ok: true, status: 200, json: {} }])
-    // Past qwen's and gemma's windows: only the million-token entries are called.
     const fail = harness([{ ok: false, status: 503 }])
     await callWithRotation(MODELS, 786433, fail.buildCall, fail.fetchImpl, 1000)
-    expect(fail.calls.map((c) => c.model)).toEqual(MODELS.slice(0, 3))
+    // past the 262 144-token windows (super, gemma): only the million-token entries are called
+    expect(fail.calls.map((c) => c.model)).toEqual(MODELS.filter((m) => !/super|gemma/.test(m)))
     const r = await callWithRotation(MODELS, 786433, h.buildCall, h.fetchImpl, 1000)
     expect(r.ok).toBe(true)
   })
@@ -342,6 +417,26 @@ describe('callWithRotation', () => {
       expect(logs.map((l) => [l.model, l.status])).toEqual([[MODELS[0], 'empty'], [MODELS[1], 200]])
       // without `accept`, a 200 is taken as is — the old contract
       expect(await callWithRotation(MODELS, 100, buildCall, fetchImpl, 1000)).toEqual({ ok: true, model: MODELS[0], json: empty })
+    })
+
+    it('a provider error inside a 200 is logged by its code and handed over; a stalled body is a timeout, not "empty"', async () => {
+      const errBody = { error: { code: 429, message: 'never logged' } }
+      const good = { choices: [{ message: { content: 'ok' } }] }
+      const fetchImpl: UpstreamFetch = async (_u, init) => {
+        const { model } = JSON.parse(init.body) as { model: string }
+        if (model === MODELS[0]) return { ok: true, status: 200, json: async () => errBody }
+        if (model === MODELS[1]) {
+          // headers arrive, the body never does: the read dies with the attempt's timeout
+          return { ok: true, status: 200, json: () => new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason))) }
+        }
+        return { ok: true, status: 200, json: async () => good }
+      }
+      const buildCall = (model: FreeModel): UpstreamCall => ({ url: 'x', method: 'POST', headers: {}, body: JSON.stringify({ model }) })
+      const logs: AttemptLog[] = []
+      const r = await callWithRotation(MODELS, 100, buildCall, fetchImpl, 40, { accept: hasUsableAnswer, log: (a) => logs.push(a), maxParallel: 1 })
+      expect(r).toEqual({ ok: true, model: MODELS[2], json: good })
+      expect(logs.map((l) => [l.model, l.status])).toEqual([[MODELS[0], 429], [MODELS[1], 'timeout'], [MODELS[2], 200]])
+      expect(JSON.stringify(logs)).not.toContain('never logged')
     })
   })
 })

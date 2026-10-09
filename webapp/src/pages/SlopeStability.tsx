@@ -1,101 +1,25 @@
 import { useMemo, useState } from 'react'
-import { ReportControls } from '../components/ReportControls'
 import {
   searchCriticalCircle, surfaceY,
-  type Pt, type SlopeSoil, type WaterModel, type CircleResult,
+  type Pt, type SlopeSoil, type WaterModel,
 } from '../engine/slopeStability'
 import { buildSlopeSolution } from '../lib/slopeSolution'
 import { infiniteSlopeFS } from '../engine/geotech'
 import { buildInfiniteSlopeSolution } from '../lib/geotechPageSolutions'
-import { WorkedSolution } from '../components/WorkedSolution'
 import { SoilLayerPicker } from '../components/SoilLayerPicker'
-import { PageHeader, CalcBody } from '../components/calc'
-import { Card, ResultCard } from '../components/qty'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { SlopeSection } from '../components/geotechSketches'
 
-function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
 const f0 = (n: number) => (Number.isFinite(n) ? Math.round(n).toString() : '—')
-
-function Field({ label, value, onChange, unit, step = 'any' }: {
-  label: string; value: number; onChange: (v: number) => void; unit?: string; step?: string
-}) {
-  return (
-    <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
-      <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-field-line px-2.5 py-1.5" />
-    </label>
-  )
-}
-
-function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
-  return (
-    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
-      <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
-    </div>
-  )
-}
 
 /** Build the ground polyline (left→right) from a simple slope geometry:
  *  crest plateau at height H, a face at angle β, then a toe plateau. */
 function groundOf(H: number, betaDeg: number, crestW: number, toeW: number): Pt[] {
   const run = betaDeg > 0 && betaDeg < 90 ? H / Math.tan((betaDeg * Math.PI) / 180) : H
   return [{ x: 0, y: H }, { x: crestW, y: H }, { x: crestW + run, y: 0 }, { x: crestW + run + toeW, y: 0 }]
-}
-
-/** Vector slope + critical-circle drawing (world m → px, y up). */
-function SlopeSvg({ ground, res, water }: { ground: Pt[]; res: CircleResult | null; water?: Pt[] }) {
-  const W = 640, Hpx = 320, pad = 30
-  const xs = ground.map((p) => p.x), ys = ground.map((p) => p.y)
-  const minX = Math.min(...xs), maxX = Math.max(...xs)
-  let minY = Math.min(...ys), maxY = Math.max(...ys)
-  if (res) { minY = Math.min(minY, res.circle.yc - res.circle.R); maxY = Math.max(maxY, res.circle.yc) }
-  const sx = (W - 2 * pad) / Math.max(1e-6, maxX - minX)
-  const sy = (Hpx - 2 * pad) / Math.max(1e-6, maxY - minY)
-  const s = Math.min(sx, sy)
-  const X = (x: number) => pad + (x - minX) * s
-  const Y = (y: number) => Hpx - pad - (y - minY) * s
-
-  const groundPath = ground.map((p, i) => `${i ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')
-  const slicePts: string[] = []
-  let arcPath = '', massPath = '', center = null as null | { cx: number; cy: number }
-  if (res) {
-    const sl = res.slices, { xc, yc, R } = res.circle
-    const yArc = (x: number) => yc - Math.sqrt(Math.max(0, R * R - (x - xc) ** 2))
-    const x0 = sl[0].x - sl[0].b / 2, x1 = sl[sl.length - 1].x + sl[sl.length - 1].b / 2
-    const nSample = 60
-    const arc: Pt[] = []
-    for (let i = 0; i <= nSample; i++) { const x = x0 + ((x1 - x0) * i) / nSample; arc.push({ x, y: yArc(x) }) }
-    arcPath = arc.map((p, i) => `${i ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')
-    // sliding mass = ground surface (x0→x1) then back along the arc
-    const top: Pt[] = arc.map((p) => ({ x: p.x, y: surfaceY(ground, p.x) }))
-    massPath = 'M' + top.map((p) => `${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' L') +
-      ' L' + [...arc].reverse().map((p) => `${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' L') + ' Z'
-    // interior slice boundaries
-    for (let i = 1; i < sl.length; i++) {
-      const xb = sl[i].x - sl[i].b / 2
-      slicePts.push(`M${X(xb).toFixed(1)},${Y(surfaceY(ground, xb)).toFixed(1)} L${X(xb).toFixed(1)},${Y(yArc(xb)).toFixed(1)}`)
-    }
-    center = { cx: X(xc), cy: Y(yc) }
-  }
-  const waterPath = water && water.length > 1
-    ? water.map((p, i) => `${i ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ') : ''
-
-  return (
-    <svg viewBox={`0 0 ${W} ${Hpx}`} className="w-full rounded-lg border border-hairline bg-sheet" style={{ maxHeight: 340 }}>
-      <rect x={0} y={0} width={W} height={Hpx} fill="#fff" />
-      {massPath && <path d={massPath} fill="#fca5a5" fillOpacity={0.28} stroke="none" />}
-      {slicePts.map((d, i) => <path key={i} d={d} stroke="#94a3b8" strokeWidth={0.5} fill="none" />)}
-      <path d={groundPath} stroke="#78350f" strokeWidth={2} fill="none" />
-      {arcPath && <path d={arcPath} stroke="#dc2626" strokeWidth={2} fill="none" />}
-      {waterPath && <path d={waterPath} stroke="#0ea5e9" strokeWidth={1.2} strokeDasharray="5,3" fill="none" />}
-      {center && <>
-        <line x1={center.cx} y1={center.cy} x2={X(res!.circle.xc + res!.circle.R)} y2={center.cy} stroke="#dc2626" strokeWidth={0.6} strokeDasharray="3,3" />
-        <circle cx={center.cx} cy={center.cy} r={3} fill="#dc2626" />
-      </>}
-    </svg>
-  )
 }
 
 export default function SlopeStability() {
@@ -134,183 +58,79 @@ export default function SlopeStability() {
   // Utilisation from the factor of safety: 1.5 is the conventional long-term
   // requirement for a permanent slope, so FS_required / FS_achieved is ≤ 1
   // exactly when it passes.
-  const report = crit ? {
-    docCode: 'G-SS',
-    ok: govOK,
-    governing: `${method} FS = ${f2(FS)} on the critical circle (target 1.5)`,
-    stats: [
-      { label: `FS (${method})`, value: f2(FS) },
-      { label: 'Circle radius R', value: f2(crit.circle.R), unit: 'm' },
-      { label: 'Centre (x, y)', value: `${f2(crit.circle.xc)}, ${f2(crit.circle.yc)}` },
-    ],
-    checks: [
-      { name: 'Factor of safety vs 1.5', ratio: FS > 0 ? 1.5 / FS : 0, ok: govOK },
-    ],
-    data: [
-      ['Slope height H', `${f2(H)} m`],
-      ['Face angle β', `${f2(beta)}°`],
-      ['Crest / toe width', `${f2(crestW)} / ${f2(toeW)} m`],
-      ['Cohesion c', `${f2(c)} kPa`],
-      ['Friction angle φ', `${f2(phi)}°`],
-      ['Unit weight γ', `${f2(gamma)} kN/m³`],
-      ['Pore pressure ru', f2(ru)],
-      ['Reported method', method],
-      ['FS Bishop', f2(crit.bishop.FS)],
-      ['FS Fellenius', f2(crit.fellenius.FS)],
-      ['FS Janbu', f2(crit.janbu.FS)],
-      ['Driving ΣW·sinα', `${f2(crit.bishop.driving)} kN`],
-      ['Resisting Σ', `${f2(crit.bishop.resisting)} kN`],
-      ['Bishop converged', `${crit.bishop.converged ? 'yes' : 'NO'} (${crit.bishop.iterations} iterations)`],
-    ] as [string, string][],
-    steps: buildSlopeSolution(
-      { H, beta, crestW, toeW, soil, ru, method }, res!, crit,
-    ),
-  } : undefined
-
+  const slopeSteps = crit && res ? buildSlopeSolution({ H, beta, crestW, toeW, soil, ru, method }, res, crit) : []
+  const METHOD_LABEL = { bishop: 'Bishop simplified', fellenius: 'Fellenius / OMS', janbu: 'Janbu simplified' } as const
   return (
-        <div>
-      <PageHeader title="Slope stability — method of slices" badges={['Bishop', 'Fellenius', 'Janbu']} />
-      <CalcBody wide>
-        <div className="space-y-5">
-      <ReportControls title="Slope Stability" badges={['Bishop', 'Fellenius', 'Janbu']} report={report} />
-      <p className="mt-2 text-sm text-muted">
-        Circular-failure factor of safety by the method of slices — Fellenius/OMS, Bishop&rsquo;s simplified and
-        Janbu&rsquo;s simplified — with a grid search for the critical (minimum-FS) circle. Pore pressure via ru.
-        The infinite-slope check below covers the other failure mode: a planar slide in a shallow
-        mantle, where every slice is identical and the answer is closed-form.
-      </p>
-
-      <section className="mt-6">
-        <SoilLayerPicker
-          want={['c', 'phiDeg', 'gamma']}
-          onApply={(f) => {
-            if (f.c != null) setC(f.c)
-            if (f.phiDeg != null) setPhi(f.phiDeg)
-            if (f.gamma != null) setGamma(f.gamma)
-          }} />
-      </section>
-
-      <Card title="Slope geometry">
-        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Height H" unit="m" value={H} onChange={setH} />
-          <Field label="Face angle β" unit="°" value={beta} onChange={setBeta} />
-          <Field label="Crest width" unit="m" value={crestW} onChange={setCrestW} />
-          <Field label="Toe width" unit="m" value={toeW} onChange={setToeW} />
-        </div>
-        </Card>
-
-      <Card title="Soil & water">
-        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Cohesion c′" unit="kPa" value={c} onChange={setC} />
-          <Field label="Friction φ′" unit="°" value={phi} onChange={setPhi} />
-          <Field label="Unit weight γ" unit="kN/m³" value={gamma} onChange={setGamma} />
-          <Field label="Pore ratio ru" value={ru} onChange={setRu} step="0.05" />
-        </div>
-      </Card>
-
-      <section className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-[13.5px] font-bold text-ink">Critical circle</h2>
-          <label className="flex items-center gap-2 text-sm">
-            <span className="text-muted">Governing method</span>
-            <select value={method} onChange={(e) => setMethod(e.target.value as typeof method)}
-              className="rounded-md border border-field-line px-2 py-1">
-              <option value="bishop">Bishop simplified</option>
-              <option value="fellenius">Fellenius / OMS</option>
-              <option value="janbu">Janbu simplified</option>
-            </select>
-          </label>
-        </div>
-        <SlopeSvg ground={ground} res={crit} />
-        {crit ? (
-          <div className="mt-3">
-            <Out label={`Factor of safety — ${method}`} value={f2(FS)} ok={govOK} />
-            <Out label="FS — Bishop / Fellenius / Janbu" value={`${f2(crit.bishop.FS)} / ${f2(crit.fellenius.FS)} / ${f2(crit.janbu.FS)}`} />
-            <Out label="Critical circle (xc, yc, R)" value={`(${f2(crit.circle.xc)}, ${f2(crit.circle.yc)}, ${f2(crit.circle.R)}) m`} />
-            <Out label="Janbu correction f₀ · slices" value={`${f2(crit.f0)} · ${crit.slices.length}`} />
-            <Out label="Σ driving / Σ resisting (Bishop)" value={`${f0(crit.bishop.driving)} / ${f0(crit.bishop.resisting)} kN·m/m`} />
-            <p className="mt-2 text-[11px] text-muted">
-              FS &lt; 1.5 (static) is generally inadequate for a permanent slope; check the target FS for your load
-              case. Search covers a centre/radius grid — refine the geometry for site-specific circles.
-            </p>
+    <WorkspacePage title="Slope Stability" badges={['Geotechnical', 'Bishop · Fellenius · Janbu']}
+      intro="Circular-failure factor of safety by the method of slices — Fellenius/OMS, Bishop's simplified and Janbu's simplified — with a grid search for the critical circle (minimum Bishop FS), pore pressure via ru, and the infinite-slope check for a planar slide in a shallow mantle."
+      inputs={<>
+        <InputGroup title="Slope geometry">
+          <Num label="Height H" unit="m" value={H} onChange={setH} />
+          <Num label="Face angle β" unit="°" value={beta} onChange={setBeta} />
+          <Num label="Crest width" unit="m" value={crestW} onChange={setCrestW} />
+          <Num label="Toe width" unit="m" value={toeW} onChange={setToeW} />
+        </InputGroup>
+        <InputGroup title="Soil and water">
+          <div className="col-span-2">
+            <SoilLayerPicker want={['c', 'phiDeg', 'gamma']} onApply={(f) => {
+              if (f.c != null) setC(f.c)
+              if (f.phiDeg != null) setPhi(f.phiDeg)
+              if (f.gamma != null) setGamma(f.gamma)
+            }} />
           </div>
-        ) : (
-          <p className="mt-3 rounded-lg border border-dashed border-hairline px-3 py-4 text-center text-xs text-faint">
-            No valid slip circle found for this geometry — check the slope height, angle and plateau widths.
-          </p>
-        )}
-      </section>
-
-      {crit && (
-        <ResultCard title="Slices (critical circle)">
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-[12px]">
-              <thead className="text-muted">
-                <tr className="border-b border-hairline">
-                  <th className="py-1 pr-3 text-left">#</th><th className="py-1 pr-3">x (m)</th><th className="py-1 pr-3">b (m)</th>
-                  <th className="py-1 pr-3">h (m)</th><th className="py-1 pr-3">α (°)</th><th className="py-1 pr-3">W (kN/m)</th><th className="py-1 pr-3">u (kPa)</th>
-                </tr>
-              </thead>
-              <tbody className="font-mono">
-                {crit.slices.map((sl, i) => (
-                  <tr key={i} className="border-b border-hairline-2">
-                    <td className="py-0.5 pr-3 text-left">{i + 1}</td>
-                    <td className="py-0.5 pr-3">{f2(sl.x)}</td><td className="py-0.5 pr-3">{f2(sl.b)}</td>
-                    <td className="py-0.5 pr-3">{f2(sl.h)}</td><td className="py-0.5 pr-3">{f2((sl.alpha * 180) / Math.PI)}</td>
-                    <td className="py-0.5 pr-3">{f0(sl.W)}</td><td className="py-0.5 pr-3">{f0(sl.u)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <Num label="Cohesion c′" unit="kPa" value={c} onChange={setC} />
+          <Num label="Friction φ′" unit="°" value={phi} onChange={setPhi} />
+          <Num label="Unit weight γ" unit="kN/m³" value={gamma} onChange={setGamma} />
+          <Num label="Pore ratio ru" value={ru} onChange={setRu} step="0.05" />
+        </InputGroup>
+        <InputGroup title="Reported method" hint="The circle is the minimum-Bishop circle; the method sets which FS is reported on it.">
+          <div className="col-span-2">
+            <Pick label="Method" value={method} onChange={(v) => setMethod(v as typeof method)}
+              options={[['bishop', METHOD_LABEL.bishop], ['fellenius', METHOD_LABEL.fellenius], ['janbu', METHOD_LABEL.janbu]]} />
           </div>
-          <p className="mt-2 text-[10px] text-muted">
-            Bishop: FS = Σ[(c·b + (W − u·b)·tanφ)/mα] / Σ[W·sinα], mα = cosα + sinα·tanφ/FS (iterated).
-            Fellenius drops the inter-slice terms; Janbu uses force equilibrium × f₀.
-          </p>
-        </ResultCard>
-      )}
-
-      {/* ── Infinite slope — the OTHER failure mode ────────────────────── */}
-      <section className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-        <h2 className="text-[13.5px] font-bold text-ink">Infinite slope — planar failure</h2>
-        <p className="mb-3 text-[11px] text-muted">
-          A shallow soil mantle sliding on a plane parallel to the ground — over rock, or a firm
-          stratum. Uses the same c, φ, γ and slope angle β entered above.
-        </p>
-        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-muted">Failure depth z (m)</span>
-            <input type="number" step="0.5" value={infZ}
-              onChange={(e) => setInfZ(parseFloat(e.target.value) || 0)}
-              className="rounded-md border border-field-line px-2.5 py-1.5" />
+        </InputGroup>
+        <InputGroup title="Infinite slope" hint="A shallow mantle sliding parallel to the ground; uses c, φ, γ and β above.">
+          <Num label="Failure depth z" unit="m" value={infZ} onChange={setInfZ} step="0.5" />
+          {infSeepage ? <Num label="γ saturated" unit="kN/m³" value={infGammaSat} onChange={setInfGammaSat} step="0.5" /> : <div />}
+          <label className="col-span-2 flex items-center gap-2 text-[12.5px] font-semibold text-ink">
+            <input type="checkbox" checked={infSeepage} onChange={(e) => setInfSeepage(e.target.checked)} className="accent-brand" />
+            Seepage parallel to the slope
           </label>
-          {infSeepage && (
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium text-muted">γsat (kN/m³)</span>
-              <input type="number" step="0.5" value={infGammaSat}
-                onChange={(e) => setInfGammaSat(parseFloat(e.target.value) || 0)}
-                className="rounded-md border border-field-line px-2.5 py-1.5" />
-            </label>
-          )}
-        </div>
-        <label className="mt-3 flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={infSeepage} onChange={(e) => setInfSeepage(e.target.checked)} />
-          <span>Seepage parallel to the slope (water table at the surface)</span>
-        </label>
-        <div className="mt-3 flex items-baseline justify-between border-t border-hairline-2 pt-2">
-          <span className="text-sm text-muted">Factor of safety</span>
-          <span className={`font-mono text-lg font-bold ${infFS >= 1.5 ? 'text-ok' : infFS >= 1 ? 'text-warn' : 'text-fail'}`}>
-            {Number.isFinite(infFS) ? infFS.toFixed(2) : '—'}
-            <span className="ml-2 text-[11px] font-normal">
-              {infFS >= 1.5 ? '✓ stable' : infFS >= 1 ? '⚠ marginal' : '✗ unstable'}
-            </span>
-          </span>
-        </div>
-      </section>
-
-      <WorkedSolution steps={infSteps} title="Infinite slope — worked solution" />
-        </div>
-      </CalcBody>
-    </div>
+        </InputGroup>
+      </>}
+      checks={<>
+        {crit ? <CheckCard title="Critical circle" basis={`${METHOD_LABEL[method]}, FS ≥ 1.5`} status={govOK ? 'pass' : FS >= 1 ? 'warn' : 'fail'}
+          value={f2(FS)} unit="FS" formula="FS = Σ[(c b + (W − u b) tanφ) / mα] / Σ W sinα"
+          ratio={FS > 0 ? 1.5 / FS : undefined} ratioLabel="Required 1.5 ÷ FS"
+          pairs={[{ label: 'Bishop · Fellenius · Janbu', value: `${f2(crit.bishop.FS)} · ${f2(crit.fellenius.FS)} · ${f2(crit.janbu.FS)}` }, { label: 'R', value: `${f2(crit.circle.R)} m` }]} />
+          : <CheckCard title="Critical circle" basis="grid search" status="warn" pillLabel="NONE" value="—" formula="No valid slip circle for this geometry — check the height, angle and plateau widths." />}
+        <CheckCard title="Infinite slope" basis={infSeepage ? 'seepage parallel to slope' : 'dry'} status={infFS >= 1.5 ? 'pass' : infFS >= 1 ? 'warn' : 'fail'}
+          value={Number.isFinite(infFS) ? f2(infFS) : '—'} unit="FS" ratio={infFS > 0 ? 1.5 / infFS : undefined} ratioLabel="Required 1.5 ÷ FS"
+          pairs={[{ label: 'Depth z', value: `${f2(infZ)} m` }, { label: 'β', value: `${f2(beta)}°` }]} />
+      </>}
+      summary={[
+        { label: 'Geometry', value: `H ${f2(H)} m, β ${f2(beta)}°` },
+        { label: 'Plateaus', value: `crest ${f2(crestW)} m, toe ${f2(toeW)} m` },
+        { label: 'Soil', value: `c′ ${f2(c)} kPa, φ′ ${f2(phi)}°, γ ${f2(gamma)} kN/m³` },
+        { label: 'Pore pressure', value: `ru ${f2(ru)}` },
+      ]}
+      drawing={{ title: 'Slope and critical circle', node: <div data-pdf-drawing><SlopeSection ground={ground} circle={crit?.circle ?? null} slices={crit?.slices ?? []}
+        FS={FS} method={METHOD_LABEL[method]} H={H} betaDeg={beta} surface={(x) => surfaceY(ground, x)} /></div> }}
+      resultsCaption={crit ? `Bishop ${crit.bishop.converged ? 'converged' : 'did NOT converge'} in ${crit.bishop.iterations} iterations; ${crit.slices.length} slices; Janbu f₀ ${f2(crit.f0)}. FS < 1.5 is generally inadequate for a permanent slope — check the target for your load case.` : undefined}
+      results={crit ? [
+        { check: 'Bishop simplified', basis: 'moment equilibrium, iterated', demand: f2(crit.bishop.FS), limit: '1.50', ratio: 1.5 / crit.bishop.FS, status: crit.bishop.FS >= 1.5 ? 'pass' as const : 'fail' as const },
+        { check: 'Fellenius / OMS', basis: 'no inter-slice forces', demand: f2(crit.fellenius.FS), limit: '1.50', ratio: 1.5 / crit.fellenius.FS, status: crit.fellenius.FS >= 1.5 ? 'pass' as const : 'fail' as const },
+        { check: 'Janbu simplified', basis: `force equilibrium × f₀ ${f2(crit.f0)}`, demand: f2(crit.janbu.FS), limit: '1.50', ratio: 1.5 / crit.janbu.FS, status: crit.janbu.FS >= 1.5 ? 'pass' as const : 'fail' as const },
+        { check: 'Critical circle', basis: '(xc, yc, R)', demand: `(${f2(crit.circle.xc)}, ${f2(crit.circle.yc)}, ${f2(crit.circle.R)}) m`, status: 'info' as const },
+        { check: 'Driving / resisting', basis: 'Bishop', demand: `${f0(crit.bishop.driving)} / ${f0(crit.bishop.resisting)} kN·m/m`, status: 'info' as const },
+        { check: 'Infinite slope', basis: `z ${f2(infZ)} m`, demand: f2(infFS), limit: '1.50', ratio: infFS > 0 ? 1.5 / infFS : undefined, status: infFS >= 1.5 ? 'pass' as const : 'fail' as const },
+      ] : [{ check: 'Infinite slope', basis: `z ${f2(infZ)} m`, demand: f2(infFS), status: infFS >= 1.5 ? 'pass' as const : 'fail' as const }]}
+      steps={[...slopeSteps, ...infSteps]}
+      references={[
+        { topic: 'Method of slices', basis: 'Fellenius (OMS), Bishop simplified, Janbu simplified', source: 'Bishop (1955); Janbu (1954); Abramson et al., Slope Stability and Stabilization' },
+        { topic: 'Pore pressure', basis: 'ru = u / γh', source: 'Bishop & Morgenstern (1960)' },
+        { topic: 'Infinite slope', basis: 'planar slide parallel to the ground', source: 'Das, Principles of Geotechnical Engineering' },
+      ]}
+    />
   )
 }

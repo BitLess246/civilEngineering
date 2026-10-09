@@ -19,7 +19,7 @@
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import type { ShellNode, ShellElem, ElementStress } from '../../engine/shell'
-import { type StressKey } from '../../lib/stressScale'
+import { type StressKey, type RampPalette } from '../../lib/stressScale'
 import { contourData, contourGeometry } from '../../lib/shellContour'
 import { contourMaterial } from '../../lib/contourMaterial'
 
@@ -36,13 +36,15 @@ import { contourMaterial } from '../../lib/contourMaterial'
  * lit. Shading it would multiply the ramp by the lighting and the colour would
  * no longer mean the number it is keyed to.
  */
-export function ShellStress3D({ nodes, elems, stresses, contourKey, bands, opacity = 0.95 }: {
+export function ShellStress3D({ nodes, elems, stresses, contourKey, bands, opacity = 0.95, palette }: {
   nodes: readonly ShellNode[]
   elems: readonly ShellElem[]
   stresses: readonly ElementStress[]
   contourKey: StressKey
   /** Discrete colour bands; 0 draws the field smooth. */
   bands: number
+  /** Ramp family; the FEA spectrum by default. */
+  palette?: RampPalette
   opacity?: number
 }) {
   const geo = useMemo(() => {
@@ -66,7 +68,7 @@ export function ShellStress3D({ nodes, elems, stresses, contourKey, bands, opaci
   // DoubleSide (set by the factory): a slab contour has to be readable from
   // underneath, which is where you look at a soffit from. Disposed on replace —
   // a ShaderMaterial is a compiled GPU program.
-  const mat = useMemo(() => contourMaterial({ signed, bands, opacity }), [signed, bands, opacity])
+  const mat = useMemo(() => contourMaterial({ signed, bands, opacity, palette }), [signed, bands, opacity, palette])
   useEffect(() => () => { mat.dispose() }, [mat])
 
   if (!geo) return null

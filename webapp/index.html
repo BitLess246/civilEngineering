@@ -5,6 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Zeta</title>
+    <!-- What a shared link unfurls into (Facebook, LinkedIn, Messenger, X,
+         Slack). One card for the whole SPA: crawlers do not run the bundle, so
+         these static tags are all they ever see. og:image must be absolute.
+         No canonical and no og:url here: this one file serves every route,
+         so either would declare every page a duplicate of the home page. -->
+    <meta name="description" content="Code-checked structural calculators, 3D frame analysis and quantity take-off for NSCP 2015, ACI 318-14 and AISC 360-16 — every result traced to its clause, every report ready to sign." />
+    <meta name="theme-color" content="#0f1b2a" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Zeta" />
+    <meta property="og:title" content="Zeta — the structural workbench for Philippine practice" />
+    <meta property="og:description" content="Code-checked calculators, 3D analysis and take-off for NSCP 2015, ACI 318-14 and AISC 360-16. Every answer shows its work." />
+    <meta property="og:image" content="https://www.zetastruct.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The Zeta logo and wordmark on a drafting grid: the structural workbench for Philippine practice." />
+    <meta property="og:locale" content="en_PH" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Zeta — the structural workbench for Philippine practice" />
+    <meta name="twitter:description" content="Code-checked calculators, 3D analysis and take-off for NSCP 2015, ACI 318-14 and AISC 360-16. Every answer shows its work." />
+    <meta name="twitter:image" content="https://www.zetastruct.app/og-image.png" />
     <!-- Google tag (gtag.js) — GA4. The initial load is counted by gtag('config')
          below; route changes inside the SPA are counted by usePageViews() in
          src/lib/analytics.ts, which deliberately skips that first render.

@@ -110,9 +110,11 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
           Drawn to scale from the entered geometry. Marks ①–⑤ are scheduled below.
         </text>
 
-        {/* ── retained soil, behind the stem and over the heel ─────────────── */}
-        <rect x={xStemR} y={yTop} width={xp - xStemR} height={yBase - yTop} fill={SOIL} />
-        <rect x={xStemR} y={yTop} width={xp - xStemR} height={yBase - yTop} fill="url(#rw-soil)" />
+        {/* ── retained soil, behind the stem, over the heel and on down past
+            the heel's end to the base soffit — the backfill does not stop at
+            the top of the base; the base is drawn over it ────────────────── */}
+        <rect x={xStemR} y={yTop} width={xp - xStemR} height={yBot - yTop} fill={SOIL} />
+        <rect x={xStemR} y={yTop} width={xp - xStemR} height={yBot - yTop} fill="url(#rw-soil)" />
         <line x1={xStemR} y1={yTop} x2={xp} y2={yTop} stroke={INK} strokeWidth={1.4} />
         {p.q_sur > 0 && (
           <g>
@@ -126,12 +128,16 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
           </g>
         )}
 
-        {/* soil in front of the toe — faint, because its passive resistance is
-            deliberately NOT counted in the sliding check */}
-        <rect x={x0 - 62} y={yBase - 24} width={62} height={yBot - yBase + 24}
+        {/* soil in front of the wall — over the toe up to the stem face and on
+            down past the toe to the base soffit (the base is drawn over it).
+            Faint, because its passive resistance is deliberately NOT counted
+            in the sliding check */}
+        <rect x={x0 - 62} y={yBase - 24} width={xStemL - x0 + 62} height={yBot - yBase + 24}
           fill={SOIL} opacity={0.45} />
-        <line x1={x0 - 62} y1={yBase - 24} x2={x0} y2={yBase - 24} stroke={FAINT} strokeWidth={1} />
-        <text x={x0 - 60} y={yBase - 14} fontSize={6.5} fill={FAINT}>passive — not counted</text>
+        <rect x={x0 - 62} y={yBase - 24} width={xStemL - x0 + 62} height={yBot - yBase + 24}
+          fill="url(#rw-soil)" opacity={0.45} />
+        <line x1={x0 - 62} y1={yBase - 24} x2={xStemL} y2={yBase - 24} stroke={FAINT} strokeWidth={1} />
+        <text x={x0 - 60} y={yBase - 28} fontSize={6.5} fill={FAINT}>passive — not counted</text>
 
         {/* ── the wall ────────────────────────────────────────────────────── */}
         <rect x={xStemL} y={yTop} width={xStemR - xStemL} height={yBase - yTop}
@@ -208,6 +214,11 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
 
         {/* ── dimensions ──────────────────────────────────────────────────── */}
         <g stroke={DIM} fill={DIM}>
+          {/* extension lines off the stem top, the base top and the base
+              soffit — the two heights used to float 80–110 px off the wall */}
+          <line x1={xStemL - 4} y1={yTop} x2={x0 - 113} y2={yTop} strokeWidth={0.6} />
+          <line x1={x0 - 4} y1={yBase} x2={x0 - 87} y2={yBase} strokeWidth={0.6} />
+          <line x1={x0 - 4} y1={yBot} x2={x0 - 113} y2={yBot} strokeWidth={0.6} />
           <VDim x={x0 - 82} y1={yTop} y2={yBase} label={`Hs = ${(Hs / 1000).toFixed(2)} m`} />
           <VDim x={x0 - 108} y1={yTop} y2={yBot} label={`H = ${H.toFixed(2)} m`} />
           {/* A long heel squeezes bt and ts to a few pixels each, and their
@@ -225,7 +236,7 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
             })
           })()}
           <HDim y={yDim2} x1={x0} x2={xHeel} label={`B = ${B.toFixed(2)} m`} />
-          <text x={xHeel + 6} y={(yBase + yBot) / 2 + 3} fontSize={7.5} stroke="none">tb = {tb}</text>
+          <text x={xHeel + 6} y={(yBase + yBot) / 2 + 3} fontSize={7.5} stroke="var(--sheet, #fff)" strokeWidth={2.6} paintOrder="stroke">tb = {tb}</text>
         </g>
 
         {/* ── bearing pressure under the base ──────────────────────────────── */}

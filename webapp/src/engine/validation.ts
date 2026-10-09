@@ -40,6 +40,10 @@ import { Ec as concreteE } from './slabDeflection'
 import { solveBoltedConnection } from './boltedConnection'
 import { solveWeldedConnection } from './weldedConnection'
 import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './steelDesign'
+import { designBolts } from './steelConnections'
+import { tabPlateChecks, copedTee } from './shearTabChecks'
+import { columnJ10 } from './columnJointChecks'
+import { basePlateMoment } from './baseplate'
 import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDesign'
 import { designWoodSlab } from './woodSlab'
 import { designSlabOpening } from './slabOpening'
@@ -55,6 +59,9 @@ import { stressSection, sectionResultants } from './memberStress'
 import { influenceLines, ilAt } from './influenceTruss'
 import { buildBeam, effectPoints, ilTotalArea } from './influenceBeam'
 import type { RectSection } from './model'
+import { designBraceEnd } from './braceConnection'
+import { designBraceMember } from './steelBrace'
+import { solvePlateFE } from './plateFE'
 
 export interface ValidationCase {
   id: string
@@ -642,6 +649,80 @@ const boltOop = (() => {
   return { manual: (100 * 100 * 200) / 100_000, software: r.Tmax }
 })()
 
+const tabInteraction = (() => {
+  // 3-M20 tab, 230 × 10 mm, bolt line 60 mm off the weld, Vu = 200 kN, A36:
+  // Manual Part 10 Eq. 10-5 (Vu/φVy)² + (Vu·a/0.9FyZ)², by hand.
+  const bolts = designBolts(200, { dia: 20, aMm: 60, locations: [0, 1, 2].map((k) => ({ id: `B${k + 1}`, x: 60, y: 40 + 75 * k })) })
+  const r = tabPlateChecks(bolts, { t: 10, wMm: 140, hMm: 230, weldSizeMm: 6, phiVn: 0, phiWeldVn: 0 }, 200)
+  const phiVy = 0.6 * 248 * 10 * 230 / 1000, phiMy = 0.9 * 248 * 10 * 230 ** 2 / 4 / 1000
+  return { manual: (200 / phiVy) ** 2 + (12000 / phiMy) ** 2, software: r.flexure.interaction }
+})()
+
+const copedTeeS = (() => {
+  // W310x38.7 coped 22 mm: the tee of ho = 288, tw 5.8, bf 165, tf 9.7 — S to
+  // the cut edge from ȳ and I by parallel axes.
+  const ho = 288, tw = 5.8, bf = 165, tf = 9.7, hw = ho - tf
+  const Af = bf * tf, Aw = tw * hw
+  const yb = (Af * tf / 2 + Aw * (tf + hw / 2)) / (Af + Aw)
+  const I = bf * tf ** 3 / 12 + Af * (yb - tf / 2) ** 2 + tw * hw ** 3 / 12 + Aw * (tf + hw / 2 - yb) ** 2
+  return { manual: I / (ho - yb), software: copedTee(ho, tw, bf, tf).S }
+})()
+
+const j10WebYield = (() => {
+  // W310x79 (tf 14.6, tw 8.76), Fy 345, a 9.7 mm beam flange, interior:
+  // §J10.2 Eq. J10-2, Rn = Fy·tw·(5k + lb), k taken as tf.
+  const r = columnJ10({ name: 'W310x79', d: 307, bf: 254, tf: 14.6, tw: 8.76, A: 10100, Fy: 345 },
+    [{ beamId: 'B', Pf: 100, bfb: 165, tfb: 9.7 }], { atEnd: false, twoSided: false, Pr: 0, beamDepth: 310 })
+  return { manual: 345 * 8.76 * (5 * 14.6 + 9.7) / 1000, software: r.webLocalYielding.phiRn }
+})()
+
+const basePlateLargeM = (() => {
+  // DG1 uniform bearing, N 500 × B 400, f′c 21, Pu 500 kN, Mu 150 kN·m, rods at
+  // f = 200: the rods' pull by moment equilibrium about the rod line (independent
+  // of the closed form for Y): qmax·Y·(f + N/2 − Y/2) = Pu·(e + f), T = qmax·Y − Pu.
+  const r = basePlateMoment({ Pu: 500, Mu: 150, N: 500, B: 400, m: 100, dBend: 310, tfBend: 15, f: 200, fc: 21, Fy: 248 })
+  const q = 0.65 * 0.85 * 21 * 400, a = 450, M = 500000 * 500
+  // solve the quadratic q·Y·(a − Y/2) = M by hand
+  const Y = a - Math.sqrt(a * a - (2 * M) / q)
+  return { manual: (q * Y - 500000) / 1000, software: r.Tu }
+})()
+
+const gussetWhitmore = (() => {
+  // HSS127x127x6.4 at 45° into a corner, beam face eb 155, column flange ec
+  // 153.5: the brace end sits where both HSS corners clear the faces by 25,
+  // sEnd = (155 + 25 + 63.5·c)/c; the Whitmore section there leaves the plate
+  // at the two faces, so the width that counts is 2·sEnd − (eb + ec)/c, c = cos45°.
+  const e = designBraceEnd(shapeByName('HSS127x127x6.4')!, 400, 300, { kind: 'corner', eb: 155, ec: 153.5, theta: Math.PI / 4 }, 450)!
+  const c = Math.SQRT1_2, sEnd = (155 + 25 + 63.5 * c) / c
+  return { manual: 2 * sEnd - (155 + 153.5) / c, software: e.whitmore.Lw }
+})()
+
+const braceCompression = (() => {
+  // HSS127x127x6.4 (A 2 770, r 49), L 5 m, Fy 345: KL/r = 102.04 ≤ 4.71√(E/Fy),
+  // Fe = π²E/(KL/r)², Fcr = 0.658^(Fy/Fe)·Fy, φPn = 0.9·Fcr·Ag (walls nonslender)
+  const r = designBraceMember(shapeByName('HSS127x127x6.4')!, 5, 300, 0, 345, 427, { An: 2770, U: 1 })
+  const Fe = (Math.PI ** 2 * 200000) / (5000 / 49) ** 2
+  return { manual: (0.9 * 0.658 ** (345 / Fe) * 345 * 2770) / 1000, software: r.compression.phiPn }
+})()
+
+const plateFECantilever = (() => {
+  // A 400 × 100 × 10 plate fixed at x = 0, 20 kN tip shear: the top-row
+  // element centre at x = 202.5, y = 97.5 against beam theory M·y/I there.
+  const L = 400, d = 100, t = 10, V = 20000, h = 5
+  const r = solvePlateFE({
+    outline: [[0, 0], [L, 0], [L, d], [0, d]], t, Fy: 250, h,
+    supports: [{ a: [0, 0], b: [0, d] }],
+    loads: [{ kind: 'line', a: [L, 0], b: [L, d], Fx: 0, Fy: -V }],
+  })!
+  const x = L / 2 + h / 2, y = d - h / 2
+  const e = r.elems.find((el) => {
+    const cx = el.nodes.reduce((s, k) => s + r.nodes[k][0], 0) / el.nodes.length
+    const cy = el.nodes.reduce((s, k) => s + r.nodes[k][1], 0) / el.nodes.length
+    return Math.abs(cx - x) < 1e-6 && Math.abs(cy - y) < 1e-6
+  })!
+  return { manual: (V * (L - x) * (y - d / 2)) / ((t * d ** 3) / 12), software: e.sx }
+})()
+
 const pryingT0 = (() => {
   // Minimum fitting thickness that eliminates prying (AISC Part 9):
   // t₀ = √(4·φBn·b′/(φf·Fy·p)) with φBn = 60 kN, b′ = 45 − 20/2 = 35 mm,
@@ -1142,6 +1223,41 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'bolt-oop-tension', category: 'Connections', title: 'Out-of-plane bolt group — top-row tension',
     reference: 'AISC 360 §J3.7', formula: 'Tᵢ = M_op·yᵢ / Σyᵢ²',
     manual: boltOop.manual, software: boltOop.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'shear-tab-interaction', category: 'Connections', title: 'Shear tab — flexure + shear at the bolt line',
+    reference: 'AISC Manual Part 10, Eq. 10-5', formula: '(Vu/φVy)² + (Vu·a / 0.9·Fy·Z)²,  Z = t·h²/4',
+    manual: tabInteraction.manual, software: tabInteraction.software, unit: '—', tol: 1e-9,
+  },
+  {
+    id: 'coped-tee-S', category: 'Connections', title: 'Coped beam — elastic modulus of the tee at the cope',
+    reference: 'AISC Manual Part 9 (coped beams)', formula: 'S = I / (ho − ȳ),  I by parallel axes',
+    manual: copedTeeS.manual, software: copedTeeS.software, unit: 'mm³', tol: 1e-9,
+  },
+  {
+    id: 'j10-web-yielding', category: 'Connections', title: 'Column web local yielding under a beam flange',
+    reference: 'AISC 360-16 §J10.2, Eq. J10-2', formula: 'φRn = 1.0·Fy·tw·(5k + lb)',
+    manual: j10WebYield.manual, software: j10WebYield.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'baseplate-moment-rods', category: 'Connections', title: 'Base plate, large moment — rod tension',
+    reference: 'AISC Design Guide 1 (2nd ed.) §3.4', formula: 'q·Y·(f + N/2 − Y/2) = Pu(e + f);  Tu = q·Y − Pu',
+    manual: basePlateLargeM.manual, software: basePlateLargeM.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'brace-compression-e3', category: 'Steel', title: 'HSS brace — flexural buckling strength',
+    reference: 'AISC 360-16 §E3, Eq. E3-2/E3-4', formula: 'φPn = 0.9·0.658^(Fy/Fe)·Fy·Ag,  Fe = π²E/(KL/r)²',
+    manual: braceCompression.manual, software: braceCompression.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'gusset-whitmore-in-plate', category: 'Connections', title: 'Corner gusset — Whitmore width inside the plate',
+    reference: 'AISC Manual Part 9 (Whitmore section) / §J4.1', formula: 'Lw = 2·sEnd − (eb + ec)/cos45°  (of H + 2·lw·tan30°)',
+    manual: gussetWhitmore.manual, software: gussetWhitmore.software, unit: 'mm', tol: 1e-9,
+  },
+  {
+    id: 'plate-fe-cantilever', category: 'Connections', title: 'Connection plate FE — bending stress of a cantilever plate',
+    reference: 'Beam theory (Euler–Bernoulli), Q6 plane-stress element', formula: 'σx = M·y/I,  M = V·(L − x),  I = t·d³/12',
+    manual: plateFECantilever.manual, software: plateFECantilever.software, unit: 'MPa', tol: 1e-4,
   },
   {
     id: 'prying-t0', category: 'Connections', title: 'Prying — thickness eliminating prying',

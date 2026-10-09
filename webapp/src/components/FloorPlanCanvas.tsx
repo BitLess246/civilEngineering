@@ -30,6 +30,8 @@ import {
   createWallOpening,
   deleteDraftElements,
   mergeDraftNodes,
+  mergeCoincidentNodes,
+  withColumnPartners,
   canMergeDraftNodes,
   nearestDraftNode,
   doorSwing,
@@ -37,7 +39,7 @@ import {
   DEFAULT_DOOR,
   DEFAULT_WINDOW,
 } from '../engine/drafting3d'
-import { CANVAS_SCALE, nextPinchView, anchoredZoom } from '../lib/planCanvasView'
+import { CANVAS_SCALE, nextPinchView, anchoredZoom, fitView, runReadout } from '../lib/planCanvasView'
 
 export type PlanTool = 'select' | 'wall' | 'beam' | 'column' | 'slab' | 'door' | 'window' | 'ceiling' | 'grid'
 
@@ -148,7 +150,7 @@ export function FloorPlanCanvas({
   // View offset (pan is a translate; the 40 px margin keeps origin labels on
   // screen) and zoom — BOTH mutable now: drag-empty-space pans, pinch/wheel
   // zooms.
-  const [pan, setPan] = useState({ x: 40, y: 40 })
+  const [pan, setPan] = useState({ x: 64, y: 48 })  // room for the axis labels
   const [zoom, setZoom] = useState(1)
   // The multi-click tool currently drawing (null = idle). Tagging the sequence
   // with its tool makes a mid-draw tool switch self-correcting: the next tap
@@ -341,10 +343,16 @@ export function FloorPlanCanvas({
     ctx.font = `${10 / (zoom * CANVAS_SCALE)}px monospace`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'top'
-    for (const x of xs) ctx.fillText(`${x.toFixed(1)}`, x, -0.5)
+    // axis labels a fixed 14 px off the grid's near edge — a metre offset
+    // grew and shrank with zoom and pushed the Y labels off the canvas
+    const px = 1 / (zoom * CANVAS_SCALE)
+    const xLab = Math.min(0, ...ys) - 14 * px
+    const yLab = Math.min(0, ...xs) - 14 * px
+    ctx.textBaseline = 'bottom'
+    for (const x of xs) ctx.fillText(`${x.toFixed(1)}`, x, xLab)
     ctx.textAlign = 'right'
     ctx.textBaseline = 'middle'
-    for (const y of ys) ctx.fillText(`${y.toFixed(1)}`, -0.5, y)
+    for (const y of ys) ctx.fillText(`${y.toFixed(1)}`, yLab, y)
 
     /** Band corners of a wall: the two centreline ends offset ± half
      *  thickness perpendicular to the run. */
@@ -543,6 +551,23 @@ export function FloorPlanCanvas({
       ctx.fill()
     }
 
+    /** Live length and bearing of the segment being drawn, beside its
+     *  midpoint — the number you would otherwise type. Screen-size text. */
+    const runLabel = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+      if (Math.hypot(b.x - a.x, b.y - a.y) < 1e-6) return
+      const px = 1 / (zoom * CANVAS_SCALE)
+      ctx.font = `600 ${12 * px}px system-ui, sans-serif`
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'bottom'
+      const tx = (a.x + b.x) / 2 + 8 * px, ty = (a.y + b.y) / 2 - 6 * px
+      const text = runReadout(a, b)
+      ctx.lineWidth = 4 * px
+      ctx.strokeStyle = '#ffffff'
+      ctx.strokeText(text, tx, ty)
+      ctx.fillStyle = '#1d4ed8'
+      ctx.fillText(text, tx, ty)
+    }
+
     // Rubber band: walls/beams run start → pointer; slabs/ceilings trace the
     // placed corners so far. Endpoints are WORLD coordinates here, snapped
     // through snapPoint so the preview shows exactly what commit will draw.
@@ -557,6 +582,7 @@ export function FloorPlanCanvas({
       ctx.lineTo(hoverSnap.x, hoverSnap.y)
       ctx.stroke()
       ctx.setLineDash([])
+      runLabel(drawStart, hoverSnap)
     }
     if ((drawingTool === 'slab' || drawingTool === 'ceiling') && hoverSnap) {
       const chain: Array<{ x: number; y: number }> = [
@@ -571,6 +597,7 @@ export function FloorPlanCanvas({
       chain.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
       ctx.stroke()
       ctx.setLineDash([])
+      if (chain.length >= 2 && slabPts.length > 0) runLabel(chain[chain.length - 2], chain[chain.length - 1])
     }
 
     /** Green ring — Revit's "this end will weld to this joint" indicator. */
@@ -765,9 +792,15 @@ export function FloorPlanCanvas({
       if (hit.kind === 'node') {
         const n = nodesView.get(hit.id)
         if (n) {
+          // a column's two joints travel together — dragging only its base
+          // used to lean the column across the storey
+          const orig = withColumnPartners(level, [hit.id])
+            .map(id => nodesView.get(id))
+            .filter((m): m is DraftNode => m !== undefined)
+            .map(m => ({ id: m.id, x: m.x, y: m.y, z: m.z }))
           gestureRef.current = {
             mode: 'move', startWorld: world, startScreen: { x: e.clientX, y: e.clientY }, primary: hit.id,
-            orig: [{ id: hit.id, x: n.x, y: n.y, z: n.z }], movedPx: 0,
+            orig, movedPx: 0,
           }
         }
       } else {
@@ -776,7 +809,7 @@ export function FloorPlanCanvas({
         if (el.type === 'door' || el.type === 'window') {
           gestureRef.current = { mode: 'moveOpening', id: hit.id, startScreen: { x: e.clientX, y: e.clientY }, movedPx: 0 }
         } else {
-          const refs = el.corners ? [...el.corners] : [...el.nodes]
+          const refs = withColumnPartners(level, el.corners ? [...el.corners] : [...el.nodes])
           const orig = refs
             .map(id => ({ id, n: nodesView.get(id) }))
             .filter((o): o is { id: string; n: DraftNode } => o.n !== undefined)
@@ -982,6 +1015,17 @@ export function FloorPlanCanvas({
         // the dropped joint no longer exists — keep the survivor selected
         onSelectionChange([moveSnapTarget])
       }
+      // the move may have brought other joints onto existing ones (a column's
+      // top following its base onto another column): weld those too
+      const moved = next.levels.get(level.id)
+      if (moved) {
+        const welded = mergeCoincidentNodes(moved)
+        if (welded !== moved) {
+          const levels = new Map(next.levels)
+          levels.set(level.id, welded)
+          next = { ...next, levels }
+        }
+      }
       onProjectChange(next)
       setNodePreview(null)
       setMoveSnapTarget(null)
@@ -1037,7 +1081,12 @@ export function FloorPlanCanvas({
   // hosted doors/windows, orphan joints are swept); Escape clears.
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Delete' && selectedIds.length > 0) {
+      // keys typed into a field (an opening's width, a level name) belong to
+      // the field — Delete there used to delete the selected element
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName))) return
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length > 0) {
+        e.preventDefault()
         const next = deleteDraftElements(level, selectedIds)
         const levels = new Map(project.levels)
         levels.set(level.id, next)
@@ -1055,12 +1104,32 @@ export function FloorPlanCanvas({
     return () => window.removeEventListener('keydown', handleKey)
   }, [selectedIds, project, level, onProjectChange, onSelectionChange, cancelDrawState])
 
+  /** Frame everything on this level — its joints and its grid lines. */
+  const fitToView = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    const xs = [...(level.grids?.x ?? project.gridX)], ys = [...(level.grids?.y ?? project.gridY)]
+    for (const n of level.nodes.values()) { xs.push(n.x); ys.push(n.y) }
+    if (xs.length === 0) xs.push(0)
+    if (ys.length === 0) ys.push(0)
+    const v = fitView(
+      { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) },
+      { w: el.clientWidth, h: el.clientHeight },
+    )
+    setZoom(v.zoom)
+    setPan(v.pan)
+  }, [level, project.gridX, project.gridY])
+
   return (
     <div
       ref={containerRef}
       className="relative w-full h-full bg-white"
       style={{ touchAction: 'none' }}
     >
+      <button type="button" onClick={fitToView} title="Fit the plan to the view"
+        className="absolute bottom-3 right-3 z-10 rounded-md border border-field-line bg-white/90 px-3 py-1.5 text-xs font-semibold text-muted shadow-sm hover:text-ink">
+        Fit
+      </button>
       <canvas
         ref={canvasRef}
         onPointerDown={handlePointerDown}

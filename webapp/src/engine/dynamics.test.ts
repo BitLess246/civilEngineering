@@ -6,6 +6,7 @@ import {
   workEnergy,
   impulseMomentum,
   curvilinear,
+  beltFriction,
 } from "./dynamics";
 
 describe("kinematicsRectilinear", () => {
@@ -28,7 +29,29 @@ describe("kinematicsRectilinear", () => {
   });
 });
 
+describe("kinematicsRectilinear — given u, a and s, the FIRST time the body reaches s", () => {
+  it("a decelerating car (u=10, a=−2) covers s=9 at t=1 with v=+8 — not t=9 after turning back", () => {
+    const r = kinematicsRectilinear({ u: 10, a: -2, s: 9 });
+    expect(r.t).toBeCloseTo(1, 9);
+    expect(r.v).toBeCloseTo(8, 9);
+  });
+  it("a body thrown back toward s (u=−5, a=2) reaches s=6 at t=6, v=7", () => {
+    const r = kinematicsRectilinear({ u: -5, a: 2, s: 6 });
+    expect(r.t).toBeCloseTo(6, 9);
+    expect(r.v).toBeCloseTo(7, 9);
+  });
+  it("constant velocity: t = s/u; a target behind a body moving away is never reached", () => {
+    expect(kinematicsRectilinear({ u: 4, a: 0, s: 12 }).t).toBeCloseTo(3, 9);
+    expect(() => kinematicsRectilinear({ u: 4, a: 0, s: -12 })).toThrow();
+  });
+});
+
 describe("projectile", () => {
+  it("thrown downward from a height, the maximum height is the launch height", () => {
+    const r = projectile({ u: 10, thetaDeg: -30, y0: 20 });
+    expect(r.maxHeight).toBeCloseTo(20, 9);
+  });
+
   it("Level ground: u=20, θ=45°, g=9.81 → R≈40.8, H≈10.2, T≈2.88", () => {
     const r = projectile({ u: 20, thetaDeg: 45 });
     expect(r.range).toBeCloseTo(40.77, 1);
@@ -101,11 +124,18 @@ describe("workEnergy", () => {
     expect(r.deltaKE).toBeCloseTo(90);
   });
 
-  it("With non-conservative work: m=10, v1=5, Wnet=0, Wnc=-50, ΔPE=20 → v2≈4.36", () => {
-    // Wnet + Wnc + ΔPE = ΔKE = 0.5*m*(v2² - v1²)
-    // 0 - 50 + 20 = -30 = 0.5*10*(v2² - 25) → v2² = 25 - 6 = 19 → v2≈4.36
+  it("With non-conservative work: m=10, v1=5, Wnet=0, Wnc=-50, ΔPE=20 → ΔKE=-70, v2=√11≈3.317", () => {
+    // ΔKE = Wnet + Wnc − ΔPE = 0 − 50 − 20 = −70 → v2² = 25 − 2·70/10 = 11
     const r = workEnergy({ m: 10, v1: 5, Wnet: 0, Wnc: -50, deltaPE: 20 });
-    expect(r.v2).toBeCloseTo(4.36, 1);
+    expect(r.deltaKE).toBeCloseTo(-70);
+    expect(r.v2).toBeCloseTo(Math.sqrt(11), 6);
+  });
+
+  it("a body that rises loses kinetic energy: frictionless 2 kg block, v1=6, ΔPE=+20 J → v2=4", () => {
+    // ½·2·(v2² − 36) = −20 → v2² = 16
+    expect(workEnergy({ m: 2, v1: 6, Wnet: 0, deltaPE: 20 }).v2).toBeCloseTo(4, 9);
+    // and back: given v2, the other work is what the energy balance leaves
+    expect(workEnergy({ m: 2, v1: 6, v2: 4, deltaPE: 20 }).Wnet).toBeCloseTo(0, 9);
   });
 });
 
@@ -143,5 +173,14 @@ describe("curvilinear", () => {
     expect(r.at).toBe(3);
     expect(r.a).toBeCloseTo(5.83, 1);
     expect(r.thetaDeg).toBeCloseTo(59.04, 1);
+  });
+});
+describe("beltFriction", () => {
+  it("solving for μ reports the ratio of the solved belt: T1/T2", () => {
+    // T1 = 300, T2 = 100, β = π → μ = ln3/π; ratio must be 3, whatever μ was in the form
+    const r = beltFriction({ T1: 300, T2: 100, mu: 0.9, beta: Math.PI, solveFor: "mu" });
+    expect(r.mu).toBeCloseTo(Math.log(3) / Math.PI, 9);
+    expect(r.ratio).toBeCloseTo(3, 9);
+    expect(beltFriction({ T1: 300, T2: 100, mu: 0.3, beta: 9, solveFor: "beta" }).ratio).toBeCloseTo(3, 9);
   });
 });

@@ -10,7 +10,7 @@
 import type { StructuralModel, RectSection, ModelLoad, Member, WoodDeck } from './model'
 import { enforceSectionHierarchy, refreshSelfWeight, barContinuityGroups, plateSelfWeightKpa } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
-import { precomputeFrame, solveWithGeometry, applyF3Combo, serializePrecomp, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
+import { precomputeFrame, solveWithGeometry, applyF3Combo, serializePrecomp, localAxes, defaultAxisRotation, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
 import { stitchResult } from './memberSplit'
 import type { BridgeResult } from './modelBridge'
 import { FramePool } from './framePool'
@@ -44,7 +44,9 @@ import { nextTimberSize, lighterTimberSize, toStockSize, toGlulam, withinStockLe
 import { designPedestal, pedestalSide, type PedestalResult } from './pedestal'
 import { designWoodSlab, woodSlabTimberSizes, type WoodSlabResult, type WoodSlabInput } from './woodSlab'
 import type { TimberSizeQty } from './takeoff'
-import { designBasePlate, adoptPlateThickness, ANCHOR_FU, ANCHOR_FY, type BasePlateResult } from './baseplate'
+import { designBraceMember, type BraceMemberDesign } from './steelBrace'
+import { designBraceEnd, braceEndSupported, braceEndFrameFor, type BraceEndDesign, type BraceEndFrame } from './braceConnection'
+import { designBasePlate, basePlateMoments, columnBaseWeld, type ColumnBaseWeld, adoptPlateThickness, ANCHOR_FU, ANCHOR_FY, type BasePlateResult, type BasePlateMomentCheck, type BaseCase } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
 import { optimizeFootingRebar, optimizeSlabRebar, applySlabMats } from './matRebarOptimize'
 import { optimizeBeamMember } from './beamRebarOptimize'
@@ -416,11 +418,29 @@ export interface SteelColumnScheduleRow {
   Fcr: number; Fe: number
   slendernessX: number; slendernessY: number
 }
+/** A steel brace: the member (§D2/§E3/§E7) and each end's gusset (HSS
+ *  slotted over it; Whitmore, block shear, UFM interfaces). */
+export interface SteelBraceScheduleRow {
+  id: string; shape: string; L: number
+  Fy: number; Fu: number                 // brace steel, MPa
+  Pu: number; Tu: number                 // envelope compression / tension, kN
+  member: BraceMemberDesign
+  ends: { node: string; frame: BraceEndFrame; design: BraceEndDesign }[]
+  ok: boolean
+  gov?: string
+}
+
 export interface BasePlateScheduleRow {
   node: string; shape: string
   Pu: number; Tu: number
   design: BasePlateResult
   tAdopt: number                   // adopted plate thickness, mm
+  /** The base moments of every case about both column axes, by DG1's
+   *  uniform-bearing method — what the plate size, thickness and the rods'
+   *  tension also answer to. Absent where no case carries a base moment. */
+  moment?: BasePlateMomentCheck
+  /** The column-to-plate fillets for the flange tension (§J2.4). */
+  weld: ColumnBaseWeld
   /** The anchor rods as designed in the concrete (ACI 318-14 Ch. 17): count,
    *  diameter and embedment, mm, and the governing check over every case. */
   anchors?: { n: number; da: number; hef: number; check: AnchorGroupResult }
@@ -437,6 +457,8 @@ export interface PostBaseScheduleRow {
 
 /** Base-plate anchor rod diameter, mm — 1″ (⌀25) A307, four per plate. */
 export const BASE_ROD_DIA = 25
+/** The diameters a base moment can upsize the rods to, mm, in order. */
+export const BASE_ROD_UPSIZE = [32, 36]
 
 // ── Timber schedule rows (NDS §3 / NSCP §6, LRFD via Appendix N) ─────────────
 export interface WoodBeamScheduleRow {
@@ -496,6 +518,8 @@ export interface StructureDesign {
   woodBeams: WoodBeamScheduleRow[]
   woodColumns: WoodColumnScheduleRow[]
   basePlates: BasePlateScheduleRow[]
+  /** Steel braces with their gusset end connections — absent on older designs. */
+  steelBraces?: SteelBraceScheduleRow[]
   /** RC pedestals under steel / timber columns — absent on older designs. */
   pedestals?: PedestalScheduleRow[]
   /** The designed post base under every timber column on a pedestal. */
@@ -539,7 +563,7 @@ export function designOK(d: StructureDesign): boolean {
     && d.steelBeams.every((b) => b.ok) && d.steelColumns.every((c) => c.ok)
     && d.woodBeams.every((b) => b.ok) && d.woodColumns.every((c) => c.ok)
     && d.basePlates.every((p) => p.ok) && (d.pedestals ?? []).every((p) => p.ok)
-    && (d.postBases ?? []).every((p) => p.ok)
+    && (d.postBases ?? []).every((p) => p.ok) && (d.steelBraces ?? []).every((b) => b.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
     && d.slabs.every((s) => s.ok) && d.woodSlabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
     && d.stairs.every((s) => s.ok)
@@ -1452,6 +1476,7 @@ function designFromRuns(
   const columns: ColumnScheduleRow[] = []
   const steelBeams: SteelBeamScheduleRow[] = []
   const steelColumns: SteelColumnScheduleRow[] = []
+  const steelBraces: SteelBraceScheduleRow[] = []
   const woodBeams: WoodBeamScheduleRow[] = []
   const woodColumns: WoodColumnScheduleRow[] = []
   const unchecked: UncheckedMember[] = []
@@ -1545,6 +1570,36 @@ function designFromRuns(
           prestressed.push({ id: m.id, L, design, ok: design.ok })
         }
       }
+    } else if (role === 'brace') {
+      const shape = isSteel && sec.shape ? shapeByName(sec.shape) : undefined
+      if (!shape) {
+        unchecked.push({ id: m.id, role: 'brace', shape: sec.shape ?? sec.name,
+          reason: isSteel ? 'shape not found in the AISC library — brace not checked' : 'braces are designed in steel only — this brace is not checked' })
+        continue
+      }
+      let Pu = 0, Tu = 0, gov = ''
+      for (const run of runs) {
+        const mr = memberOf(run, m.id); if (!mr) continue
+        const c = Math.max(0, -Math.min(...mr.N)), t = Math.max(0, ...mr.N)
+        if (Math.max(c, t) > Math.max(Pu, Tu)) gov = run.name
+        Pu = Math.max(Pu, c); Tu = Math.max(Tu, t)
+      }
+      const na = model.nodes.find((n) => n.id === m.i)!, nb = model.nodes.find((n) => n.id === m.j)!
+      const L = Math.hypot(nb.x - na.x, nb.y - na.y, nb.z - na.z)
+      if (!braceEndSupported(shape)) {
+        unchecked.push({ id: m.id, role: 'brace', shape: shape.name,
+          reason: `${shape.family} brace: its end connection is designed for HSS and pipe braces slotted over a gusset — choose one, or detail this end` })
+        continue
+      }
+      const Fy = sec.steelFy ?? 248, Fu = sec.steelFu ?? 400
+      // the ends first, each asked for the effective net area the member's
+      // rupture needs (Tu/(0.75·Fu)); then the member on the worst end
+      const AeNeed = (Tu * 1000) / (0.75 * Fu)
+      const ends = [m.i, m.j].map((node) => ({ node, frame: braceEndFrameFor(model, m, node) }))
+        .map(({ node, frame }) => ({ node, frame, design: designBraceEnd(shape, Tu, Pu, frame, Fu, 248, 400, AeNeed)! }))
+      const weak = ends.reduce((a, b) => (b.design.U * b.design.An < a.design.U * a.design.An ? b : a))
+      const member = designBraceMember(shape, L, Pu, Tu, Fy, Fu, { An: weak.design.An, U: weak.design.U })
+      steelBraces.push({ id: m.id, shape: shape.name, L, Fy, Fu, Pu, Tu, member, ends, gov, ok: member.ok && ends.every((e) => e.design.ok) })
     } else if (role === 'column') {
       if (isSteel) {
         let best: SteelColumnScheduleRow | null = null, bestRatio = -1, gov = '', Tu = 0
@@ -1840,42 +1895,90 @@ function designFromRuns(
     // √(A2/A1) ≤ 2): size the plate once at A2 = A1, then re-check it on the
     // pedestal it actually sits on.
     const ped = pedestalAt.get(ru.node)
-    const first = designBasePlate({ ...plateIn, rodDia: BASE_ROD_DIA })
-    const design = ped
-      ? designBasePlate({ ...plateIn, rodDia: BASE_ROD_DIA, a2OverA1: Math.min(4, ped.side ** 2 / (first.N * first.B)) })
-      : first
-    const tAdopt = adoptPlateThickness(design.tReq)
-    // ── the rods in the concrete, ACI 318-14 Ch. 17 — every case's own
-    //    tension and shear together, the seismic ones at 75 % (§17.2.3.4.4);
-    //    the shallowest embedment that passes, in 25 mm steps ──
-    const pad = footings.find((f) => f.node === ru.node)
-    const half = ped ? ped.side / 2 : pad ? (pad.design.B * 1000) / 2 : Infinity
-    const hMax = ped ? ped.height * 1000 - 100 : pad ? pad.design.Dc - 100 : 600
-    const loads = runs.flatMap((run) => {
+    // every case's axial and base moment, about the column's own axes: the
+    // depth d runs along local y′ projected to plan (as steelConnections and
+    // the solver see it), strong-axis bending turns about the plan line ⟂ to it
+    const nI = model.nodes.find((n) => n.id === col.i), nJ = model.nodes.find((n) => n.id === col.j)
+    const cdir: [number, number, number] = nI && nJ ? [nJ.x - nI.x, nJ.y - nI.y, nJ.z - nI.z] : [0, 1, 0]
+    const [, yp] = localAxes(cdir, defaultAxisRotation(cdir, col.axisRotation))
+    const ph = Math.hypot(yp[0], yp[2]), dx = ph > 1e-9 ? yp[0] / ph : 1, dz = ph > 1e-9 ? yp[2] / ph : 0
+    const cases: BaseCase[] = runs.flatMap((run) => {
       const r = run.result.reactions.find((x) => x.node === ru.node)
-      return r ? [{ N: Math.max(0, -r.F[1]), V: Math.hypot(r.F[0], r.F[2]), seismic: /\d\.?\d*E\b/.test(run.name) }] : []
+      return r ? [{ name: run.name, P: r.F[1], Ms: Math.abs(-r.M[0] * dz + r.M[2] * dx), Mw: Math.abs(r.M[0] * dx + r.M[2] * dz) }] : []
     })
-    const anchorsAt = (hef: number) => {
-      let worst: AnchorGroupResult | null = null
-      for (const ld of loads) {
-        const a = checkAnchorGroup({
-          nx: 2, ny: 2, sx: 2 * design.rodX, sy: 2 * design.rodY,
-          edges: [half - design.rodX, half - design.rodX, half - design.rodY, half - design.rodY],
-          hef, da: BASE_ROD_DIA, futa: ANCHOR_FU.A307, fya: ANCHOR_FY.A307, fc: fs.fc,
-          ha: ped ? ped.height * 1000 : undefined, edgeReinf: ped ? 'bars' : 'none',
-          Nua: ld.N, Vua: ld.V, seismic: ld.seismic,
-        })
-        if (!worst || a.util > worst.util) worst = a
+    const anyMoment = cases.some((c) => c.Ms > 1e-6 || c.Mw > 1e-6)
+    const colDims = { d: plateIn.d, bf: plateIn.bf, tf: shape.tf ?? 12 }
+    // The rods start at ⌀25 and grow (⌀32, ⌀36) where a base moment's
+    // tension-side pull is more than the embedment alone can answer; each
+    // diameter re-sizes the plate, whose rod edge distances depend on it.
+    const designWith = (rodDia: number) => {
+      // size for bearing, re-check on the pedestal, and lengthen whichever way a
+      // moment finds the plate too short for (DG1: no real bearing length)
+      let Nmin = 0, Bmin = 0, a2Final = 1, design!: BasePlateResult, moment: BasePlateMomentCheck | undefined
+      for (let it = 0; it < 60; it++) {
+        const first = designBasePlate({ ...plateIn, rodDia, Nmin, Bmin })
+        const a2 = ped ? Math.min(4, ped.side ** 2 / (first.N * first.B)) : 1
+        design = ped ? designBasePlate({ ...plateIn, rodDia, a2OverA1: a2, Nmin, Bmin }) : first
+        a2Final = Math.max(1, a2)
+        moment = anyMoment ? basePlateMoments(design, colDims, cases, fs.fc, fs.steelFy ?? 248, a2Final) : undefined
+        if (!moment || (!moment.shortN && !moment.shortB)) break
+        if (moment.shortN) Nmin = design.N + 25
+        if (moment.shortB) Bmin = design.B + 25
       }
-      return worst
+      const tAdopt = adoptPlateThickness(Math.max(design.tReq, moment?.tReq ?? 0))
+      const weld = columnBaseWeld({ ...colDims, tw: shape.tw }, tAdopt, cases.length ? cases : [{ name: '', P: Pu, Ms: 0, Mw: 0 }])
+      // ── the rods in the concrete, ACI 318-14 Ch. 17 — every case's own
+      //    tension and shear together, the seismic ones at 75 % (§17.2.3.4.4);
+      //    the shallowest embedment that passes, in 25 mm steps ──
+      const pad = footings.find((f) => f.node === ru.node)
+      const half = ped ? ped.side / 2 : pad ? (pad.design.B * 1000) / 2 : Infinity
+      const hMax = ped ? ped.height * 1000 - 100 : pad ? pad.design.Dc - 100 : 600
+      const loads = runs.flatMap((run) => {
+        const r = run.result.reactions.find((x) => x.node === ru.node)
+        if (!r) return []
+        // a base moment puts the two rods of one side in tension (DG1 Tu):
+        // §17.2.1.1 lets those tension anchors be checked as their own group
+        const c = cases.find((k) => k.name === run.name)
+        const mo1 = c && anyMoment ? basePlateMoments(design, colDims, [c], fs.fc, fs.steelFy ?? 248, a2Final) : undefined
+        const TuS = mo1?.strong.ok ? mo1.strong.Tu : 0, TuW = mo1?.weak.ok ? mo1.weak.Tu : 0
+        return [{ N: Math.max(0, -r.F[1]), V: Math.hypot(r.F[0], r.F[2]), TuS, TuW, seismic: /\d\.?\d*E\b/.test(run.name) }]
+      })
+      const anchorsAt = (hef: number) => {
+        let worst: AnchorGroupResult | null = null
+        const common = { hef, da: rodDia, futa: ANCHOR_FU.A307, fya: ANCHOR_FY.A307, fc: fs.fc,
+          ha: ped ? ped.height * 1000 : undefined, edgeReinf: ped ? ('bars' as const) : ('none' as const) }
+        for (const ld of loads) {
+          const groups = [
+            // all four: net uplift and the base shear
+            checkAnchorGroup({ ...common, nx: 2, ny: 2, sx: 2 * design.rodX, sy: 2 * design.rodY,
+              edges: [half - design.rodX, half - design.rodX, half - design.rodY, half - design.rodY], Nua: ld.N, Vua: ld.V, seismic: ld.seismic }),
+            // strong-axis moment: the pair on one rod line (x = +rodX), half the shear
+            ...(ld.TuS > 0 ? [checkAnchorGroup({ ...common, nx: 1, ny: 2, sx: 0, sy: 2 * design.rodY,
+              edges: [half + design.rodX, half - design.rodX, half - design.rodY, half - design.rodY], Nua: ld.TuS, Vua: ld.V / 2, seismic: ld.seismic })] : []),
+            // weak-axis moment: the pair on y = +rodY
+            ...(ld.TuW > 0 ? [checkAnchorGroup({ ...common, nx: 2, ny: 1, sx: 2 * design.rodX, sy: 0,
+              edges: [half - design.rodX, half - design.rodX, half + design.rodY, half - design.rodY], Nua: ld.TuW, Vua: ld.V / 2, seismic: ld.seismic })] : []),
+          ]
+          for (const a of groups) if (!worst || a.util > worst.util) worst = a
+        }
+        return worst
+      }
+      let hef = Math.min(200, Math.max(100, hMax)), anchors = anchorsAt(hef)
+      // deeper only helps a strength mode — spacing and edge distance are geometry
+      while (anchors && anchors.util > 1 && hef + 25 <= hMax) { hef += 25; anchors = anchorsAt(hef) }
+      return { design, moment, tAdopt, weld, anchors, hef, rodDia }
     }
-    let hef = Math.min(200, Math.max(100, hMax)), anchors = anchorsAt(hef)
-    // deeper only helps a strength mode — spacing and edge distance are geometry
-    while (anchors && anchors.util > 1 && hef + 25 <= hMax) { hef += 25; anchors = anchorsAt(hef) }
+    let base = designWith(BASE_ROD_DIA)
+    for (const da of BASE_ROD_UPSIZE) {
+      if (!base.anchors || base.anchors.ok) break
+      const next = designWith(da)
+      if (next.anchors && (next.anchors.ok || next.anchors.util < base.anchors.util)) base = next
+    }
+    const { design, moment, tAdopt, weld, anchors, hef, rodDia } = base
     basePlates.push({
-      node: ru.node, shape: shape.name, Pu, Tu, design, tAdopt,
-      ...(anchors ? { anchors: { n: 4, da: BASE_ROD_DIA, hef, check: anchors } } : {}),
-      ok: design.bearingOK && design.anchorOK && (anchors?.ok ?? true),
+      node: ru.node, shape: shape.name, Pu, Tu, design, tAdopt, weld, ...(moment ? { moment } : {}),
+      ...(anchors ? { anchors: { n: 4, da: rodDia, hef, check: anchors } } : {}),
+      ok: design.bearingOK && design.anchorOK && (anchors?.ok ?? true) && weld.ok && (!moment || (!moment.shortN && !moment.shortB)),
     })
   }
 
@@ -2056,7 +2159,7 @@ function designFromRuns(
     govName: runs[govIdx].name,
     system: opts.seismicSystem ?? 'gravity',
     cases: runs.map((r) => r.name),
-    beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates, pedestals, postBases,
+    beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates, pedestals, postBases, steelBraces,
     joints: [] as SteelJoint[],
     beamJoints: [] as BeamBeamJoint[],
     slabs, woodSlabs, walls, stairs, footings, combined,
@@ -2824,6 +2927,18 @@ function buildGrowActions(design: StructureDesign, model: StructuralModel, memSe
       utils.set(mm.section, Math.max(utils.get(mm.section) ?? 0, need))
     }
   }
+  // Steel connections: a connection that fails — above all one whose bolt
+  // column does not fit between the beam's flanges — is fixed by a deeper
+  // beam; a column short under §J10 even with its stiffening, by a heavier
+  // column. Neither shows in the member's own utilisation, so without this
+  // the optimizer stops with every member passing and the joint failing.
+  const bump = (sec: string | undefined, f: number) => { if (sec) utils.set(sec, Math.max(utils.get(sec) ?? 0, f)) }
+  for (const j of design.joints) for (const c of j.connections) {
+    if (c.ok) continue
+    bump(memSecId.get(c.beamId), 1.15)
+    if (c.j10 && !c.j10.ok) bump(memSecId.get(j.columnId), 1.15)
+  }
+  for (const j of design.beamJoints) for (const c of j.connections) if (!c.ok) bump(memSecId.get(c.beamId), 1.15)
   // Slabs: §408.3.1.2 hmin directly; §424.2 deflection via Ie ≈ h³ ⇒ target
   // h ≈ h·∛(δ/δlim); and the thickness the mat search says it needs, straight.
   //
@@ -2923,6 +3038,7 @@ function buildUtilMap(
   for (const c of design.columns)      if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.util))
   for (const b of design.steelBeams)   if (!b.ok) bump(memSecId.get(b.id), Math.max(2, b.utilM, b.utilV, b.deflLim > 0 ? b.defl / b.deflLim : 2))
   for (const c of design.steelColumns) if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.ratio))
+  for (const b of design.steelBraces ?? []) if (!b.ok) bump(memSecId.get(b.id), Math.max(2, b.member.util))
   for (const b of design.woodBeams)    if (!b.ok) bump(memSecId.get(b.id), Math.max(2, b.utilM, b.utilV))
   for (const c of design.woodColumns)  if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.ratio))
   return out

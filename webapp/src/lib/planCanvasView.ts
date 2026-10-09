@@ -48,3 +48,37 @@ export function anchoredZoom(
     },
   }
 }
+
+/** The view that frames a plan rectangle (metres) in a canvas of `size` px
+ *  with `margin` px clear on every side — the Fit button. A degenerate box
+ *  (one point, empty plan) is framed as a 6 m square around it. Pure. */
+export function fitView(
+  box: { minX: number; minY: number; maxX: number; maxY: number },
+  size: { w: number; h: number },
+  margin = 56,
+): { zoom: number; pan: { x: number; y: number } } {
+  const cx = (box.minX + box.maxX) / 2
+  const cy = (box.minY + box.maxY) / 2
+  const bw = Math.max(box.maxX - box.minX, 6)
+  const bh = Math.max(box.maxY - box.minY, 6)
+  const zx = Math.max(1, size.w - 2 * margin) / (bw * CANVAS_SCALE)
+  const zy = Math.max(1, size.h - 2 * margin) / (bh * CANVAS_SCALE)
+  const zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.min(zx, zy)))
+  return {
+    zoom,
+    pan: { x: size.w / 2 - cx * zoom * CANVAS_SCALE, y: size.h / 2 - cy * zoom * CANVAS_SCALE },
+  }
+}
+
+/** The live readout beside a wall/beam being drawn: its plan length and its
+ *  bearing from +x, counter-clockwise as the plan is read (canvas y points
+ *  down, so the sign of dy flips). "6.00 m · 90°". Pure. */
+export function runReadout(a: { x: number; y: number }, b: { x: number; y: number }): string {
+  const dx = b.x - a.x, dy = b.y - a.y
+  const len = Math.hypot(dx, dy)
+  if (len < 1e-9) return '0.00 m'
+  let deg = (Math.atan2(-dy, dx) * 180) / Math.PI
+  if (deg < 0) deg += 360
+  const shown = Math.round(deg * 10) / 10
+  return `${len.toFixed(2)} m · ${shown % 1 === 0 ? shown.toFixed(0) : shown.toFixed(1)}°`
+}

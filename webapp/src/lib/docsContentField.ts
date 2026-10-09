@@ -4,12 +4,12 @@ import type { DocTool } from './docsModel'
 
 export const FIELD_TOOLS: DocTool[] = [
   {
-    id: 'surveying',
-    name: 'Surveying Toolbox',
-    route: '/surveying',
+    id: 'leveling',
+    name: 'Differential Leveling',
+    route: '/leveling',
     group: 'Surveying',
-    summary: 'Four board-exam classics in one shell: differential leveling, traverse closure and area, simple circular curves, and earthwork with mass haul.',
-    basis: 'Plane surveying: HI and rise-and-fall book reduction, Bowditch/compass rule, DMD area, average end area with the prismoidal correction.',
+    summary: 'Reduces a level book by height of instrument and by rise and fall, then distributes the misclosure to a closing benchmark.',
+    basis: 'HI method and rise-and-fall with the page check ΣBS − ΣFS = Σrise − Σfall; misclosure against the 4√K / 8√K / 12√K order bands.',
     sections: [
       {
         id: 'surveying-leveling',
@@ -22,6 +22,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'Level book', what: 'Full reduction by HI and rise & fall side by side, with the page check ΣBS−ΣFS = Σrise−Σfall = Δelev.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'traverse',
+    name: 'Traverse',
+    route: '/traverse',
+    group: 'Surveying',
+    summary: 'Closes a traverse from its courses: latitudes and departures, the linear misclosure and precision, the adjustment and the enclosed area.',
+    basis: 'Bowditch (compass) or transit rule adjustment; area by double-meridian distances over the adjusted courses.',
+    sections: [
       {
         id: 'surveying-traverse',
         title: 'Traverse',
@@ -32,6 +42,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'Area', what: 'Area by double-meridian distances over the adjusted courses, in m² and hectares, with the polygon drawn.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'simple-curve',
+    name: 'Simple Curve',
+    route: '/simple-curve',
+    group: 'Surveying',
+    summary: 'Every element of a simple circular curve from its radius and central angle, with the deflection-angle staking table.',
+    basis: 'T = R·tan(Δ/2), L = πRΔ/180, E and M; deflection angles from the PC with sub-chords at each end, summing to Δ/2 at the PT.',
+    sections: [
       {
         id: 'surveying-curves',
         title: 'Curves',
@@ -43,6 +63,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'Staking table', what: 'Chords from the PC, incremental and total deflections — the total at the PT equals Δ/2, the field check.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'earthwork',
+    name: 'Earthwork',
+    route: '/earthwork',
+    group: 'Surveying',
+    summary: 'Cut and fill volumes between cross-sections with shrink and swell, and the mass-haul diagram that reads borrow and waste.',
+    basis: 'Average end area with the prismoidal correction where a middle section is known; mass ordinates accumulated after shrinkage and bulking.',
+    sections: [
       {
         id: 'surveying-earthwork',
         title: 'Earthwork',
@@ -179,11 +209,11 @@ export const FIELD_TOOLS: DocTool[] = [
   },
   {
     id: 'open-channel',
-    name: 'Open Channel Flow',
+    name: 'Normal Depth',
     route: '/open-channel',
     group: 'Water resources',
-    summary: 'Three hydraulics modes in one shell: Manning normal depth, critical depth with the specific-energy curve, and the hydraulic jump with its energy balance.',
-    basis: "Manning Q = (1/n)A·R^2/3·√S solved by bisection; critical condition Q²T/(gA³) = 1; sequent depths from the momentum function M = Q²/(gA) + A·ȳ; rectangular jump y₂ = (y₁/2)(√(1+8Fr₁²)−1).",
+    summary: 'Uniform-flow depth by Manning in a rectangular, trapezoidal, triangular or circular channel, with the velocity and Froude number.',
+    basis: 'Manning Q = (1/n)·A·R^2/3·√S solved for depth by bisection; Fr = V/√(gD) sets the flow state.',
     sections: [
       {
         id: 'open-channel-normal',
@@ -195,6 +225,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'yn, V, Fr', what: 'The depth Manning settles at, the velocity, and the Froude number with the flow state; a circular pipe that cannot carry Q reports its peak capacity near y/D = 0.938 instead of a fake root.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'critical-depth',
+    name: 'Critical Depth',
+    route: '/critical-depth',
+    group: 'Water resources',
+    summary: 'Critical depth and minimum specific energy for a discharge, with the E–y curve and the alternate depth of any probe depth.',
+    basis: 'Critical condition Q²T/(gA³) = 1 solved by bisection for every shape; E = y + V²/2g.',
+    sections: [
       {
         id: 'open-channel-critical',
         title: 'Critical depth & specific energy',
@@ -204,6 +244,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'E–y curve', what: 'Specific energy against depth with Emin, yc, the 45° asymptote and both limbs drawn — the picture every textbook sketches.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'hydraulic-jump',
+    name: 'Hydraulic Jump',
+    route: '/hydraulic-jump',
+    group: 'Water resources',
+    summary: 'The sequent depth of a hydraulic jump, the energy it destroys and the power dissipated, with the jump class from Fr₁.',
+    basis: 'Rectangular y₂ = (y₁/2)(√(1 + 8Fr₁²) − 1); other shapes by the momentum function M = Q²/(gA) + A·ȳ; ΔE = E₁ − E₂.',
+    sections: [
       {
         id: 'open-channel-jump',
         title: 'Hydraulic jump',
@@ -312,12 +362,12 @@ export const FIELD_TOOLS: DocTool[] = [
     ],
   },
   {
-    id: 'geometric-design',
-    name: 'Geometric Design',
-    route: '/geometric-design',
+    id: 'sight-distance',
+    name: 'Stopping Sight Distance',
+    route: '/sight-distance',
     group: 'Transportation',
-    summary: 'Highway alignment classics in one shell: stopping sight distance, parabolic vertical curves with crest/sag sight-distance checks, and the superelevation balance with minimum radius.',
-    basis: 'AASHTO Green Book forms: SSD = 0.278Vt + V²/254(f±G); crest L = AS²/658 (1.08 m eye, 0.60 m object); sag headlight L = AS²/(120+3.5S); comfort L ≥ AV²/395; e + f = V²/127R.',
+    summary: 'The distance a driver needs to perceive, react and brake to a stop, split into its reaction and braking pieces, on a grade.',
+    basis: 'AASHTO Green Book SSD = 0.278·V·t + V²/254(f ± G).',
     sections: [
       {
         id: 'geometric-ssd',
@@ -328,6 +378,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'SSD', what: 'Reaction and braking pieces reported separately with the composition drawn to scale.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'vertical-curves',
+    name: 'Vertical Curves',
+    route: '/vertical-curves',
+    group: 'Transportation',
+    summary: 'A parabolic crest or sag curve between two grades: its elevations, high or low point, and the sight-distance and comfort checks.',
+    basis: 'AASHTO crest L = AS²/658 (1.08 m eye, 0.60 m object); sag headlight L = AS²/(120 + 3.5S); comfort L ≥ AV²/395; e = AL/800.',
+    sections: [
       {
         id: 'geometric-curve',
         title: 'Vertical curves',
@@ -338,6 +398,16 @@ export const FIELD_TOOLS: DocTool[] = [
           { kind: 'output', name: 'Curve geometry', what: 'A, K, r, the PVI external offset e = A·L/800, and the high/low point station and elevation, with the profile drawn.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'superelevation',
+    name: 'Superelevation',
+    route: '/superelevation',
+    group: 'Transportation',
+    summary: 'Splits the lateral demand of a horizontal curve between banking and side friction and gives the minimum radius at the design limits.',
+    basis: 'e + f = V²/127R with friction taken first and e capped at eMax; Rmin = V²/127(eMax + fMax).',
+    sections: [
       {
         id: 'geometric-super',
         title: 'Superelevation',
@@ -804,129 +874,409 @@ export const FIELD_TOOLS: DocTool[] = [
     ],
   },
   {
-    id: 'eng-economy',
-    name: 'Engineering Economy',
-    route: '/eng-economy',
+    id: 'interest-factors',
+    name: 'Interest Factors',
+    route: '/interest-factors',
     group: 'Mathematics',
-    summary: 'The board-exam money mathematics: time-value factors and gradients, NPV/IRR/payback on a cash-flow series, and depreciation with break-even — every line worked with the entered numbers.',
-    basis: 'Single-payment and uniform-series factors (P/F, F/P, P/A, A/P, F/A, A/F); arithmetic and geometric gradients; effective rate (1+r/m)^m−1; NPV, IRR by bisection, simple and discounted payback; SL/SYD/DB depreciation; break-even and capitalized cost.',
+    summary: 'The compound-interest factors that move money through time, with the arithmetic and geometric gradients, the effective rate of a nominal one and the capitalized cost of a perpetual series.',
+    basis: 'Single-payment and uniform-series factors (P/F, F/P, P/A, A/P, F/A, A/F); (P/G) = [(1+i)^n − in − 1]/[i²(1+i)^n]; geometric P = A₁[1 − ((1+g)/(1+i))^n]/(i − g); i_eff = (1 + r/m)^m − 1; capitalized cost A/i.',
     sections: [
       {
-        id: 'economy-factors',
-        title: 'Rate, horizon and gradients',
+        id: 'interest-factors-inputs',
+        title: 'Inputs and results',
         controls: [
-          { kind: 'field', name: 'Rate i · periods n', what: 'The per-period interest rate and the horizon every factor below is evaluated at.' },
-          { kind: 'field', name: 'Gradients', what: 'Arithmetic gradient G (maintenance that worsens) and geometric first flow A1 growing at g percent.' },
-          { kind: 'output', name: 'Factors', what: 'P/F, A/P, F/A, P/A with the numbers substituted, plus the gradient present worths and the effective annual rate.' },
-        ],
-      },
-      {
-        id: 'economy-project',
-        title: 'Cash flows and verdict',
-        controls: [
-          { kind: 'field', name: 'Cash-flow series', what: 'Year-by-year amounts with the investment at t = 0; add or drop years freely.' },
-          { kind: 'output', name: 'NPV · IRR · payback', what: 'Net present value at the hurdle rate, the break-even rate, and simple plus discounted payback — accept iff IRR clears the hurdle.' },
-        ],
-      },
-      {
-        id: 'economy-depreciation',
-        title: 'Depreciation and break-even',
-        controls: [
-          { kind: 'choice', name: 'Method', what: 'Straight-line spreads evenly; sum-of-years-digits and declining-balance front-load the charge.' },
-          { kind: 'output', name: 'Schedule · BE · cap cost', what: 'Year-by-year charge and book value, the break-even volume, and the A/i perpetuity price.' },
+          { kind: 'field', name: 'Rate i · periods n', what: 'The per-period interest rate and the horizon every factor on the page is evaluated at.' },
+          { kind: 'field', name: 'Amount A', what: 'A uniform end-of-period amount, moved to its present and future equivalents and priced as a perpetuity.' },
+          { kind: 'field', name: 'Gradients', what: 'Arithmetic step G (maintenance that worsens each year) and a geometric series starting at A₁ growing by g percent.' },
+          { kind: 'field', name: 'Nominal rate r · m', what: 'A nominal annual rate and its compounding frequency, converted to the effective annual rate.' },
+          { kind: 'output', name: 'Factors and equivalents', what: 'Every factor to four places, P and F of the uniform series drawn to scale, the gradient present worths and the capitalized cost.' },
         ],
       },
     ],
   },
   {
-    id: 'hydrostatics',
-    name: 'Hydrostatics',
-    route: '/hydrostatics',
+    id: 'cash-flow-analysis',
+    name: 'Cash-Flow Analysis',
+    route: '/cash-flow-analysis',
     group: 'Mathematics',
-    summary: 'Fluid at rest and in rigid-body motion: plane-surface force with its center of pressure, curved-gate components, buoyancy and metacentric stability, manometers, and accelerating or rotating vessels.',
-    basis: 'F = γ·hc·A with yp = yc + Ixx,c/(yc·A); quarter-gate Fh on the projection and Fv as fluid weight; GM = KB + BM − KG; manometer walk ±γh; tanθ = ax/g; p = ρ(g+az)h; z = ω²r²/2g.',
+    summary: 'Judges a project from its year-by-year cash flows: net present worth, internal rate of return, benefit–cost ratio and payback, each against the hurdle rate.',
+    basis: 'NPV = Σ CFₜ/(1 + i)ᵗ; IRR by bisection on a widening bracket; B/C = PW(receipts)/PW(outlays); simple and discounted payback interpolated within the year.',
     sections: [
       {
-        id: 'hydrostatics-plane',
-        title: 'Plane surface and gate',
+        id: 'cash-flow-analysis-inputs',
+        title: 'Inputs and results',
         controls: [
-          { kind: 'field', name: 'Plate', what: 'Rectangle or circle with its dimensions, centroid depth and inclination from the horizontal.' },
-          { kind: 'field', name: 'Gate', what: 'Quarter-circular radius, width and centroid depth of the projected rectangle.' },
-          { kind: 'output', name: 'Force and CP', what: 'Resultant magnitude with the center of pressure along the plate and as a vertical depth, plus the gate components and angle.' },
-        ],
-      },
-      {
-        id: 'hydrostatics-float',
-        title: 'Flotation and stability',
-        controls: [
-          { kind: 'field', name: 'Barge', what: 'Length, beam, draft and KG above the keel of the box hull.' },
-          { kind: 'output', name: 'GM verdict', what: 'Buoyant force with displaced volume, and the metacentric height with a stable/unstable verdict.' },
-        ],
-      },
-      {
-        id: 'hydrostatics-motion',
-        title: 'Manometer and moving vessels',
-        controls: [
-          { kind: 'field', name: 'Legs', what: 'Manometer fluids with column heights, walking down (+) or up (−) from the starting pressure.' },
-          { kind: 'output', name: 'Pressures and motion', what: 'Far-end pressure, surface tilt under horizontal acceleration, pressure under vertical acceleration, and the forced-vortex rim rise.' },
+          { kind: 'field', name: 'Cash flows', what: 'Year-by-year amounts with the investment at t = 0 as a negative number; add or drop years freely.' },
+          { kind: 'field', name: 'Hurdle rate (MARR)', unit: '%', what: 'The minimum attractive rate of return the project is discounted at and its IRR is compared against.' },
+          { kind: 'output', name: 'Verdict', what: 'ACCEPT or REJECT on NPV, IRR and B/C, with the cash-flow diagram and the running present worth whose zero crossing is the discounted payback.' },
         ],
       },
     ],
   },
   {
-    id: 'dynamics',
-    name: 'Dynamics',
-    route: '/dynamics',
+    id: 'depreciation',
+    name: 'Depreciation',
+    route: '/depreciation',
     group: 'Mathematics',
-    summary: 'Kinematics and kinetics of particles: rectilinear and curvilinear motion, projectile trajectory, Newton\'s second law, work-energy theorem, and impulse-momentum principle — every step worked with the entered numbers.',
-    basis: 'v = u + at, s = ut + ½at², v² = u² + 2as; projectile y = y₀ + x·tanθ − gx²/(2u²cos²θ); aₙ = v²/ρ; F = ma; W = ΔKE = ½m(v₂²−v₁²); I = Δp = m(v₂−v₁).',
+    summary: 'Year-by-year depreciation charge and book value by straight line, sum of years\' digits or declining balance, with the charge and book value read off for any year.',
+    basis: 'SL D = (C − S)/n; SYD D_k = (n − k + 1)/[n(n + 1)/2]·(C − S); DB D_k = r·BV_(k−1), floored at salvage.',
     sections: [
       {
-        id: 'dynamics-rectilinear',
-        title: 'Rectilinear motion',
+        id: 'depreciation-inputs',
+        title: 'Inputs and results',
         controls: [
-          { kind: 'field', name: 'Knowns', what: 'Any two of final velocity, time, or displacement (initial velocity and acceleration are always given); the solver returns all five variables.' },
-          { kind: 'output', name: 'Complete state', what: 'v, t, s with the formula used, the substitution, and a plain-language line.' },
+          { kind: 'choice', name: 'Schedule', what: 'Straight line spreads the base evenly; sum of years\' digits and declining balance front-load the charge.' },
+          { kind: 'field', name: 'Cost · salvage · life', what: 'First cost, salvage value at the end of life, and the whole-year life the base is spread over.' },
+          { kind: 'field', name: 'Read year k', what: 'The year whose charge and end-of-year book value are reported on the cards and highlighted in the schedule.' },
+          { kind: 'output', name: 'Schedule', what: 'Charge, accumulated depreciation and book value per year, drawn as a staircase; a declining rate that leaves value above salvage is flagged SHORT.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'break-even',
+    name: 'Break-Even Analysis',
+    route: '/break-even',
+    group: 'Mathematics',
+    summary: 'The volume at which revenue covers fixed and variable cost, with the profit and the margin of safety at an expected volume.',
+    basis: 'Q_BE = F/(p − v); profit = (p − v)Q − F; margin of safety (Q − Q_BE)/Q.',
+    sections: [
       {
-        id: 'dynamics-projectile',
-        title: 'Projectile motion',
+        id: 'break-even-inputs',
+        title: 'Inputs and results',
         controls: [
-          { kind: 'field', name: 'Launch', what: 'Initial speed, angle, optional height and gravity; range, max height, time of flight, and impact conditions.' },
-          { kind: 'output', name: 'Trajectory', what: 'Range, max height, time of flight, impact speed and angle, plus the trajectory equation y = Ax² + Bx + C.' },
+          { kind: 'field', name: 'Fixed and variable cost', what: 'Fixed cost per period and the variable cost of each unit produced.' },
+          { kind: 'field', name: 'Price · expected volume', what: 'The selling price per unit and the volume the profit and margin of safety are evaluated at.' },
+          { kind: 'output', name: 'Break-even chart', what: 'Revenue and total-cost lines crossing at the break-even volume, with the loss and profit regions either side of it.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'hydrostatic-force',
+    name: 'Hydrostatic Force',
+    route: '/hydrostatic-force',
+    group: 'Water resources',
+    summary: 'The resultant of water pressure on a submerged plane surface and where it acts — the center of pressure, below the centroid.',
+    basis: 'F = γ·hc·A; yp = yc + Ixx,c/(yc·A) measured along the plane; hp = yp·sinθ.',
+    sections: [
       {
-        id: 'dynamics-curvilinear',
-        title: 'Curvilinear motion',
+        id: 'hydrostatic-force-inputs',
+        title: 'Surface and position',
         controls: [
-          { kind: 'field', name: 'Path geometry', what: 'Speed, radius of curvature, and optional tangential acceleration.' },
-          { kind: 'output', name: 'Acceleration', what: 'Normal aₙ = v²/ρ, tangential aₜ, total a, and the angle from the tangent.' },
+          { kind: 'field', name: 'Shape', what: 'Rectangle (width and height along the plane) or circle (diameter).' },
+          { kind: 'field', name: 'Position', what: 'Depth of the centroid below the free surface and the inclination from the horizontal.' },
+          { kind: 'output', name: 'Force and center of pressure', what: 'The resultant in kN, with the center of pressure as a vertical depth and along the plane.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'curved-gate',
+    name: 'Curved Gate',
+    route: '/curved-gate',
+    group: 'Water resources',
+    summary: 'A quarter-circular gate holding water on its concave side: horizontal and vertical components and the resultant through the arc center.',
+    basis: 'Fh = γ·hc·(R·W) on the vertical projection, hc = h₀ + R/2; Fv = γ·W·(R·h₀ + πR²/4), the water above the arc; R = √(Fh² + Fv²).',
+    sections: [
       {
-        id: 'dynamics-kinetics',
-        title: 'Kinetics (F = ma)',
+        id: 'curved-gate-inputs',
+        title: 'Gate and water',
         controls: [
-          { kind: 'field', name: 'Mass and forces', what: 'Mass and up to three force components; initial velocity and time interval.' },
-          { kind: 'output', name: 'Acceleration · velocity · displacement', what: 'Full 3D kinematic state at the end of the interval, with the F = ma derivation.' },
+          { kind: 'field', name: 'Gate', what: 'Radius and width of the quarter-circular gate.' },
+          { kind: 'field', name: 'Water above the top', what: 'Depth of water standing above the top of the gate, zero when the surface is at the top.' },
+          { kind: 'output', name: 'Components and resultant', what: 'Fh, Fv, the resultant and its angle above the horizontal, acting through the arc center.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'buoyancy',
+    name: 'Buoyancy & Stability',
+    route: '/buoyancy',
+    group: 'Water resources',
+    summary: 'Buoyant force and transverse stability of a floating box hull, with the metacentric height verdict.',
+    basis: 'Fb = γ·L·B·d; KB = d/2; BM = (L·B³/12)/V; GM = KB + BM − KG, stable for GM > 0.',
+    sections: [
       {
-        id: 'dynamics-workenergy',
-        title: 'Work–Energy',
+        id: 'buoyancy-inputs',
+        title: 'Hull',
         controls: [
-          { kind: 'field', name: 'Energies', what: 'Mass, initial velocity, and either final velocity or net work; optional non-conservative work and ΔPE.' },
-          { kind: 'output', name: 'ΔKE and W_net', what: 'Change in kinetic energy, net work, and the result variable, all with substitutions shown.' },
+          { kind: 'field', name: 'Hull', what: 'Length, beam, draft and the height of the center of gravity above the keel.' },
+          { kind: 'output', name: 'Stability verdict', what: 'Buoyant force with displaced volume, the metacentric radius and GM with a stable or unstable verdict.' },
         ],
       },
+    ],
+  },
+  {
+    id: 'manometer',
+    name: 'Manometer',
+    route: '/manometer',
+    group: 'Water resources',
+    summary: 'Pressure at the far end of a multi-fluid manometer, walked leg by leg from a point of known pressure.',
+    basis: 'p = p₀ + Σ ±γ·h: add γh going down a leg, subtract it going up.',
+    sections: [
       {
-        id: 'dynamics-impulse',
-        title: 'Impulse–Momentum',
+        id: 'manometer-inputs',
+        title: 'Legs',
         controls: [
-          { kind: 'field', name: 'Impulse or final velocity', what: 'Mass, initial velocity, and either impulse (or F_avg and t) or final velocity.' },
-          { kind: 'output', name: 'Δp and I', what: 'Change in momentum, impulse, and the result variable with the substitution.' },
+          { kind: 'field', name: 'Legs', what: 'Each fluid column with its unit weight and height, walked down (+) or up (−); legs can be added and removed.' },
+          { kind: 'output', name: 'Far-end pressure', what: 'The pressure at the end of the walk in kPa, its change from the start and the equivalent water head.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'relative-equilibrium',
+    name: 'Accelerating & Rotating Vessels',
+    route: '/relative-equilibrium',
+    group: 'Water resources',
+    summary: 'Liquid moving as a rigid body with its container: surface tilt under horizontal acceleration, pressure under vertical acceleration, and the paraboloid of a spinning vessel.',
+    basis: 'tanθ = ax/g; p = ρ(g + az)h; z = ω²r²/2g.',
+    sections: [
+      {
+        id: 'relative-equilibrium-inputs',
+        title: 'Motion',
+        controls: [
+          { kind: 'field', name: 'Linear acceleration', what: 'Horizontal and vertical accelerations, with the depth at which the pressure is wanted.' },
+          { kind: 'field', name: 'Rotation', what: 'Angular speed and the radius at which the surface rise is wanted.' },
+          { kind: 'output', name: 'Surface and pressure', what: 'The surface tilt, the pressure at depth and the rim rise of the forced vortex.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'bernoulli',
+    name: 'Energy Equation',
+    route: '/bernoulli',
+    group: 'Water resources',
+    summary: 'Total head between two points of a flow with pump and turbine heads and the head loss; pick the unknown and it is solved.',
+    basis: 'p₁/γ + v₁²/2g + z₁ + hP = p₂/γ + v₂²/2g + z₂ + hT + hL.',
+    sections: [
+      {
+        id: 'bernoulli-inputs',
+        title: 'Points and machines',
+        controls: [
+          { kind: 'field', name: 'Solve for', what: 'Which quantity is unknown — pressure, velocity or elevation at point 2, the head loss, the pump head or the turbine head.' },
+          { kind: 'field', name: 'Points 1 and 2', what: 'Pressure, velocity and elevation at each point; the unknown field is computed and locked.' },
+          { kind: 'output', name: 'Answer and balance', what: 'The solved quantity, the total head at each point and the energy balance, flagged when no real solution exists.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'jet-on-vane',
+    name: 'Jet on a Vane',
+    route: '/jet-on-vane',
+    group: 'Water resources',
+    summary: 'The force of a water jet on a stationary or moving vane, with the power delivered and the efficiency of a moving vane.',
+    basis: 'F = ρQ(v − u)(1 − cosθ) along the jet; P = F·u; η = P/(½ρAv³), greatest at u = v/3.',
+    sections: [
+      {
+        id: 'jet-on-vane-inputs',
+        title: 'Jet and vane',
+        controls: [
+          { kind: 'field', name: 'Jet', what: 'Jet velocity and diameter; water density is taken as 1000 kg/m³.' },
+          { kind: 'field', name: 'Vane', what: 'Deflection angle (90° flat plate, 180° full reversal) and the speed of the vane along the jet.' },
+          { kind: 'output', name: 'Force, power and efficiency', what: 'The force along and across the jet, the power delivered and the efficiency, with the best vane speed.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'rectilinear-motion',
+    name: 'Rectilinear Motion',
+    route: '/rectilinear-motion',
+    group: 'Mathematics',
+    summary: 'Straight-line motion at constant acceleration: give any three of u, a, t, v and s and the other two follow.',
+    basis: 'v = u + at; s = ut + ½at²; v² = u² + 2as. Solving for t takes the first time the position is reached.',
+    sections: [
+      {
+        id: 'rectilinear-motion-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Given', what: 'Which three quantities are known — u with two of a, t, v and s; the others are computed and locked.' },
+          { kind: 'output', name: 'Motion', what: 'Final velocity, displacement, time and acceleration, with the velocity–time graph and its area.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'projectile-motion',
+    name: 'Projectile Motion',
+    route: '/projectile-motion',
+    group: 'Mathematics',
+    summary: 'A body launched at speed u and angle θ from a height, under gravity alone, with no air resistance.',
+    basis: 'x = uₓt; y = y₀ + u_y·t − ½gt²; T from y(T) = 0; H = y₀ + u_y²/2g; R = uₓT.',
+    sections: [
+      {
+        id: 'projectile-motion-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Launch', what: 'Launch speed, angle, launch height above the landing level and the value of gravity.' },
+          { kind: 'output', name: 'Flight', what: 'Time of flight, maximum height, range, impact speed and angle, and the trajectory drawn to scale.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'curvilinear-motion',
+    name: 'Curvilinear Motion',
+    route: '/curvilinear-motion',
+    group: 'Mathematics',
+    summary: 'Normal and tangential acceleration of a particle on a curved path, and their resultant.',
+    basis: 'aₙ = v²/ρ; aₜ = dv/dt; a = √(aₜ² + aₙ²).',
+    sections: [
+      {
+        id: 'curvilinear-motion-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Path and speed', what: 'Speed, radius of curvature and the tangential acceleration (zero for constant speed).' },
+          { kind: 'output', name: 'Acceleration', what: 'Normal, tangential and total acceleration with its angle from the tangent.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'kinetics',
+    name: 'Kinetics',
+    route: '/kinetics',
+    group: 'Mathematics',
+    summary: 'Newton second law for a particle under a constant resultant force, and the motion that follows over a time interval.',
+    basis: 'a = ΣF/m per axis; v = v₀ + at; s = v₀t + ½at².',
+    sections: [
+      {
+        id: 'kinetics-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Body and force', what: 'Mass, the resultant force components, the initial velocity components and the time interval.' },
+          { kind: 'output', name: 'Motion', what: 'Acceleration, final velocity and displacement, per axis and as magnitudes.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'work-energy',
+    name: 'Work–Energy',
+    route: '/work-energy',
+    group: 'Mathematics',
+    summary: 'The work–energy balance: find the final speed from the work done, or the work from the change in speed.',
+    basis: 'ΔKE = W + Wnc − ΔPE, with KE = ½mv²; equivalently Wnc = ΔKE + ΔPE when no other force works.',
+    sections: [
+      {
+        id: 'work-energy-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Energy terms', what: 'Mass, initial speed, the final speed or the work of other forces, the non-conservative work and the rise in potential energy.' },
+          { kind: 'output', name: 'Balance', what: 'The change in kinetic energy and the unknown, with the energy-balance bars; flagged when the body would stop short.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'impulse-momentum',
+    name: 'Impulse–Momentum',
+    route: '/impulse-momentum',
+    group: 'Mathematics',
+    summary: 'The impulse that changes a body momentum: from a change of speed, or the final speed from an impulse or a force acting for a time.',
+    basis: 'I = m(v₂ − v₁); I = F·t for a constant force; v₂ = v₁ + I/m.',
+    sections: [
+      {
+        id: 'impulse-momentum-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Body and impulse', what: 'Mass and initial velocity, with the final velocity, the impulse, or a force and its duration.' },
+          { kind: 'output', name: 'Momentum', what: 'The impulse and final velocity, with the momentum before and after drawn as vectors.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'friction',
+    name: 'Friction',
+    route: '/friction',
+    group: 'Mathematics',
+    summary: 'Whether a block on a plane holds under a force along the slope, and if it slides, the friction and acceleration.',
+    basis: 'N = mg·cosθ; holds while |F − mg·sinθ| ≤ μₛN; once sliding Ff = μₖN against the motion.',
+    sections: [
+      {
+        id: 'friction-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Block and plane', what: 'Mass, incline angle, the force along the slope, the static and kinetic coefficients and whether it starts at rest.' },
+          { kind: 'output', name: 'Holds or slides', what: 'The friction needed against the friction available as a utilization, the friction acting and the acceleration.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'belt-friction',
+    name: 'Belt Friction',
+    route: '/belt-friction',
+    group: 'Mathematics',
+    summary: 'A flat belt or rope round a fixed drum at the point of slipping: either tension, the coefficient or the wrap angle.',
+    basis: 'T₁ = T₂·e^(μβ) with β in radians inside the exponent.',
+    sections: [
+      {
+        id: 'belt-friction-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Belt and drum', what: 'Tight and slack tensions, the friction coefficient and the wrap angle in degrees; the unknown is computed and locked.' },
+          { kind: 'output', name: 'Capstan result', what: 'The unknown, the tension ratio and difference, and the belt drawn on the drum.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'method-of-joints',
+    name: 'Method of Joints',
+    route: '/method-of-joints',
+    group: 'Mathematics',
+    summary: 'The forces meeting at a joint, resolved: x/y components per force, the sums Rx and Ry, and the resultant R with its direction.',
+    basis: 'Fx = F·cosθ, Fy = F·sinθ; Rx = ΣFx, Ry = ΣFy; R = √(Rx² + Ry²), θR = atan2(Ry, Rx); equilibrium when R ≈ 0.',
+    sections: [
+      {
+        id: 'method-of-joints-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Forces at the joint', what: 'Any number of forces, each with a name, a magnitude in kN and a direction in degrees counter-clockwise from the +x axis.' },
+          { kind: 'output', name: 'Resultant and equilibrium', what: 'Per-force components, the sums Rx/Ry, the resultant R with its direction, and whether the joint balances; the joint diagram draws every arrow and its dashed components.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'trigonometry',
+    name: 'Trigonometry',
+    route: '/trigonometry',
+    group: 'Mathematics',
+    summary: 'A solver for any triangle — right or oblique: fill any three of a, b, c, A, B, C (a side required) and the calculator picks the Law of Sines, the Law of Cosines or the angle sum for each unknown, inverses included, writing every step; the ambiguous SSA case returns both triangles.',
+    basis: 'A + B + C = 180°; a/sin A = b/sin B = c/sin C; c² = a² + b² − 2ab·cos C (Pythagoras at 90°); two sides with a non-included angle may solve twice.',
+    sections: [
+      {
+        id: 'trigonometry-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Three knowns', what: 'Exactly three of the six fields — sides a, b, c and angles A, B, C in degrees; blank means unknown, at least one side required. No angle is assumed to be 90°.' },
+          { kind: 'output', name: 'Solved triangle', what: 'All six values with the law each came from, the worked steps naming the function and inverse used, the triangle drawn in its true shape — and both triangles when the SSA knowns fit two.' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'spherical-triangle',
+    name: 'Spherical Triangle',
+    route: '/spherical-triangle',
+    group: 'Mathematics',
+    summary: 'Three great-circle arcs on a sphere: all three angles from the spherical law of cosines, the spherical excess, and the area by Girard.',
+    basis: 'cos A = (cos a − cos b cos c)/(sin b sin c); E = A + B + C − 180°; Δ = R²·E with E in radians.',
+    sections: [
+      {
+        id: 'spherical-triangle-inputs',
+        title: 'Inputs and results',
+        controls: [
+          { kind: 'field', name: 'Sides or side-side-angle', what: 'Three sides in degrees of arc, or two sides and their included angle; the sphere radius for arc lengths and area, Earth by default.' },
+          { kind: 'output', name: 'Angles, excess, area', what: 'The three angles, the excess over 180°, arc lengths on the surface and the Girard area; the sphere and its triangle are drawn.' },
         ],
       },
     ],

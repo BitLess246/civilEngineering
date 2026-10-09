@@ -1,0 +1,78 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../fonts/fonts.css">
+<link rel="stylesheet" href="assets/katex.css">
+<style>
+:root{
+  --ink:#0f1b2a; --ink2:#3d4a5c; --night:#0b1420; --paper:#f4f3ef; --sheet:#ffffff; --sheet2:#f9f8f4;
+  --brand:#0f4c92; --accent:#6ba4dc; --muted:#9eb0c5; --hair:#e3e1da; --amber:#f2b53a;
+  --ok:#14603a; --okt:#ddefe3; --fail:#c2402a; --failt:#fbeeea; --rail:#0f1b2a; --logo:#0f2a4a;
+  --fg: #e8eaed;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#0b1420}
+body{font-family:'Archivo',system-ui,sans-serif;color:var(--fg);-webkit-font-smoothing:antialiased;text-rendering:geometricPrecision}
+#stage{position:absolute;inset:0;overflow:hidden;background:#0b1420}
+.layer{position:absolute;inset:0;overflow:hidden;will-change:transform,opacity}
+.abs{position:absolute}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-weight:500;letter-spacing:.16em;text-transform:uppercase}
+.disp{font-weight:800;letter-spacing:-.035em;line-height:.92}
+.glow{filter:drop-shadow(0 0 10px rgba(242,181,58,.9)) drop-shadow(0 0 34px rgba(242,181,58,.45))}
+.ground-dark{position:absolute;inset:-200px;background:
+  radial-gradient(1200px 800px at 50% 45%, #15283f 0%, #0f1b2a 55%, #0a131e 100%)}
+.grid{position:absolute;inset:-400px;opacity:1;
+  background-image:
+   linear-gradient(rgba(107,164,220,.11) 1px,transparent 1px),
+   linear-gradient(90deg,rgba(107,164,220,.11) 1px,transparent 1px),
+   linear-gradient(rgba(107,164,220,.045) 1px,transparent 1px),
+   linear-gradient(90deg,rgba(107,164,220,.045) 1px,transparent 1px);
+  background-size:160px 160px,160px 160px,32px 32px,32px 32px}
+.ground-paper{position:absolute;inset:-200px;background:radial-gradient(1400px 900px at 50% 40%, #f8f7f3 0%, #f1efe9 70%, #e9e6de 100%)}
+.grid-paper{position:absolute;inset:-400px;
+  background-image:
+   linear-gradient(rgba(15,27,42,.07) 1px,transparent 1px),
+   linear-gradient(90deg,rgba(15,27,42,.07) 1px,transparent 1px),
+   linear-gradient(rgba(15,27,42,.03) 1px,transparent 1px),
+   linear-gradient(90deg,rgba(15,27,42,.03) 1px,transparent 1px);
+  background-size:160px 160px,160px 160px,32px 32px,32px 32px}
+.card{background:#fff;border-radius:14px;box-shadow:0 1px 0 rgba(15,27,42,.06),0 18px 50px -12px rgba(5,12,22,.35),0 60px 120px -40px rgba(5,12,22,.45)}
+.card-dark{background:#0f1b2a;border:1px solid rgba(158,176,197,.18);border-radius:14px}
+.chip{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:6px 14px;font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:15px;letter-spacing:.08em}
+.vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(1300px 900px at 50% 50%, transparent 55%, rgba(0,0,0,.55) 100%)}
+.grain{position:absolute;inset:-64px;pointer-events:none;mix-blend-mode:overlay;opacity:.11;background-size:256px 256px}
+svg{overflow:visible}
+.seq{position:absolute;left:0;top:0;display:none}
+table{border-collapse:collapse}
+
+/* the app's drafting theme — the calculator workspace */
+.ws{--paper:#f4f3ef;--sheet:#fff;--sheet2:#f9f8f4;--field:#fcfbf8;--ink:#0f1b2a;--muted:#5c6675;--faint:#736d5e;--hair:#e3e1da;--hair2:#eeece5;--fline:#8d8b85;--brand:#0f4c92;--ok:#14603a;--okt:#ddefe3;--okl:#c2ddcb}
+.fld{display:flex;flex-direction:column;color:#0f1b2a}
+.fld .lb{font-size:11.5px;font-weight:600;color:#5c6675;margin-bottom:4px;white-space:nowrap}
+.fld .lb sub{font-size:.78em;vertical-align:-.25em;line-height:0}
+.fld .lb i{font-family:'KaTeX_Math','Times New Roman',serif;font-size:1.12em;font-weight:400}
+.fld .bx{display:flex;border:1px solid #8d8b85;border-radius:6px;background:#fcfbf8;overflow:hidden;height:34px;align-items:stretch}
+.fld .v{flex:1;padding:0 10px;font-size:13px;display:flex;align-items:center;font-family:'IBM Plex Mono';font-weight:500;white-space:nowrap;overflow:hidden}
+.fld .u{display:flex;align-items:center;border-left:1px solid #eeece5;background:#f9f8f4;padding:0 9px;font-family:'IBM Plex Mono';font-size:10.5px;color:#736d5e;white-space:nowrap}
+.fld.sel .v::after{content:'';margin-left:auto;width:7px;height:7px;border-right:1.6px solid #0f1b2a;border-bottom:1.6px solid #0f1b2a;transform:translateY(-2px) rotate(45deg)}
+.rc{background:#fff;border:1px solid #e3e1da;border-radius:10px;padding:16px;color:#0f1b2a;width:300px}
+.rc h3{font-size:13px;font-weight:700}
+.rc .sb{font-size:11px;color:#736d5e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc .chp{border-radius:999px;border:1px solid #c2ddcb;background:#ddefe3;color:#14603a;font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 8px;white-space:nowrap}
+.rc .big{margin-top:10px;font-family:'IBM Plex Mono';font-size:24px;font-weight:700;color:#0f4c92;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rc .big span{margin-left:4px;font-size:11.5px;font-weight:600;color:#736d5e}
+.rc .fm{margin-top:6px;font-size:11px;color:#5c6675;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc .rq{margin-top:12px;display:flex;justify-content:space-between;font-size:11px;color:#5c6675}
+.rc .rq b{font-family:'IBM Plex Mono';font-weight:600;color:#14603a}
+.rc .tr{margin-top:4px;height:5px;border-radius:3px;background:#e3e1da;overflow:hidden}
+.rc .tr div{height:100%;border-radius:3px;background:#14603a}
+.rc dl{margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;border-top:1px solid #eeece5;padding-top:10px}
+.rc dt{font-size:10.5px;color:#736d5e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc dd{font-family:'IBM Plex Mono';font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eqb{background:#f9f8f4;border:1px solid #e3e1da;border-radius:9px;padding:16px 22px;color:#0f1b2a;white-space:nowrap;font-size:19px}
+.eqb .katex-html{display:inline-block}
+.eqb .base{display:inline-block}
+.sheetc{background:#fff;border:1px solid #e3e1da;border-radius:12px}
+.secT{font-family:'IBM Plex Mono';font-weight:600;font-size:11px;letter-spacing:.16em;color:#0f1b2a;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.secT::after{content:'';flex:1;height:1px;background:#e3e1da}
+</style></head>
+<body><div id="stage"></div>

@@ -43,16 +43,23 @@ const ColumnDesign = lazy(() => import('./pages/ColumnDesign'))
 const FrameAnalysis = lazy(() => import('./pages/FrameAnalysis'))
 const LoadPath = lazy(() => import('./pages/LoadPath'))
 const InfluenceLines = lazy(() => import('./pages/InfluenceLines'))
-const Surveying = lazy(() => import('./pages/Surveying'))
+const DifferentialLeveling = lazy(() => import('./pages/DifferentialLeveling'))
+const Traverse = lazy(() => import('./pages/Traverse'))
+const SimpleCurve = lazy(() => import('./pages/SimpleCurve'))
+const Earthwork = lazy(() => import('./pages/Earthwork'))
 const TrafficVolume = lazy(() => import('./pages/TrafficVolume'))
 const SignalTiming = lazy(() => import('./pages/SignalTiming'))
 const TrafficQueue = lazy(() => import('./pages/TrafficQueue'))
 const RationalMethod = lazy(() => import('./pages/RationalMethod'))
 const OpenChannel = lazy(() => import('./pages/OpenChannel'))
+const CriticalDepth = lazy(() => import('./pages/CriticalDepth'))
+const HydraulicJump = lazy(() => import('./pages/HydraulicJump'))
 const PipeFlow = lazy(() => import('./pages/PipeFlow'))
 const MixDesign = lazy(() => import('./pages/MixDesign'))
 const SectionProperties = lazy(() => import('./pages/SectionProperties'))
-const GeometricDesign = lazy(() => import('./pages/GeometricDesign'))
+const SightDistance = lazy(() => import('./pages/SightDistance'))
+const VerticalCurves = lazy(() => import('./pages/VerticalCurves'))
+const Superelevation = lazy(() => import('./pages/Superelevation'))
 const WeirFlow = lazy(() => import('./pages/WeirFlow'))
 const PileCapacity = lazy(() => import('./pages/PileCapacity'))
 const BridgeLoading = lazy(() => import('./pages/BridgeLoading'))
@@ -70,9 +77,28 @@ const AxleLoads = lazy(() => import('./pages/AxleLoads'))
 const StormSewer = lazy(() => import('./pages/StormSewer'))
 const PumpStation = lazy(() => import('./pages/PumpStation'))
 const WaterDemand = lazy(() => import('./pages/WaterDemand'))
-const EngEconomy = lazy(() => import('./pages/EngEconomy'))
-const Hydrostatics = lazy(() => import('./pages/Hydrostatics'))
-const Dynamics = lazy(() => import('./pages/Dynamics'))
+const InterestFactors = lazy(() => import('./pages/InterestFactors'))
+const CashFlowAnalysis = lazy(() => import('./pages/CashFlowAnalysis'))
+const Depreciation = lazy(() => import('./pages/Depreciation'))
+const BreakEven = lazy(() => import('./pages/BreakEven'))
+const HydrostaticForce = lazy(() => import('./pages/HydrostaticForce'))
+const CurvedGate = lazy(() => import('./pages/CurvedGate'))
+const Buoyancy = lazy(() => import('./pages/Buoyancy'))
+const Manometer = lazy(() => import('./pages/Manometer'))
+const RelativeEquilibrium = lazy(() => import('./pages/RelativeEquilibrium'))
+const EnergyEquation = lazy(() => import('./pages/EnergyEquation'))
+const JetOnVane = lazy(() => import('./pages/JetOnVane'))
+const RectilinearMotion = lazy(() => import('./pages/RectilinearMotion'))
+const ProjectileMotion = lazy(() => import('./pages/ProjectileMotion'))
+const CurvilinearMotion = lazy(() => import('./pages/CurvilinearMotion'))
+const Kinetics = lazy(() => import('./pages/Kinetics'))
+const WorkEnergy = lazy(() => import('./pages/WorkEnergy'))
+const ImpulseMomentum = lazy(() => import('./pages/ImpulseMomentum'))
+const Friction = lazy(() => import('./pages/Friction'))
+const BeltFriction = lazy(() => import('./pages/BeltFriction'))
+const MethodOfJoints = lazy(() => import('./pages/MethodOfJoints'))
+const Trigonometry = lazy(() => import('./pages/Trigonometry'))
+const SphericalTriangle = lazy(() => import('./pages/SphericalTriangle'))
 const Drafting3D = lazy(() => import('./pages/Drafting3D'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const Validation = lazy(() => import('./pages/Validation'))
@@ -251,16 +277,29 @@ export default function App() {
         <Route path="/frame" element={<RequireAuth><FrameAnalysis /></RequireAuth>} />
         <Route path="/load-path" element={<LoadPath />} />
         <Route path="/influence-lines" element={<InfluenceLines />} />
-        <Route path="/surveying" element={<Surveying />} />
+        {/* surveying — one calculator per page; /surveying was the four-mode
+            toolbox and now lands on the first of them */}
+        <Route path="/surveying" element={<Navigate to="/leveling" replace />} />
+        <Route path="/leveling" element={<DifferentialLeveling />} />
+        <Route path="/traverse" element={<Traverse />} />
+        <Route path="/simple-curve" element={<SimpleCurve />} />
+        <Route path="/earthwork" element={<Earthwork />} />
         <Route path="/traffic-volume" element={<TrafficVolume />} />
         <Route path="/signal-timing" element={<SignalTiming />} />
         <Route path="/traffic-queue" element={<TrafficQueue />} />
         <Route path="/rational-method" element={<RationalMethod />} />
         <Route path="/open-channel" element={<OpenChannel />} />
+        <Route path="/critical-depth" element={<CriticalDepth />} />
+        <Route path="/hydraulic-jump" element={<HydraulicJump />} />
         <Route path="/pipe-flow" element={<PipeFlow />} />
         <Route path="/concrete-mix" element={<MixDesign />} />
         <Route path="/section-properties" element={<SectionProperties />} />
-        <Route path="/geometric-design" element={<GeometricDesign />} />
+        {/* highway geometry — one calculator per page; /geometric-design was
+            the three-mode shell and now lands on the first of them */}
+        <Route path="/geometric-design" element={<Navigate to="/sight-distance" replace />} />
+        <Route path="/sight-distance" element={<SightDistance />} />
+        <Route path="/vertical-curves" element={<VerticalCurves />} />
+        <Route path="/superelevation" element={<Superelevation />} />
         <Route path="/weir-flow" element={<WeirFlow />} />
         <Route path="/pile-capacity" element={<PileCapacity />} />
         <Route path="/bridge-loading" element={<BridgeLoading />} />
@@ -279,12 +318,39 @@ export default function App() {
         <Route path="/storm-sewer" element={<StormSewer />} />
         <Route path="/pump-station" element={<PumpStation />} />
         <Route path="/water-demand" element={<WaterDemand />} />
-        {/* mathematics: engineering economy (board-exam money mathematics) */}
-        <Route path="/eng-economy" element={<EngEconomy />} />
-        {/* fluid statics: hydrostatic force, gates, buoyancy, vessels */}
-        <Route path="/hydrostatics" element={<Hydrostatics />} />
+        {/* engineering economy — one calculator per page; /eng-economy was the
+            combined page and now lands on the first of them */}
+        <Route path="/eng-economy" element={<Navigate to="/interest-factors" replace />} />
+        <Route path="/interest-factors" element={<InterestFactors />} />
+        <Route path="/cash-flow-analysis" element={<CashFlowAnalysis />} />
+        <Route path="/depreciation" element={<Depreciation />} />
+        <Route path="/break-even" element={<BreakEven />} />
+        {/* fluid statics and hydraulics — one calculator per page; /hydrostatics was
+            the combined page and now lands on the first of them */}
+        <Route path="/hydrostatics" element={<Navigate to="/hydrostatic-force" replace />} />
+        <Route path="/hydrostatic-force" element={<HydrostaticForce />} />
+        <Route path="/curved-gate" element={<CurvedGate />} />
+        <Route path="/buoyancy" element={<Buoyancy />} />
+        <Route path="/manometer" element={<Manometer />} />
+        <Route path="/relative-equilibrium" element={<RelativeEquilibrium />} />
+        <Route path="/bernoulli" element={<EnergyEquation />} />
+        <Route path="/jet-on-vane" element={<JetOnVane />} />
         {/* mechanics: kinematics, kinetics, work-energy, impulse-momentum */}
-        <Route path="/dynamics" element={<Dynamics />} />
+        {/* dynamics — one calculator per page; /dynamics was the tabbed page and
+            now lands on the first of them */}
+        <Route path="/dynamics" element={<Navigate to="/rectilinear-motion" replace />} />
+        <Route path="/rectilinear-motion" element={<RectilinearMotion />} />
+        <Route path="/projectile-motion" element={<ProjectileMotion />} />
+        <Route path="/curvilinear-motion" element={<CurvilinearMotion />} />
+        <Route path="/kinetics" element={<Kinetics />} />
+        <Route path="/work-energy" element={<WorkEnergy />} />
+        <Route path="/impulse-momentum" element={<ImpulseMomentum />} />
+        <Route path="/friction" element={<Friction />} />
+        <Route path="/belt-friction" element={<BeltFriction />} />
+        {/* mathematics mini-calculators: statics resultant, triangle solver, spherical triangle */}
+        <Route path="/method-of-joints" element={<MethodOfJoints />} />
+        <Route path="/trigonometry" element={<Trigonometry />} />
+        <Route path="/spherical-triangle" element={<SphericalTriangle />} />
         {/* drafting: 2D floor plans → 3D viewport → ModelSpace export */}
         <Route path="/drafting3d" element={<Drafting3D />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected

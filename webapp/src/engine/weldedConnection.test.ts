@@ -1,6 +1,6 @@
 import { lineText } from '../lib/solution'
 import { describe, it, expect } from 'vitest'
-import { solveWeldedConnection, weldedConnectionSolution, type WeldSegment } from './weldedConnection'
+import { solveWeldedConnection, weldedConnectionSolution, weldForceAt, type WeldSegment } from './weldedConnection'
 
 describe('solveWeldedConnection — elastic weld-line method', () => {
   it('single vertical weld, eccentric vertical load (hand check)', () => {
@@ -114,5 +114,25 @@ describe('weldedConnectionSolution — the printed report', () => {
     const s = weldedConnectionSolution(P, r)
     const step = s.find((st) => st.title === 'Governing endpoint')!
     expect(JSON.stringify(step.lines)).toContain(`(${Math.round(crit.x)},`)
+  })
+})
+
+describe('weldForceAt — the same elastic formula anywhere on the line', () => {
+  const segs = [{ id: 'L', x1: 0, y1: 0, x2: 0, y2: 250 }, { id: 'R', x1: 200, y1: 0, x2: 200, y2: 250 }]
+  const r = solveWeldedConnection({ segments: segs, size: 6, load: { P: 120, angleDeg: 90, px: 400, py: 125 } })
+  it('reproduces the solver at every endpoint', () => {
+    for (const p of r.points) {
+      const q = weldForceAt(r, p.x, p.y)
+      expect(q.fx).toBeCloseTo(p.fx, 9); expect(q.fy).toBeCloseTo(p.fy, 9)
+    }
+  })
+  it('is linear along a segment, so the peak magnitude is at an end', () => {
+    for (const s of segs) {
+      const a = weldForceAt(r, s.x1, s.y1), b = weldForceAt(r, s.x2, s.y2)
+      const m = weldForceAt(r, (s.x1 + s.x2) / 2, (s.y1 + s.y2) / 2)
+      expect(m.fx).toBeCloseTo((a.fx + b.fx) / 2, 9)
+      expect(m.fy).toBeCloseTo((a.fy + b.fy) / 2, 9)
+      expect(m.f).toBeLessThanOrEqual(Math.max(a.f, b.f) + 1e-9)
+    }
   })
 })

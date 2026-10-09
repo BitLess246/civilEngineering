@@ -4,7 +4,7 @@ import type { ShellNode, ShellElem, ElementStress } from '../engine/shell'
 import { contourData } from '../lib/shellContour'
 import {
   STRESS_KEYS, stressColorRGB, normalise, unitFor, labelFor,
-  rampSwatches, rampTicks, DEFAULT_BANDS, bandCenter, type StressKey,
+  rampSwatches, rampTicks, DEFAULT_BANDS, bandCenter, type StressKey, type RampPalette,
 } from '../lib/stressScale'
 import { groupPlates, projectNode, barycentric, type PlateGroup } from './modelSpace/contour'
 
@@ -17,11 +17,13 @@ interface Props {
   /** 'frame' = recovered from the full frame analysis (real load path);
    *  'standalone' = isolated shell mesh solve. */
   source?: 'frame' | 'standalone'
+  /** Ramp family; the FEA spectrum by default. */
+  palette?: RampPalette
 }
 
 const BANDS = DEFAULT_BANDS
 
-export function ShellContourPanel({ nodes, elems, stresses, caseName, source }: Props) {
+export function ShellContourPanel({ nodes, elems, stresses, caseName, source, palette }: Props) {
   // Default vmSurf: the surface von Mises (membrane ± bending fibre). The
   // membrane-only vonMises reads ~0 on the commonest model in the app — a
   // gravity slab is bending-dominated and the CST membrane carries none of it.
@@ -35,7 +37,7 @@ export function ShellContourPanel({ nodes, elems, stresses, caseName, source }: 
   )
 
   const plates = useMemo(() => groupPlates(nodes, elems), [nodes, elems])
-  const swatches = rampSwatches(BANDS, domain.signed, BANDS)
+  const swatches = rampSwatches(BANDS, domain.signed, BANDS, palette)
   const ticks = rampTicks(domain, 5)
 
   return (
@@ -54,7 +56,7 @@ export function ShellContourPanel({ nodes, elems, stresses, caseName, source }: 
       {/* One tile per panel — walls no longer fold onto slabs, storeys no longer stack */}
       <div className="col-span-full mb-2 grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
         {plates.map((g) => (
-          <PlateTile key={g.id} g={g} nodal={nodal} domain={domain} />
+          <PlateTile key={g.id} g={g} nodal={nodal} domain={domain} palette={palette} />
         ))}
       </div>
 
@@ -85,7 +87,8 @@ export function ShellContourPanel({ nodes, elems, stresses, caseName, source }: 
  *  interpolates the same two node colours on both sides), unlike the flat
  *  per-element fills this replaces. Values snap to band centres, so the
  *  boundaries between colour bands ARE the iso-lines. */
-function PlateTile({ g, nodal, domain }: {
+function PlateTile({ g, nodal, domain, palette }: {
+  palette?: RampPalette
   g: PlateGroup; nodal: Map<string, number>; domain: ReturnType<typeof contourData>['domain']
 }) {
   const ref = useRef<HTMLCanvasElement | null>(null)
@@ -141,7 +144,7 @@ function PlateTile({ g, nodal, domain }: {
           const w = barycentric([pxI + 0.5, py + 0.5], p[0], p[1], p[2])
           if (!w) continue
           const val = w[0] * c[0] + w[1] * c[1] + w[2] * c[2]
-          const [r, gg, b] = stressColorRGB(bandCenter(normalise(val, domain), BANDS), domain.signed)
+          const [r, gg, b] = stressColorRGB(bandCenter(normalise(val, domain), BANDS), domain.signed, palette)
           const o = (py * tile.W + pxI) * 4
           data[o] = r * 255; data[o + 1] = gg * 255; data[o + 2] = b * 255; data[o + 3] = 255
         }
@@ -162,7 +165,7 @@ function PlateTile({ g, nodal, domain }: {
       ctx.closePath()
       ctx.stroke()
     }
-  }, [g, nodal, domain, tile])
+  }, [g, nodal, domain, tile, palette])
 
   if (!tile) return null
   return (

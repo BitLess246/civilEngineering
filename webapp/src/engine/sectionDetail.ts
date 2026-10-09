@@ -135,11 +135,11 @@ export function buildSectionDetail(i: SectionDetailInput): SectionDetailDrawing 
   if (i.dims !== false) {
     P.push({
       kind: 'dim', x1: u0, y1: v1 + off, x2: u1, y2: v1 + off,
-      text: `${Math.round(w * 1000)}`, off: 0, size: size * 0.9, ext: v1,
+      text: `${Math.round(w * 1000)} mm`, off: 0, size: size * 0.9, ext: v1,
     })
     P.push({
       kind: 'dim', x1: u1 + off, y1: v0, x2: u1 + off, y2: v1,
-      text: `${Math.round(h * 1000)}`, off: 0, size: size * 0.9, ext: u1,
+      text: `${Math.round(h * 1000)} mm`, off: 0, size: size * 0.9, ext: u1,
     })
   }
 

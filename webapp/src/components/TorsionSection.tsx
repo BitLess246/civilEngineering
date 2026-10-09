@@ -12,7 +12,7 @@
 //     longitudinal steel Al = (At/s)·ph·(fyt/fy) and the spacing cap ph/8.
 //   • Ao = 0.85·Aoh is the shear-flow path, drawn inside Aoh.
 //   • The longitudinal torsional bars are DISTRIBUTED around that perimeter,
-//     one in every corner and at most 300 mm apart (§22.7.6.1). Torsion is
+//     one in every corner and at most 300 mm apart (§9.7.5.1). Torsion is
 //     carried by the shell, so bunching them into the tension face — the
 //     flexural instinct — does not work here.
 //
@@ -20,16 +20,16 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { DrawingFrame } from './DrawingFrame'
+import { DimBelow, DimSide } from './dims'
 
 const INK = '#37526e'
 const CONC = '#eef3f8'
 const STIRRUP = '#c2402a'
 const LONG = '#0f4c92'
 const FLOW = '#0e7490'
-const DIM = '#1f77b4'
 const FAINT = '#a39d8d'
 
-/** §22.7.6.1 — longitudinal torsional bars at most this far apart. */
+/** ACI 318-14 §9.7.5.1 — longitudinal torsional bars at most this far apart. */
 const LONG_BAR_MAX_SPACING = 300
 
 export interface TorsionSectionProps {
@@ -52,7 +52,7 @@ export interface TorsionSectionProps {
 export function TorsionSection({
   b, h, x1, y1, barDia, stirrupDia, Aoh, ph, Ao, Al, stirrupNote,
 }: TorsionSectionProps) {
-  const ML = 62, MR = 150, MT = 34, MB = 62
+  const ML = 62, MR = 184, MT = 40, MB = 62
   const DRAW = 210
   const s = Math.min(DRAW / Math.max(b, 1), DRAW / Math.max(h, 1))
   const bw = b * s, hh = h * s
@@ -74,16 +74,20 @@ export function TorsionSection({
   // then enough intermediates that no gap exceeds 300 mm.
   const nx = Math.max(0, Math.ceil(x1 / LONG_BAR_MAX_SPACING) - 1)
   const ny = Math.max(0, Math.ceil(y1 / LONG_BAR_MAX_SPACING) - 1)
+  // Bars sit INSIDE the stirrup, their centres (ds + db)/2 in from its
+  // centreline — drawn on the centreline they overlapped the stirrup.
+  const inset = ((stirrupDia + barDia) / 2) * s
+  const bx0 = sx + inset, bx1 = sx + sw - inset, by0 = sy + inset, by1 = sy + sh - inset
   const bars: [number, number][] = [
-    [sx, sy], [sx + sw, sy], [sx, sy + sh], [sx + sw, sy + sh],
+    [bx0, by0], [bx1, by0], [bx0, by1], [bx1, by1],
   ]
   for (let i = 1; i <= nx; i++) {
-    const x = sx + (sw * i) / (nx + 1)
-    bars.push([x, sy], [x, sy + sh])
+    const x = bx0 + ((bx1 - bx0) * i) / (nx + 1)
+    bars.push([x, by0], [x, by1])
   }
   for (let i = 1; i <= ny; i++) {
-    const y = sy + (sh * i) / (ny + 1)
-    bars.push([sx, y], [sx + sw, y])
+    const y = by0 + ((by1 - by0) * i) / (ny + 1)
+    bars.push([bx0, y], [bx1, y])
   }
   const br = Math.max(2.4, (barDia / 2) * s)
 
@@ -114,42 +118,30 @@ export function TorsionSection({
         {bars.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={br} fill={LONG} />)}
 
         {/* x₁ and y₁ are stirrup-CENTRELINE dimensions — the distinction the
-            whole of §22.7 turns on */}
+            whole of §22.7 turns on — so their extension lines leave the
+            stirrup's centreline corners, not the concrete face */}
         <g>
-          <line x1={sx} y1={y0 + hh + 18} x2={sx + sw} y2={y0 + hh + 18} stroke={DIM} strokeWidth={0.9} />
-          {[sx, sx + sw].map((x) => (
-            <line key={x} x1={x - 4} y1={y0 + hh + 22} x2={x + 4} y2={y0 + hh + 14} stroke={DIM} strokeWidth={1.2} />
-          ))}
-          <text x={sx + sw / 2} y={y0 + hh + 14} fontSize={8.5} fill={DIM} textAnchor="middle"
-            paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>x₁ = {Math.round(x1)}</text>
-
-          <line x1={x0 - 18} y1={sy} x2={x0 - 18} y2={sy + sh} stroke={DIM} strokeWidth={0.9} />
-          {[sy, sy + sh].map((y) => (
-            <line key={y} x1={x0 - 22} y1={y + 4} x2={x0 - 14} y2={y - 4} stroke={DIM} strokeWidth={1.2} />
-          ))}
-          <text x={x0 - 28} y={sy + sh / 2} fontSize={8.5} fill={DIM} textAnchor="middle"
-            transform={`rotate(-90 ${x0 - 28} ${sy + sh / 2})`}
-            paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>y₁ = {Math.round(y1)}</text>
-
-          <text x={x0 + bw / 2} y={y0 - 9} fontSize={8} fill={FAINT} textAnchor="middle">
-            {Math.round(b)} × {Math.round(h)} gross
-          </text>
+          <DimBelow xA={sx} xB={sx + sw} featY={sy + sh} dY={y0 + hh + 20} label={`x₁ = ${Math.round(x1)}`} />
+          <DimSide yA={sy} yB={sy + sh} featX={sx} dX={x0 - 20} label={`y₁ = ${Math.round(y1)}`} side="left" />
+          {/* the gross section, dimensioned off its own faces */}
+          <DimBelow xA={x0} xB={x0 + bw} featY={y0 - 8} dY={y0 - 20} label={`b = ${Math.round(b)}`} />
+          <DimSide yA={y0} yB={y0 + hh} featX={x0 + bw} dX={x0 + bw + 18} label={`h = ${Math.round(h)}`} side="right" />
         </g>
 
         {/* the symbols, spelled out beside the section */}
         <g fontSize={8.5}>
-          <rect x={W - MR + 4} y={MT + 2} width={11} height={8} fill={STIRRUP} opacity={0.25}
+          <rect x={W - MR + 38} y={MT + 2} width={11} height={8} fill={STIRRUP} opacity={0.25}
             stroke={STIRRUP} strokeWidth={1.1} />
-          <text x={W - MR + 22} y={MT + 10} fill={STIRRUP}>Aoh = {Math.round(Aoh).toLocaleString()} mm²</text>
-          <text x={W - MR + 22} y={MT + 23} fill={STIRRUP}>ph = {Math.round(ph).toLocaleString()} mm</text>
-          <line x1={W - MR + 4} y1={MT + 36} x2={W - MR + 15} y2={MT + 36} stroke={FLOW}
+          <text x={W - MR + 56} y={MT + 10} fill={STIRRUP}>Aoh = {Math.round(Aoh).toLocaleString()} mm²</text>
+          <text x={W - MR + 56} y={MT + 23} fill={STIRRUP}>ph = {Math.round(ph).toLocaleString()} mm</text>
+          <line x1={W - MR + 38} y1={MT + 36} x2={W - MR + 49} y2={MT + 36} stroke={FLOW}
             strokeWidth={1.1} strokeDasharray="4 2" />
-          <text x={W - MR + 22} y={MT + 39} fill={FLOW}>Ao = 0.85·Aoh</text>
-          <text x={W - MR + 22} y={MT + 52} fill={FLOW}>= {Math.round(Ao).toLocaleString()} mm²</text>
-          <circle cx={W - MR + 9} cy={MT + 63} r={3} fill={LONG} />
-          <text x={W - MR + 22} y={MT + 66} fill={LONG}>Al = {Math.round(Al).toLocaleString()} mm²</text>
-          <text x={W - MR + 22} y={MT + 79} fill={LONG}>{bars.length} bars, s ≤ {LONG_BAR_MAX_SPACING} mm</text>
-          {stirrupNote && <text x={W - MR + 4} y={MT + 96} fill={STIRRUP}>{stirrupNote}</text>}
+          <text x={W - MR + 56} y={MT + 39} fill={FLOW}>Ao = 0.85·Aoh</text>
+          <text x={W - MR + 56} y={MT + 52} fill={FLOW}>= {Math.round(Ao).toLocaleString()} mm²</text>
+          <circle cx={W - MR + 43} cy={MT + 63} r={3} fill={LONG} />
+          <text x={W - MR + 56} y={MT + 66} fill={LONG}>Al = {Math.round(Al).toLocaleString()} mm²</text>
+          <text x={W - MR + 56} y={MT + 79} fill={LONG}>{bars.length} bars, s ≤ {LONG_BAR_MAX_SPACING} mm</text>
+          {stirrupNote && <text x={W - MR + 38} y={MT + 96} fill={STIRRUP}>{stirrupNote}</text>}
         </g>
 
         <text x={W / 2} y={HT - 18} fontSize={7.5} fill={FAINT} textAnchor="middle">

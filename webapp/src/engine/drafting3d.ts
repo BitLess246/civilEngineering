@@ -145,6 +145,58 @@ export const DEFAULT_SECTIONS: RectSection[] = [
   { id: 'wall-250', name: 'Wall 250', b: 1000, h: 250, fc: 28, fy: 420, barDia: 10, tieDia: 10, cover: 25, material: 'concrete' },
 ]
 
+/** The structural duty a library section is sized for. */
+export type DraftSectionRole = 'beam' | 'column' | 'slab' | 'wall'
+
+/** The section each drawing tool starts with. One active section for every
+ *  tool stamped a 400×400 COLUMN on slabs and walls (a 400 mm plate, a
+ *  400 mm wall) unless the user thought to change it first. */
+export const DEFAULT_SECTION_FOR: Record<DraftSectionRole, string> = {
+  beam: 'beam-300x500', column: 'col-400x400', slab: 'slab-150', wall: 'wall-200',
+}
+
+/** Role of a library section: by its id prefix (the library's own naming),
+ *  else by shape — a 1000 mm strip is a slab or wall (per metre), a square is
+ *  a column, anything else a beam. */
+export function sectionRole(sec: RectSection): DraftSectionRole {
+  if (sec.id.startsWith('beam-')) return 'beam'
+  if (sec.id.startsWith('col-')) return 'column'
+  if (sec.id.startsWith('slab-')) return 'slab'
+  if (sec.id.startsWith('wall-')) return 'wall'
+  if (sec.b === 1000) return 'slab'
+  return sec.b === sec.h ? 'column' : 'beam'
+}
+
+/** The element types that take a section of their own role. */
+const SECTIONED: ReadonlySet<DraftElement['type']> = new Set(['beam', 'column', 'slab', 'wall'])
+
+/** Repair elements stamped with a section of the wrong role — what the old
+ *  single active section did to every slab and wall drawn without first
+ *  visiting the Sections panel. Each gets its role's default. Returns the
+ *  SAME project when nothing needed repair. */
+export function normalizeDraftSections(project: DraftProject): DraftProject {
+  let changed = false
+  const levels = new Map(project.levels)
+  for (const [lid, lvl] of project.levels) {
+    let elements: Map<string, DraftElement> | null = null
+    for (const [eid, el] of lvl.elements) {
+      if (!SECTIONED.has(el.type)) continue
+      const role = el.type as DraftSectionRole
+      const sec = project.sections.get(el.sectionId)
+      if (sec && sectionRole(sec) === role) continue
+      const fix = DEFAULT_SECTION_FOR[role]
+      if (!project.sections.has(fix) || fix === el.sectionId) continue
+      elements ??= new Map(lvl.elements)
+      elements.set(eid, { ...el, sectionId: fix })
+    }
+    if (elements) {
+      levels.set(lid, { ...lvl, elements })
+      changed = true
+    }
+  }
+  return changed ? { ...project, levels } : project
+}
+
 /** Create a new empty drafting project. */
 export function createDraftProject(name = 'Untitled'): DraftProject {
   const now = Date.now()
@@ -171,10 +223,13 @@ export function createDraftProject(name = 'Untitled'): DraftProject {
   }
 }
 
-/** Add a level above the current highest. */
+/** Add a level above the current highest. `height` is the NEW level's own
+ *  floor-to-floor height; it stands on the top of the storey below — that
+ *  storey's elevation plus ITS height, which is exactly where the columns and
+ *  walls drawn on it put their top joints, so the two floors share joints. */
 export function addLevel(project: DraftProject, height = 3.5): DraftLevel {
-  const highest = Math.max(...Array.from(project.levels.values()).map(l => l.elevation))
-  const newElevation = highest + (project.levels.size === 1 ? height : 3.5)
+  const top = Array.from(project.levels.values()).reduce((a, b) => (b.elevation > a.elevation ? b : a))
+  const newElevation = top.elevation + top.height
   // uid(), not Date.now() alone: two calls inside the same millisecond must
   // not collide — a collision would silently overwrite an existing level.
   const levelId = uid('level')
@@ -263,6 +318,15 @@ export function mergeDraftNodes(level: DraftLevel, mapping: ReadonlyMap<string, 
     }
     if (next.nodes[0] === next.nodes[1]) continue               // zero-length member
     if (next.corners && new Set(next.corners).size !== 4) continue  // collapsed panel
+    // a weld can stack one member exactly on another (a column dropped onto
+    // a column): the copy would double the frame's stiffness there, so the
+    // first one drawn survives — Revit's "identical instances" clean-up
+    if (!next.corners && !next.hostId && (next.type === 'beam' || next.type === 'column' || next.type === 'wall')) {
+      const [p, q] = next.nodes
+      const dup = [...elements.values()].some(o => o.type === next.type && !o.corners
+        && ((o.nodes[0] === p && o.nodes[1] === q) || (o.nodes[0] === q && o.nodes[1] === p)))
+      if (dup) continue
+    }
     elements.set(id, next)
   }
   // Sweep joints nothing references any more (an element may have been
@@ -328,6 +392,8 @@ export function draftToStructuralModel(project: DraftProject): StructuralModel {
     for (const dn of level.nodes.values()) modelNodeId(dn)
   }
 
+  const pendingWalls: Array<{ level: DraftLevel; el: DraftElement; section: RectSection }> = []
+
   // Process each level
   for (const level of project.levels.values()) {
     // Convert elements
@@ -360,34 +426,11 @@ export function draftToStructuralModel(project: DraftProject): StructuralModel {
           })
           break
         }
-        case 'wall': {
-          // A wall drawn on this level's plan stands on the floor and rises a
-          // full storey. ModelSpace walls hang BELOW their carrying member
-          // (Wall3D draws from the member's node line down `height`), so the
-          // carrying member goes at the wall's TOP: two extra joints one storey
-          // up, merged with the next level's grid when the user draws it.
-          const tops = el.nodes.map(nid => {
-            const dn = level.nodes.get(nid)
-            if (!dn) return null
-            return modelNodeId({ ...dn, z: dn.z + level.height })
-          })
-          if (tops.some(t => !t) || tops[0] === tops[1]) break
-          members.push({
-            id: el.id,
-            i: tops[0]!,
-            j: tops[1]!,
-            role: 'beam',
-            section: el.sectionId,
-          })
-          walls.push({
-            id: el.id,
-            member: el.id,
-            height: level.height,
-            thickness: section.h,          // mm — the wall section's h IS its thickness
-            shearWall: false,
-          })
+        case 'wall':
+          // after every frame member exists, so a wall can ride on a beam
+          // already drawn along its top instead of doubling it
+          pendingWalls.push({ level, el, section })
           break
-        }
         case 'slab': {
           if (el.corners) {
             const corners = el.corners.map(c => draftNodeToModelNode.get(c)!).filter(Boolean)
@@ -404,6 +447,37 @@ export function draftToStructuralModel(project: DraftProject): StructuralModel {
         }
       }
     }
+  }
+
+  // Walls. A wall drawn on a level's plan stands on the floor and rises a
+  // full storey. ModelSpace walls hang BELOW their carrying member (Wall3D
+  // draws from the member's node line down `height`), so the carrier sits at
+  // the wall's TOP: two joints one storey up, which merge with the next
+  // level's joints by position. When a beam already spans those two joints
+  // the wall rides on it — a second member on the same line would double the
+  // frame's stiffness there. Otherwise a carrier is added with a BEAM section:
+  // the wall's own section is a 1000 mm strip of wall, not a beam.
+  const carrierSection = sections.find(s => s.id === DEFAULT_SECTION_FOR.beam)
+    ?? sections.find(s => sectionRole(s) === 'beam')
+  for (const { level, el, section } of pendingWalls) {
+    const tops = el.nodes.map(nid => {
+      const dn = level.nodes.get(nid)
+      if (!dn) return null
+      return modelNodeId({ ...dn, z: dn.z + level.height })
+    })
+    if (tops.some(t => !t) || tops[0] === tops[1]) continue
+    const [ti, tj] = tops as [string, string]
+    const existing = members.find(m => m.role === 'beam' && ((m.i === ti && m.j === tj) || (m.i === tj && m.j === ti)))
+    if (!existing) {
+      members.push({ id: el.id, i: ti, j: tj, role: 'beam', section: (carrierSection ?? section).id })
+    }
+    walls.push({
+      id: el.id,
+      member: existing?.id ?? el.id,
+      height: level.height,
+      thickness: section.h,          // mm — the wall section's h IS its thickness
+      shearWall: false,
+    })
   }
 
   // Attach hosted doors/windows to their wall as ordered metadata — the
@@ -430,23 +504,37 @@ export function draftToStructuralModel(project: DraftProject): StructuralModel {
   }
   for (const w of walls) w.openings?.sort((a, b) => a.t - b.t)
 
-  // Add default supports at the base of ground-level columns
-  const groundLevel = Array.from(project.levels.values()).find(l => l.elevation === 0)
+  // Fixed supports at the base of the LOWEST level's columns — the level the
+  // building stands on, whatever its elevation (a basement at −3.0 included).
+  const levelsList = Array.from(project.levels.values())
+  const groundLevel = levelsList.length
+    ? levelsList.reduce((a, b) => (b.elevation < a.elevation ? b : a))
+    : undefined
   if (groundLevel) {
     for (const el of groundLevel.elements.values()) {
       if (el.type === 'column') {
         // el.nodes[0] is the column's BOTTOM joint (the canvas always writes
         // [bottom, top]); the top joint is the next level's business.
         const base = draftNodeToModelNode.get(el.nodes[0])
-        if (base) supports.push({ node: base, fixity: 'fixed' })
+        if (base && !supports.some(s => s.node === base)) supports.push({ node: base, fixity: 'fixed' })
       }
     }
   }
 
+  // Only joints the frame uses. Every draft joint was registered up front,
+  // but a wall's base, a ceiling's corners and the corners of an abandoned
+  // panel are joints no member or plate touches — exported, each is a free
+  // node with no stiffness at all.
+  const used = new Set<string>()
+  for (const m of members) { used.add(m.i); used.add(m.j) }
+  for (const pl of plates) for (const c of pl.corners) used.add(c)
+  for (const sp of supports) used.add(sp.node)
+  const usedNodes = nodes.filter(nd => used.has(nd.id))
+
   return {
     version: 1,
     name: project.name,
-    nodes,
+    nodes: usedNodes,
     members,
     plates,
     walls,
@@ -659,4 +747,176 @@ export function getGridPoints(level: DraftLevel): GridPoint[] {
     }
   }
   return points
+}
+// --- Moving joints without tearing columns ----------------------------------
+
+/** The joints a drag must move together: the given ones plus, for every
+ *  column touching one of them, its other end. A column is a vertical pair
+ *  (base on the floor, top a storey up) at ONE plan point — dragging only the
+ *  base used to leave the top behind and lean the column across the storey. */
+export function withColumnPartners(level: DraftLevel, ids: Iterable<string>): string[] {
+  const out = new Set(ids)
+  for (const el of level.elements.values()) {
+    if (el.type !== 'column') continue
+    const [a, b] = el.nodes
+    if (out.has(a)) out.add(b)
+    if (out.has(b)) out.add(a)
+  }
+  return [...out]
+}
+
+/** Weld every pair of joints that sit on the same spot (plan and elevation
+ *  within `tol`, m) where `canMergeDraftNodes` allows it — the clean-up after
+ *  a drag: a column dropped onto another column's base also brings its top
+ *  onto that column's top, and the two tops must become one joint. Returns
+ *  the SAME level when nothing coincides. */
+export function mergeCoincidentNodes(level: DraftLevel, tol = 1e-3): DraftLevel {
+  let cur = level
+  for (;;) {
+    const list = [...cur.nodes.values()]
+    let pair: [string, string] | null = null
+    for (let i = 0; i < list.length && !pair; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j]
+        if (Math.abs(a.x - b.x) <= tol && Math.abs(a.y - b.y) <= tol && Math.abs(a.z - b.z) <= tol
+          && canMergeDraftNodes(cur, b.id, a.id)) {
+          pair = [b.id, a.id]
+          break
+        }
+      }
+    }
+    if (!pair) return cur
+    cur = mergeDraftNodes(cur, new Map([pair]))
+  }
+}
+
+/** Plan corners of a slab or ceiling, in their drawn order; null unless all
+ *  four joints resolve. Plan coordinates: x, and y — NOT z, which is the
+ *  joint's elevation. */
+export function panelCorners(level: DraftLevel, el: DraftElement): Array<{ x: number; y: number }> | null {
+  if (!el.corners) return null
+  const pts = el.corners.map(c => level.nodes.get(c))
+  if (pts.some(p => !p)) return null
+  return (pts as DraftNode[]).map(p => ({ x: p.x, y: p.y }))
+}
+
+// --- Level management --------------------------------------------------------
+
+/** Rename a level. Returns a new project; a blank name keeps the old one. */
+export function renameLevel(project: DraftProject, levelId: string, name: string): DraftProject {
+  const lvl = project.levels.get(levelId)
+  const clean = name.trim()
+  if (!lvl || !clean || clean === lvl.name) return project
+  const levels = new Map(project.levels)
+  levels.set(levelId, { ...lvl, name: clean })
+  return { ...project, levels }
+}
+
+/** Change a storey's floor-to-floor height and RESTACK what stands on it:
+ *  this level's own top joints (column tops, at elevation + height) and every
+ *  level above — elevation and every joint — move by the change, so columns
+ *  keep meeting the next floor exactly. Heights below 2 m are refused (the
+ *  project comes back unchanged). Pure. */
+export function setLevelHeight(project: DraftProject, levelId: string, height: number): DraftProject {
+  const lvl = project.levels.get(levelId)
+  if (!lvl || !Number.isFinite(height) || height < 2) return project
+  const delta = height - lvl.height
+  if (Math.abs(delta) < 1e-9) return project
+  const topZ = lvl.elevation + lvl.height
+  const shift = (nodes: Map<string, DraftNode>, pick: (n: DraftNode) => boolean) => {
+    const out = new Map(nodes)
+    for (const [id, n] of nodes) if (pick(n)) out.set(id, { ...n, z: n.z + delta })
+    return out
+  }
+  const levels = new Map<string, DraftLevel>()
+  for (const [id, l] of project.levels) {
+    if (id === levelId) {
+      levels.set(id, { ...l, height, nodes: shift(l.nodes, n => Math.abs(n.z - topZ) < 1e-6) })
+    } else if (l.elevation > lvl.elevation + 1e-9) {
+      levels.set(id, { ...l, elevation: l.elevation + delta, nodes: shift(l.nodes, () => true) })
+    } else {
+      levels.set(id, l)
+    }
+  }
+  return { ...project, levels }
+}
+
+/** Only the TOP level can be deleted (and never the last one left): removing
+ *  a storey from the middle would have to drop everything above it. */
+export function canDeleteLevel(project: DraftProject, levelId: string): boolean {
+  if (project.levels.size < 2 || !project.levels.has(levelId)) return false
+  const top = Array.from(project.levels.values()).reduce((a, b) => (b.elevation > a.elevation ? b : a))
+  return top.id === levelId
+}
+
+/** Delete the top level with everything drawn on it; the level below becomes
+ *  active if the deleted one was. Returns the project unchanged when
+ *  `canDeleteLevel` says no. */
+export function deleteLevel(project: DraftProject, levelId: string): DraftProject {
+  if (!canDeleteLevel(project, levelId)) return project
+  const levels = new Map(project.levels)
+  levels.delete(levelId)
+  let activeLevelId = project.activeLevelId
+  if (activeLevelId === levelId) {
+    activeLevelId = Array.from(levels.values()).reduce((a, b) => (b.elevation > a.elevation ? b : a)).id
+  }
+  return { ...project, levels, activeLevelId }
+}
+
+// --- Retype and duplicate -----------------------------------------------------
+
+/** Give the selected elements a new section — only those whose own role the
+ *  section is sized for (a beam section never lands on a slab). Returns a
+ *  new level, or the same one when nothing matched. */
+export function retypeElements(level: DraftLevel, ids: Iterable<string>, section: RectSection): DraftLevel {
+  const role = sectionRole(section)
+  let elements: Map<string, DraftElement> | null = null
+  for (const id of ids) {
+    const el = level.elements.get(id)
+    if (!el || el.type !== role || el.sectionId === section.id) continue
+    elements ??= new Map(level.elements)
+    elements.set(id, { ...el, sectionId: section.id })
+  }
+  return elements ? { ...level, elements } : level
+}
+
+/** Copy a level to a new storey on top of the building: every joint and
+ *  element with fresh ids, joints lifted by the elevation difference, hosted
+ *  doors/windows re-pointed at their copied walls. The copy becomes active.
+ *  The usual way a typical floor is drafted once and stacked. Pure. */
+export function duplicateLevelUp(project: DraftProject, levelId: string): DraftProject {
+  const src = project.levels.get(levelId)
+  if (!src) return project
+  const top = Array.from(project.levels.values()).reduce((a, b) => (b.elevation > a.elevation ? b : a))
+  const elevation = top.elevation + top.height
+  const dz = elevation - src.elevation
+  const nodeId = new Map<string, string>()
+  const nodes = new Map<string, DraftNode>()
+  for (const n of src.nodes.values()) {
+    const id = uid('n')
+    nodeId.set(n.id, id)
+    nodes.set(id, { id, x: n.x, y: n.y, z: n.z + dz })
+  }
+  const elemId = new Map<string, string>()
+  for (const el of src.elements.values()) elemId.set(el.id, uid('e'))
+  const remap = (r: string) => nodeId.get(r) ?? r
+  const elements = new Map<string, DraftElement>()
+  for (const el of src.elements.values()) {
+    const id = elemId.get(el.id)!
+    elements.set(id, {
+      ...el,
+      id,
+      nodes: [remap(el.nodes[0]), remap(el.nodes[1])],
+      corners: el.corners ? (el.corners.map(remap) as [string, string, string, string]) : undefined,
+      hostId: el.hostId ? elemId.get(el.hostId) : undefined,
+      openings: el.openings?.map(o => ({ ...o })),
+    })
+  }
+  const id = uid('level')
+  const levels = new Map(project.levels)
+  levels.set(id, {
+    id, name: `Level ${project.levels.size + 1}`, elevation, height: src.height, nodes, elements,
+    grids: src.grids ? { x: src.grids.x.slice(), y: src.grids.y.slice() } : undefined,
+  })
+  return { ...project, levels, activeLevelId: id }
 }

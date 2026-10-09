@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { designPunchingShear } from './punchingShear'
+import { twoWayVc } from './shear'
 
 // Reference: interior square column 500×500, d=150, fc=28, λ=1, Vu=500 kN
 const BASE = {
@@ -90,27 +91,39 @@ describe('designPunchingShear — Vc equations §22.6.5.2', () => {
     expect(r.Vc3).toBeCloseTo(0.33 * base / 1000, 6)
   })
 
-  it('Vc1 = (0.17 + 0.33/βc)·λ·√f\'c·b0·d  (kN)', () => {
-    const expected = (0.17 + 0.33 / 1) * base / 1000
-    expect(r.Vc1).toBeCloseTo(expected, 6)
+  // Hand calc, interior 500 × 500, d = 150, f'c = 28: b0 = 2600 mm,
+  // √f'c·b0·d = 5.2915 × 2600 × 150 = 2 063 685 N.
+  it('Vc1 = 0.17(1 + 2/βc)·λ·√f\'c·b0·d — Table 22.6.5.2(b) as printed', () => {
+    expect(base).toBeCloseTo(2_063_685, -1)
+    expect(r.Vc1).toBeCloseTo(0.51 * 2063.685, 1)          // 1052.5 kN
   })
 
-  it('Vc2 = (0.083·αs·d/b0 + 0.17)·λ·√f\'c·b0·d  (kN)', () => {
-    const expected = (0.083 * 40 * 150 / b0 + 0.17) * base / 1000
-    expect(r.Vc2).toBeCloseTo(expected, 6)
+  it('Vc2 = 0.083(2 + αs·d/b0)·λ·√f\'c·b0·d — Table 22.6.5.2(c) as printed', () => {
+    // 0.083 × (2 + 40 × 150 / 2600) = 0.083 × 4.3077 = 0.35754
+    expect(r.Vc2).toBeCloseTo(0.083 * (2 + 6000 / 2600) * 2063.685, 1)   // 737.9 kN
+  })
+
+  it('agrees with the shared twoWayVc the footing engines use', () => {
+    // The two used to carry different expansions of the same table, so a
+    // footing and this page reported different capacities for one column.
+    for (const [c1, c2, position] of [[500, 500, 'interior'], [200, 800, 'interior'], [400, 600, 'edge'], [450, 300, 'corner']] as const) {
+      const p = designPunchingShear({ ...BASE, c1, c2, position })
+      const shared = twoWayVc({ fc: BASE.fc, bo: p.b0, d: BASE.d, betaC: p.betac, position, lambda: BASE.lambda })
+      expect(p.Vc).toBeCloseTo(shared, 6)
+    }
   })
 
   it('Vc = min(Vc1, Vc2, Vc3)', () => {
     expect(r.Vc).toBeCloseTo(Math.min(r.Vc1, r.Vc2, r.Vc3), 9)
   })
 
-  it('for square interior column βc=1, Vc1 = 0.5·base and Vc3 = 0.33·base → Vc3 governs', () => {
-    // 0.17 + 0.33/1 = 0.50 > 0.33, so Vc1 > Vc3 → Vc3 governs over Vc1
+  it('for square interior column βc=1, Vc1 = 0.51·base and Vc3 = 0.33·base → Vc3 governs', () => {
+    // 0.17(1 + 2/1) = 0.51 > 0.33, so Vc1 > Vc3 → Vc3 governs over Vc1
     expect(r.Vc).toBeCloseTo(r.Vc3, 9)
   })
 
   it('Vc1 governs when βc is large (elongated column)', () => {
-    // βc = 4 → Vc1 coefficient = 0.17+0.33/4 = 0.2525 < 0.33 (Vc3) → Vc1 governs
+    // βc = 4 → Vc1 coefficient = 0.17(1 + 2/4) = 0.255 < 0.33 (Vc3) → Vc1 governs
     const r2 = designPunchingShear({ ...BASE, c1: 200, c2: 800 })
     expect(r2.betac).toBeCloseTo(4, 9)
     expect(r2.Vc).toBeCloseTo(r2.Vc1, 9)

@@ -1,0 +1,16 @@
+import { open, clean } from './lib.mjs'
+import { writeFileSync, mkdirSync } from 'node:fs'
+mkdirSync('cap/h', { recursive: true })
+const { b, p } = await open({ dpr: 2 })
+await p.goto((process.env.APP || 'http://localhost:5192') + '/validation', { waitUntil: 'domcontentloaded' }); await p.waitForTimeout(5000); await clean(p)
+const val = await p.evaluate(() => [...document.querySelectorAll('table')].map((t) => ({ head: [...t.querySelectorAll('thead th')].map((x) => x.innerText.trim()), rows: [...t.querySelectorAll('tbody tr')].slice(0, 80).map((r) => [...r.children].map((c) => c.innerText.trim().replace(/\s+/g, ' '))) })))
+writeFileSync('cap/h/validation.json', JSON.stringify(val))
+const vtext = await p.evaluate(() => document.body.innerText.slice(0, 3000))
+writeFileSync('cap/h/validation.txt', vtext)
+await p.screenshot({ path: 'cap/h/validation.png' })
+await p.goto((process.env.APP || 'http://localhost:5192') + '/', { waitUntil: 'domcontentloaded' }); await p.waitForTimeout(4000); await clean(p)
+writeFileSync('cap/h/home.txt', await p.evaluate(() => document.body.innerText))
+const row = p.locator('text=Every number, defensible').locator('xpath=following::*[contains(@class,"rounded")][1]')
+await row.scrollIntoViewIfNeeded().catch(() => {}); await p.waitForTimeout(500)
+await row.screenshot({ path: 'cap/h/defensible.png' }).catch((e) => console.log('defensible', e.message.slice(0, 80)))
+await b.close()

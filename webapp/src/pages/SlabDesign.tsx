@@ -4,16 +4,14 @@ import { optimizeSlabRebar } from '../engine/matRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
 import { buildRebarSelectionSolution, withRebarSelection } from '../lib/rebarSolution'
 import { nameMat } from '../lib/rebarLabel'
-import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
-import { ReportControls } from '../components/ReportControls'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard, ResultsTable, type ResultRow } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { buildSlabSolution } from '../lib/slabSolution'
 import { Math as KTex } from '../lib/math'
 import { SlabBarSection } from '../components/SlabBarSection'
 import { tempSteelArea, tempSpacingMax } from '../engine/slabBarDetail'
 import { f0, f1, f2 } from '../lib/format'
-import 'katex/dist/katex.min.css'
-import { WorkedSolution } from '../components/WorkedSolution'
-import { PageHeader } from '../components/calc'
 import { ModelMemberResults } from '../components/ModelMemberResults'
 import { backSolvedServiceLoads, type MemberLoadRequest } from '../lib/modelMemberResults'
 
@@ -51,28 +49,26 @@ function steelSub(s: SlabSectionSteel) {
   return `As=${f0(s.As)} mm²${s.usedMin ? ' (T/S min)' : ''}`
 }
 
-function DirCard({ title, dir, barDia, mats }: {
-  title: string; dir: SlabDirResult; barDia: number
+function DirTable({ dir, barDia, mats }: {
+  dir: SlabDirResult; barDia: number
   /** Keyed by `slabStrips`' label, so the schedule quotes the adopted mat. */
   mats?: Map<string, StripMat>
 }) {
   const mat = (loc: string, which: 'column' | 'middle') =>
     mats?.get(`${dir.dir}-dir ${loc} ${which} strip`)
   return (
-    <ResultCard title={title}>
-      <Row label="Span l₁" value={`${f2(dir.l1)} m`} sub={`l₂=${f2(dir.l2)} m`} />
-      <Row label="Clear span lₙ" value={`${f2(dir.ln)} m`} />
-      <Row label={<KTex tex="M_o" />} value={`${f1(dir.Mo)} kN·m`} />
-      <Row label="d (effective)" value={`${f1(dir.d)} mm`} />
-      <Row label="Column strip" value={`${f2(dir.csWidth)} m wide`} sub={`Middle: ${f2(dir.msWidth)} m`} />
-      <div className="mt-2 overflow-x-auto">
+    <div>
+      <p className="mb-2 font-mono text-[11.5px] text-muted">
+        l₁ {f2(dir.l1)} m · l₂ {f2(dir.l2)} m · lₙ {f2(dir.ln)} m · Mo {f1(dir.Mo)} kN·m · d {f1(dir.d)} mm · column strip {f2(dir.csWidth)} m, middle {f2(dir.msWidth)} m
+      </p>
+      <div className="overflow-x-auto">
         <table className="w-full border-collapse text-xs">
           <thead>
             <tr className="border-b border-hairline text-left uppercase tracking-wide text-muted">
               <th className="pb-1 pr-2 font-semibold">Location</th>
               <th className="pb-1 pr-2 font-semibold">M (kN·m)</th>
-              <th className="pb-1 pr-2 font-semibold">Col strip</th>
-              <th className="pb-1 font-semibold">Mid strip</th>
+              <th className="pb-1 pr-2 font-semibold">Column strip</th>
+              <th className="pb-1 font-semibold">Middle strip</th>
             </tr>
           </thead>
           <tbody>
@@ -97,7 +93,7 @@ function DirCard({ title, dir, barDia, mats }: {
           </tbody>
         </table>
       </div>
-    </ResultCard>
+    </div>
   )
 }
 
@@ -205,172 +201,111 @@ export default function SlabDesign() {
     }))
   }
 
+  const hOK = r ? r.h >= r.hmin : false
+  const deflRows: ResultRow[] = defl ? [
+    { check: 'Immediate (D + L)', basis: defl.cracked ? 'cracked — Branson Ie' : 'uncracked', demand: `${f1(defl.immediate)} mm`, status: 'info' },
+    { check: 'Immediate live', basis: 'L/360', demand: `${f1(defl.immLive)} mm`, limit: `${f1(defl.limitLive)} mm`, ratio: defl.immLive / defl.limitLive, status: defl.liveOK ? 'pass' : 'fail' },
+    { check: 'Long-term dead', basis: `λΔ ${defl.lambdaDelta.toFixed(2)} (ξ = 2.0, ρ′ = 0)`, demand: `${f1(defl.longTerm)} mm`, status: 'info' },
+    { check: 'Total (LT dead + imm. live)', basis: 'L/240', demand: `${f1(defl.total)} mm`, limit: `${f1(defl.limitTotal)} mm`, ratio: defl.total / defl.limitTotal, status: defl.totalOK ? 'pass' : 'fail' },
+  ] : []
+  // the section quotes the ADOPTED mat, the same one the strip tables print
+  const stripSpacing = (loc: string, strip: 'column' | 'middle', fallback: number) =>
+    mats.get(`x-dir ${loc} ${strip} strip`)?.spacing ?? fallback
   return (
-        <div>
-      <PageHeader title="Two-Way Slab Design" badges={['ACI 318-14 §8.10', 'NSCP 2015 §408.10']} />
-      {/* Same container as the letterhead cards on the other calculators —
-          keeps the card aligned with the rest of the page and out of print. */}
-      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7">
-        <ModelMemberResults kind="slab" onLoad={loadSaved} />
-      </div>
-      {/* px-5 sm:px-7 (not p-6): the saved-project card above now follows the
-          app-wide horizontal rail, so this container matches it instead of
-          sitting 4px off — the mismatch this page used to have. */}
-      <div className="mx-auto max-w-[1500px] px-5 py-6 sm:px-7">
-      <p className="no-print mt-1 text-muted">
-        Direct Design Method — NSCP 2015 §408.10 / ACI 318-14 §8.10. Square or rectangular interior and end panels;
-        column-strip / middle-strip flexure; temp/shrinkage minimum; §408.7.2.2 spacing; mid-panel deflection by
-        crossing-strip method (Branson I_e).
-      </p>
-      <ReportControls title="Two-Way Slab (DDM)" badges={['ACI 318-14 §8.10', 'NSCP 2015 §408.10']} report={report} />
-
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
-        {/* ── INPUTS ── */}
-        <div className="space-y-5">
-          <Card title="Panel geometry">
-            <Num label={<>Span <KTex tex="l_x" /> (short)</>} unit="m" value={f.lx} onChange={set('lx')} min={0.1} />
-            <Num label={<>Span <KTex tex="l_y" /> (long)</>} unit="m" value={f.ly} onChange={set('ly')} min={0.1} />
-            <Num label="Column width" unit="mm" value={f.colWidth} onChange={set('colWidth')} min={0} />
-          </Card>
-
-          <Card title="Service loads">
-            <Num label={<>Dead load <KTex tex="D" /></>} unit="kPa" value={f.D} onChange={set('D')} min={0} />
-            <Num label={<>Live load <KTex tex="L" /></>} unit="kPa" value={f.L} onChange={set('L')} min={0} />
-          </Card>
-
-          <Card title="Materials">
-            <Num label={<KTex tex="f'_c" />} unit="MPa" value={f.fc} onChange={set('fc')} min={1} />
-            <Num label={<KTex tex="f_y" />} unit="MPa" value={f.fy} onChange={set('fy')} min={1} />
-          </Card>
-
-          <Card title="Detailing"
-            hint={
-              <label className="no-print flex min-h-[24px] cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-muted">
-                <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-brand" />
-                Auto-select bar ⌀ and spacing
-              </label>
-            }>
-            {/* min 1, not 0: a blank field is NaN and `clampTo` passes non-finite
-                straight through, so "blank = auto" survives the bound while a
-                typed 0 — which the engine would read as a 0 mm slab, not as
-                auto — cannot be entered. */}
-            <Num label="Thickness h (blank = auto)" unit="mm" value={f.h} onChange={set('h')} min={1} />
-            <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} min={0} />
-            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={dbEff} onChange={set('barDia')} min={1}
-              disabled={autoBar}
-              hint={autoBar ? (slabChoice?.db ? 'chosen by the optimiser' : 'no compliant mat — see the ranking') : undefined} />
-          </Card>
-
-          <Card title="Span type">
-            <Pick label="End span in x-dir?" value={f.extX} onChange={set('extX')}
-              options={[['no', 'Interior (no disc. edge)'], ['yes', 'End span (one disc. edge)']]} />
-            <Pick label="End span in y-dir?" value={f.extY} onChange={set('extY')}
-              options={[['no', 'Interior (no disc. edge)'], ['yes', 'End span (one disc. edge)']]} />
-            <Pick label="Beams on all edges?" value={f.withBeams} onChange={set('withBeams')}
-              options={[['yes', 'Yes (grid beams)'], ['no', 'No (flat plate)']]} />
-          </Card>
-          {slabChoice && (
-            <RebarRanking selection={slabChoice.selection} title="Mat selection — whole panel" name={nameMat} />
-          )}
-        </div>
-
-        {/* ── RESULTS ── */}
-        <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
-          {r ? (
-            <>
-              {/* Summary */}
-              <ResultCard title="Summary">
-                {!r.applicable && (
-                  <div className="mb-2 rounded border border-warn-line bg-warn-tint px-3 py-2 text-xs text-warn">
-                    ⚠ DDM not fully applicable — review notes below.
-                  </div>
-                )}
-                <Row label="Ratio l_y / l_x" value={f2(r.ratio)}
-                  sub={r.twoWay ? 'two-way ✓' : 'one-way ✗'} />
-                <Row label="Min. thickness h_min" value={`${Math.round(r.hmin)} mm`} />
-                <Row label="Adopted thickness h" value={`${r.h} mm`}
-                  alert={Number.isFinite(f.h) && f.h < r.hmin} />
-                <Row label={<><KTex tex="w_u" /> (factored)</>} value={`${f1(r.wu)} kPa`} />
-              </ResultCard>
-
-              {/* DDM notes */}
-              {r.notes.length > 0 && (
-                <div className="space-y-1">
-                  {r.notes.map((n, i) => (
-                    <p key={i} className="rounded border border-hairline bg-sheet-2 px-3 py-1.5 text-xs text-muted">
-                      {n}
-                    </p>
-                  ))}
-                </div>
-              )}
-
-              {/* X direction */}
-              <DirCard title={`Direction x (l₁ = ${f2(r.x.l1)} m)`} dir={r.x} barDia={dbEff} mats={mats} />
-
-              {/* Y direction */}
-              <DirCard title={`Direction y (l₁ = ${f2(r.y.l1)} m)`} dir={r.y} barDia={dbEff} mats={mats} />
-
-              {/* ── Bar arrangement ─────────────────────────────────── */}
-              <ResultCard title="Bar arrangement — section through the span">
-                <div className="-mx-1 space-y-4">
-                  {(['column', 'middle'] as const).map((strip) => {
-                    const loc = r.x.locations.find((l) => l.name === '+M') ?? r.x.locations[0]
-                    const neg = r.x.locations.find((l) => l.name.includes('−M')) ?? loc
-                    const sec = strip === 'column' ? loc.column : loc.middle
-                    const negSec = strip === 'column' ? neg.column : neg.middle
-                    return (
-                      <SlabBarSection key={strip} strip={strip}
-                        l1={r.x.l1} support={f.colWidth / 1000} h={r.h} cover={f.cover}
-                        topBars={`⌀${dbEff} @ ${f0(negSec.spacing)} mm`}
-                        bottomBars={`⌀${dbEff} @ ${f0(sec.spacing)} mm`}
-                        tempBars={`As ${f0(temp.As)} mm²/m · max s ${f0(tempSpacingMax(r.h))} mm`} />
-                    )
-                  })}
-                </div>
-                <p className="mt-2 text-[11px] leading-5 text-muted">
-                  Sections are taken along <KTex tex="l_1" /> in the x-direction. Top steel is the
-                  negative-moment mat over the supports; bottom steel is the positive-moment mat
-                  through mid-span. The shrinkage and temperature bars run perpendicular, so a
-                  section cuts them end-on. Cut-offs follow ACI 318-14
-                  Fig. 8.7.4.1.3(a) for a flat plate without drop panels: top steel from the
-                  FACE of support, the bottom remainder from the support CENTRELINE. The column
-                  strip's bottom mat is 100% continuous — at least two bars pass through the
-                  column core per §8.7.4.2.
-                </p>
-              </ResultCard>
-
-              {/* Deflection */}
-              {defl && (
-                <ResultCard title="Deflection — §24.2 crossing-strip">
-                  <Row label="Immediate (D+L)" value={`${f1(defl.immediate)} mm`} />
-                  <Row label="Immediate live" value={`${f1(defl.immLive)} mm`}
-                    alert={!defl.liveOK}
-                    sub={`L/360 = ${f1(defl.limitLive)} mm${defl.liveOK ? ' ✓' : ' ✗'}`} />
-                  <Row label={<>Long-term <KTex tex="\lambda_\Delta" /></>}
-                    value={defl.lambdaDelta.toFixed(2)} sub="ξ=2.0, ρ′=0" />
-                  <Row label="Long-term dead" value={`${f1(defl.longTerm)} mm`} />
-                  <Row label="Total (LT dead + imm live)" value={`${f1(defl.total)} mm`}
-                    alert={!defl.totalOK}
-                    sub={`L/240 = ${f1(defl.limitTotal)} mm${defl.totalOK ? ' ✓' : ' ✗'}`} />
-                  {defl.cracked && (
-                    <p className="mt-1 text-xs text-muted">Slab cracks under service load — Branson I_e applied.</p>
-                  )}
-                </ResultCard>
-              )}
-            </>
-          ) : (
-            <p className="py-8 text-center text-sm text-muted">Enter valid panel inputs to see results.</p>
-          )}
-        </div>
-      </div>
-      {/* The step-by-step already existed and only ever reached the PDF. */}
-      {solution && solution.length > 0 && (
-        <div className="mt-5">
-          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
-        </div>
+    <WorkspacePage title="Two-Way Slab" badges={['Concrete', 'ACI 318-14 §8.10 · NSCP 2015 §408.10']}
+      intro="Direct Design Method for square or rectangular interior and end panels: column-strip and middle-strip flexure, the temperature and shrinkage minimum, §408.7.2.2 spacing, and mid-panel deflection by the crossing-strip method with Branson's Ie."
+      report={report}
+      inputs={<>
+        <div className="no-print"><ModelMemberResults kind="slab" onLoad={loadSaved} /></div>
+        <InputGroup title="Panel geometry">
+          <Num label={<>Span <KTex tex="l_x" /> (short)</>} unit="m" value={f.lx} onChange={set('lx')} min={0.1} />
+          <Num label={<>Span <KTex tex="l_y" /> (long)</>} unit="m" value={f.ly} onChange={set('ly')} min={0.1} />
+          <Num label="Column width" unit="mm" value={f.colWidth} onChange={set('colWidth')} min={0} />
+        </InputGroup>
+        <InputGroup title="Service loads">
+          <Num label={<>Dead <KTex tex="D" /></>} unit="kPa" value={f.D} onChange={set('D')} min={0} />
+          <Num label={<>Live <KTex tex="L" /></>} unit="kPa" value={f.L} onChange={set('L')} min={0} />
+        </InputGroup>
+        <InputGroup title="Materials">
+          <Num label={<KTex tex="f'_c" />} unit="MPa" value={f.fc} onChange={set('fc')} min={1} />
+          <Num label={<KTex tex="f_y" />} unit="MPa" value={f.fy} onChange={set('fy')} min={1} />
+        </InputGroup>
+        <InputGroup title="Detailing">
+          <label className="col-span-2 flex cursor-pointer items-center gap-2 text-[12.5px] font-semibold text-ink">
+            <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)} className="h-3.5 w-3.5 accent-brand" />
+            Auto-select bar ⌀ and spacing
+          </label>
+          <Num label="Thickness h (blank = auto)" unit="mm" value={f.h} onChange={set('h')} min={1} />
+          <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} min={0} />
+          <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={dbEff} onChange={set('barDia')} min={1} disabled={autoBar}
+            hint={autoBar ? (slabChoice?.db ? 'chosen by the optimiser' : 'no compliant mat — see the ranking') : undefined} />
+        </InputGroup>
+        <InputGroup title="Span type">
+          <Pick label="End span in x?" value={f.extX} onChange={set('extX')} options={[['no', 'Interior'], ['yes', 'End span']]} />
+          <Pick label="End span in y?" value={f.extY} onChange={set('extY')} options={[['no', 'Interior'], ['yes', 'End span']]} />
+          <div className="col-span-2">
+            <Pick label="Beams on all edges?" value={f.withBeams} onChange={set('withBeams')} options={[['yes', 'Yes (grid beams)'], ['no', 'No (flat plate)']]} />
+          </div>
+        </InputGroup>
+      </>}
+      checks={r ? <>
+        <CheckCard title="Panel" basis={r.applicable ? 'DDM applicable' : 'DDM not fully applicable — see notes'} status={r.applicable ? 'pass' : 'warn'}
+          pillLabel={r.applicable ? (r.twoWay ? 'TWO-WAY' : 'ONE-WAY') : 'REVIEW'} value={`${r.h} mm`} unit="thickness"
+          pairs={[{ label: 'ly / lx', value: f2(r.ratio) }, { label: 'wu', value: `${f1(r.wu)} kPa` }]} />
+        <CheckCard title="Minimum thickness" basis="h ≥ h_min" status={hOK ? 'pass' : 'fail'} value={`${Math.round(r.hmin)} mm`} unit="h_min"
+          ratio={r.h > 0 ? r.hmin / r.h : undefined} ratioLabel="h_min ÷ h" />
+        {defl ? <>
+          <CheckCard title="Live deflection" basis="L/360" status={defl.liveOK ? 'pass' : 'fail'} value={f1(defl.immLive)} unit="mm"
+            ratio={defl.immLive / defl.limitLive} ratioLabel="δ ÷ limit" />
+          <CheckCard title="Total deflection" basis="L/240" status={defl.totalOK ? 'pass' : 'fail'} value={f1(defl.total)} unit="mm"
+            ratio={defl.total / defl.limitTotal} ratioLabel="δ ÷ limit" />
+        </> : <CheckCard title="Deflection" basis="§24.2 crossing strip" status="info" pillLabel="NOT RUN" value="—" />}
+      </> : (
+        <CheckCard title="Check the inputs" basis="two-way slab" status="warn" pillLabel="CHECK" value="—" formula="Enter valid panel inputs." />
       )}
-    </div>
-    </div>
+      summary={[
+        { label: 'Spans lx × ly', value: `${f2(f.lx)} × ${f2(f.ly)} m` },
+        { label: 'Loads', value: `D ${f1(f.D)}, L ${f1(f.L)} kPa` },
+        { label: "f'c / fy", value: `${f.fc} / ${f.fy} MPa` },
+        { label: 'Edges', value: `${f.extX === 'yes' ? 'end' : 'interior'} in x, ${f.extY === 'yes' ? 'end' : 'interior'} in y, ${f.withBeams === 'yes' ? 'beams' : 'flat plate'}` },
+      ]}
+      drawing={r ? { title: 'Bar arrangement — section through the span', node: <div data-pdf-drawing className="space-y-4">
+        {(['column', 'middle'] as const).map((strip) => {
+          const loc = r.x.locations.find((l) => l.name === '+M') ?? r.x.locations[0]
+          const neg = r.x.locations.find((l) => l.name.includes('−M')) ?? loc
+          const sec = strip === 'column' ? loc.column : loc.middle
+          const negSec = strip === 'column' ? neg.column : neg.middle
+          return (
+            <SlabBarSection key={strip} strip={strip}
+              l1={r.x.l1} support={f.colWidth / 1000} h={r.h} cover={f.cover}
+              topBars={`⌀${dbEff} @ ${f0(stripSpacing(neg.name, strip, negSec.spacing))} mm`}
+              bottomBars={`⌀${dbEff} @ ${f0(stripSpacing(loc.name, strip, sec.spacing))} mm`}
+              tempBars={`As ${f0(temp.As)} mm²/m · max s ${f0(tempSpacingMax(r.h))} mm`} />
+          )
+        })}
+      </div> } : undefined}
+      resultsCaption={r ? [...r.notes, 'Sections are taken along l₁ in the x-direction: top steel is the negative-moment mat over the supports, bottom steel the positive-moment mat at mid-span, the shrinkage and temperature bars cut end-on. Cut-offs follow ACI 318-14 Fig. 8.7.4.1.3(a); the column strip bottom mat is continuous with at least two bars through the column core (§8.7.4.2).'].join(' ') : undefined}
+      results={r ? [
+        { check: 'Panel ratio ly / lx', basis: r.twoWay ? 'two-way ≤ 2' : 'one-way > 2', demand: f2(r.ratio), status: r.twoWay ? 'pass' : 'warn' },
+        { check: 'Adopted thickness', basis: `h_min ${Math.round(r.hmin)} mm`, demand: `${r.h} mm`, limit: `${Math.round(r.hmin)} mm`, status: hOK ? 'pass' : 'fail' },
+        { check: 'Factored load wu', basis: '1.2D + 1.6L', demand: `${f1(r.wu)} kPa`, status: 'info' },
+        { check: 'Static moment Mo', basis: 'x / y', demand: `${f1(r.x.Mo)} / ${f1(r.y.Mo)} kN·m`, status: 'info' },
+        { check: 'Temperature steel', basis: '§424.4.3', demand: `${f0(temp.As)} mm²/m`, limit: `s ≤ ${f0(tempSpacingMax(r.h))} mm`, status: 'info' },
+      ] : [{ check: 'Panel', basis: 'invalid input', demand: '—', status: 'warn' }]}
+      extraSections={r ? [
+        { title: `Direction x (l₁ = ${f2(r.x.l1)} m)`, node: <DirTable dir={r.x} barDia={dbEff} mats={mats} /> },
+        { title: `Direction y (l₁ = ${f2(r.y.l1)} m)`, node: <DirTable dir={r.y} barDia={dbEff} mats={mats} /> },
+        ...(defl ? [{ title: 'Deflection — §24.2 crossing strip', node: <ResultsTable rows={deflRows} /> }] : []),
+        ...(slabChoice ? [{ title: 'Mat selection — whole panel', node: <RebarRanking selection={slabChoice.selection} title="Ranked mats" name={nameMat} /> }] : []),
+      ] : []}
+      steps={solution ?? [{ title: 'Check the inputs', lines: [{ text: 'Enter valid panel inputs.' }] }]}
+      references={[
+        { topic: 'Direct Design Method', basis: 'Mo, distribution to column and middle strips', source: 'ACI 318-14 §8.10; NSCP 2015 §408.10' },
+        { topic: 'Minimum thickness', basis: 'two-way slab h_min', source: 'ACI 318-14 §8.3.1' },
+        { topic: 'Spacing and minimum steel', basis: '§408.7.2.2, shrinkage and temperature', source: 'NSCP 2015 §408.7.2.2, §424.4.3' },
+        { topic: 'Bar cut-offs', basis: 'flat plate without drop panels', source: 'ACI 318-14 Fig. 8.7.4.1.3(a), §8.7.4.2' },
+        { topic: 'Deflection', basis: 'crossing-strip, Branson Ie', source: 'ACI 318-14 §24.2' },
+      ]}
+    />
   )
 }

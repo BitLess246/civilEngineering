@@ -36,6 +36,8 @@ import {
 } from './planDetails'
 import { buildFrameElevation } from '../engine/frameElevation'
 import { buildStructureCages } from '../engine/cageBuilder'
+import { buildExplodedBeamLine, buildBbsSheet, cagesByKind } from '../engine/barCuttingSheets'
+import { bendingSchedule, scheduleTypes } from '../engine/barBendingSchedule'
 import { buildSteelSectionDetail } from '../engine/steelSection'
 import { buildConnectionDetail } from '../engine/steelConnectionDetail'
 import { buildSteelFrameElevation } from '../engine/steelElevation'
@@ -49,6 +51,7 @@ export type SheetGroup =
   | 'Slab opening details' | 'Wall standard details'
   | 'Frame elevations'
   | 'Steel schedules' | 'Steel sections' | 'Steel connections' | 'Timber schedules'
+  | 'Bar cutting lists' | 'Bar bending schedules'
 
 export interface PlanSheet {
   /** Stable identity — also the SVG download file stem. */
@@ -86,6 +89,8 @@ const REF: Record<SheetGroup, string> = {
   'Steel sections': 'S-10',
   'Steel connections': 'S-11',
   'Timber schedules': 'S-07',
+  'Bar cutting lists': 'S-12',
+  'Bar bending schedules': 'S-13',
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -263,6 +268,39 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
     }
   })
 
+  // Fabrication sheets come LAST: they are read after the details they cut
+  // for, and a fabricator's set is these two groups on their own.
+  const fab: PlanSheet[] = []
+  // BAR CUTTING LISTS — the same lines' bars pulled out of the beam, one
+  // sheet per line and level: what the fabricator cuts from, read against
+  // the elevation the fixer places from.
+  frameElevationBundles(model, design, cages).forEach((b, i) => {
+    const drawing = buildExplodedBeamLine(b.input, { detailNo: String(i + 1), sheetRef: ref('Bar cutting lists') })
+    const n = cages.filter((c) => b.input.subject.has(c.member))
+      .reduce((s, c) => s + c.runs.filter((r) => r.role === 'top' || r.role === 'bottom' || r.role === 'side').length, 0)
+    if (n === 0) return
+    fab.push({
+      key: `${b.key}-cutting`, group: 'Bar cutting lists',
+      title: `Grid ${b.line} — ${b.level}`, subtitle: `${n} bar marks, exploded`,
+      warnings: [], drawing,
+    })
+  })
+  // BAR BENDING SCHEDULES — one per kind of member, every bar typed by shape.
+  const KIND_LABEL: Record<string, string> = { beam: 'Beams', column: 'Columns', footing: 'Footings', slab: 'Slabs', stair: 'Stairs' }
+  let bbsNo = 0
+  for (const [kind, list] of cagesByKind(cages)) {
+    const types = scheduleTypes(bendingSchedule(list))
+    if (types.length === 0) continue
+    const heading = KIND_LABEL[kind] ?? kind
+    const drawing = buildBbsSheet(types, heading, { detailNo: String(++bbsNo), sheetRef: ref('Bar bending schedules') })
+    const kg = types.reduce((s, t) => s + t.kg, 0)
+    fab.push({
+      key: `bbs-${slug(kind)}`, group: 'Bar bending schedules', title: heading,
+      subtitle: `${types.length} bar types · ${kg.toFixed(0)} kg`, warnings: [], drawing,
+    })
+  }
+
+  out.push(...fab)
   return out
 }
 

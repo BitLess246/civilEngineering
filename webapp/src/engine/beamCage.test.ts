@@ -38,17 +38,6 @@ describe('buildBeamCage — longitudinal steel', () => {
     expect(bare.runs.filter((r) => r.role === 'bottom')).toHaveLength(CORNER_BARS_PER_FACE)
   })
 
-  it('spreads a face on ONE row when the design gave no layers', () => {
-    // The historic behaviour — and still right for a single-layer design.
-    // Measured on the bars' LINE, not the crank tips: a curtailed bar's path
-    // climbs/descends as it cranks, which is not a second layer.
-    const lineY = (r: { mark: string; path: readonly (readonly [number, number, number])[] }) =>
-      r.mark.startsWith('B1-X') ? r.path[1]![1] : r.path[0]![1]
-    const oneRow = new Set(cage.runs.filter((x) => x.role === 'bottom').map(lineY).map((y) => y.toFixed(4)))
-    expect(oneRow.size).toBe(1)
-  })
-
-
   it('runs a through bar to the SUPPORT CENTRELINE at a continuous support', () => {
     // A bar at a continuous support is not anchored, it carries on. Stopping at
     // the column face left the joint with no steel through it at all and made
@@ -174,73 +163,6 @@ describe('buildBeamCage — longitudinal steel', () => {
         }
       }
     }
-  })
-})
-
-describe('buildBeamCage — the face stacks into the layers the design detailed (§407.7.2)', () => {
-  // 6 bars a side, arranged [3, 3] — what designBeam reports for a face that
-  // needs two rows. Without layers the cage drew all six shoulder to shoulder
-  // on one line the section does not have.
-  const layered = buildBeamCage({ ...beam, botLayers: [3, 3], topLayers: [3, 3] })
-  // The layer a bar sits on, read at its straight segment — a curtailed bar's
-  // crank tip climbs/descends off the line, and that is not a second layer.
-  const lineY = (r: { mark: string; path: readonly (readonly [number, number, number])[] }) =>
-    r.mark.startsWith('B1-X') ? r.path[1]![1] : r.path[0]![1]
-  const layerYs = (role: string) =>
-    [...new Set(layered.runs.filter((x) => x.role === role).map(lineY).map((y) => y.toFixed(4)))].map(Number)
-
-  it('puts each face on TWO rows, not six bars on one line', () => {
-    expect(layerYs('bottom')).toHaveLength(2)
-    expect(layerYs('top')).toHaveLength(2)
-    const pitch = (beam.barDia + Math.max(25, beam.barDia)) / 1000
-    const [botLo, botHi] = layerYs('bottom').sort((a, b) => a - b)
-    const [topLo, topHi] = layerYs('top').sort((a, b) => a - b)
-    expect(botHi - botLo).toBeCloseTo(pitch, 9)
-    expect(topHi - topLo).toBeCloseTo(pitch, 9)   // the top stacks DOWNWARD from its face
-  })
-
-  it('keeps the extreme-layer line where the single-row cage put it', () => {
-    // Layer 0 is unchanged — the stack grows INTO the section, not off its face.
-    const plainY = cage.runs.find((x) => x.role === 'bottom')!.path[0][1]
-    expect(Math.min(...layerYs('bottom'))).toBeCloseTo(plainY, 9)
-    const plainTopY = cage.runs.find((x) => x.role === 'top')!.path[0][1]
-    expect(Math.max(...layerYs('top'))).toBeCloseTo(plainTopY, 9)
-  })
-
-  it('keeps the CONTINUOUS bars in the extreme layer', () => {
-    // Corner bars run through — they belong on the face the crack opens at.
-    const extremeBot = Math.min(...layerYs('bottom'))
-    const extremeTop = Math.max(...layerYs('top'))
-    for (const t of layered.runs.filter((x) => x.mark.startsWith('B1-T'))) {
-      expect(lineY(t)).toBeCloseTo(extremeTop, 9)
-    }
-    for (const b of layered.runs.filter((x) => x.mark.startsWith('B1-B'))) {
-      expect(lineY(b)).toBeCloseTo(extremeBot, 9)
-    }
-  })
-
-  it('splits the curtailed extras across the rows too', () => {
-    // 6 bars, [3, 3], 2 continuous → 4 extras: layer 0's last place, then the
-    // three of layer 1. Both rows must show up among the XB runs (read at the
-    // line — the crank tips climb off it and are not a third row).
-    const ys = [...new Set(layered.runs.filter((x) => x.mark.startsWith('B1-XB'))
-      .map(lineY).map((y) => y.toFixed(4)))]
-    expect(ys).toHaveLength(2)
-  })
-
-  it('a layered face still fits the stirrup — every bar inside the tie', () => {
-    const tieTop = 3 + (beam.h - beam.cover) / 1000
-    const tieBot = 3 + beam.cover / 1000
-    for (const y of [...layerYs('top'), ...layerYs('bottom')]) {
-      expect(y).toBeGreaterThan(tieBot - 1e-9)
-      expect(y).toBeLessThan(tieTop + 1e-9)
-    }
-  })
-
-  it('more bars than the layers name still get a row (nothing dropped)', () => {
-    const stuffed = buildBeamCage({ ...beam, botBars: 7, botLayers: [3, 3] })
-    const ys = [...new Set(stuffed.runs.filter((x) => x.role === 'bottom').map(lineY).map((y) => y.toFixed(4)))]
-    expect(ys).toHaveLength(3)     // 3 + 3 + 1 leftover row
   })
 })
 
@@ -592,5 +514,90 @@ describe('buildBeamCage — cranked into the joint', () => {
     for (const x of [0, 0.2, 3, 6]) expect(w(x)).toBeCloseTo(0.088, 9)
     // and no bend across the bar anywhere in it
     for (const r of fm) expect(new Set(r.path.map((p) => p[2].toFixed(9))).size).toBe(1)
+  })
+})
+
+describe('buildBeamCage — faces in layers', () => {
+  // A 300 web cannot hold six ⌀28 at the §407.7.1 clear spacing in one row, so
+  // the design stacks the face 4+2 and measures d to the layered centroid. The
+  // cage has to place the same stack: a single row of six drew an arrangement
+  // the design had ruled out, at a depth its d did not name.
+  const stacked: BeamCageInput = {
+    ...beam, barDia: 28, botLayers: [4, 2], topLayers: [4, 2],
+  }
+  const pitch = (28 + 25) / 1000
+  const yBot = 3 + (40 + 12 + 14) / 1000
+  const yTop = 3 + 0.55 - (40 + 12 + 14) / 1000
+  const half = 0.15 - (40 + 12 + 14) / 1000
+  const ys = (cage: ReturnType<typeof buildBeamCage>, role: string) =>
+    new Set(cage.runs.filter((r) => r.role === role).flatMap((r) => r.path.map((p) => Math.round(p[1] * 1e6))))
+  const at = (y: number) => Math.round(y * 1e6)
+
+  it('sits the second layer one §407.7.2 pitch inside the extreme layer', () => {
+    const cage = buildBeamCage(stacked)
+    expect(ys(cage, 'bottom').has(at(yBot))).toBe(true)
+    expect(ys(cage, 'bottom').has(at(yBot + pitch))).toBe(true)
+    // and the top face stacks DOWNWARD from its own extreme layer
+    expect(ys(cage, 'top').has(at(yTop))).toBe(true)
+    expect(ys(cage, 'top').has(at(yTop - pitch))).toBe(true)
+  })
+
+  it('aligns the upper layer over the extreme layer\'s inner bars — §407.7.2', () => {
+    // 4 bottom bars spread on the even grid; the 2 above sit over the inner
+    // slots, where the stirrup's corner bend still leaves room.
+    const cage = buildBeamCage(stacked)
+    const upper = cage.runs.filter((r) => r.role === 'bottom'
+      && r.path.some((p) => Math.round(p[1] * 1e6) === at(yBot + pitch)))
+    expect(upper).toHaveLength(2)
+    for (const r of upper) expect(Math.abs(r.path[0][2])).toBeCloseTo(half / 3, 9)
+  })
+
+  it('gives the continuous bars the extreme layer\'s outermost places', () => {
+    // The corners run through; the curtailed bars are the inner ones of the
+    // extreme row and the whole upper layer — the bars the span can spare.
+    const cage = buildBeamCage(stacked)
+    const thru = cage.runs.filter((r) => /^B1-B\d+$/.test(r.mark))
+    expect(thru).toHaveLength(2)
+    for (const r of thru) {
+      expect(r.path[0][1]).toBeCloseTo(yBot, 9)
+      expect(Math.abs(r.path[0][2])).toBeCloseTo(half, 9)
+    }
+    const extras = cage.runs.filter((r) => r.mark.startsWith('B1-XB'))
+    expect(extras).toHaveLength(4)
+    // running y: an extra's straight portion is its 2nd and 3rd path point
+    const upper = extras.filter((r) => Math.round(r.path[1][1] * 1e6) === at(yBot + pitch))
+    const inner = extras.filter((r) => Math.round(r.path[1][1] * 1e6) === at(yBot))
+    expect(upper).toHaveLength(2)
+    expect(inner).toHaveLength(2)
+    for (const r of inner) expect(Math.abs(r.path[1][2])).toBeCloseTo(half / 3, 9)
+  })
+
+  it('cranks an upper-layer extra from its own row, and no further than the opposite steel', () => {
+    // The crank used to rise from the extreme row whatever layer the bar sat
+    // in — drawn steel the section did not have.
+    const cage = buildBeamCage(stacked)
+    const upper = cage.runs.filter((r) => r.mark.startsWith('B1-XB')
+      && Math.round(r.path[1][1] * 1e6) === at(yBot + pitch))
+    for (const r of upper) {
+      const crankRise = r.path[0][1] - r.path[1][1]
+      expect(crankRise).toBeGreaterThan(0)
+      expect(r.path[0][1]).toBeLessThanOrEqual(yTop + 1e-9)
+    }
+  })
+
+  it('falls back to one row when the layers do not sum to the face\'s count', () => {
+    const cage = buildBeamCage({ ...stacked, botLayers: [4, 1] })   // sums to 5, face has 6
+    expect(ys(cage, 'bottom').has(at(yBot + pitch))).toBe(false)
+  })
+
+  it('draws one row, as before, when no layers are given', () => {
+    const cage = buildBeamCage(beam)
+    const running = cage.runs.filter((r) => r.role === 'bottom'
+      && (r.mark.startsWith('B1-B') || r.mark.startsWith('B1-XB')))
+    expect(running).toHaveLength(6)
+    for (const r of running) {
+      const y = r.mark.startsWith('B1-XB') ? r.path[1][1] : r.path[0][1]
+      expect(y).toBeCloseTo(3 + (40 + 12 + 10) / 1000, 9)
+    }
   })
 })

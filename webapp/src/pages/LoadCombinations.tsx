@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { calcLoadCombinations, type LoadDemands } from '../engine/loadCombinations'
-import { Num, Card } from '../components/qty'
-import { ReportControls } from '../components/ReportControls'
+import { Num } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { ComboBars } from '../components/loadSketches'
 import { f2 } from '../lib/format'
-import { PageHeader } from '../components/calc'
 import { usePendingCalculatorInputs } from '../lib/ai/pendingAction'
 import { usePublishPageSnapshot, type PageSnapshot } from '../lib/ai/pageContext'
 
@@ -53,93 +54,54 @@ export default function LoadCombinations() {
   }), [d, r])
   usePublishPageSnapshot('/load-combinations', comboSnapshot)
 
+  const report = r ? {
+    docCode: 'L-01',
+    ok: true,
+    governing: `Max ${f2(r.maxCombo.value)} (combo ${r.maxCombo.id}) · min ${f2(r.minCombo.value)} (combo ${r.minCombo.id})`,
+    stats: [
+      { label: 'Governing max', value: f2(r.maxCombo.value), unit: `combo ${r.maxCombo.id}` },
+      { label: 'Governing min', value: f2(r.minCombo.value), unit: `combo ${r.minCombo.id}` },
+    ],
+    data: (['D', 'L', 'Lr', 'W', 'E'] as const).map((k) => [k, f2(d[k])]) as [string, string][],
+    steps: [{
+      title: 'Factored combinations — NSCP 2015 §203.3',
+      lines: r.combos.map((c) => ({ text: `${c.id}: ${c.label} = ${f2(c.value)}` })),
+    }],
+  } : undefined
+
   return (
-        <div>
-      <PageHeader title="Load Combinations" badges={['NSCP 2015', 'ACI 318-14']} />
-      <div className="mx-auto max-w-[1200px] p-6">
-      <p className="no-print mt-1 text-muted">
-        NSCP 2015 §203.3 Strength Design (LRFD) — 13 factored combinations.
-        Enter unfactored characteristic loads; the table shows every factored result
-        with the governing (max/min) envelope highlighted.
-      </p>
-      <ReportControls title="NSCP 2015 Load Combinations" />
-
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_2fr]">
-        {/* ── INPUTS ── */}
-        <Card title="Unfactored Loads">
-          <Num label="D — Dead load"       value={d.D}  onChange={set('D')} />
-          <Num label="L — Floor live"      value={d.L}  onChange={set('L')} />
-          <Num label="Lr — Roof live"      value={d.Lr} onChange={set('Lr')} />
-          <Num label="W — Wind"            value={d.W}  onChange={set('W')} />
-          <Num label="E — Earthquake"      value={d.E}  onChange={set('E')} />
-          <p className="mt-2 text-xs text-muted">
-            Any consistent unit (kN, kN/m, kPa, …). W and E enter as positive magnitudes;
-            the ±W/±E sign is handled by each combination.
-          </p>
-        </Card>
-
-        {/* ── RESULTS TABLE ── */}
-        {r ? (
-          <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet shadow-sm">
-            <div className="border-b border-hairline-2 bg-sheet-2 px-4 py-2.5">
-              <span className="text-sm font-semibold text-ink-2">Factored Load Combinations</span>
-              <span className="ml-3 text-xs text-muted">NSCP 2015 §203.3</span>
-            </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-hairline-2 text-left text-xs text-muted">
-                  <th className="px-3 py-2 font-medium">No.</th>
-                  <th className="px-3 py-2 font-medium">Combination</th>
-                  <th className="px-3 py-2 text-right font-medium">Value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {r.combos.map(c => {
-                  const isMax = c.id === r.maxCombo.id
-                  const isMin = c.id === r.minCombo.id
-                  const highlight = isMax
-                    ? 'bg-ok-tint'
-                    : isMin && r.minCombo.value < 0
-                    ? 'bg-fail-tint'
-                    : ''
-                  return (
-                    <tr key={c.id} className={`border-b border-hairline-2 ${highlight}`}>
-                      <td className="px-3 py-2 font-mono text-muted">{c.id}</td>
-                      <td className="px-3 py-2 text-ink-2">{c.label}</td>
-                      <td className="px-3 py-2 text-right font-semibold tabular-nums">
-                        {f2(c.value)}
-                        {isMax && (
-                          <span className="ml-1.5 rounded bg-ok-tint px-1 py-0.5 text-[10px] font-semibold text-ok">MAX</span>
-                        )}
-                        {isMin && r.minCombo.value < 0 && (
-                          <span className="ml-1.5 rounded bg-fail-tint px-1 py-0.5 text-[10px] font-semibold text-fail">MIN</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-            <div className="flex gap-6 border-t border-hairline-2 bg-sheet-2 px-4 py-3 text-sm">
-              <div>
-                <span className="text-muted">Max (governing):</span>
-                <span className="ml-1.5 font-bold text-ok">{f2(r.maxCombo.value)}</span>
-                <span className="ml-1 text-muted text-xs">combo {r.maxCombo.id}</span>
-              </div>
-              <div>
-                <span className="text-muted">Min:</span>
-                <span className="ml-1.5 font-bold text-ink-2">{f2(r.minCombo.value)}</span>
-                <span className="ml-1 text-muted text-xs">combo {r.minCombo.id}</span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p className="self-start rounded-xl border border-hairline bg-sheet p-6 text-sm text-muted">
-            Fill in load values to see factored combinations.
-          </p>
-        )}
-      </div>
-    </div>
-    </div>
+    <WorkspacePage title="Load Combinations" badges={['Loads', 'NSCP 2015 §203.3']}
+      intro="The strength-design (LRFD) combinations of NSCP 2015 §203.3 for one set of unfactored load effects. Enter characteristic values in any consistent unit; W and E enter as positive magnitudes and each combination applies its own ± sign."
+      report={report}
+      inputs={
+        <InputGroup title="Unfactored loads" hint="Any consistent unit — kN, kN/m, kPa, kN·m.">
+          <Num label="D — dead" value={d.D} onChange={set('D')} />
+          <Num label="L — floor live" value={d.L} onChange={set('L')} />
+          <Num label="Lr — roof live" value={d.Lr} onChange={set('Lr')} />
+          <Num label="W — wind" value={d.W} onChange={set('W')} />
+          <Num label="E — earthquake" value={d.E} onChange={set('E')} />
+        </InputGroup>
+      }
+      checks={r ? <>
+        <CheckCard title="Governing maximum" basis={`combination ${r.maxCombo.id}`} status="info" value={f2(r.maxCombo.value)}
+          pairs={[{ label: 'Expression', value: r.maxCombo.label }]} />
+        <CheckCard title="Governing minimum" basis={`combination ${r.minCombo.id}`} status={r.minCombo.value < 0 ? 'warn' : 'info'}
+          pillLabel={r.minCombo.value < 0 ? 'REVERSAL' : undefined} value={f2(r.minCombo.value)}
+          pairs={[{ label: 'Expression', value: r.minCombo.label }]} />
+      </> : <p className="text-sm text-muted">Fill in load values to see the combinations.</p>}
+      summary={(['D', 'L', 'Lr', 'W', 'E'] as const).map((k) => ({ label: k, value: f2(d[k]) }))}
+      drawing={r ? { title: 'Factored combinations', node: <div data-pdf-drawing>
+        <ComboBars combos={r.combos} maxId={r.maxCombo.id} minId={r.minCombo.id} />
+      </div> } : undefined}
+      resultsCaption={r && r.minCombo.value < 0 ? 'A negative minimum is a reversal — uplift, overturning or tension where the gravity case gives compression — and has to be designed for, not just noted.' : undefined}
+      results={r ? r.combos.map((c) => ({
+        check: `Combination ${c.id}`, basis: c.label, demand: f2(c.value),
+        status: c.id === r.minCombo.id && c.value < 0 ? 'warn' as const : 'info' as const,
+      })) : []}
+      steps={report?.steps ?? []}
+      references={[
+        { topic: 'Strength-design combinations', basis: 'LRFD factored load combinations', source: 'NSCP 2015 §203.3' },
+      ]}
+    />
   )
 }

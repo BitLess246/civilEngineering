@@ -103,10 +103,13 @@ export interface LintelResult {
 /**
  * Effective span — ACI 318-14 §6.3.2.1: for a member not built integrally with
  * its supports, the clear span plus the depth, but never more than the distance
- * between support centres.
+ * between support centres. `bearing` is the length at EACH end, so each centre
+ * sits bearing/2 behind its jamb face and the centres are ln + bearing apart.
+ * (This once added 2·bearing — the out-to-out length of the lintel, not the
+ * distance between its support centres.)
  */
 export function lintelSpan(openingM: number, hMm: number, bearingMm: number): number {
-  return Math.min(openingM + hMm / 1000, openingM + (2 * bearingMm) / 1000)
+  return Math.min(openingM + hMm / 1000, openingM + bearingMm / 1000)
 }
 
 /** Height of the arching triangle over a span, m. */

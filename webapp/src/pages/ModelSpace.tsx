@@ -39,7 +39,7 @@ import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
 import { type ModalResult, type MassModel } from '../engine/modal'
 import { computeResponseSpectrum, rsaEquivalentLoads, type ResponseSpectrumResult, type RsaLateralResult } from '../engine/responseSpectrum'
 import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase, type BiaxialMethod } from '../engine/pipeline'
-import type { SteelJoint } from '../engine/steelConnections'
+import { FNV_A325, phiBoltShear, type SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
 import { footingLayout } from '../engine/footingLayout'
 import { type ShellNode, type ShellElem, type ElementStress, recoverShellStress } from '../engine/shell'
@@ -75,6 +75,12 @@ import { JointConnections3D } from '../components/JointConnections3D'
 import { ConnectionDetail2D } from '../components/ConnectionDetail2D'
 import { connectionMarks, markAt } from '../lib/steelMarks'
 import { connectionRowSolution } from '../lib/connectionSolution'
+import { ModelConnectionMechanics } from '../components/ModelConnectionMechanics'
+import { TabStressContour, GussetStressContours } from '../components/PlateStressContour'
+import { BasePlateDetail2D } from '../components/BasePlateDetail2D'
+import { basePlateRowSolution, basePlateContext } from '../lib/basePlateSolution'
+import { BraceGussetDetail2D } from '../components/BraceGussetDetail2D'
+import { braceRowSolution } from '../lib/braceSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { ConstructionSchedule } from '../components/ConstructionSchedule'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
@@ -98,7 +104,7 @@ import { TimeHistoryPanel } from '../components/TimeHistoryPanel'
 import { ShellContourPanel } from '../components/ShellContourPanel'
 import { ShellStress3D } from '../components/modelSpace/shellStress'
 import { contourData } from '../lib/shellContour'
-import { STRESS_KEYS, rampSwatches, rampTicks, formatStress, isMembrane, unitFor, labelFor, DEFAULT_BANDS, type StressKey } from '../lib/stressScale'
+import { STRESS_KEYS, rampSwatches, rampTicks, formatStress, isMembrane, unitFor, labelFor, DEFAULT_BANDS, DEFAULT_PALETTE, type StressKey, type RampPalette } from '../lib/stressScale'
 import { parseCase, describeCase, caseNodePeak, caseLoads, caseBaseShear } from '../lib/lateralCases'
 import { MemberStress3D } from '../components/modelSpace/memberStressLayer'
 import { stressSection, type StressSection } from '../engine/memberStress'
@@ -346,6 +352,16 @@ export default function ModelSpace() {
   // reader comparing a slab band against a beam band would be comparing two
   // different quantisations of the same ramp.
   const [bands, setBands] = useState(DEFAULT_BANDS)
+  // Contour palette — the FEA spectrum by default; the perceptual pair
+  // (viridis / diverging) for colour-deficient readers and greyscale print.
+  // Remembered per browser; a blocked storage just falls back to the default.
+  const [palette, setPaletteState] = useState<RampPalette>(() => {
+    try { return localStorage.getItem('contour-palette') === 'perceptual' ? 'perceptual' : DEFAULT_PALETTE } catch { return DEFAULT_PALETTE }
+  })
+  const setPalette = (p: RampPalette) => {
+    setPaletteState(p)
+    try { localStorage.setItem('contour-palette', p) } catch { /* storage blocked — session only */ }
+  }
   const [memStressKey, setMemStressKey] = useState<MemberStressKey>('sigma')
   // Averaged at joints by default: exact member by member, the field breaks at
   // every joint (a beam's σ and a column's σ are different components), which
@@ -2383,16 +2399,16 @@ export default function ModelSpace() {
                 {deformInfo && (
                   <>
                     <UndeformedGhost segments={deformInfo.ghost} />
-                    <DeformedShape3D geo={deformInfo.geo} bands={bands} />
+                    <DeformedShape3D geo={deformInfo.geo} bands={bands} palette={palette} />
                   </>
                 )}
                 {!deformActive && showStress && shellStress && (
                   <ShellStress3D nodes={shellStress.nodes} elems={shellStress.elems}
-                    stresses={shellStress.stresses} contourKey={stressKey} bands={bands} />
+                    stresses={shellStress.stresses} contourKey={stressKey} bands={bands} palette={palette} />
                 )}
                 {!deformActive && memStressInfo && (
                   <MemberStress3D members={memStressInfo.members}
-                    contourKey={memStressKey} domain={memStressInfo.domain} bands={bands}
+                    contourKey={memStressKey} domain={memStressInfo.domain} bands={bands} palette={palette}
                     blendJoints={memBlend} />
                 )}
                 {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} kinds={cageKinds} />}
@@ -4065,7 +4081,7 @@ export default function ModelSpace() {
               )}
               {shellOut?.ok && (
                 <ShellContourPanel nodes={shellOut.nodes} elems={shellOut.elems} stresses={shellOut.stresses}
-                  caseName={shellOut.caseName} source={shellOut.source} />
+                  caseName={shellOut.caseName} source={shellOut.source} palette={palette} />
               )}
               {slabFEFail && (
                 <div className="col-span-full rounded-xl border border-warn-line bg-warn-tint p-3 text-[12px] leading-relaxed text-warn">
@@ -5094,6 +5110,24 @@ export default function ModelSpace() {
                         ? 'Smooth — a continuous blend, with no iso-boundary to read a value against.'
                         : `${bands} bands — every boundary is an iso-line, so a region on the model can be matched to a swatch on the bar.`}
                     </p>
+                    <p className="mt-2 text-[11px] font-medium text-ink">Colours</p>
+                    <div className="mt-1 flex gap-1">
+                      {([['fea', 'FEA spectrum'], ['perceptual', 'Colour-blind safe']] as const).map(([p, label]) => (
+                        <button key={p} type="button" onClick={() => setPalette(p)}
+                          aria-pressed={palette === p}
+                          className={`flex-1 rounded border px-2 py-1 text-[11px] font-medium ${
+                            palette === p
+                              ? 'border-brand bg-brand text-on-solid'
+                              : 'border-field-line bg-field text-ink hover:border-brand-hover'}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[11px] leading-snug text-muted">
+                      {palette === 'fea'
+                        ? 'Blue → cyan → green → yellow → red, as FEA programs draw it: the peak reads red at a glance.'
+                        : 'Viridis for magnitudes, blue ↔ red for signed values — readable under red–green deficiency and in greyscale print.'}
+                    </p>
                   </div>
                 )}
                 {/* DEFORMED SHAPE — displacement contour. Continuous through
@@ -5119,7 +5153,7 @@ export default function ModelSpace() {
                           </p>
                         ) : (<>
                           <div className="mt-1.5 flex h-3 overflow-hidden rounded-sm">
-                            {rampSwatches(24, d.signed, bands).map((c, i) => (
+                            {rampSwatches(24, d.signed, bands, palette).map((c, i) => (
                               <div key={i} className="flex-1" style={{ background: c }} />
                             ))}
                           </div>
@@ -5193,7 +5227,7 @@ export default function ModelSpace() {
                           {/* The colour bar, low → high, labelled at the
                               magnitude of THIS field. */}
                           <div className="mt-1.5 flex h-3 overflow-hidden rounded-sm">
-                            {rampSwatches(24, domain.signed, bands).map((c, i) => (
+                            {rampSwatches(24, domain.signed, bands, palette).map((c, i) => (
                               <div key={i} className="flex-1" style={{ background: c }} />
                             ))}
                           </div>
@@ -5273,7 +5307,7 @@ export default function ModelSpace() {
                           </p>
                         ) : (<>
                           <div className="mt-1.5 flex h-3 overflow-hidden rounded-sm">
-                            {rampSwatches(24, domain.signed, bands).map((c, i) => (
+                            {rampSwatches(24, domain.signed, bands, palette).map((c, i) => (
                               <div key={i} className="flex-1" style={{ background: c }} />
                             ))}
                           </div>
@@ -6413,6 +6447,73 @@ export default function ModelSpace() {
             </div>
           )}
 
+          {/* Steel brace schedule (full width) */}
+          {(design.steelBraces ?? []).length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel brace schedule — AISC Ch. D/E + gusset ends (UFM)<SchedChip items={design.steelBraces ?? []} ok={(b) => b.ok} /></h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
+                    <th className="py-1 pr-2 font-semibold">Brace</th>
+                    <th className="py-1 pr-2 font-semibold">Shape</th>
+                    <th className="py-1 pr-2 text-right font-semibold">L (m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Tu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">KL/r</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Member</th>
+                    <th className="py-1 pr-2 font-semibold">End gussets</th>
+                    <th className="py-1 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(design.steelBraces ?? []).flatMap((b) => {
+                    const key = `br:${b.id}`
+                    const open = expanded === key || reportOpen
+                    return [(
+                    <tr key={b.id} onClick={() => setExpanded(expanded === key ? null : key)}
+                      className={`sched-row cursor-pointer border-t border-hairline-2 hover:bg-brand-tint/40 ${b.ok ? '' : 'bg-fail-tint text-fail'}`}>
+                      <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {b.id}</td>
+                      <td className="py-1 pr-2">{b.shape}</td>
+                      <td className="py-1 pr-2 text-right">{b.L.toFixed(2)}</td>
+                      <td className="py-1 pr-2 text-right">{b.Pu > 0 ? f1(b.Pu) : '—'}</td>
+                      <td className="py-1 pr-2 text-right">{b.Tu > 0 ? f1(b.Tu) : '—'}</td>
+                      <td className="py-1 pr-2 text-right">{b.member.KLr.toFixed(0)}</td>
+                      <td className="py-1 pr-2 text-right">{(b.member.util * 100).toFixed(0)}% <span className="text-muted">({b.member.governs})</span></td>
+                      <td className="py-1 pr-2">
+                        {b.ends.map((e) => (
+                          <div key={e.node} className={e.design.ok ? '' : 'text-fail'}>
+                            {e.node}: PL {e.design.tg} · 4×{e.design.weld.w}×{e.design.weld.lw} · {Math.round(e.design.ufm.Lh)}{e.design.ufm.Lv > 0 ? `×${Math.round(e.design.ufm.Lv)}` : ''} · {(e.design.util * 100).toFixed(0)}% <span className="text-muted">({e.design.governs})</span>
+                          </div>
+                        ))}
+                      </td>
+                      <td className="py-1">{b.ok ? '✓ OK' : '✗ check'}</td>
+                    </tr>
+                    ),
+                    open && (
+                      <tr key={`${key}:detail`}>
+                        <td colSpan={9} className="bg-sheet-2/60 px-2 pb-2">
+                          <div className="grid w-full grid-cols-1 gap-3">
+                            {wantDraw && <BraceGussetDetail2D row={b} />}
+                            {wantDraw && expanded === key && <GussetStressContours row={b} />}
+                            {wantSol && <WorkedSolution steps={braceRowSolution(b)} title={`Brace ${b.id} — worked solution`} />}
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                    ]
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-muted">
+                Member: §E3 flexural buckling (pin-ended, K = 1, least r) with §E7 effective area for slender walls;
+                §D2 yielding and rupture at the slot (An = Ag − 2t(tg + 3), U from Table D3.1 for the weld length the end uses);
+                KL/r ≤ 200, L/r ≤ 300. Ends: the HSS slotted over a gusset, four fillets; the Whitmore section in the plate
+                (yielding, §J4.4 buckling at K = 0.65), §J4.3 block shear; gusset-to-frame forces by the Uniform Force Method
+                with interface fillets for 1.25× the resultant. Click a row for the gusset details and the worked solution.
+              </p>
+            </div>
+          )}
+
           {/* Base-plate schedule (full width) */}
           {design.basePlates.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
@@ -6431,27 +6532,51 @@ export default function ModelSpace() {
                   </tr>
                 </thead>
                 <tbody>
-                  {design.basePlates.map((p) => (
-                    <tr key={p.node} className={`sched-row border-t border-hairline-2 ${p.ok ? '' : 'bg-fail-tint text-fail'}`}>
-                      <td className="py-1 pr-2 font-medium">{p.node}</td>
+                  {design.basePlates.flatMap((p) => {
+                    const key = `bp:${p.node}`
+                    const open = expanded === key || reportOpen
+                    const ctx = model ? basePlateContext(model, p) : null
+                    return [(
+                    <tr key={p.node} onClick={() => setExpanded(expanded === key ? null : key)}
+                      className={`sched-row cursor-pointer border-t border-hairline-2 hover:bg-brand-tint/40 ${p.ok ? '' : 'bg-fail-tint text-fail'}`}>
+                      <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {p.node}</td>
                       <td className="py-1 pr-2">{p.shape}</td>
                       <td className="py-1 pr-2 text-right">{f1(p.Pu)}</td>
                       <td className="py-1 pr-2 text-right">{p.Tu > 0 ? f1(p.Tu) : '—'}</td>
-                      <td className="py-1 pr-2">{f1(p.design.B)} × {f1(p.design.N)} × {p.tAdopt}</td>
+                      <td className="py-1 pr-2">{f1(p.design.B)} × {f1(p.design.N)} × {p.tAdopt}
+                        {p.moment && <div className="text-[10px] text-muted">base M: e {Number.isFinite(p.moment.strong.e) ? Math.round(p.moment.strong.e) : '∞'} mm ({p.moment.strong.regime}) · t {p.moment.tReq.toFixed(1)} mm</div>}
+                        <div className={`text-[10px] ${p.weld.ok ? 'text-muted' : 'text-fail'}`}>{p.weld.w} mm fillets to column</div>
+                      </td>
                       <td className="py-1 pr-2 text-right">{(p.design.bearingUtil * 100).toFixed(0)}%</td>
                       <td className="py-1 pr-2">
                         {p.anchors
                           ? <>{p.anchors.n}-⌀{p.anchors.da} headed, hef {p.anchors.hef} · {(p.anchors.check.util * 100).toFixed(0)}% <span className="text-muted">({p.anchors.check.governs})</span></>
                           : '—'}
+                        {p.moment && p.moment.rodTu > 0 && <div className="text-[10px] text-muted">rod T from base M {f1(p.moment.rodTu)} kN</div>}
                       </td>
                       <td className="py-1">{p.ok ? '✓ OK' : '✗ check'}</td>
                     </tr>
-                  ))}
+                    ),
+                    open && ctx && (
+                      <tr key={`${key}:detail`}>
+                        <td colSpan={8} className="bg-sheet-2/60 px-2 pb-2">
+                          <div className="grid w-full grid-cols-1 gap-3">
+                            {wantDraw && <BasePlateDetail2D row={p} col={ctx.col} />}
+                            {wantSol && <WorkedSolution steps={basePlateRowSolution(p, ctx.col, ctx.fc, ctx.Fy)} title={`Base plate ${p.node} — worked solution`} />}
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                    ]
+                  })}
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-muted">
                 Bearing §J8: φc·0.85f′c·√(A2/A1), φc = 0.65. Plate thickness from cantilever bending
-                t = ℓ√(2fp/(0.9Fy)); ℓ = max(m, n, n′). Uplift sizes anchor rods (φt·0.75·Fu).
+                t = ℓ√(2fp/(0.9Fy)); ℓ = max(m, n, n′). Base moments of every case, about both column axes, by DG1's
+                uniform-bearing method: the plate is lengthened where a moment finds it too short, thickened for the bearing
+                and the rod-tension sides, and the rods carry the tension side's pull. Column-to-plate fillets carry the flange tension (§J2.4).
+                Click a row for the plan/section detail and the worked solution. Uplift sizes anchor rods (φt·0.75·Fu).
                 Adopted t rounded to plate stock. On an RC pedestal, A2 is the pedestal top.
                 Anchors: headed rods outside the flanges, checked per load case for steel, breakout, pullout,
                 side-face blowout, steel shear, shear breakout, pryout and the §17.6 interaction — cracked
@@ -6601,7 +6726,7 @@ export default function ModelSpace() {
             <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel connection schedule — AISC SCM<SchedChip items={[...design.joints.flatMap((j) => j.connections), ...design.beamJoints.flatMap((j) => j.connections)]} ok={(cn) => cn.ok} /></h3>
               <p className="mb-2 text-[11px] text-muted">
-                Columns oriented with depth <em>d</em> in X (flanges face ±X); X-direction girders land on the column <strong>flange</strong> face, Z-direction beams on the column <strong>web</strong> face. Each end is built as it was analysed: a moment connection unless the end is set Simple (a shear tab, released in the analysis); a beam landing on a girder is a pin (fin plate) by default. Bolts: M20 A325 single-shear (φRₙ = 116.5 kN/bolt). Welds: E70XX fillet, both sides of plate.
+                Columns oriented with depth <em>d</em> in X (flanges face ±X); X-direction girders land on the column <strong>flange</strong> face, Z-direction beams on the column <strong>web</strong> face. Each end is built as it was analysed: a moment connection unless the end is set Simple (a shear tab, released in the analysis); a beam landing on a girder is a pin (fin plate) by default. Bolts: M20 A325-X single-shear (φRₙ = {phiBoltShear(20).toFixed(1)} kN/bolt, F<sub>nv</sub> = {FNV_A325} MPa, Table J3.2). Welds: E70XX fillet, both sides of plate.
               </p>
               <table className="w-full border-collapse text-xs">
                 <thead>
@@ -6644,22 +6769,44 @@ export default function ModelSpace() {
                           {c.connType === 'moment-flange-weld' ? 'Moment (CJP flange)'
                             : c.connType === 'moment-web-plate' ? 'Moment (web ext. plates)' : 'Shear tab'}
                           <div className="text-[10px] text-muted">{c.pinned ? 'pin — releases Mz' : 'rigid'}</div>
+                          {c.note && <div className="text-[10px] font-medium">{c.note}</div>}
                         </td>
                         <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
                         <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
                         <td className="py-1 pr-2 text-[11px]">
                           {c.bolts.n} × M{c.bolts.dia} A325 <span className="text-[10px] text-muted">(single shear)</span>
                           <div className="text-[10px] text-muted">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN/bolt · e={Math.round(c.bolts.ecc)}mm</div>
+                          <div className={`text-[10px] ${c.bearing.ok ? 'text-muted' : 'text-fail'}`}
+                            title={`§J3.10(a): each bolt against the least of its shear, bearing/tear-out on the tab (φRn ${f1(c.bearing.phiRnTab)} kN, edge lc ${Math.round(c.bearing.lcTabMin)} mm) and on the beam web (tw ${c.bearing.tw}, φRn ${f1(c.bearing.phiRnWeb)} kN)`}>
+                            bearing/tear-out {Math.round(c.bearing.util * 100)}% · {c.bearing.governingBolt} {c.bearing.governedBy}
+                          </div>
+                          {c.webBlockShear && (
+                            <div className={`text-[10px] ${c.webBlockShear.ok ? 'text-muted' : 'text-fail'}`}
+                              title={`§J4.3 coped web: Agv ${Math.round(c.webBlockShear.Agv)}, Anv ${Math.round(c.webBlockShear.Anv)}, Ant ${Math.round(c.webBlockShear.Ant)} mm²`}>
+                              coped-web block shear φRn {f1(c.webBlockShear.phiRn)} kN ({Math.round((c.Vu / Math.max(c.webBlockShear.phiRn, 1e-9)) * 100)}%)
+                            </div>
+                          )}
                         </td>
-                        <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
+                        <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm
+                          <div className={`text-[10px] ${c.plate.ok ? 'text-muted' : 'text-fail'}`}>{Math.round(c.plate.util * 100)}% · {c.plate.governs}</div>
+                        </td>
                         <td className="py-1 pr-2 text-[11px]">
                           {c.tab.weldSizeMm}mm E70
                           {c.flange && <span className="ml-1 text-brand">{c.flange.webPlate ? '+ ext. plates' : '+ CJP flg'}</span>}
+                          <div className={`text-[10px] ${c.weld.ok ? 'text-muted' : 'text-fail'}`}>{Math.round(c.weld.util * 100)}% · {c.weld.governs}</div>
                         </td>
                         <td className="py-1 text-[11px]">
                           <span className={c.ok ? 'text-ok' : 'text-fail'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
                           {c.flange && (
                             <div className="text-[10px] text-muted">Tf={f1(c.flange.Tf)} kN</div>
+                          )}
+                          {c.j10 && (
+                            <div className={`text-[10px] ${c.j10.ok ? 'text-muted' : 'text-fail'}`}
+                              title={`§J10 on ${c.j10.col.name}: Ru ${f1(c.j10.Ru)} kN vs ${f1(c.j10.phiRnMin)} kN (${c.j10.governs}); panel zone ${f1(c.j10.panel.Vu)} / ${f1(c.j10.panel.phiRv)} kN`}>
+                              col. §J10 {Math.round((c.j10.Ru / c.j10.phiRnMin) * 100)}%
+                              {c.j10.stiffeners && <> · cont. PL {c.j10.stiffeners.ts}×{Math.round(c.j10.stiffeners.bs)}</>}
+                              {c.j10.doubler && <> · doubler PL {c.j10.doubler.td}</>}
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -6670,6 +6817,8 @@ export default function ModelSpace() {
                             <div className="grid w-full grid-cols-1 gap-3">
                               {/* two views side by side: the detail takes the row, the solution follows */}
                               <ConnectionDetail2D conn={c} hostShape={j.columnShape} hostKind="column" faceType={c.faceType} beamShape={beamShapeName} mark={connMarks ? markAt(connMarks, c.beamId, j.nodeId) : undefined} />
+                              {wantDraw && <ModelConnectionMechanics conn={c} host={{ kind: 'column', shape: j.columnShape, faceType: c.faceType }} beamShape={beamShapeName} />}
+                              {wantDraw && expanded === key && <TabStressContour conn={c} />}
                               {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'column', shape: j.columnShape, faceType: c.faceType })} title={`Connection ${j.nodeId} · ${c.beamId} — worked solution`} />}
                             </div>
                           </td>
@@ -6710,9 +6859,24 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-[11px]">
                           {c.bolts.n} × M{c.bolts.dia} A325 <span className="text-[10px] text-muted">(single shear)</span>
                           <div className="text-[10px] text-muted">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN/bolt · e={Math.round(c.bolts.ecc)}mm</div>
+                          <div className={`text-[10px] ${c.bearing.ok ? 'text-muted' : 'text-fail'}`}
+                            title={`§J3.10(a): each bolt against the least of its shear, bearing/tear-out on the tab (φRn ${f1(c.bearing.phiRnTab)} kN, edge lc ${Math.round(c.bearing.lcTabMin)} mm) and on the beam web (tw ${c.bearing.tw}, φRn ${f1(c.bearing.phiRnWeb)} kN)`}>
+                            bearing/tear-out {Math.round(c.bearing.util * 100)}% · {c.bearing.governingBolt} {c.bearing.governedBy}
+                          </div>
+                          {c.webBlockShear && (
+                            <div className={`text-[10px] ${c.webBlockShear.ok ? 'text-muted' : 'text-fail'}`}
+                              title={`§J4.3 coped web: Agv ${Math.round(c.webBlockShear.Agv)}, Anv ${Math.round(c.webBlockShear.Anv)}, Ant ${Math.round(c.webBlockShear.Ant)} mm²`}>
+                              coped-web block shear φRn {f1(c.webBlockShear.phiRn)} kN ({Math.round((c.Vu / Math.max(c.webBlockShear.phiRn, 1e-9)) * 100)}%)
+                            </div>
+                          )}
                         </td>
-                        <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
-                        <td className="py-1 pr-2 text-[11px]">{c.tab.weldSizeMm}mm E70</td>
+                        <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm
+                          <div className={`text-[10px] ${c.plate.ok ? 'text-muted' : 'text-fail'}`}>{Math.round(c.plate.util * 100)}% · {c.plate.governs}</div>
+                          {c.copedBeam && <div className={`text-[10px] ${c.copedBeam.ok ? 'text-muted' : 'text-fail'}`}>cope {Math.round(c.copedBeam.util * 100)}% · {c.copedBeam.governs}</div>}
+                        </td>
+                        <td className="py-1 pr-2 text-[11px]">{c.tab.weldSizeMm}mm E70
+                          <div className={`text-[10px] ${c.weld.ok ? 'text-muted' : 'text-fail'}`}>{Math.round(c.weld.util * 100)}% · {c.weld.governs}</div>
+                        </td>
                         <td className="py-1 text-[11px]">
                           <span className={c.ok ? 'text-ok' : 'text-fail'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
                         </td>
@@ -6724,6 +6888,8 @@ export default function ModelSpace() {
                             <div className="grid w-full grid-cols-1 gap-3">
                               {/* two views side by side: the detail takes the row, the solution follows */}
                               <ConnectionDetail2D conn={c} hostShape={bj.girderShape} hostKind="girder" faceType="web" beamShape={beamShapeName} mark={connMarks ? markAt(connMarks, c.beamId, bj.nodeId) : undefined} />
+                              {wantDraw && <ModelConnectionMechanics conn={c} host={{ kind: 'girder', shape: bj.girderShape, faceType: 'web' }} beamShape={beamShapeName} />}
+                              {wantDraw && expanded === key && <TabStressContour conn={c} />}
                               {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'girder', shape: bj.girderShape })} title={`Connection ${bj.nodeId} · ${c.beamId} — worked solution`} />}
                             </div>
                           </td>
@@ -6735,9 +6901,10 @@ export default function ModelSpace() {
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-muted">
-                Shear tab: A36 plate (Fy=248, Fu=400 MPa), M20 A325 bolts @ 75 mm pitch, 40 mm edge. Plate shear yielding φ=1.0 (§J4.2).
-                Moment connection: CJP groove weld at beam flanges, φFu·A_flange (§J2.6). Weld = E70XX fillet both sides of shear tab.
-                Beam-to-beam: fin plate welded to the girder web, supported-beam top flange coped to clear the girder flange (SCM Pt 9/10).
+                Shear tab: A36 plate (Fy=248, Fu=400 MPa), M20 A325-X bolts @ 75 mm pitch, 40 mm edge. Plate: §J4.2 shear yielding and rupture, §J4.3 block shear, flexure at the bolt line (Manual Part 10 Eq. 10-5, net-section rupture, Part 9 plate buckling).
+                Welds: E70XX fillets both faces of the tab by the elastic line method (V and V·a), Table J2.4 minimum, §J4.2(b) base metal of the tab and the support.
+                Moment connection: CJP groove welds at the beam flanges, base-metal strength 0.9·Fy·Af (Table J2.5); the column is checked under the flange forces (§J10.1 flange bending, §J10.2 web yielding, §J10.3 crippling, §J10.5 web buckling with beams both sides, §J10.6 panel zone) and stiffened where short — continuity plates (§J10.7/§J10.8) and a web doubler (§J10.9).
+                Beam-to-beam: fin plate welded to the girder web, supported-beam top flange coped to clear the girder flange; the coped section is checked for shear, flexural rupture and local web buckling (Manual Part 9). Click a row for the detail, the mechanics drawing and the worked solution.
               </p>
             </div>
           )}

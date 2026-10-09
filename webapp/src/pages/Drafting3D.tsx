@@ -7,12 +7,14 @@
  * draw, drag elements to move them, pinch to zoom, two-finger drag to pan.
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useLayoutEffect, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Drafting3DViewport } from '../components/Drafting3DViewport'
 import { FloorPlanCanvas, type PlanTool } from '../components/FloorPlanCanvas'
 import { useDraftProject } from '../lib/drafting3dSession'
 import type { DraftProject } from '../engine/drafting3d'
-import { addLevel, SLAB_MATERIALS, CEILING_MATERIALS, finishMaterial } from '../engine/drafting3d'
+import { addLevel, SLAB_MATERIALS, CEILING_MATERIALS, finishMaterial, DEFAULT_SECTION_FOR, sectionRole, deleteDraftElements, renameLevel, setLevelHeight, canDeleteLevel, deleteLevel, retypeElements, duplicateLevelUp, type DraftSectionRole } from '../engine/drafting3d'
+import { readSession, writeSession, writeOpenId } from '../lib/modelSpaceSession'
 
 /** The ribbon, grouped the way Revit groups its tools. */
 const TOOL_GROUPS: Array<{ label: string; tools: PlanTool[] }> = [
@@ -35,10 +37,36 @@ const TOOL_HINTS: Record<PlanTool, string> = {
   grid: 'Tap anywhere to add grid lines through that point',
 }
 
+const ROLE_LABEL: Record<DraftSectionRole, string> = { wall: 'Walls', beam: 'Beams', column: 'Columns', slab: 'Slabs' }
+const ROLES: DraftSectionRole[] = ['wall', 'beam', 'column', 'slab']
+const isRole = (t: PlanTool): t is DraftSectionRole => (ROLES as string[]).includes(t)
+
+/** Fill the window below wherever the page starts — the app shell's top bar
+ *  and any banner above it vary, and `h-screen` under them pushed the
+ *  viewport's bottom off the page. */
+function useFillHeight() {
+  const [el, setEl] = useState<HTMLDivElement | null>(null)
+  const [height, setHeight] = useState<number>()
+  useLayoutEffect(() => {
+    if (!el) return
+    const fit = () => setHeight(Math.max(420, window.innerHeight - (el.getBoundingClientRect().top + window.scrollY)))
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [el])
+  return [setEl, height] as const
+}
+
 export default function Drafting3D() {
-  const { project, setProject, exportToModelSpace } = useDraftProject()
+  const { project, setProject, replaceProject, exportToModelSpace, undo, redo, canUndo, canRedo } = useDraftProject()
+  const navigate = useNavigate()
   const [activeTool, setActiveTool] = useState<PlanTool>('select')
-  const [activeSectionId, setActiveSectionId] = useState('col-400x400')
+  // One section PER ROLE — a single active section stamped the 400×400
+  // column on every slab and wall drawn before the panel was opened.
+  const [sectionByRole, setSectionByRole] = useState<Record<DraftSectionRole, string>>({ ...DEFAULT_SECTION_FOR })
+  const activeSectionId = isRole(activeTool) ? sectionByRole[activeTool]
+    : activeTool === 'ceiling' ? sectionByRole.slab : DEFAULT_SECTION_FOR.beam
+  const [fillRef, fillHeight] = useFillHeight()
   // Revit's type selector: the finish applied to NEW slabs / ceilings. One per
   // catalog, since the two lists serve different tools.
   const [slabMaterialId, setSlabMaterialId] = useState(SLAB_MATERIALS[0].id)
@@ -78,9 +106,11 @@ export default function Drafting3D() {
     setSelectedIds(prev => (prev.length === 1 && prev[0] === id ? [] : [id]))
   }, [])
 
+  // switching storeys is view state, not an edit — Undo should not flip it
   const activateLevel = useCallback((id: string) => {
-    setProject({ ...project, activeLevelId: id })
-  }, [project, setProject])
+    replaceProject({ ...project, activeLevelId: id })
+    setSelectedIds([])
+  }, [project, replaceProject])
 
   const handleAddLevel = useCallback(() => {
     const clone: DraftProject = { ...project, levels: new Map(project.levels) }
@@ -88,7 +118,8 @@ export default function Drafting3D() {
     setProject(clone)
   }, [project, setProject])
 
-  const handleExportModelSpace = useCallback(() => {
+  /** The drafted frame as a downloadable StructuralModel JSON. */
+  const handleDownloadJson = useCallback(() => {
     const model = exportToModelSpace(project)
     const blob = new Blob([JSON.stringify(model, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -98,6 +129,50 @@ export default function Drafting3D() {
     a.click()
     URL.revokeObjectURL(url)
   }, [project, exportToModelSpace])
+
+  /** Hand the drafted frame to Model Space: write it where Model Space reads
+   *  its session at mount (lib/modelSpaceSession) and go there. The old
+   *  button only downloaded a JSON file Model Space had no way to import. */
+  const handleOpenInModelSpace = useCallback(() => {
+    const model = exportToModelSpace(project)
+    if (model.members.length === 0 && model.plates.length === 0) {
+      window.alert('Nothing to send yet — draw at least one column, beam, wall or slab.')
+      return
+    }
+    const open = readSession()
+    if (open.model && (open.model.members?.length ?? 0) > 0
+      && !window.confirm('Model Space already has a model open in this tab. Replace it with this drafting? (Save it as a project first if you need it.)')) return
+    // a fresh, unsaved model: no stale design results, not tied to a saved project
+    writeSession({ model, inputs: open.inputs, design: null })
+    writeOpenId(null)
+    navigate('/model')
+  }, [exportToModelSpace, navigate, project])
+
+  const deleteSelected = useCallback(() => {
+    if (selectedIds.length === 0) return
+    const levels = new Map(project.levels)
+    levels.set(level.id, deleteDraftElements(level, selectedIds))
+    setProject({ ...project, levels })
+    setSelectedIds([])
+  }, [level, project, selectedIds, setProject])
+
+  // Ctrl/⌘+Z undo, Ctrl/⌘+Shift+Z or Ctrl+Y redo — never while typing in a field
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName))) return
+      if (!(e.ctrlKey || e.metaKey)) return
+      const k = e.key.toLowerCase()
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo])
+
+  const topLevelId = useMemo(
+    () => Array.from(project.levels.values()).reduce((a, b) => (b.elevation > a.elevation ? b : a)).id,
+    [project.levels])
 
   /** Edit the selected opening's properties (width / height / sill / swing). */
   const patchSelectedOpening = useCallback((patch: Partial<{ width: number; height: number; sill: number; swing: 0 | 1 | 2 | 3 }>) => {
@@ -140,23 +215,22 @@ export default function Drafting3D() {
   }
 
   return (
-    <div className="h-screen w-full flex flex-col bg-sheet">
+    <div ref={fillRef} className="h-[calc(100dvh-7rem)] w-full flex flex-col bg-sheet" style={fillHeight ? { height: fillHeight } : undefined}>
       {/* Top Toolbar */}
-      <header className="bg-white border-b border-hairline shadow-sm z-10">
-        <div className="mx-auto max-w-full px-4 py-3 flex flex-wrap items-center gap-4">
+      <header className="bg-sheet border-b border-hairline shadow-sm z-10">
+        <div className="mx-auto max-w-full px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-ink">Drafting3D</h1>
-            <span className="px-2 py-0.5 text-xs font-semibold bg-brand-tint text-brand rounded">Beta</span>
+            <h1 className="text-lg font-bold text-ink">Drafting3D<sup className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-brand">beta</sup></h1>
           </div>
 
-          <div className="flex-1 flex justify-center items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {TOOL_GROUPS.map(group => (
-              <div key={group.label} className="flex items-center gap-1 bg-white border border-field-line rounded-lg p-1">
+              <div key={group.label} className="flex items-center gap-1 bg-field border border-field-line rounded-lg p-0.5">
                 {group.tools.map(tool => (
                   <button
                     key={tool}
                     onClick={() => setActiveTool(tool)}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                    className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition ${
                       activeTool === tool
                         ? 'bg-brand text-on-solid'
                         : 'text-muted hover:text-ink hover:bg-brand-tint'
@@ -169,13 +243,33 @@ export default function Drafting3D() {
             ))}
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1 bg-white border border-field-line rounded-lg p-1">
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
+            {/* Edit — undo/redo and a Delete a finger can reach (the key is desktop-only) */}
+            <div className="flex items-center gap-1 bg-field border border-field-line rounded-lg p-0.5">
+              <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)" aria-label="Undo"
+                className="px-2 py-1 text-[15px] leading-none font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint disabled:opacity-40 disabled:hover:bg-transparent">↶</button>
+              <button onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo"
+                className="px-2 py-1 text-[15px] leading-none font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint disabled:opacity-40 disabled:hover:bg-transparent">↷</button>
+              <button onClick={deleteSelected} disabled={selectedIds.length === 0} title="Delete the selection (Delete)"
+                className="px-2 py-1 text-[13px] font-medium rounded-md text-fail hover:bg-fail-tint disabled:opacity-40 disabled:text-muted disabled:hover:bg-transparent">Delete</button>
+            </div>
+
+            <label className="flex items-center gap-1.5 text-sm text-muted">
+              <span className="sr-only">Active level</span>
+              <select value={project.activeLevelId} onChange={e => activateLevel(e.target.value)}
+                className="py-1 pl-2 pr-7 text-[13px] border border-field-line rounded-lg text-ink">
+                {Array.from(project.levels.values()).sort((a, b) => a.elevation - b.elevation).map(l => (
+                  <option key={l.id} value={l.id}>{l.name} · {l.elevation.toFixed(2)}</option>
+                ))}
+              </select>
+            </label>
+
+            <div className="flex items-center gap-1 bg-field border border-field-line rounded-lg p-0.5">
               {(['2d', '3d', 'split'] as const).map(mode => (
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                  className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition ${
                     viewMode === mode
                       ? 'bg-brand text-on-solid'
                       : 'text-muted hover:text-ink hover:bg-brand-tint'
@@ -189,7 +283,7 @@ export default function Drafting3D() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowSectionPanel(!showSectionPanel)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition ${
                   showSectionPanel ? 'bg-brand text-on-solid' : 'text-muted hover:text-ink hover:bg-brand-tint'
                 }`}
               >
@@ -197,24 +291,28 @@ export default function Drafting3D() {
               </button>
               <button
                 onClick={() => setShowLevelPanel(!showLevelPanel)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition ${
+                className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition ${
                   showLevelPanel ? 'bg-brand text-on-solid' : 'text-muted hover:text-ink hover:bg-brand-tint'
                 }`}
               >
                 Levels
               </button>
               <button
-                onClick={handleExportModelSpace}
-                className="px-4 py-1.5 text-sm font-semibold bg-brand text-on-solid rounded hover:bg-brand-hover transition"
+                onClick={handleDownloadJson}
+                title="Download the frame as a StructuralModel JSON file"
+                className="px-2.5 py-1 text-[13px] font-medium rounded-md text-muted hover:text-ink hover:bg-brand-tint transition"
               >
-                Export to ModelSpace
+                JSON
+              </button>
+              <button
+                onClick={handleOpenInModelSpace}
+                className="px-3 py-1.5 text-[13px] font-semibold bg-brand text-on-solid rounded hover:bg-brand-hover transition"
+              >
+                Open in Model Space
               </button>
             </div>
           </div>
         </div>
-
-        {/* Status hint — what the active tool does with the next tap/drag */}
-        <div className="mx-auto max-w-full px-4 pb-2 text-xs text-muted">{TOOL_HINTS[activeTool]}</div>
       </header>
 
       {/* Side Panels */}
@@ -222,22 +320,39 @@ export default function Drafting3D() {
         <div className="fixed inset-y-0 right-0 z-50 w-80 bg-white border-l border-hairline shadow-xl flex flex-col overflow-auto">
           <div className="p-4 border-b border-hairline flex items-center justify-between">
             <h3 className="font-semibold text-ink">Sections</h3>
-            <button onClick={() => setShowSectionPanel(false)} className="text-muted hover:text-ink">×</button>
+            <button onClick={() => setShowSectionPanel(false)} aria-label="Close sections" className="text-muted hover:text-ink">×</button>
           </div>
-          <div className="p-4 space-y-3 max-h-[calc(100vh-100px)] overflow-auto">
-            {sections.map(sec => (
-              <button
-                key={sec.id}
-                onClick={() => setActiveSectionId(sec.id)}
-                className={`w-full text-left p-3 rounded-lg border transition ${
-                  activeSectionId === sec.id
-                    ? 'bg-brand-tint border-brand'
-                    : 'border-hairline hover:bg-brand-tint hover:border-brand'
-                }`}
-              >
-                <div className="font-medium text-ink">{sec.name}</div>
-                <div className="text-sm text-muted">{sec.b}×{sec.h} mm</div>
-              </button>
+          <div className="p-4 space-y-4 max-h-[calc(100vh-100px)] overflow-auto">
+            <p className="text-xs text-muted">Each tool draws with its own section — the highlighted one in each group is what it places next. Picking a section also retypes the selected elements of that kind.</p>
+            {ROLES.map(role => (
+              <div key={role} className="space-y-2">
+                <div className={`text-xs font-semibold uppercase tracking-wide ${role === activeTool ? 'text-brand' : 'text-muted'}`}>
+                  {ROLE_LABEL[role]}{role === activeTool ? ' · active tool' : ''}
+                </div>
+                {sections.filter(sec => sectionRole(sec) === role).map(sec => (
+                  <button
+                    key={sec.id}
+                    onClick={() => {
+                      setSectionByRole(prev => ({ ...prev, [role]: sec.id }))
+                      // retype what is selected too (Revit's type selector)
+                      const next = retypeElements(level, selectedIds, sec)
+                      if (next !== level) {
+                        const levels = new Map(project.levels)
+                        levels.set(level.id, next)
+                        setProject({ ...project, levels })
+                      }
+                    }}
+                    className={`w-full text-left p-3 rounded-lg border transition ${
+                      sectionByRole[role] === sec.id
+                        ? 'bg-brand-tint border-brand'
+                        : 'border-hairline hover:bg-brand-tint hover:border-brand'
+                    }`}
+                  >
+                    <div className="font-medium text-ink">{sec.name}</div>
+                    <div className="text-sm text-muted">{role === 'slab' || role === 'wall' ? `${sec.h} mm thick` : `${sec.b}×${sec.h} mm`}</div>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         </div>
@@ -247,23 +362,46 @@ export default function Drafting3D() {
         <div className="fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-hairline shadow-xl flex flex-col overflow-auto">
           <div className="p-4 border-b border-hairline flex items-center justify-between">
             <h3 className="font-semibold text-ink">Levels</h3>
-            <button onClick={() => setShowLevelPanel(false)} className="text-muted hover:text-ink">×</button>
+            <button onClick={() => setShowLevelPanel(false)} aria-label="Close levels" className="text-muted hover:text-ink">×</button>
           </div>
           <div className="flex-1 p-4 space-y-2 overflow-auto">
-            {Array.from(project.levels.values()).map(l => (
-              <button
-                key={l.id}
-                onClick={() => activateLevel(l.id)}
-                className={`w-full text-left p-3 rounded-lg border transition ${
-                  project.activeLevelId === l.id
-                    ? 'bg-brand-tint border-brand'
-                    : 'border-hairline hover:bg-brand-tint hover:border-brand'
+            {Array.from(project.levels.values()).sort((x, y) => y.elevation - x.elevation).map(l => (
+              <div key={l.id}
+                className={`p-3 rounded-lg border transition ${
+                  project.activeLevelId === l.id ? 'bg-brand-tint border-brand' : 'border-hairline'
                 }`}
               >
-                <div className="font-medium text-ink">{l.name}</div>
-                <div className="text-sm text-muted">EL {l.elevation.toFixed(2)} m</div>
-              </button>
+                <div className="flex items-center gap-2">
+                  {/* keyed on name: a rename (or an undo of one) remounts it with the new value */}
+                  <input key={l.name} defaultValue={l.name} aria-label="Level name"
+                    onBlur={e => setProject(renameLevel(project, l.id, e.target.value))}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                    className="min-w-0 flex-1 px-2 py-1 text-sm font-medium border border-field-line rounded text-ink" />
+                  <button onClick={() => activateLevel(l.id)} disabled={project.activeLevelId === l.id}
+                    className="px-2 py-1 text-xs font-semibold rounded border border-hairline text-muted hover:border-brand hover:text-brand disabled:border-brand disabled:text-brand">
+                    {project.activeLevelId === l.id ? 'Active' : 'Open'}
+                  </button>
+                </div>
+                <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+                  <span>EL {l.elevation.toFixed(2)} m</span>
+                  <label className="ml-auto flex items-center gap-1">
+                    Storey
+                    <input key={l.height} type="number" min={2} step={0.1} defaultValue={l.height} aria-label="Storey height"
+                      onBlur={e => setProject(setLevelHeight(project, l.id, Number(e.target.value)))}
+                      onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                      className="w-16 px-1.5 py-1 border border-field-line rounded text-ink" />
+                    m
+                  </label>
+                  <button onClick={() => { setProject(duplicateLevelUp(project, l.id)); setSelectedIds([]) }}
+                    className="px-2 py-1 rounded text-muted hover:text-brand hover:bg-brand-tint" title="Copy this floor to a new level on top">Duplicate</button>
+                  {l.id === topLevelId && canDeleteLevel(project, l.id) && (
+                    <button onClick={() => { if (window.confirm(`Delete ${l.name} and everything drawn on it?`)) setProject(deleteLevel(project, l.id)) }}
+                      className="px-2 py-1 rounded text-fail hover:bg-fail-tint" title="Only the top level can be deleted">Delete</button>
+                  )}
+                </div>
+              </div>
             ))}
+            <p className="text-xs text-muted">A taller storey lifts every level above it, so columns keep meeting the floor they carry. Duplicate stacks a copy of a floor on top — draft a typical floor once.</p>
             <button
               onClick={handleAddLevel}
               className="w-full p-3 rounded-lg border border-dashed border-hairline text-muted hover:border-brand hover:text-brand transition"
@@ -274,34 +412,11 @@ export default function Drafting3D() {
         </div>
       )}
 
-      {/* Material picker — Revit's type selector for the active tool */}
-      {(activeTool === 'slab' || activeTool === 'ceiling') && (
-        <div className="bg-white border-b border-hairline px-4 py-2 flex items-center gap-3 overflow-x-auto">
-          <span className="text-xs font-semibold text-muted whitespace-nowrap">
-            {activeTool === 'ceiling' ? 'Ceiling finish' : 'Slab material'}
-          </span>
-          {(activeTool === 'ceiling' ? CEILING_MATERIALS : SLAB_MATERIALS).map(m => (
-            <button
-              key={m.id}
-              onClick={() => setMaterial(m.id)}
-              title={`${m.note} · ${m.load} kN/m²`}
-              className={`flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg border text-sm transition whitespace-nowrap ${
-                (activeTool === 'ceiling' ? ceilingMaterialId : slabMaterialId) === m.id
-                  ? 'border-brand bg-brand-tint text-ink'
-                  : 'border-hairline text-muted hover:border-brand hover:text-ink'
-              }`}
-            >
-              <span className="w-4 h-4 rounded-sm border border-hairline inline-block" style={{ background: m.color }} />
-              {m.name}
-              {m.load > 0 && <span className="text-xs text-muted">{m.load} kN/m²</span>}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Selected door/window property editor — width, height, sill, swing */}
-      {selectedOpening && (
-        <div className="bg-white border-b border-hairline px-4 py-2 flex items-center gap-4 overflow-x-auto">
+      {/* Context row — ONE fixed-height row for the tool hint, the material
+          picker or the selected opening's editor. Inserting and removing those
+          as separate rows moved the canvas up and down under the pointer. */}
+      <div className="h-12 shrink-0 bg-white border-b border-hairline px-4 flex items-center gap-3 overflow-x-auto">
+        {selectedOpening ? (<>
           <span className="text-xs font-semibold text-muted whitespace-nowrap">
             {selectedOpening.type === 'door' ? 'Door' : 'Window'} · {selectedOpening.width?.toFixed(2)}×{selectedOpening.height?.toFixed(2)} m
           </span>
@@ -347,8 +462,34 @@ export default function Drafting3D() {
               </select>
             </label>
           )}
-        </div>
-      )}
+        </>) : (activeTool === 'slab' || activeTool === 'ceiling') ? (<>
+          <span className="text-xs font-semibold text-muted whitespace-nowrap">
+            {activeTool === 'ceiling' ? 'Ceiling finish' : 'Slab material'}
+          </span>
+          {(activeTool === 'ceiling' ? CEILING_MATERIALS : SLAB_MATERIALS).map(m => (
+            <button
+              key={m.id}
+              onClick={() => setMaterial(m.id)}
+              title={`${m.note} · ${m.load} kN/m²`}
+              className={`flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg border text-sm transition whitespace-nowrap ${
+                (activeTool === 'ceiling' ? ceilingMaterialId : slabMaterialId) === m.id
+                  ? 'border-brand bg-brand-tint text-ink'
+                  : 'border-hairline text-muted hover:border-brand hover:text-ink'
+              }`}
+            >
+              <span className="w-4 h-4 rounded-sm border border-hairline inline-block" style={{ background: m.color }} />
+              {m.name}
+              {m.load > 0 && <span className="text-xs text-muted">{m.load} kN/m²</span>}
+            </button>
+          ))}
+          <span className="text-xs text-muted whitespace-nowrap">
+            {finishMaterial(activeTool === 'ceiling' ? CEILING_MATERIALS : SLAB_MATERIALS,
+              activeTool === 'ceiling' ? ceilingMaterialId : slabMaterialId).note}
+          </span>
+        </>) : (
+          <span className="text-xs text-muted">{TOOL_HINTS[activeTool]}</span>
+        )}
+      </div>
 
       {/* Main Viewport */}
       <main className="flex-1 overflow-hidden relative">
@@ -384,13 +525,6 @@ export default function Drafting3D() {
         )}
       </main>
 
-      {/* Catalog footnote — what the picker's colours and loads mean */}
-      {(activeTool === 'slab' || activeTool === 'ceiling') && (
-        <div className="bg-sheet border-t border-hairline px-4 py-1.5 text-xs text-muted">
-          {finishMaterial(activeTool === 'ceiling' ? CEILING_MATERIALS : SLAB_MATERIALS,
-            activeTool === 'ceiling' ? ceilingMaterialId : slabMaterialId).note}
-        </div>
-      )}
     </div>
   )
 }

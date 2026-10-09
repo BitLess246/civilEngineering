@@ -47,9 +47,9 @@ export function concreteClassForFc(fc: number): ClassForFc {
   }
   return { klass: 'AA', classFc: CONCRETE_CLASS_FC.AA, adequate: false };
 }
-const STEEL_DENSITY = 7850;   // kg/m³
-const BAR_LENGTH = 6;         // m, commercial length
-const TIE_WIRE_ROLL = 2385;   // m per roll
+export const STEEL_DENSITY = 7850;   // kg/m³
+export const BAR_LENGTH = 6;         // m, commercial length
+export const TIE_WIRE_ROLL = 2385;   // m per roll
 
 const barAreaM2 = (diaMm: number) => (Math.PI / 4) * (diaMm / 1000) ** 2;
 
@@ -128,8 +128,8 @@ export function estimateSlab(i: SlabInput): SlabResult {
 
 // ── CHB (masonry) ───────────────────────────────────────────────────────────
 export type ChbSize = '4' | '6' | '8';
-const MORTAR_CEMENT: Record<ChbSize, number> = { '4': 0.522, '6': 1.018, '8': 1.5 };
-const MORTAR_SAND: Record<ChbSize, number> = { '4': 0.0435, '6': 0.0844, '8': 0.125 };
+export const MORTAR_CEMENT: Record<ChbSize, number> = { '4': 0.522, '6': 1.018, '8': 1.5 };
+export const MORTAR_SAND: Record<ChbSize, number> = { '4': 0.0435, '6': 0.0844, '8': 0.125 };
 export interface ChbInput { wallArea: number; holeArea: number; size: ChbSize; }
 export interface ChbResult {
   netArea: number; pieces: number;

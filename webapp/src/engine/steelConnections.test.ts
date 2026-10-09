@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { designStructure } from './pipeline'
-import { designSteelJoints, designBolts } from './steelConnections'
+import { buildBraceGussetDetail } from './braceGussetDetail'
+import { braceRowSolution } from '../lib/braceSolution'
+import { designSteelJoints, designBolts, designBoltedTab, copedWebBlockShear, tabBearing, tabHeightLimit, FNV_A325, phiBoltShear } from './steelConnections'
 import { shapeByName } from './aiscSections'
 import type { BoltPos } from './steelDesign'
 import type { RectSection } from './model'
@@ -48,10 +50,36 @@ describe('steel joint / connection design', () => {
     }
   })
 
+  it('every tab passes its plate limit states and its welds, at no less than the Table J2.4 leg', () => {
+    for (const j of joints) for (const c of j.connections) {
+      expect(c.plate.ok).toBe(true)
+      expect(c.plate.t).toBe(c.tab.t)
+      expect(c.weld.ok).toBe(true)
+      expect(c.weld.w).toBe(c.tab.weldSizeMm)
+      expect(c.weld.w).toBeGreaterThanOrEqual(c.weld.wMin)
+      expect(c.weld.fMax).toBeLessThanOrEqual(Math.min(c.weld.phiWeld, c.weld.phiTab) + 1e-9)
+      // the support is the column flange or web the tab is welded to
+      const col = shapeByName(j.columnShape)!
+      expect(c.weld.tSupport).toBe(c.faceType === 'flange' ? col.tf : col.tw)
+    }
+  })
+
+  it('a web-face tab, extended past the flange tips, is thickened until the tab can take its welds', () => {
+    const web = joints.flatMap((j) => j.connections).filter((c) => c.faceType === 'web')
+    expect(web.length).toBeGreaterThan(0)
+    for (const c of web) {
+      expect(c.plate.flexure.a).toBeGreaterThan(60)
+      expect(c.weld.fMax).toBeLessThanOrEqual(c.weld.phiTab + 1e-9)
+    }
+  })
+
   it('bolt group: elastic eccentric method sizes each bolt within φRn', () => {
     for (const j of joints) {
       for (const c of j.connections) {
-        expect(c.bolts.dia).toBe(20)                       // M20
+        // M20 unless the web is too shallow for enough of them: then M22/M24
+        expect([20, 22, 24]).toContain(c.bolts.dia)
+        const b = design.steelBeams.find((r) => r.id === c.beamId)!
+        expect(c.tab.hMm).toBeLessThanOrEqual(tabHeightLimit(b, c.pinned ? 'simple' : 'moment') + 1e-9)
         expect(c.bolts.locations.length).toBe(c.bolts.n)   // one position per bolt
         expect(c.bolts.Rmax).toBeLessThanOrEqual(c.bolts.phiRnKn + 1e-6)
         expect(c.bolts.ok).toBe(true)
@@ -253,10 +281,210 @@ describe('designBeamBeamJoints — beams framing into a girder web (fin plates)'
     expect(c.ok).toBe(true)
   })
 
+  it('checks the coped beam, the tab plate and its welds, and a beam opposite loads the same girder web', () => {
+    const m = beamBeamModel()
+    // a second secondary beam framing into the other face of the girder web
+    m.nodes.push({ id: 'sd', x: 3, y: 3, z: 5 })
+    m.members.push({ id: 'sb2', i: 'gm', j: 'sd', role: 'beam', section: 'sbs' })
+    m.supports.push({ node: 'sd', fixity: 'pin' })
+    m.loads.push({ kind: 'member-point', member: 'sb2', t: 0.4, P: 60, cat: 'D' })
+    const d = designStructure(m, soil)!
+    const bj = d.beamJoints.find((j) => j.nodeId === 'gm')!
+    const a = bj.connections.find((x) => x.beamId === 'sb')!, b = bj.connections.find((x) => x.beamId === 'sb2')!
+    for (const c of [a, b]) {
+      expect(c.copedBeam).toBeTruthy()
+      expect(c.copedBeam!.ho).toBeCloseTo(c.copedBeam!.d - c.cope!.depthMm, 9)
+      expect(c.copedBeam!.Mu).toBeCloseTo(c.Vu * (c.cope!.lengthMm + 13), 9)
+      expect(c.plate.ok).toBe(true)
+      expect(c.weld.tSupport).toBe(shapeByName('W360x51')!.tw)
+    }
+    // the girder web's base metal carries BOTH tabs' weld force
+    expect(a.weld.util).toBeGreaterThanOrEqual((a.weld.fMax + b.weld.fMax) / a.weld.phiSupport - 1e-9)
+  })
+
   it('does NOT create beam-to-beam joints at column-hosted nodes', () => {
     const m = makeModel()                       // grid: every beam meets a column
     const d = designStructure(m, soil)!
     expect(d.beamJoints).toHaveLength(0)
     expect(d.joints.length).toBeGreaterThan(0)  // those are beam-to-COLUMN joints
+  })
+})
+
+describe('shear tab §J3.10(a): bearing and tear-out on the tab and the beam web', () => {
+  it('a thin web and the tab edge bolt now size the bolt column, not bolt shear alone', () => {
+    const shearOnly = designBolts(300, { dia: 20 })
+    const d = designBoltedTab(300, 5.08)
+    // every bolt passes against the least of its shear, tab and web strengths
+    expect(d.bearing.ok).toBe(true)
+    expect(d.bearing.util).toBeLessThanOrEqual(1 + 1e-9)
+    expect(d.bolts.ok).toBe(true)
+    // web bearing 0.75·2.4·20·5.08·400 = 73.15 kN < bolt shear ≈ 116.6 kN → more bolts
+    expect(d.bearing.phiRnWeb).toBeCloseTo(0.75 * 2.4 * 20 * 5.08 * 400 / 1000, 6)
+    expect(d.bolts.n).toBeGreaterThan(shearOnly.n)
+    // the tab's edge bolt tears out along its INCLINED push (the reaction is
+    // 60 mm off the bolt line, so the edge bolts carry a horizontal share):
+    // lc is at least the straight-down 40 − 11 = 29 mm, and the tab strength
+    // is the tear-out over exactly that lc
+    expect(d.bearing.lcTabMin).toBeGreaterThanOrEqual(29 - 1e-9)
+    expect(d.bearing.lcTabMin).toBeLessThan(2 * 20)
+    expect(d.bearing.phiRnTab).toBeCloseTo(0.75 * 1.2 * d.bearing.lcTabMin * d.tab.t * 400 / 1000, 6)
+  })
+
+  it('a stocky web and light reaction stay governed by bolt shear', () => {
+    const d = designBoltedTab(60, 12)
+    expect(d.bearing.ok).toBe(true)
+    expect(d.bolts.n).toBe(designBolts(60, { dia: 20 }).n)
+  })
+})
+
+describe('coped beam web: tear-out toward the cope and §J4.3 block shear', () => {
+  const cope = { beamD: 310, depthMm: 25 }
+  it('the coped web has a free top edge the top bolt tears toward', () => {
+    const d = designBoltedTab(150, 6, undefined, cope)
+    const webTop = d.tab.hMm / 2 + cope.beamD / 2 - cope.depthMm
+    const uncoped = tabBearing(d.bolts, d.tab, 150, 6)
+    const coped = tabBearing(d.bolts, d.tab, 150, 6, 400, webTop)
+    // the cope can only take strength away
+    expect(coped.phiRnWeb).toBeLessThanOrEqual(uncoped.phiRnWeb + 1e-9)
+    expect(d.bearing.ok).toBe(true)
+  })
+
+  it('block shear of the coped web, by hand: Lv cope→bottom bolt, Lt bolt line→beam end', () => {
+    const d = designBoltedTab(150, 6, undefined, cope)
+    const webTop = d.tab.hMm / 2 + cope.beamD / 2 - cope.depthMm
+    const b = copedWebBlockShear(d.bolts, 150, 6, webTop)
+    const n = d.bolts.n, dh = 22
+    const Lv = webTop - d.bolts.edgeMm, Lt = 60 - 13
+    const Agv = 6 * Lv, Anv = Agv - (n - 0.5) * dh * 6, Ant = 6 * Lt - 0.5 * dh * 6
+    expect(b.Agv).toBeCloseTo(Agv, 9)
+    expect(b.Anv).toBeCloseTo(Anv, 9)
+    expect(b.Ant).toBeCloseTo(Ant, 9)
+    expect(b.Rn).toBeCloseTo((Math.min(0.6 * 400 * Anv, 0.6 * 248 * Agv) + 400 * Ant) / 1000, 9)
+    expect(d.webBlockShear!.ok).toBe(b.phiRn >= 150)
+  })
+
+  it('a heavy reaction on a thin coped web grows the bolt column until the block passes', () => {
+    const d = designBoltedTab(320, 5, undefined, { beamD: 460, depthMm: 25 })
+    expect(d.webBlockShear!.ok).toBe(true)
+    expect(d.webBlockShear!.phiRn).toBeGreaterThanOrEqual(320)
+  })
+})
+
+describe('model-space bolt shear reads Table J3.2', () => {
+  it('A325M threads excluded: Fnv 469 MPa (360-16), M20 φRn = 0.75·469·π·10²/1000', () => {
+    // was a stray 495 — 5 % above the 68 ksi the table gives
+    expect(FNV_A325).toBe(469)
+    expect(phiBoltShear(20)).toBeCloseTo(0.75 * 469 * Math.PI * 100 / 1000, 9)
+    expect(phiBoltShear(20)).toBeCloseTo(110.5, 1)
+  })
+})
+
+describe('moment connections: the CJP is base metal, the column is checked under §J10', () => {
+  const m = makeModel()
+  // every beam end rigid: a moment connection at every column flange
+  for (const mem of m.members) if (mem.role !== 'column') mem.connections = { iEnd: 'moment', jEnd: 'moment' }
+  const d = designStructure(m, soil)!
+  const flangeMoments = d.joints.flatMap((j) => j.connections.map((c) => ({ j, c }))).filter(({ c }) => c.connType === 'moment-flange-weld')
+
+  it('the CJP flange weld is the beam flange in tension yielding: 0.9·Fy·bf·tf (Table J2.5), not Fu', () => {
+    expect(flangeMoments.length).toBeGreaterThan(0)
+    for (const { c } of flangeMoments) {
+      const b = d.steelBeams.find((r) => r.id === c.beamId)!
+      expect(c.flange!.Fy).toBe(345)
+      expect(c.flange!.phiCapKn).toBeCloseTo(0.9 * 345 * b.bf * b.tf / 1000, 9)
+    }
+  })
+
+  it('every flange-face moment connection carries the §J10 check of its column, shared per joint', () => {
+    for (const { j, c } of flangeMoments) {
+      expect(c.j10).toBeTruthy()
+      expect(c.j10!.col.name).toBe(j.columnShape)
+      expect(c.j10!.Ru).toBeGreaterThanOrEqual(c.flange!.Tf - 1e-9)
+      const others = j.connections.filter((x) => x.connType === 'moment-flange-weld')
+      for (const o of others) expect(o.j10).toBe(c.j10)
+      // a one-storey frame: every beam-column joint is at the column top
+      expect(c.j10!.atEnd).toBe(true)
+      expect(c.ok).toBe(c.bolts.ok && c.plate.ok && c.weld.ok && c.flange!.ok && c.j10!.ok)
+    }
+  })
+
+  it('web-face moment connections carry no §J10 (the extension plates span to the flanges)', () => {
+    for (const j of d.joints) for (const c of j.connections) if (c.faceType === 'web') expect(c.j10).toBeUndefined()
+  })
+})
+
+describe('the shear tab fits the beam web between its flanges', () => {
+  // W310x38.7: d 310, tf 9.7, tw 5.8
+  const b = { d: 310, tf: 9.7, tw: 5.8 }
+  it('limits: simple tf + 15 each side; moment tf + max(1.5tw, 25) + 5 (§J1.6 access holes); coped by the cope', () => {
+    expect(tabHeightLimit(b, 'simple')).toBeCloseTo(310 - 2 * 24.7, 9)
+    expect(tabHeightLimit(b, 'moment')).toBeCloseTo(310 - 2 * (9.7 + 25 + 5), 9)
+    expect(tabHeightLimit(b, 'simple', 24)).toBeCloseTo(310 - 48 - 20, 9)
+  })
+  it('the bolt column never grows past the limit: a bigger bolt first', () => {
+    const free = designBoltedTab(140, 9)                      // unlimited: M20, as many as it takes
+    expect(free.bolts.dia).toBe(20)
+    const capped = designBoltedTab(140, 9, undefined, undefined, undefined, 160)
+    expect(capped.tab.hMm).toBeLessThanOrEqual(160)
+    expect(capped.bolts.n).toBeLessThanOrEqual(2)
+    expect(capped.bolts.dia).toBeGreaterThan(20)
+    expect(capped.fits).toBe(true)
+  })
+  it('a reaction no single column in the web can carry is reported as not fitting', () => {
+    const r = designBoltedTab(900, 6, undefined, undefined, undefined, 160)
+    expect(r.fits).toBe(false)
+    expect(r.tab.hMm).toBeLessThanOrEqual(160)
+  })
+})
+
+describe('steel braces: the member and both gusset ends, in the design', () => {
+  function bracedModel(shape: string) {
+    const m = makeModel()
+    // a diagonal in the X-direction bay, base to beam-column joint
+    const base = m.nodes.find((n) => n.y === 0 && n.x === 0 && n.z === 0)!
+    const top = m.nodes.find((n) => n.y > 0 && n.x > 0 && n.z === 0)!
+    m.sections.push({ ...steelSection, id: 'BR', name: shape, shape })
+    m.members.push({ id: 'br1', i: base.id, j: top.id, role: 'brace', section: 'BR' })
+    m.loads = [...m.loads, { kind: 'node', node: top.id, Fx: -60, cat: 'D' }]
+    return m
+  }
+  it('an HSS brace is designed, its ends resolved: base plate at the support, corner at the joint', () => {
+    const d = designStructure(bracedModel('HSS127x127x6.4'), soil)!
+    const b = d.steelBraces!.find((x) => x.id === 'br1')!
+    expect(b).toBeTruthy()
+    expect(b.Pu + b.Tu).toBeGreaterThan(0)
+    expect(b.ends.map((e) => e.design.kind).sort()).toEqual(['base', 'corner'])
+    const corner = b.ends.find((e) => e.design.kind === 'corner')!.design
+    expect(corner.ufm.Hc).toBeGreaterThan(0)
+    // the member's rupture uses the end that gives the least effective net area
+    const minAe = Math.min(...b.ends.map((e) => e.design.U * e.design.An))
+    expect(b.member.tension.Ae).toBeCloseTo(minAe, 9)
+    expect(b.ok).toBe(b.member.ok && b.ends.every((e) => e.design.ok))
+  })
+  it('each end is drawn and solved from the design: the gusset sheet carries its numbers, the solution its steps', () => {
+    const d = designStructure(bracedModel('HSS127x127x6.4'), soil)!
+    const b = d.steelBraces!.find((x) => x.id === 'br1')!
+    const top = b.ends.find((e) => e.design.kind === 'corner')!, bot = b.ends.find((e) => e.design.kind === 'base')!
+    expect(top.frame.upper).toBe(true)                     // the brace runs down from the joint
+    expect(bot.frame.upper).toBe(false)
+    for (const e of b.ends) {
+      const dr = buildBraceGussetDetail({ end: e.design, frame: e.frame, braceShape: b.shape, node: e.node })
+      const texts = dr.primitives.flatMap((p) => (p.kind === 'text' ? [p.text] : []))
+      expect(texts.some((t) => t.includes(`GUSSET PL ${e.design.tg}`) && t.includes(`${Math.round(e.design.ufm.Lh)}`))).toBe(true)
+      expect(texts).toContain(`4 × ${e.design.weld.w} FILLET × ${e.design.weld.lw}`)
+      expect(texts.some((t) => t.startsWith(`WHITMORE ${Math.round(e.design.whitmore.Lw)}`))).toBe(true)
+      expect(texts.some((t) => t.includes(`${b.shape} BRACE`))).toBe(true)
+      for (const p of dr.primitives) for (const v of Object.values(p)) if (typeof v === 'number') expect(Number.isFinite(v)).toBe(true)
+      expect(dr.bounds.maxX).toBeGreaterThan(dr.bounds.minX)
+    }
+    const steps = braceRowSolution(b)
+    expect(steps.map((s) => s.title)).toEqual(['Design forces', 'Compression (§E3, §E7)', 'Tension (§D2, Table D3.1)',
+      ...b.ends.map((e) => expect.stringContaining(`End at ${e.node}`)), 'Verdict'])
+    expect(JSON.stringify(steps)).toContain(b.member.compression.phiPn.toFixed(1))
+  })
+  it('a W brace is listed as unchecked (its end detail is not designed) — never silently passed', () => {
+    const d = designStructure(bracedModel('W200x46.1'), soil)!
+    expect(d.steelBraces!.some((x) => x.id === 'br1')).toBe(false)
+    expect(d.unchecked.some((u) => u.id === 'br1' && u.role === 'brace')).toBe(true)
   })
 })

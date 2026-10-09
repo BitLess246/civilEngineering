@@ -19,7 +19,7 @@ import type { BeamConnection } from './steelConnections'
 import { shapeByName } from './aiscSections'
 import type { PlanPrimitive, Drawing, PathCmd } from './planRenderer'
 import { SHEET_INK, SHEET_NOTE, SHEET_GRID, STEEL, STEEL_CONTEXT, SHEET_STEELWORK } from './sheetInk'
-import { leader, titleBlock, sheetBounds } from './detailSheet'
+import { leader, leaderKnee, titleBlock, sheetBounds } from './detailSheet'
 
 export interface ConnectionDetailInput {
   conn: BeamConnection
@@ -95,7 +95,16 @@ export function buildConnectionDetail(i: ConnectionDetailInput, opts: Connection
   if (isWebCol) P.push({ kind: 'line', x1: weldX, y1: 0, x2: weldX, y2: H, stroke: STEEL_CONTEXT, width: 0.8, dash: [u * 0.8, u * 0.5] })
   const hostLabelY = isGirder ? beamTop + gD + u * 1.6 : u * 1.4
   txt(x0 + hostW / 2, hostLabelY, i.hostShape, u * 0.9, 'middle', SHEET_INK, 600)
-  txt(x0 + hostW / 2, hostLabelY + u * 1.1, isGirder ? 'GIRDER (CUT)' : `COLUMN ${i.faceType.toUpperCase()}`, u * 0.85, 'middle')
+  if (isGirder) txt(x0 + hostW / 2, hostLabelY + u * 1.1, 'GIRDER (CUT)', u * 0.85, 'middle')
+  else {
+    // the face the plate is welded to is NAMED BY A LEADER to it — the flange
+    // at the beam side of the band, or the web on its centre line — not
+    // printed over the column body, where it reads as naming the whole band
+    const faceTx = i.faceType === 'flange' ? x0 + hostW - hostTf : weldX
+    const ty = hostLabelY + u * 1.6
+    P.push(...leader({ x: faceTx + (i.faceType === 'flange' ? hostTf / 2 : 0), y: ty + u * 1.4,
+      tx: faceTx - leaderKnee(u * 0.85) - u * 0.6, ty, text: `COLUMN ${i.faceType.toUpperCase()}`, size: u * 0.85 }))
+  }
   // beam, coped where the design coped it
   const cope = conn.cope
   const beamPath: PathCmd[] = cope
@@ -114,6 +123,27 @@ export function buildConnectionDetail(i: ConnectionDetailInput, opts: Connection
   P.push({ kind: 'rect', x: weldX - u * 0.25, y: plateTop, w: u * 0.5, h: tab.hMm, fill: SHEET_INK })
   P.push(...leader({ x: weldX, y: plateTop + u, tx: weldX + tab.wMm + u * 3.5, ty: plateTop - u * 2.4,
     text: `${tab.weldSizeMm} E70XX FILLET, BOTH SIDES, FULL HEIGHT`, size: u * 0.8 }))
+  // §J10 stiffening of the column: continuity plates at both beam-flange
+  // levels (edge-on, between the flanges — the web is in the plane of this
+  // view) and the doubler on the web, outlined over the panel
+  const j = conn.j10
+  if (conn.connType === 'moment-flange-weld' && j && i.hostKind === 'column') {
+    const xIn = x0 + hostTf, xOut = x0 + hostW - hostTf
+    const tw2 = (t: string) => t.length * 0.6 * u * 0.78
+    if (j.doubler) {
+      P.push({ kind: 'rect', x: xIn, y: beamTop - u * 0.6, w: xOut - xIn, h: dB + u * 1.2, fill: 'none', stroke: SHEET_INK, width: 0.9, dash: [u * 0.6, u * 0.3] })
+      const t = `DOUBLER PL ${j.doubler.td}`, t2 = `${j.doubler.weld} FILLET TO FLANGES`
+      P.push(...leader({ x: xIn + (xOut - xIn) * 0.85, y: cy + u, tx: xIn + Math.max(tw2(t), tw2(t2)) + u * 0.5, ty: beamBot + u * 4.4, text: t, text2: t2, size: u * 0.78 }))
+    }
+    if (j.stiffeners) {
+      const st = j.stiffeners
+      const xFrom = st.fullDepth ? xIn : x0 + hostW / 2
+      for (const yc of [beamTop + tfB / 2, beamBot - tfB / 2])
+        P.push({ kind: 'rect', x: xFrom, y: yc - st.ts / 2, w: xOut - xFrom, h: st.ts, fill: SHEET_INK })
+      const t = `CONTINUITY PL ${st.ts}×${Math.round(st.bs)}`, t2 = `BOTH SIDES, ${st.weld} FILLET`
+      P.push(...leader({ x: xFrom + (xOut - xFrom) * 0.8, y: beamBot - tfB / 2, tx: xIn + Math.max(tw2(t), tw2(t2)) + u * 0.5, ty: beamBot + u * 2, text: t, text2: t2, size: u * 0.78 }))
+    }
+  }
   if (conn.connType === 'moment-flange-weld') {
     weldTri(faceX, beamTop, 1); weldTri(faceX, beamBot, -1)
     P.push(...leader({ x: faceX + u * 0.4, y: beamBot + u * 0.5, tx: faceX + u * 4, ty: beamBot + u * 2.6, text: 'CJP FLANGE WELDS, TOP AND BOTTOM', size: u * 0.8 }))
@@ -146,7 +176,7 @@ export function buildConnectionDetail(i: ConnectionDetailInput, opts: Connection
   const plY = Math.max(beamBot, isGirder ? beamTop + gD + u * 2.4 : 0) + u * (conn.connType === 'shear-tab' ? 2.6 : 5.6)
   const plX = Math.max(faceX + u * 2, weldX + tab.wMm / 2)
   P.push(...leader({ x: weldX + tab.wMm * 0.75, y: plateTop + tab.hMm - u * 0.5, tx: plX + u * 4, ty: plY,
-    text: `PL ${tab.t}×${Math.round(tab.wMm)}×${Math.round(tab.hMm)}, ${conn.bolts.n}-M${conn.bolts.dia} A325-N`, size: u * 0.8, color: SHEET_INK, weight: 700 }))
+    text: `PL ${tab.t}×${Math.round(tab.wMm)}×${Math.round(tab.hMm)}, ${conn.bolts.n}-M${conn.bolts.dia} A325-X`, size: u * 0.8, color: SHEET_INK, weight: 700 }))
 
   // ── SECTION (looking along the beam at the support) ───────────────────────
   const elevRight = faceX + beamLen
@@ -202,7 +232,7 @@ export function buildConnectionDetail(i: ConnectionDetailInput, opts: Connection
   // ── notes and title ───────────────────────────────────────────────────────
   const bodyBottom = Math.max(H, cy + dB / 2 + u * 6, isGirder ? beamTop + gD + u * 4 : 0, plY + u)
   const notes = [
-    `PLATE Fy 248 MPa (A36); BOLTS ${conn.bolts.n}-M${conn.bolts.dia} A325-N IN STD HOLES, EDGE ${conn.bolts.edgeMm}, PITCH ${conn.bolts.pitchMm}; WELDS E70XX.`,
+    `PLATE Fy 248 MPa (A36); BOLTS ${conn.bolts.n}-M${conn.bolts.dia} A325-X (THREADS EXCLUDED) IN STD HOLES, EDGE ${conn.bolts.edgeMm}, PITCH ${conn.bolts.pitchMm}; WELDS E70XX.`,
     conn.pinned ? 'SIMPLE (SHEAR) CONNECTION — THE END IS RELEASED IN THE ANALYSIS.' : 'MOMENT CONNECTION — THE END IS RIGID IN THE ANALYSIS.',
   ]
   if (i.Vu != null) notes.push(`DESIGNED FOR Vu = ${i.Vu.toFixed(1)} kN${i.Mu ? `, Mu = ${i.Mu.toFixed(1)} kN·m` : ''}${i.ends ? ` — THE WORST OF ${i.ends} END${i.ends === 1 ? '' : 'S'} THIS MARK SERVES` : ''}. AISC 360-16 LRFD.`)

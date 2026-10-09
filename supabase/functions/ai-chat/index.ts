@@ -34,7 +34,7 @@
 import { preflight, jsonWithCors } from '../_shared/cors.ts'
 import {
   UPSTREAM_CHAT_COMPLETIONS_URL,
-  FREE_MODELS,
+  createFreeModelSource,
   buildAssistantSystemPrompt,
   openCalculatorToolSchema,
   validateAssistantRequest,
@@ -60,6 +60,9 @@ const UPSTREAM_TIMEOUT_MS = 30_000
  *  model's thinking counts against it: at 1500 one spent the lot thinking over
  *  a long page and returned an empty answer (measured on the live function). */
 const MAX_TOKENS = 4000
+
+/** The live free-model selection, one cache per isolate. */
+const freeModels = createFreeModelSource(fetch)
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const early = preflight(req)
@@ -106,9 +109,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }),
   })
 
-  // A client-named model narrows the rotation to itself; otherwise every
-  // allowlisted entry is a candidate, most capable first.
-  const candidates = parsed.model ? [parsed.model] : [...FREE_MODELS]
+  // The rotation is whatever is free in OpenRouter's catalogue right now
+  // (cached per isolate) — a hard-coded list went dark within a week. A
+  // client-named model narrows it to itself, and only if it is in there.
+  const free = await freeModels()
+  if (parsed.model && !free.models.includes(parsed.model)) return jsonWithCors({ error: 'model' }, 400)
+  const candidates = parsed.model ? [parsed.model] : free.models
   // Rotation skips what cannot fit, so size it on the largest thing sent: the
   // system prompt plus the whole conversation plus the page snapshot.
   const chars =
@@ -118,7 +124,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // One line per upstream attempt — model, outcome, time. Never content.
   const log = (a: AttemptLog) =>
     console.log(`ai-chat: ${a.model}${a.withTools ? '' : ' (no tools)'} → ${a.status} in ${a.ms} ms`)
-  const res = await callWithRotation(candidates, chars, buildCall, fetch, UPSTREAM_TIMEOUT_MS, { log, accept: hasUsableAnswer })
+  if (free.source !== 'cached') console.log(`ai-chat: free models (${free.source}): ${free.models.join(', ')}`)
+  const res = await callWithRotation(candidates, chars, buildCall, fetch, UPSTREAM_TIMEOUT_MS, { log, accept: hasUsableAnswer, context: free.context })
   if (!res.ok) {
     // The STATUS goes back to the browser; the body never does. It is the
     // provider's wording, not ours, and must never carry a hint of the key

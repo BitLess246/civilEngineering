@@ -11,8 +11,11 @@ export function Tick({ x, y }: { x: number; y: number }) {
 }
 
 /** Horizontal dimension below a feature (extension lines + dim line + ticks + label). */
-export function DimBelow({ xA, xB, featY, dY, label }: {
+export function DimBelow({ xA, xB, featY, dY, label, flipNarrow = false }: {
   xA: number; xB: number; featY: number; dY: number; label: string
+  /** Move a label wider than the dimension below the line. Opt-in: a caller
+   *  stacking another dimension just below cannot take the flipped label. */
+  flipNarrow?: boolean
 }) {
   return (
     <g>
@@ -21,8 +24,10 @@ export function DimBelow({ xA, xB, featY, dY, label }: {
       <line x1={xA} y1={dY} x2={xB} y2={dY} stroke={DIM} strokeWidth={0.9} />
       <Tick x={xA} y={dY} />
       <Tick x={xB} y={dY} />
-      <text x={(xA + xB) / 2} y={dY - 4} fontSize={9.5} fill={DIM} textAnchor="middle"
-        paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>{label}</text>
+      {/* a label wider than its dimension goes BELOW the line, clear of the
+          extension lines (which stop 5 px past it) instead of sitting on them */}
+      <text x={(xA + xB) / 2} y={flipNarrow && label.length * 5.6 > Math.abs(xB - xA) - 8 ? dY + 14 : dY - 4} fontSize={9.5} fill={DIM} textAnchor="middle"
+        paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{label}</text>
     </g>
   )
 }
@@ -42,7 +47,7 @@ export function DimSide({ yA, yB, featX, dX, label, side }: {
       <Tick x={dX} y={yA} />
       <Tick x={dX} y={yB} />
       <text x={lab} y={(yA + yB) / 2} fontSize={9.5} fill={DIM} textAnchor="middle"
-        transform={`rotate(-90 ${lab} ${(yA + yB) / 2})`} paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>{label}</text>
+        transform={`rotate(-90 ${lab} ${(yA + yB) / 2})`} paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{label}</text>
     </g>
   )
 }

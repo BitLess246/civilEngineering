@@ -49,12 +49,23 @@ export function kinematicsRectilinear(input: KinematicsRectilinearInput): {
     ss = u * tt + 0.5 * a * tt * tt;
   }
   // Case 3: u, a, s known → v, t
+  // The body reaches s at the EARLIEST t ≥ 0 of ½at² + ut − s = 0, and v follows
+  // from that t. Taking v = sign(a)·√(u² + 2as) instead picked the wrong root
+  // for a decelerating body: u = 10, a = −2, s = 9 reached s at t = 1 (v = +8),
+  // but returned t = 9, v = −8 — the second pass, after it had turned back.
   else if (ss !== undefined && vv === undefined && tt === undefined) {
     const disc = u * u + 2 * a * ss;
     if (disc < 0) throw new Error("No real solution for v with given s");
-    vv = Math.sqrt(disc) * (a >= 0 ? 1 : -1);
-    if (a === 0) throw new Error("Cannot solve for t when a = 0");
-    tt = (vv - u) / a;
+    if (a === 0) {
+      if (u === 0 || ss / u < 0) throw new Error("The body never reaches s with a = 0");
+      tt = ss / u;
+    } else {
+      const r = Math.sqrt(disc);
+      const roots = [(-u + r) / a, (-u - r) / a].filter((x) => x >= -1e-12).sort((x, y) => x - y);
+      if (!roots.length) throw new Error("The body never reaches s");
+      tt = Math.max(0, roots[0]);
+    }
+    vv = u + a * tt;
   }
   // Case 4: u, v, t known → a, s
   else if (vv !== undefined && tt !== undefined && ss === undefined) {
@@ -144,8 +155,8 @@ export function projectile(input: ProjectileInput): ProjectileResult {
   const disc = uy * uy + 2 * g * y0;
   const tFlight = (uy + Math.sqrt(disc)) / g;
 
-  // Max height
-  const tUp = uy / g;
+  // Max height — reached at launch when the throw is downward (uy < 0)
+  const tUp = Math.max(0, uy / g);
   const hMax = y0 + uy * tUp - 0.5 * g * tUp * tUp;
 
   // Range
@@ -233,8 +244,11 @@ export interface WorkEnergyInput {
 }
 
 /**
- * Work-Energy theorem: Wnet = ΔKE = ½m(v2² - v1²)
- * With non-conservative forces: Wnc + ΔPE = ΔKE
+ * Work-Energy theorem: ΔKE = ½m(v2² − v1²) = Wnet + Wnc − ΔPE, where Wnet is
+ * the work of any other applied force, Wnc the non-conservative work (friction
+ * negative) and ΔPE = PE2 − PE1. A body that rises (ΔPE > 0) LOSES kinetic
+ * energy — the classic form Wnc = ΔKE + ΔPE. (This used to add ΔPE, so a rising
+ * body sped up.)
  */
 export function workEnergy(input: WorkEnergyInput): { v2: number; Wnet: number; deltaKE: number } {
   const { m, v1, v2, Wnet, Wnc = 0, deltaPE = 0 } = input;
@@ -245,12 +259,12 @@ export function workEnergy(input: WorkEnergyInput): { v2: number; Wnet: number; 
 
   if (v2 !== undefined) {
     const deltaKE = 0.5 * m * (v2 * v2 - v1 * v1);
-    const WnetCalc = deltaKE - Wnc - deltaPE;
+    const WnetCalc = deltaKE - Wnc + deltaPE;
     return { v2, Wnet: WnetCalc, deltaKE };
   }
 
   if (Wnet !== undefined) {
-    const deltaKE = Wnet + Wnc + deltaPE;
+    const deltaKE = Wnet + Wnc - deltaPE;
     const v2sq = v1 * v1 + (2 * deltaKE) / m;
     if (v2sq < 0) throw new Error("Imaginary velocity: check energy inputs");
     return { v2: Math.sqrt(v2sq), Wnet, deltaKE };
@@ -441,5 +455,7 @@ export function beltFriction(input: BeltFrictionInput): {
     betaCalc = Math.log(T1 / T2) / mu;
   }
 
-  return { T1: T1Calc, T2: T2Calc, mu: muCalc, beta: betaCalc, ratio };
+  // the ratio of the SOLVED belt: solving for μ or β must report e^(μβ) of
+  // the answer, not of the input left over in the form
+  return { T1: T1Calc, T2: T2Calc, mu: muCalc, beta: betaCalc, ratio: Math.exp(muCalc * betaCalc) };
 }

@@ -11,10 +11,10 @@
 // The section runs d/2 past the far column face and stops AT the free edge —
 // so an edge halves the d term in that direction, never the column dimension.
 //
-// Three Vc equations §22.6.5.2 (SI equivalents of ACI 318M-14):
-//   Vc1 = (0.17 + 0.33/βc) λ √f'c b0 d
-//   Vc2 = (0.083 αs d/b0 + 0.17) λ √f'c b0 d
-//   Vc3 = 0.33 λ √f'c b0 d
+// Three Vc equations, Table 22.6.5.2 as ACI 318M-14 / NSCP 2015 PRINT them:
+//   Vc1 = 0.17 (1 + 2/βc) λ √f'c b0 d          (b)
+//   Vc2 = 0.083 (2 + αs d/b0) λ √f'c b0 d      (c)
+//   Vc3 = 0.33 λ √f'c b0 d                     (a)
 //   Vc  = min(Vc1, Vc2, Vc3)
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -71,10 +71,16 @@ export function designPunchingShear(i: PunchingInput): PunchingResult {
   // αs per column location
   const alphaS = position === 'interior' ? 40 : position === 'edge' ? 30 : 20
 
-  // Vc in N (SI equivalents of §22.6.5.2a–c)
+  // Vc in N, Table 22.6.5.2 — the same coefficients as `twoWayVc` in
+  // shear.ts, which the footing engines use. This module carried its own
+  // expansions, (0.17 + 0.33/βc) and (0.083αs·d/b0 + 0.17), and both are a
+  // little ABOVE the printed forms: 0.17(1 + 2/β) is 0.17 + 0.34/β, and
+  // 0.083(2 + αs·d/b0) starts at 0.166, not 0.17. So the page and a footing
+  // could report different capacities for the same column, and the page's
+  // was the unconservative one — by up to 2.4% on (c) and 1.0% on (b) at β = 4.
   const base = lambda * sqrtFc * b0 * d
-  const Vc1 = (0.17 + 0.33 / betac) * base / 1000
-  const Vc2 = (0.083 * alphaS * d / b0 + 0.17) * base / 1000
+  const Vc1 = 0.17 * (1 + 2 / betac) * base / 1000
+  const Vc2 = 0.083 * (2 + alphaS * d / b0) * base / 1000
   const Vc3 = 0.33 * base / 1000
 
   const Vc    = Math.min(Vc1, Vc2, Vc3)

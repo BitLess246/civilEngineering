@@ -1,15 +1,13 @@
 import { useState } from 'react'
-import 'katex/dist/katex.min.css'
 import {
   weirDischarge, headForQ, type WeirShape, type WeirResult,
 } from '../engine/weirFlow'
-import { Card, Num, Pick, ResultCard, Row } from '../components/qty'
-import { DrawingCard } from '../components/calc'
-import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { WeirViews } from '../components/hydraulicsSketches'
 import type { SolutionStep } from '../lib/solution'
-import { INK, MUTED, f2, f3 } from '../lib/influenceStyle'
+import { f2, f3 } from '../lib/influenceStyle'
 
 // Weir Flow — discharge over the standard measurement weirs: rectangular
 // (suppressed / contracted), Cipolletti, V-notch and broad-crested.
@@ -42,6 +40,14 @@ const SHAPE_NOTES: Record<WeirShape, string> = {
 }
 
 interface SolveOut { res: WeirResult | null; solvedH: number }
+
+const FORMULA_PLAIN: Record<WeirShape, string> = {
+  rectSuppressed: 'Q = 1.84 L H^1.5',
+  rectContracted: 'Q = 1.84 (L − 0.1nH) H^1.5',
+  cipolletti: 'Q = 1.86 L H^1.5',
+  vnotch: 'Q = (8/15) Cd √2g tan(θ/2) H^2.5',
+  broadCrested: 'Q = 1.705 Cb b H^1.5',
+}
 
 export default function WeirFlow() {
   const [shape, setShape] = useState<WeirShape>('rectSuppressed')
@@ -114,152 +120,66 @@ export default function WeirFlow() {
           ],
         },
     ...res.notes.map((nt) => ({ title: 'Note', lines: [{ text: nt }] })),
-  ] : []
+  ] : [{ title: 'Check the inputs', lines: [{ text: 'Give a positive head (or target discharge) and crest length. A contracted weir also refuses heads so large that 0.1·n·H eats the whole crest.' }] }]
 
+  const name = SHAPES.find(([v]) => v === shape)?.[1] ?? ''
+  const crestWord = shape === 'broadCrested' ? 'Crest width b' : 'Crest length L'
   return (
-    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <ReportControls title="Weir Flow Report" badges={[SHAPES.find(([v]) => v === shape)?.[1] ?? '']} />
-      <p className="mt-2 max-w-3xl text-sm text-muted">
-        The standard flow-measurement weirs: Francis rectangular (with or without end
-        contractions), the Cipolletti trapezoid whose 4V:1H sides self-correct the
-        contractions, the V-notch for small flows, and the broad-crested spillway crest.
-        Head → discharge, or discharge → head.
-      </p>
-
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <Card title="Weir and solve direction">
-            <div className="sm:col-span-2 lg:col-span-3">
-              <button type="button"
-                onClick={() => { setShape('rectSuppressed'); setSolve('qFromH'); setH(0.5); setL(2); setHa(0) }}
-                className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                Load the sample — 2 m suppressed weir, H = 0.5 m
-              </button>
-            </div>
-            <Pick label="Weir type" value={shape} onChange={(v) => setShape(v as WeirShape)} options={SHAPES} />
-            <Pick label="Solve" value={solve} onChange={(v) => setSolve(v as Solve)}
-              options={[['qFromH', 'Q from the head H'], ['hFromQ', 'Head H for a target Q']]} />
-            {needsL && <Num label={shape === 'broadCrested' ? 'Crest width b' : 'Crest length L'} unit="m" value={L} onChange={setL} min={0.1} max={50} step="0.1" />}
-            {solve === 'qFromH'
-              ? <Num label="Head above crest H" unit="m" value={H} onChange={setH} min={0.01} max={5} step="0.05" />
-              : <Num label="Target discharge Q" unit="m³/s" value={Q} onChange={setQ} min={0.001} max={200} step="0.1" />}
-            {shape === 'rectContracted' && (
-              <Num label="End contractions n" value={n} onChange={setN} min={0} max={2} step="1" />
-            )}
-            {shape === 'vnotch' && (
-              <>
-                <Num label="Notch angle θ" unit="°" value={angle} onChange={setAngle} min={20} max={150} step="5" />
-                <Num label="Discharge coeff Cd" value={Cd} onChange={setCd} min={0.4} max={0.9} step="0.01" />
-              </>
-            )}
-            {shape === 'broadCrested' && (
-              <Num label="Coefficient Cb" value={Cb} onChange={setCb} min={0.5} max={1.2} step="0.01" />
-            )}
-            {(shape === 'rectSuppressed' || shape === 'rectContracted') && (
-              <Num label="Approach head ha" unit="m" value={ha} onChange={setHa} min={0} max={0.5} step="0.01" />
-            )}
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          {res ? (
-            <>
-              <ResultCard title="Discharge">
-                <Row label="Discharge Q" value={`${f3(res.Q)} m³/s`} sub={`${f2(res.Q * 1000)} L/s`} />
-                <Row label="Head H" value={`${f3(shownH)} m`} sub={solve === 'hFromQ' ? `solved for Q = ${f3(Q)} m³/s` : 'given'} />
-                {shape !== 'vnotch' && (
-                  <Row label="Effective crest length" value={`${f3(res.effectiveLength)} m`} sub={res.effectiveLength < L - 1e-9 ? 'after the contraction correction' : 'uncorrected'} />
-                )}
-              </ResultCard>
-
-              {res.notes.length > 0 && (
-                <ResultCard title="Notes">
-                  <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
-                    {res.notes.map((nt) => <li key={nt}>{nt}</li>)}
-                  </ul>
-                </ResultCard>
-              )}
-
-              <DrawingCard title="Section" meta="head measured above the crest, upstream of the drawdown">
-                <DrawingFrame label="Weir section">
-                  <WeirSection shape={shape} H={shownH} L={needsL ? L : 2 * shownH * Math.tan((angle / 2) * Math.PI / 180)} angle={angle} />
-                </DrawingFrame>
-              </DrawingCard>
-
-              <WorkedSolution steps={steps} title="Weir flow — step by step" />
-            </>
-          ) : (
-            <ResultCard title="Check the inputs">
-              <p className="text-sm text-fail">
-                Give a positive head (or target discharge) and crest length. The contracted weir
-                also refuses heads so large that 0.1·n·H eats the whole crest.
-              </p>
-            </ResultCard>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── section drawing ──────────────────────────────────────────────────────
-
-function WeirSection({ shape, H, L, angle }: { shape: WeirShape; H: number; L: number; angle: number }) {
-  const W = 640, Hh = 300
-  const x0 = 110, x1 = W - 110
-  const crestY = 190
-  const scale = Math.min(80 / Math.max(H, 0.01), 50 / Math.max(L, 0.5), 60)
-  const hPix = H * scale
-  const lPix = shape === 'vnotch'
-    ? Math.min(2 * H * Math.tan((angle / 2) * Math.PI / 180) * scale, x1 - x0 - 20)
-    : Math.min(L * scale, x1 - x0 - 20)
-  const topY = crestY - hPix
-
-  // structure profile per type
-  const st = (() => {
-    if (shape === 'rectSuppressed' || shape === 'rectContracted') {
-      return { d: `M ${x0 - 8} ${crestY} L ${x1 + 8} ${crestY}`, label: 'sharp crest' }
-    }
-    if (shape === 'cipolletti') {
-      return { d: `M ${x0 - 8} ${crestY} L ${x1 + 8} ${crestY}`, label: 'sharp crest · 4V:1H sides' }
-    }
-    if (shape === 'vnotch') {
-      const halfW = lPix / 2
-      return { d: `M ${W / 2 - halfW} ${crestY} L ${W / 2} ${crestY - Math.min(hPix, 90)} L ${W / 2 + halfW} ${crestY}`, label: 'V-notch plate' }
-    }
-    return { d: `M ${x0 - 8} ${crestY} L ${x0 - 8} ${crestY + 34} L ${x1 + 8} ${crestY + 34} L ${x1 + 8} ${crestY}`, label: 'broad crest' }
-  })()
-  const waterEnd = shape === 'broadCrested' ? x0 : shape === 'vnotch' ? W / 2 - lPix / 2 : x0 + lPix / 2
-
-  return (
-    <svg viewBox={`0 0 ${W} ${Hh}`} className="w-full" role="img" aria-label="Weir section">
-      {/* upstream water body */}
-      <rect x={x0 - 70} y={topY} width={Math.max(waterEnd - (x0 - 70), 4)} height={Math.max(crestY - topY, 2)}
-        fill="rgba(15,76,146,0.16)" stroke="none" />
-      {/* water surface line */}
-      <line x1={x0 - 70} x2={waterEnd} y1={topY} y2={topY} stroke="rgba(15,76,146,0.85)" strokeWidth="1.4" />
-      {/* falling jet for sharp-crested weirs */}
-      {shape !== 'broadCrested' && shape !== 'vnotch' && (
-        <path d={`M ${x0 + lPix / 2} ${crestY + 2} C ${x0 + lPix / 2 + 14} ${crestY + 26}, ${x0 + lPix / 2 + 26} ${crestY + 34}, ${x0 + lPix / 2 + 30} ${crestY + 76}`}
-          fill="none" stroke="rgba(15,76,146,0.55)" strokeWidth="2" />
+    <WorkspacePage title="Weir Flow" badges={['Hydraulics', name]}
+      intro="The standard flow-measurement weirs: Francis rectangular with or without end contractions, the Cipolletti trapezoid whose 4V:1H sides offset the contractions, the V-notch for small flows, and the broad-crested crest. Head to discharge, or discharge to head."
+      inputs={<>
+        <InputGroup title="Weir">
+          <div className="col-span-2"><Pick label="Weir type" value={shape} onChange={(v) => setShape(v as WeirShape)} options={SHAPES} /></div>
+          {needsL && <Num label={crestWord} unit="m" value={L} onChange={setL} min={0.1} max={50} step="0.1" />}
+          {shape === 'rectContracted' && <Num label="End contractions n" value={n} onChange={setN} min={0} max={2} step="1" />}
+          {shape === 'vnotch' && <>
+            <Num label="Notch angle θ" unit="°" value={angle} onChange={setAngle} min={20} max={150} step="5" />
+            <Num label="Discharge coeff. Cd" value={Cd} onChange={setCd} min={0.4} max={0.9} step="0.01" />
+          </>}
+          {shape === 'broadCrested' && <Num label="Coefficient Cb" value={Cb} onChange={setCb} min={0.5} max={1.2} step="0.01" />}
+        </InputGroup>
+        <InputGroup title="Solve for">
+          <div className="col-span-2"><Pick label="Unknown" value={solve} onChange={(v) => setSolve(v as Solve)} options={[['qFromH', 'Discharge Q from the head H'], ['hFromQ', 'Head H for a target Q']]} /></div>
+          {solve === 'qFromH'
+            ? <Num label="Head above crest H" unit="m" value={H} onChange={setH} min={0.01} max={5} step="0.05" />
+            : <Num label="Target discharge Q" unit="m³/s" value={Q} onChange={setQ} min={0.001} max={200} step="0.1" />}
+          {(shape === 'rectSuppressed' || shape === 'rectContracted') && <Num label="Approach head hₐ" unit="m" value={ha} onChange={setHa} min={0} max={0.5} step="0.01" />}
+        </InputGroup>
+      </>}
+      checks={res ? <>
+        <CheckCard title={solve === 'qFromH' ? 'Discharge' : 'Head above the crest'} basis={name} status="info"
+          value={solve === 'qFromH' ? f3(res.Q) : f3(shownH)} unit={solve === 'qFromH' ? 'm³/s' : 'm'} formula={FORMULA_PLAIN[shape]}
+          pairs={solve === 'qFromH'
+            ? [{ label: 'In litres', value: `${f2(res.Q * 1000)} L/s` }, { label: 'Head H', value: `${f3(H)} m` }]
+            : [{ label: 'Target Q', value: `${f3(Q)} m³/s` }, { label: 'Check Q(H)', value: `${f3(res.Q)} m³/s` }]} />
+        <CheckCard title="Effective opening" basis={shape === 'vnotch' ? 'width at the surface' : shape === 'rectContracted' ? `${n} end contraction${n === 1 ? '' : 's'}` : 'crest'} status="info"
+          value={f3(res.effectiveLength)} unit="m" formula={shape === 'rectContracted' ? "L′ = L − 0.1nH" : shape === 'vnotch' ? '2H tan(θ/2)' : 'no correction'}
+          pairs={[{ label: shape === 'vnotch' ? 'Angle θ' : crestWord, value: shape === 'vnotch' ? `${f2(angle)}°` : `${f3(L)} m` }, { label: 'H / L', value: shape === 'vnotch' ? '—' : f3(shownH / L) }]} />
+      </> : (
+        <CheckCard title="Check the inputs" basis={name} status="warn" pillLabel="CHECK" value="—" formula="Positive head (or Q) and crest length; a contracted weir cannot lose its whole crest to 0.1·n·H." />
       )}
-      {/* structure */}
-      <path d={st.d} fill="none" stroke={INK} strokeWidth="2" />
-      {/* head dimension */}
-      <line x1={x0 - 34} x2={x0 - 34} y1={topY} y2={crestY} stroke={INK} strokeWidth="1" />
-      <text x={x0 - 42} y={(topY + crestY) / 2} textAnchor="end" fontSize="11" fill={INK} fontFamily="var(--font-mono, monospace)">
-        H = {f3(H)} m
-      </text>
-      {/* crest length dimension */}
-      {shape !== 'vnotch' && (
-        <>
-          <line x1={x0} x2={x0 + lPix} y1={crestY + 52} y2={crestY + 52} stroke={INK} strokeWidth="1" />
-          <text x={x0 + lPix / 2} y={crestY + 68} textAnchor="middle" fontSize="11" fill={INK} fontFamily="var(--font-mono, monospace)">
-            {shape === 'broadCrested' ? 'b' : 'L'} = {f3(L)} m
-          </text>
-        </>
-      )}
-      <text x={x0 - 70} y={26} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">{st.label}</text>
-    </svg>
+      summary={[
+        { label: 'Weir', value: name },
+        ...(needsL ? [{ label: crestWord, value: `${f3(L)} m` }] : [{ label: 'Notch angle θ', value: `${f2(angle)}°` }]),
+        solve === 'qFromH' ? { label: 'Head H', value: `${f3(H)} m` } : { label: 'Target Q', value: `${f3(Q)} m³/s` },
+        ...(ha > 0 && (shape === 'rectSuppressed' || shape === 'rectContracted') ? [{ label: 'Approach head hₐ', value: `${f3(ha)} m` }] : []),
+      ]}
+      drawing={res && Number.isFinite(shownH) ? { title: 'Profile and front view', node: <div data-pdf-drawing>
+        <WeirViews shape={shape} H={shownH} L={needsL ? L : 1} angle={angle} n={n} Leff={res.effectiveLength} />
+      </div> } : undefined}
+      resultsCaption={res && res.notes.length ? res.notes.join(' ') : undefined}
+      results={res ? [
+        { check: 'Discharge Q', basis: FORMULA_PLAIN[shape], demand: `${f3(res.Q)} m³/s`, status: 'info' },
+        { check: 'Head above crest H', basis: solve === 'qFromH' ? 'given' : 'bisection on Q(H)', demand: `${f3(shownH)} m`, status: 'info' },
+        { check: 'Effective opening', basis: shape === 'rectContracted' ? 'L − 0.1nH' : 'as built', demand: `${f3(res.effectiveLength)} m`, status: 'info' },
+      ] : [{ check: 'Discharge', basis: 'inputs out of range', demand: '—', status: 'warn' }]}
+      steps={steps}
+      references={[
+        { topic: 'Francis rectangular', basis: 'Q = 1.84(L − 0.1nH)H^1.5 (SI); approach head: (H + hₐ)^1.5 − hₐ^1.5', source: 'Francis (1883); USBR Water Measurement Manual' },
+        { topic: 'Cipolletti', basis: 'Q = 1.86 L H^1.5 with 4V:1H sides', source: 'USBR Water Measurement Manual' },
+        { topic: 'V-notch', basis: 'Q = (8/15) Cd √(2g) tan(θ/2) H^2.5', source: 'Kindsvater–Shen; ISO 1438' },
+        { topic: 'Broad-crested', basis: 'Q = 1.705 Cb b H^1.5 (critical depth 2H/3 on the crest)', source: 'Open-channel hydraulics' },
+      ]}
+    />
   )
 }

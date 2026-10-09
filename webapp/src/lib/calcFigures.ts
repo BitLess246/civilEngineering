@@ -42,20 +42,18 @@ export interface CalcBeamSectionInput {
   bars: number
   /** Compression bars, where the check placed any. */
   comprBars?: number
-  /**
-   * Bars per layer, extreme layer first — the design's `layers` (tension
-   * face) and `comprLayers`. Given, the section cut draws the stack the
-   * design detailed; left out, every bar of a face sits on one row, which is
-   * a fiction a [3, 3] face exposes immediately.
-   */
-  layers?: number[]
-  comprLayers?: number[]
   /** −Mu: the tension steel is at the TOP and the cut is taken at a support. */
   hogging?: boolean
   /** Adopted stirrup spacing, mm. Zero or absent → the cage's own minimum. */
   spacing?: number
   /** Effective depth, mm — dimensioned from the compression face. */
   d?: number
+  /** The design's own layer arrangement, EXTREME tension-face layer first —
+   *  `beamDesign`'s `layers`. Absent, the tension face draws in one row. */
+  layers?: number[]
+  /** The compression face's layers, EXTREME compression-face layer first —
+   *  `beamDesign`'s `comprLayers`. Absent, that face draws in one row. */
+  comprLayers?: number[]
   title?: string
   notes?: string[]
 }
@@ -71,18 +69,23 @@ export function calcBeamSection(i: CalcBeamSectionInput): SectionDetailDrawing {
   const L = NOMINAL_SPAN
   const s = i.spacing && i.spacing > 0 ? i.spacing : Math.max(50, Math.round(i.h / 2))
   const hM = i.h / 1000
-  // The tension face carries the designed layers; the compression face, if it
-  // carries anything, carries the compression layers — each face only when it
-  // is the one this cut looks at (a face with no bars gets its corner bars
-  // back from the cage's own floor, on one row, which is what hangers are).
-  const tensionLayers = i.layers && i.layers.length > 1 ? i.layers : undefined
-  const comprFaceLayers = i.comprLayers && i.comprLayers.length > 1 ? i.comprLayers : undefined
+  // The design's `layers` belong to the TENSION face and `comprLayers` to the
+  // compression face, each listed extreme-first. The cage wants bottom layers
+  // bottom-first and top layers top-first — and a stack listed extreme-first
+  // on one face reads extreme-first on the mirrored face UNCHANGED, because
+  // mirroring maps the layer nearest one face onto the layer nearest the
+  // other (reversing the array would flip the stack and move the centroid).
+  // So a hogging cut only swaps which face each array describes. Without any
+  // of this the section draws a single-row cage while the note says "(4+2)"
+  // and d measures a centroid the picture does not have.
+  const botLayers = i.hogging ? i.comprLayers : i.layers
+  const topLayers = i.hogging ? i.layers : i.comprLayers
   const cage = buildBeamCage({
     mark: 'B', L, b: i.b, h: i.h, cover: i.cover, barDia: i.barDia, stirrupDia: i.stirrupDia,
     topBars: i.hogging ? i.bars : (i.comprBars ?? 0),
     botBars: i.hogging ? (i.comprBars ?? 0) : i.bars,
-    topLayers: i.hogging ? tensionLayers : comprFaceLayers,
-    botLayers: i.hogging ? comprFaceLayers : tensionLayers,
+    ...(botLayers ? { botLayers } : {}),
+    ...(topLayers ? { topLayers } : {}),
     sEnd: s, sMid: s,
     axis: { x0: 0, z0: 0, x1: L, z1: 0 }, ySoffit: 0,
     continuousLeft: false, continuousRight: false,
@@ -96,7 +99,7 @@ export function calcBeamSection(i: CalcBeamSectionInput): SectionDetailDrawing {
     outline: { u0: -i.b / 2000, v0: 0, u1: i.b / 2000, v1: hM },
     cages: [cage], cut, cover: i.cover,
     notes: [
-      ...(i.d ? [`d = ${Math.round(i.d)} TO THE ${i.hogging ? 'BOTTOM' : 'TOP'} FACE`] : []),
+      ...(i.d ? [`d = ${Math.round(i.d)} mm TO THE ${i.hogging ? 'BOTTOM' : 'TOP'} FACE`] : []),
       ...(i.notes ?? []),
     ],
   })

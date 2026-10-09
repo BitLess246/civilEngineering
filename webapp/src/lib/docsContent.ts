@@ -28,6 +28,15 @@ export const DOC_ROUTE_ALIASES: Record<string, string> = {
   '/steel': 'steel-beam',
   // the geotechnical index was navigation only; the route now redirects
   '/geotech': 'bearing-capacity',
+  // the combined Hydrostatics page split into seven; the old route lands on the first
+  '/hydrostatics': 'hydrostatic-force',
+  // the tabbed Dynamics page split into eight; the old route lands on the first
+  '/dynamics': 'rectilinear-motion',
+  // the Surveying Toolbox and Geometric Design shells split into one page per mode
+  '/surveying': 'leveling',
+  '/geometric-design': 'sight-distance',
+  // the combined Engineering Economy page split into four
+  '/eng-economy': 'interest-factors',
   '/signup': 'account', '/forgot-password': 'account', '/reset-password': 'account',
   '/profile': 'account',
   // the four public policy pages share one docs entry

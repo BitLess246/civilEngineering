@@ -1,14 +1,12 @@
 import { useState } from 'react'
-import 'katex/dist/katex.min.css'
 import { gvfProfile, frictionSlope, gvfSlope, type GvfResult } from '../engine/gvf'
 import { froude } from '../engine/openChannel'
-import { ShapeCard } from './openChannelShared'
+import { ShapeGroup } from './openChannelShared'
 import { buildShape, type ShapeState } from './openChannelTypes'
-import { Card, Num, Pick, ResultCard, Row } from '../components/qty'
-import { DrawingCard } from '../components/calc'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { DrawingFrame } from '../components/DrawingFrame'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
 import type { SolutionStep } from '../lib/solution'
 import { INK, MUTED, HAIR, f3 } from '../lib/influenceStyle'
 
@@ -107,71 +105,58 @@ export default function Gvf() {
         { text: `Far-end depth y = ${f3(r.yEnd)} m${r.yn !== null ? ` against yn = ${f3(r.yn)} m` : ''} over the ${f0(L)} m reach.` },
       ],
     },
-  ] : []
+  ] : [{ title: 'Check the inputs', lines: [{ text: 'Give a positive discharge, Manning n, reach length and control depth. On a circular section the control must stay below the crown; a control at (or extremely close to) critical depth sits on the classification singularity — nudge it into zone 1, 2 or 3.' }] }]
 
   return (
-    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <ReportControls title="GVF Profile Report" badges={[r ? r.profile : 'Chow profiles']} />
-      <p className="mt-2 max-w-3xl text-sm text-muted">
-        The gradually-varied-flow water surface behind a control: normal and critical depths,
-        the Chow classification (M1–M3, S1–S3, C, H2/H3, A2/A3), and an RK4 integration of
-        dy/dx = (S0 − Sf)/(1 − Fr²) drawn over the reach with the uniform-flow and critical
-        depth reference lines.
-      </p>
-
-      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-        <div className="space-y-5">
-          <ShapeCard shape={shape} onChange={(patch) => setShape((s) => ({ ...s, ...patch }))}
-            hint="Section geometry used for A, P, T at every depth." />
-          <Card title="Flow and bed">
-            <Num label="Discharge Q" unit="m³/s" value={Q} onChange={setQ} min={0.01} max={500} step="0.1" />
-            <Num label="Manning n" value={n} onChange={setN} min={0.008} max={0.1} step="0.001" />
-            <Num label="Bed slope S0" unit="m/m" value={S0} onChange={setS0} min={-0.02} max={0.05} step="0.0005" />
-            <Num label="Reach length L" unit="m" value={L} onChange={setL} min={10} max={20000} step="10" />
-          </Card>
-          <Card title="Control (boundary condition)">
-            <Num label="Control depth" unit="m" value={yControl} onChange={setYControl} min={0.01} max={30} step="0.05" />
+    <WorkspacePage title="GVF Profiles" badges={['Open channel', r ? `${r.profile} profile` : 'Chow profiles']}
+      intro="The gradually-varied-flow water surface behind a control: normal and critical depths, the Chow classification (M1–M3, S1–S3, C, H2/H3, A2/A3), and an RK4 march of dy/dx = (S0 − Sf)/(1 − Fr²) drawn over the reach against the yn and yc lines."
+      inputs={<>
+        <ShapeGroup shape={shape} onChange={(patch) => setShape((s) => ({ ...s, ...patch }))} hint="Section geometry used for A, P and T at every depth." />
+        <InputGroup title="Flow and bed">
+          <Num label="Discharge Q" unit="m³/s" value={Q} onChange={setQ} min={0.01} max={500} step="0.1" />
+          <Num label="Manning n" value={n} onChange={setN} min={0.008} max={0.1} step="0.001" />
+          <Num label="Bed slope S0" unit="m/m" value={S0} onChange={setS0} min={-0.02} max={0.05} step="0.0005" />
+          <Num label="Reach length L" unit="m" value={L} onChange={setL} min={10} max={20000} step="10" />
+        </InputGroup>
+        <InputGroup title="Control">
+          <Num label="Control depth" unit="m" value={yControl} onChange={setYControl} min={0.01} max={30} step="0.05" />
+          <div className="col-span-2">
             <Pick label="Control placed at" value={controlAt} onChange={(v) => setControlAt(v as typeof controlAt)}
               options={[['auto', 'Auto — subcritical downstream, supercritical upstream'], ['upstream', 'Upstream end'], ['downstream', 'Downstream end']]} />
-            <div className="sm:col-span-2 lg:col-span-3">
-              <button type="button"
-                onClick={() => { setShape(SAMPLE_SHAPE); setQ(3); setN(0.014); setS0(0.001); setL(200); setYControl(1.5); setControlAt('auto') }}
-                className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">
-                Load the sample — M1 backwater ahead of a dam
-              </button>
-            </div>
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          {r ? (
-            <>
-              <ResultCard title="Classification">
-                <Row label="Profile" value={r.profile} sub={`${r.slopeClass} slope · zone ${r.zone} · ${r.march === 'upstream' ? 'marches upstream' : 'marches downstream'} from the ${r.controlAt} control`} />
-                <Row label="Normal depth yn" value={r.yn !== null ? `${f3(r.yn)} m` : '— (no uniform flow)'} sub={`critical depth yc = ${f3(r.yc)} m`} />
-                <Row label="Control Froude" value={f3(r.FrControl)} sub={r.FrControl > 1 ? 'supercritical control' : 'subcritical control'} />
-                <Row label="Far-end depth" value={`${f3(r.yEnd)} m`} sub={r.terminus} />
-              </ResultCard>
-
-              <DrawingCard title="Water-surface profile" meta={`${r.profile} profile over ${f0(L)} m — bed drop drawn true to S0·L`}>
-                <ProfileDrawing result={r} L={L} S0={S0} />
-              </DrawingCard>
-
-              <WorkedSolution steps={steps} title="GVF profile — step by step" />
-            </>
-          ) : (
-            <ResultCard title="Check the inputs">
-              <p className="text-sm text-fail">
-                Give a positive discharge, Manning n, reach length and control depth. On a circular
-                section the control must stay below the crown. A control depth at (or extremely
-                close to) critical depth sits on the classification singularity where dy/dx blows
-                up — nudge it into zone 1, 2 or 3.
-              </p>
-            </ResultCard>
-          )}
-        </div>
-      </div>
-    </div>
+          </div>
+        </InputGroup>
+      </>}
+      checks={r ? <>
+        <CheckCard title="Profile" basis={`${r.slopeClass} slope · zone ${r.zone}`} status="info" pillLabel={r.profile} value={r.profile}
+          formula="dy/dx = (S0 − Sf) / (1 − Fr²)"
+          pairs={[{ label: 'March', value: `${r.march} from the ${r.controlAt} control` }, { label: 'Ends at', value: r.terminus }]} />
+        <CheckCard title="Reference depths" basis={r.yn !== null ? (r.yn > r.yc ? 'yn > yc: mild' : r.yn < r.yc ? 'yn < yc: steep' : 'yn = yc') : 'no uniform flow'} status="info"
+          value={r.yn !== null ? f3(r.yn) : '—'} unit="m normal" formula="Manning at S0; Q²T/gA³ = 1"
+          pairs={[{ label: 'Critical yc', value: `${f3(r.yc)} m` }, { label: 'Control Froude', value: f3(r.FrControl) }]} />
+        <CheckCard title="Far-end depth" basis={`${f0(L)} m reach`} status={r.terminus.startsWith('critical') ? 'warn' : 'info'} pillLabel={r.terminus.startsWith('critical') ? 'JUMP' : undefined}
+          value={f3(r.yEnd)} unit="m" pairs={[{ label: 'Control depth', value: `${f3(yControl)} m` }, { label: 'Stations', value: `${r.stations.length}` }]} />
+      </> : (
+        <CheckCard title="Check the inputs" basis="no profile" status="warn" pillLabel="CHECK" value="—" formula="Positive Q, n, L and control depth; keep the control off critical depth." />
+      )}
+      summary={[
+        { label: 'Discharge Q', value: `${f3(Q)} m³/s` }, { label: 'Manning n', value: f3(n) },
+        { label: 'Bed slope S0', value: `${S0} m/m` }, { label: 'Reach length L', value: `${f0(L)} m` },
+        { label: 'Control depth', value: `${f3(yControl)} m (${controlAt})` },
+      ]}
+      drawing={r ? { title: 'Water-surface profile', node: <div data-pdf-drawing><ProfileDrawing result={r} L={L} S0={S0} /></div> } : undefined}
+      results={r ? [
+        { check: 'Normal depth yn', basis: 'Manning at S0', demand: r.yn !== null ? `${f3(r.yn)} m` : '—', status: 'info' },
+        { check: 'Critical depth yc', basis: 'Q²T/(gA³) = 1', demand: `${f3(r.yc)} m`, status: 'info' },
+        { check: 'Profile', basis: 'Chow classification', demand: r.profile, status: 'info' },
+        { check: 'Far-end depth', basis: r.terminus, demand: `${f3(r.yEnd)} m`, status: r.terminus.startsWith('critical') ? 'warn' : 'info' },
+      ] : [{ check: 'Profile', basis: 'no solution', demand: '—', status: 'warn' }]}
+      steps={steps}
+      references={[
+        { topic: 'GVF equation', basis: 'dy/dx = (S0 − Sf)/(1 − Fr²), Sf from Manning', source: 'Chow, Open-Channel Hydraulics §9' },
+        { topic: 'Profile classes', basis: 'M, S, C, H, A by slope; zones 1–3 by y against yn and yc', source: 'Chow §9-3' },
+        { topic: 'Integration', basis: 'fourth-order Runge–Kutta from the control', source: 'Numerical methods' },
+      ]}
+    />
   )
 }
 

@@ -1,60 +1,12 @@
 import { useMemo, useState } from 'react'
 import { designPrestressed } from '../engine/prestressedBeam'
 import { buildPrestressedSolution } from '../lib/prestressedSolution'
-import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
-import { initialLetterhead } from '../lib/letterhead'
-import { Num, Pick, Card } from '../components/qty'
-import { WorkedSolution } from '../components/WorkedSolution'
-import { DimBelow, DimSide } from '../components/dims'
-import { udlStations } from '../components/udl'
-import { DrawingFrame } from '../components/DrawingFrame'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard, type ResultRow } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { PSElevation } from '../components/prestressSketches'
 
 const f1 = (v: number) => v.toFixed(1)
-
-/** Elevation to scale-ish: beam on pin + roller supports, UDL arrows landing
- *  on the top edge, straight eccentric tendon, template dimension lines. */
-function PSElevation({ h, e, span }: { h: number; e: number; span: number }) {
-  const W = 340, HT = 220
-  const x0 = 46, bw = 248
-  const y0 = 74, H = 56
-  const yc = y0 + H / 2, yTendon = Math.min(y0 + H - 5, yc + (e / h) * H)
-  const arrows = udlStations(bw).map((t) => x0 + t * bw)
-  return (
-    <DrawingFrame label="prestressed section">
-      <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block w-full max-w-[380px]" style={{ fontFamily: 'Arial, sans-serif' }}>
-        {/* UDL: top line + arrows touching the beam's top edge */}
-        <line x1={x0} y1={y0 - 26} x2={x0 + bw} y2={y0 - 26} stroke="#5c6675" strokeWidth="1.4" />
-        {arrows.map((x) => (
-          <g key={x} stroke="#5c6675" strokeWidth="1.4">
-            {/* The tip lands ON the top edge (y0). It used to stop at y0 − 0.5,
-                which with a 1.4 stroke reads as a load floating above the beam. */}
-            <line x1={x} y1={y0 - 26} x2={x} y2={y0 - 6} />
-            <path d={`M${x - 3.2} ${y0 - 6} L${x} ${y0} L${x + 3.2} ${y0 - 6} z`} fill="#5c6675" stroke="none" />
-          </g>
-        ))}
-        <text x={x0 + bw / 2} y={y0 - 32} fontSize="8.5" fill="#5c6675" textAnchor="middle">w (D + L)</text>
-        {/* beam */}
-        <rect x={x0} y={y0} width={bw} height={H} fill="#eef3f8" stroke="#37526e" strokeWidth="1.6" />
-        <line x1={x0} y1={yc} x2={x0 + bw} y2={yc} stroke="#a39d8d" strokeWidth="0.8" strokeDasharray="3 4" />
-        <line x1={x0} y1={yTendon} x2={x0 + bw} y2={yTendon} stroke="#0f4c92" strokeWidth="2.2" strokeDasharray="8 4" />
-        <text x={x0 + bw / 2} y={y0 + H + 12} fontSize="8.5" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92" textAnchor="middle">
-          Aps · e = {e} mm below cg
-        </text>
-        {/* supports ON the soffit: pin (triangle apex at the beam) + roller */}
-        <g stroke="#37526e" strokeWidth="1.4" fill="#fff">
-          <path d={`M${x0 + 10} ${y0 + H} L${x0 + 1} ${y0 + H + 15} L${x0 + 19} ${y0 + H + 15} z`} />
-          <line x1={x0 - 5} y1={y0 + H + 15} x2={x0 + 25} y2={y0 + H + 15} />
-          <circle cx={x0 + bw - 10} cy={y0 + H + 7.5} r={7} />
-          <line x1={x0 + bw - 25} y1={y0 + H + 15} x2={x0 + bw + 5} y2={y0 + H + 15} />
-        </g>
-        {/* dimensions (shared template) */}
-        <DimBelow xA={x0} xB={x0 + bw} featY={y0 + H + 18} dY={y0 + H + 40} label={`L = ${span} m`} />
-        <DimSide yA={y0} yB={y0 + H} featX={x0 + bw} dX={x0 + bw + 20} label={`h = ${h} mm`} side="right" />
-        <DimSide yA={yc} yB={yTendon} featX={x0} dX={x0 - 18} label={`e`} side="left" />
-      </svg>
-    </DrawingFrame>
-  )
-}
 
 export default function PrestressedBeam() {
   const [b, setB] = useState(400); const [h, setH] = useState(800)
@@ -65,102 +17,90 @@ export default function PrestressedBeam() {
   const [wSDL, setWSDL] = useState(6); const [wLL, setWLL] = useState(12)
   const [RH, setRH] = useState(75)
   const [klass, setKlass] = useState<'U' | 'T'>('U')
-  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead(''))
 
   const inp = useMemo(() => ({
     b, h, span, fc, fci, Aps, fpu, e, fpj: (fpjPct / 100) * fpu, wSDL, wLL, RH, klass,
   }), [b, h, span, fc, fci, Aps, fpu, e, fpjPct, wSDL, wLL, RH, klass])
   const r = useMemo(() => { try { return designPrestressed(inp) } catch { return null } }, [inp])
   const steps = useMemo(() => (r ? buildPrestressedSolution(inp, r) : []), [inp, r])
-  const badges = ['ACI 318-14', 'PCI', 'NSCP 2015']
 
+  const checks = r ? [
+    { name: 'Strength Mu/φMn', ratio: r.phiMn > 0 ? r.Mu / r.phiMn : 99, ok: r.strengthOK, basis: '§20.3.2.3.1 fps' },
+    { name: 'Service σ,bot / limit', ratio: Number.isFinite(r.limServiceT) ? Math.max(0, -r.service.bot) / r.limServiceT : 0, ok: r.serviceOK, basis: `§24.5.4, class ${klass}` },
+    { name: "Transfer σ,bot / 0.60f'ci", ratio: r.transfer.bot / r.limTransferC, ok: r.transferOK, basis: '§24.5.3' },
+    { name: '1.2Mcr / φMn', ratio: r.phiMn > 0 ? (1.2 * r.Mcr) / r.phiMn : 99, ok: r.crackingOK, basis: '§9.6.2.1' },
+  ] : []
   return (
-    <div className="min-h-screen">
-      <PageHeader title="Prestressed Beam" badges={[...badges, `class ${klass}`]} />
-      {/* PrintReport carries the letterhead card AND the export button in one; this
-          bare one is the fallback for when the design has not solved. */}
-      {!(r) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} /></div>}
-      {r && (
-        <PrintReport docTitle="Prestressed Beam" docCode="PS-01" badges={badges} ok={r.ok}
-          governing={`losses ${r.lossPct.toFixed(1)}% · utilization ${(r.Mu / Math.max(r.phiMn, 1e-9)).toFixed(2)}`}
-          lh={lh} onLhChange={(p) => setLh((s) => ({ ...s, ...p }))}
-          stats={[
-            { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
-            { label: 'fse', value: f1(r.fse), unit: 'MPa' },
-            { label: 'Pe', value: f1(r.Pe), unit: 'kN' },
-          ]}
-          checks={[
-            { name: 'Transfer stresses §24.5.3', ratio: r.transfer.bot / r.limTransferC, ok: r.transferOK },
-            { name: 'Service stresses §24.5.4', ratio: Number.isFinite(r.limServiceT) ? Math.max(0, -r.service.bot) / r.limServiceT : 0, ok: r.serviceOK },
-            { name: 'Strength Mu/φMn', ratio: r.Mu / Math.max(r.phiMn, 1e-9), ok: r.strengthOK },
-            { name: 'φMn ≥ 1.2Mcr', ratio: (1.2 * r.Mcr) / Math.max(r.phiMn, 1e-9), ok: r.crackingOK },
-          ]}
-          data={[
-            ['Section', `${b} × ${h} mm`], ['Span', `${span} m`], ["f'c / f'ci", `${fc} / ${fci} MPa`],
-            ['Tendons', `Aps ${Aps} mm² · fpu ${fpu} · e ${e} mm`], ['Loads', `SDL ${wSDL} · LL ${wLL} kN/m`],
-            ['Losses', `${r.lossPct.toFixed(1)} % → fse ${f1(r.fse)} MPa`],
-          ]}
-          steps={steps}
-          drawing={<PSElevation h={h} e={e} span={span} />}
-          drawingTitle="Prestressed beam" />
+    <WorkspacePage title="Prestressed Beam" badges={['Concrete', `ACI 318-14 · PCI · class ${klass}`]}
+      intro="A pretensioned, bonded, simply supported beam: PCI losses (elastic shortening, creep, shrinkage, relaxation), the §24.5 transfer and service stress limits, fps per §20.3.2.3.1, φMn ≥ 1.2Mcr, Vci/Vcw and camber."
+      report={r ? {
+        docCode: 'PS-01', ok: r.ok,
+        governing: `losses ${r.lossPct.toFixed(1)}% · utilization ${(r.Mu / Math.max(r.phiMn, 1e-9)).toFixed(2)}`,
+        stats: [
+          { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
+          { label: 'fse', value: f1(r.fse), unit: 'MPa' },
+          { label: 'Pe', value: f1(r.Pe), unit: 'kN' },
+        ],
+        checks: checks.map((c) => ({ name: c.name, ratio: c.ratio, ok: c.ok })),
+        data: [
+          ['Section', `${b} × ${h} mm`], ['Span', `${span} m`], ["f'c / f'ci", `${fc} / ${fci} MPa`],
+          ['Tendons', `Aps ${Aps} mm² · fpu ${fpu} · e ${e} mm`], ['Loads', `SDL ${wSDL} · LL ${wLL} kN/m`],
+          ['Losses', `${r.lossPct.toFixed(1)} % → fse ${f1(r.fse)} MPa`],
+        ],
+        steps, drawingTitle: 'Prestressed beam',
+      } : undefined}
+      inputs={<>
+        <InputGroup title="Section and span">
+          <Num label="Width b" unit="mm" value={b} onChange={setB} />
+          <Num label="Depth h" unit="mm" value={h} onChange={setH} />
+          <Num label="Simple span L" unit="m" value={span} onChange={setSpan} />
+          <div />
+          <Num label="f′c (28-day)" unit="MPa" value={fc} onChange={setFc} />
+          <Num label="f′ci (transfer)" unit="MPa" value={fci} onChange={setFci} />
+        </InputGroup>
+        <InputGroup title="Tendons" hint="Pretensioned, bonded.">
+          <Num label="Aps" unit="mm²" value={Aps} onChange={setAps} />
+          <Num label="fpu" unit="MPa" value={fpu} onChange={setFpu} />
+          <Num label="Eccentricity e" unit="mm" value={e} onChange={setE} />
+          <Num label="Jacking" unit="% fpu" value={fpjPct} onChange={setFpjPct} />
+          <Num label="Ambient RH" unit="%" value={RH} onChange={setRH} />
+          <Pick label="Class (§24.5.2)" value={klass} onChange={(v) => setKlass(v as 'U' | 'T')} options={[['U', 'U — uncracked'], ['T', 'T — transition']]} />
+        </InputGroup>
+        <InputGroup title="Loads" hint="Unfactored; self-weight is added.">
+          <Num label="Superimposed DL" unit="kN/m" value={wSDL} onChange={setWSDL} />
+          <Num label="Live load" unit="kN/m" value={wLL} onChange={setWLL} />
+        </InputGroup>
+      </>}
+      checks={r ? <>
+        <CheckCard title="Design" basis={`losses ${r.lossPct.toFixed(1)}%, fse ${f1(r.fse)} MPa`} status={r.ok ? 'pass' : 'fail'} pillLabel={r.ok ? 'DESIGN OK' : 'REVISE'}
+          value={f1(r.Pe)} unit="kN Pe" pairs={[{ label: 'φMn', value: `${f1(r.phiMn)} kN·m` }, { label: 'Net deflection', value: `${f1(r.deltaNet)} mm` }]} />
+        {checks.map((c) => (
+          <CheckCard key={c.name} title={c.name} basis={c.basis} status={c.ok ? 'pass' : 'fail'} value={c.ratio.toFixed(2)} ratio={c.ratio} ratioLabel="Utilization" />
+        ))}
+      </> : (
+        <CheckCard title="Check the inputs" basis="prestressed beam" status="warn" pillLabel="CHECK" value="—" formula="Positive section, span, materials and tendon area." />
       )}
-      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <p className="no-print text-[13px] text-muted">
-          Pretensioned bonded beam: PCI losses
-          (ES/CR/SH/RE), §24.5 transfer & service stress limits, fps per §20.3.2.3.1, φMn ≥ 1.2Mcr, Vci/Vcw, camber.
-        </p>
-        <div className="no-print mt-4 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(330px,1fr)]">
-          <div className="space-y-4">
-            <Card title="Section & span">
-              <Num label="Width b" unit="mm" value={b} onChange={setB} />
-              <Num label="Depth h" unit="mm" value={h} onChange={setH} />
-              <Num label="Simple span L" unit="m" value={span} onChange={setSpan} />
-              <Num label="f'c (28-day)" unit="MPa" value={fc} onChange={setFc} />
-              <Num label="f'ci (transfer)" unit="MPa" value={fci} onChange={setFci} />
-            </Card>
-            <Card title="Tendons" hint="pretensioned · bonded">
-              <Num label="Aps" unit="mm²" value={Aps} onChange={setAps} />
-              <Num label="fpu" unit="MPa" value={fpu} onChange={setFpu} />
-              <Num label="Eccentricity e" unit="mm" value={e} onChange={setE} />
-              <Num label="Jacking (% fpu)" unit="%" value={fpjPct} onChange={setFpjPct} />
-              <Num label="Ambient RH" unit="%" value={RH} onChange={setRH} />
-              <Pick label="Class (§24.5.2)" value={klass} onChange={(v) => setKlass(v as 'U' | 'T')}
-                options={[['U', 'U — uncracked'], ['T', 'T — transition']]} />
-            </Card>
-            <Card title="Loads" hint="unfactored, self-weight auto">
-              <Num label="Superimposed DL" unit="kN/m" value={wSDL} onChange={setWSDL} />
-              <Num label="Live load" unit="kN/m" value={wLL} onChange={setWLL} />
-            </Card>
-          </div>
-          <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-            {r && (
-              <VerdictPanel ok={r.ok} headline={r.ok ? 'DESIGN OK' : 'CHECK FAILED'}
-                governing={`losses ${r.lossPct.toFixed(1)}% · fse ${f1(r.fse)} MPa · ${r.shearNote}`}
-                stats={[
-                  { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
-                  { label: 'Pe', value: f1(r.Pe), unit: 'kN' },
-                  { label: 'Net Δ', value: f1(r.deltaNet), unit: 'mm' },
-                ]}
-                checks={[
-                  { name: 'Strength Mu/φMn', ratio: r.phiMn > 0 ? r.Mu / r.phiMn : 99 },
-                  { name: 'Service σ,bot / limit', ratio: Number.isFinite(r.limServiceT) ? Math.max(0, -r.service.bot) / r.limServiceT : 0 },
-                  { name: 'Transfer σ,bot / 0.60f\'ci', ratio: r.transfer.bot / r.limTransferC },
-                  { name: '1.2Mcr / φMn', ratio: r.phiMn > 0 ? (1.2 * r.Mcr) / r.phiMn : 99 },
-                ]} />
-            )}
-            {r && (
-              <DrawingCard pdfDrawing title="Elevation & tendon profile" meta={`${b}×${h} · L = ${span} m`}>
-                <PSElevation h={h} e={e} span={span} />
-              </DrawingCard>
-            )}
-          </div>
-        </div>
-        {r && (
-          <div className="no-print mt-5">
-            <WorkedSolution steps={steps} title="Prestressed beam — worked solution" />
-          </div>
-        )}
-      </div>
-    </div>
+      summary={[
+        { label: 'Section', value: `${b} × ${h} mm, L ${span} m` },
+        { label: "f'c / f'ci", value: `${fc} / ${fci} MPa` },
+        { label: 'Tendons', value: `Aps ${Aps} mm², fpu ${fpu} MPa, e ${e} mm, ${fpjPct} % jacking` },
+        { label: 'Loads', value: `SDL ${wSDL}, LL ${wLL} kN/m; RH ${RH} %` },
+      ]}
+      drawing={r ? { title: 'Elevation and tendon profile', node: <div data-pdf-drawing><PSElevation h={h} e={e} span={span} /></div> } : undefined}
+      resultsCaption={r ? r.shearNote : undefined}
+      results={r ? [
+        { check: 'Prestress losses', basis: 'ES + CR + SH + RE', demand: `${r.lossPct.toFixed(1)} %`, status: 'info' as const },
+        { check: 'Effective prestress', basis: 'fse, Pe', demand: `${f1(r.fse)} MPa, ${f1(r.Pe)} kN`, status: 'info' as const },
+        ...checks.map((c): ResultRow => ({ check: c.name, basis: c.basis, demand: c.ratio.toFixed(2), limit: '1.00', ratio: c.ratio, status: c.ok ? 'pass' : 'fail' })),
+        { check: 'Net deflection', basis: 'camber − load', demand: `${f1(r.deltaNet)} mm`, status: 'info' as const },
+      ] : [{ check: 'Beam', basis: 'invalid input', demand: '—', status: 'warn' as const }]}
+      steps={steps.length ? steps : [{ title: 'Check the inputs', lines: [{ text: 'Positive section, span, materials and tendon area.' }] }]}
+      references={[
+        { topic: 'Losses', basis: 'elastic shortening, creep, shrinkage, relaxation', source: 'PCI Design Handbook; Zia et al. (1979)' },
+        { topic: 'Stress limits', basis: 'transfer and service, class U / T', source: 'ACI 318-14 §24.5' },
+        { topic: 'Flexural strength', basis: 'fps approximation', source: 'ACI 318-14 §20.3.2.3.1' },
+        { topic: 'Minimum strength', basis: 'φMn ≥ 1.2 Mcr', source: 'ACI 318-14 §9.6.2.1' },
+      ]}
+    />
   )
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState, type VerdictCheck } from '../components/calc'
+import { type LetterheadState, type VerdictCheck } from '../components/calc'
 import { ModelMemberResults } from '../components/ModelMemberResults'
 import type { MemberLoadRequest } from '../lib/modelMemberResults'
 import { initialLetterhead } from '../lib/letterhead'
@@ -10,16 +10,18 @@ import type { CriticalSection } from '../engine/beamSections'
 import { SheetFigure } from '../components/modelSpace/figures'
 import { calcBeamSection } from '../lib/calcFigures'
 import { beamSectionNotes } from '../lib/scheduleFigures'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { beamStressBlock } from '../lib/beamStressBlock'
+import { withStressDiagrams } from '../lib/beamSectionStress'
 import { buildBeamSolution, beamProvidedCapacities } from '../lib/beamSolution'
 import { optimizeBeamRebar, optimizeBeamMember } from '../engine/beamRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
 import { buildRebarSelectionSolution, withRebarSelection } from '../lib/rebarSolution'
-import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard, ResultsTable, type ResultRow } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { Math as KTex } from '../lib/math'
 import { f0, f1, f2 } from '../lib/format'
 import { usePublishPageSnapshot, type PageSnapshot } from '../lib/ai/pageContext'
-import 'katex/dist/katex.min.css'
 
 interface FormState extends BeamDesignInput { fyt: number; legs: number; comprBarDia: number }
 
@@ -162,31 +164,42 @@ export default function BeamDesign() {
   // returns, a second layer, nor the arrangement the sheets draw for the same
   // beam. The callout is composed by the schedule's own `beamSectionNotes`, so
   // the calculator and the schedule cannot word the same section differently.
+  const sectionNotes = useMemo(() => (r ? [
+    `d = ${Math.round(r.d)} mm TO THE ${hogging ? 'BOTTOM' : 'TOP'} FACE`,
+    ...beamSectionNotes(
+      { x: 0, label: '', hogging, design: {
+        bars: r.bars, sAdopt: r.sAdopt, sHinge: r.sHinge, legs: fd.legs, layers: r.layers,
+        comprBars: r.comprBars, comprLayers: r.comprLayers,
+        mode: r.mode, comprEffective: r.comprEffective,
+      } },
+      { b: fd.b, h: fd.h, cover: fd.cover, barDia: fd.barDia, tieDia: fd.stirrupDia },
+    ),
+    // The reason comes from the engine: "enlarge it" is right for a
+    // diverging layout and wrong for a mistyped bar diameter.
+    ...r.flexNotes.map((n) => n.toUpperCase()),
+  ] : []), [r, fd, hogging])
+  // The notes print BELOW the figure as text, not inside the SVG — a long
+  // callout was clipped at the figure's edge.
   const sectionFigure = useMemo(() => {
     if (!r || !sectionGeomOK) return null
     const rect = { b: fd.b, h: fd.h, cover: fd.cover, barDia: fd.barDia, tieDia: fd.stirrupDia }
-    return calcBeamSection({
+    const section = calcBeamSection({
       ...rect, stirrupDia: fd.stirrupDia,
-      bars: r.bars, comprBars: r.comprBars, hogging, spacing: r.sAdopt, d: r.d,
-      // The stack the design detailed, so a [3, 3] face draws two rows and
-      // not six bars shoulder to shoulder on a line the section does not have.
+      bars: r.bars, comprBars: r.comprBars, hogging, spacing: r.sAdopt,
+      // The arrangement the design measured d to — the cut has to show the
+      // layers the note "(4+2)" and the d dimension both speak for.
       layers: r.layers, comprLayers: r.comprLayers,
       title: `SECTION — ${f0(fd.b)}×${f0(fd.h)}`,
-      notes: [
-        ...beamSectionNotes(
-          { x: 0, label: '', hogging, design: {
-            bars: r.bars, sAdopt: r.sAdopt, sHinge: r.sHinge, legs: fd.legs, layers: r.layers,
-            comprBars: r.comprBars, comprLayers: r.comprLayers,
-            mode: r.mode, comprEffective: r.comprEffective,
-          } },
-          rect,
-        ),
-        // The reason comes from the engine: "enlarge it" is right for a
-        // diverging layout and wrong for a mistyped bar diameter.
-        ...r.flexNotes.map((n) => n.toUpperCase()),
-      ],
+      notes: [],
+    })
+    // the strain and stress diagrams, joined to the actual section on its
+    // right at the section's own depth scale
+    return withStressDiagrams(section, {
+      b: fd.b, h: fd.h, d: r.d, dPrime: r.dPrime, fc: fd.fc, fy: fd.fy,
+      s: beamStressBlock(r, fd.fc, fd.fy), hogging,
     })
   }, [r, fd, hogging, sectionGeomOK])
+  const stress = useMemo(() => (r && sectionGeomOK ? beamStressBlock(r, fd.fc, fd.fy) : null), [r, fd.fc, fd.fy, sectionGeomOK])
   // The selection is appended, not prepended: it justifies the bar chosen for
   // the steel the flexure steps above derived, so it reads after them.
   const solution = useMemo(
@@ -308,9 +321,12 @@ export default function BeamDesign() {
       // ρ off the engine is the REQUIRED ratio (As,req / b·d); the bars the
       // schedule actually carries give a larger ρ_prov. Unlabelled, the two
       // were indistinguishable and a checker could not tell which one the
-      // ρmax comparison used.
+      // ρmax comparison used. (Audit fix 5.)
       ['ρ_req / ρ,min / ρ,max', `${r.rho.toFixed(4)} / ${r.rhoMin.toFixed(4)} / ${r.rhoMax.toFixed(4)}`],
       ['ρ_prov (provided bars)', `${(r.AsProv / (fd.b * r.d)).toFixed(4)} (As,prov = ${f0(r.AsProv)} mm²)`],
+      ...(stress ? [['Internal couple', `a = ${f0(stress.a)} mm, c = ${f0(stress.c)} mm, C = ${f1(stress.Cc + stress.Cs)} kN, T = ${f1(stress.T)} kN`] as [string, string]] : []),
+      // the section's notes left the drawing; the PDF keeps them here
+      ...sectionNotes.map((n, i) => [`Section note ${i + 1}`, n] as [string, string]),
     ] as [string, string][],
     steps: solution,
     drawingTitle: 'Beam Section',
@@ -335,277 +351,187 @@ export default function BeamDesign() {
     }))
   }
 
-  return (
-    <div>
-      <PageHeader title="Rectangular RC Beam" badges={['ACI 318-14', 'NSCP 2015']}
-        actions={
-          <div className="flex items-center gap-0.5 rounded-md border border-field-line bg-field p-0.5">
-            {([['single', 'Single section'], ['multi', 'Multiple sections']] as const).map(([v, t]) => (
-              <button key={v} type="button" onClick={() => setMulti(v === 'multi')}
-                className={`rounded px-3 py-1.5 text-[11.5px] font-semibold ${(v === 'multi') === multi ? 'bg-brand text-on-solid' : 'text-muted hover:text-ink'}`}>
-                {t}
-              </button>
-            ))}
-          </div>
-        } />
-      {/* PrintReport carries the letterhead card AND the export button in one; this
-          bare one is the fallback for when the design has not solved. */}
-      {!(reportData) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
-        {reportData && (
-          <PrintReport {...reportData}
-            drawing={sectionFigure ? <SheetFigure drawing={sectionFigure} width={420} /> : null}
-          />
-        )}
-      {/* The saved-project card sits in the SAME container as the letterhead
-          above — without it the card runs edge to edge while every other card
-          obeys the 1500px rail, and the misalignment reads as a broken layout.
-          no-print: a dropdown is meaningless on paper. */}
-      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7">
-        <ModelMemberResults kind="beam" onLoad={loadSaved} />
-      </div>
-      <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
+  const okRow = (ok: boolean): ResultRow['status'] => (ok ? 'pass' : 'fail')
+  const resultRows: ResultRow[] = r ? [
+    ...r.flexNotes.map((n) => ({ check: 'Section', basis: 'detailing', demand: n, status: 'fail' as const })),
+    { check: 'Effective depth d', basis: r.layers.length > 1 ? `dt ${f1(r.dt)} · ȳ ${f1(r.yBar)} mm` : 'single layer', demand: `${f1(r.d)} mm`, status: 'info' },
+    { check: 'Flexure mode', basis: r.mode === 'SRRB' ? `from the ${hogging ? 'top' : 'bottom'} steel alone (§409.7.3.8 bars not counted)` : `compression steel ${r.comprEffective ? 'counted' : "not counted: f's ≤ 0.85f'c"}`, demand: `${r.mode}, φMn,max ${f1(r.phiMnMax)} kN·m`, status: 'info' },
+    { check: 'Tension steel', basis: r.usedMin ? 'ρ_min governs' : `ρ ${r.rho.toFixed(4)}`, demand: `${r.bars}-⌀${fd.barDia} (As ${f0(r.As)} mm²)`, status: 'info' },
+    { check: 'Steel ratio', basis: `ρ_min ${r.rhoMin.toFixed(4)} · ρ_b ${r.rhoB.toFixed(4)}`, demand: r.rho.toFixed(4), limit: `ρ_max ${r.rhoMax.toFixed(4)}`, status: okRow(r.rho <= r.rhoMax + 1e-9) },
+    { check: 'Bar layers', basis: `clear spacing ≥ ${f0(r.sMinClear)} mm`, demand: r.layers.length > 1 ? `${r.layers.length} (${r.layers.join(' + ')})` : '1', limit: `${f0(r.sClear)} mm clear`, status: okRow(r.sClear >= r.sMinClear - 1e-9) },
+    ...(r.mode === 'DRRB' ? [{ check: 'Compression steel', basis: `f's ${f1(r.fsPrime)} MPa${r.fsYields ? '' : ' (not yielding)'}`, demand: r.comprEffective ? `${r.comprBars}-⌀${fd.comprBarDia} (A's ${f0(r.AsPrime)} mm²)` : 'ineffective', status: okRow(r.comprEffective) }] : []),
+    ...(r.comprLayers.length > 0 ? [{ check: 'Compression above NA', basis: `deepest d' ${f0(r.dPrimeExtreme)} mm vs c ${f0(r.cNA)} mm`, demand: r.comprNAOK ? 'above NA' : 'crosses NA', status: okRow(r.comprNAOK) }] : []),
+    { check: 'Concrete shear φVc', basis: `Vc ${f1(r.Vc)} kN`, demand: `${f1(r.phiVc)} kN`, status: 'info' },
+    { check: 'Shear region', basis: REGION[r.region], demand: stirrupText(r), status: r.region === 'inadequate' ? 'fail' : 'pass' },
+    ...(r.region === 'designed' ? [{ check: 'Stirrup spacing', basis: `s_max ${f0(r.sMax)} mm`, demand: `s_req ${f0(r.sReq)} mm`, status: 'info' as const }] : []),
+    { check: 'Hooks (135°)', basis: `bend ⌀ ${f0(r.stirrupBendDia)} mm (4ds)`, demand: `extension ${f0(r.stirrupHookExt)} mm`, status: 'info' },
+  ] : [{ check: 'Section', basis: 'invalid input', demand: detailingNotes(f)[0] ?? 'Enter a valid section.', status: 'warn' }]
 
-      <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
-        <div className="space-y-3.5">
-          <Card title="Section"
-            hint={
-              <label className="no-print flex min-h-[24px] cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-muted">
-                <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-brand" />
-                Auto-select bar ⌀
-              </label>
-            }>
-            <Num label="Width b" unit="mm" value={f.b} onChange={set('b')} min={1} />
-            <Num label="Total depth h" unit="mm" value={f.h} onChange={set('h')} min={1} />
-            <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} min={0} />
-            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={fd.barDia} onChange={set('barDia')} min={1}
-              disabled={autoBar}
-              hint={autoBar ? (adoptedDb ? 'chosen by the optimiser' : 'no compliant ⌀ — see the ranking') : undefined} />
-            <Num label={<>Compr. bar <KTex tex="d_b'" /></>} unit="mm" value={fd.comprBarDia} onChange={set('comprBarDia')} min={1}
-              disabled={autoBar}
-              hint={autoBar ? 'follows the tension bar' : undefined} />
-            <Num label={<>Stirrup <KTex tex="d_s" /></>} unit="mm" value={f.stirrupDia} onChange={set('stirrupDia')} min={1} />
-            <Num label="Stirrup legs" value={f.legs} onChange={set('legs')} min={2} step="1" />
-            {/* A textbook problem states d; a drawing states h and the cover.
-                0 keeps the derived value — see `BeamDesignInput.dGiven`. */}
-            <Num label={<>Effective depth <KTex tex="d" /> (0 = derive)</>} unit="mm"
-              value={f.dGiven ?? 0} onChange={set('dGiven')} />
-          </Card>
-          <Card title="Materials">
-            <Num label={<KTex tex="f'_c" />} unit="MPa" value={f.fc} onChange={set('fc')} />
-            <Num label={<KTex tex="f_y" />} unit="MPa" value={f.fy} onChange={set('fy')} />
-            <Num label={<KTex tex="f_{yt}" />} unit="MPa" value={f.fyt} onChange={set('fyt')} />
-            {/* §425.2.1's third spacing term, 4/3·d_agg. It was fixed at 20 mm,
-                so a textbook beam on a finer mix could not be reproduced. */}
-            <Num label="Max. aggregate size" unit="mm" value={f.aggregate ?? 20} onChange={set('aggregate')} min={1} />
-          </Card>
+  const deflRows: ResultRow[] = deflection ? [
+    { check: 'Minimum thickness', basis: `Table 409.3.1.1 (${deflection.support})`, demand: `h ${f0(f.h)} mm`, limit: `${deflection.hMin.toFixed(0)} mm`, status: deflection.hMinOK ? 'pass' : 'warn' },
+    { check: 'Section state', basis: `Mcr ${deflection.Mcr.toFixed(1)} kN·m`, demand: deflection.cracked ? 'cracked (Ma > Mcr)' : 'uncracked', status: 'info' },
+    { check: 'Effective inertia', basis: `Ig ${(deflection.Ig / 1e6).toFixed(0)} · Icr ${(deflection.Icr / 1e6).toFixed(0)} ×10⁶ mm⁴`, demand: `Ie ${(deflection.Ie / 1e6).toFixed(0)} ×10⁶ mm⁴`, status: 'info' },
+    { check: 'Immediate dead δD', basis: 'Branson Ie', demand: `${deflection.deltaD.toFixed(1)} mm`, status: 'info' },
+    { check: 'Immediate live δL', basis: 'L/360', demand: `${deflection.deltaL.toFixed(1)} mm`, limit: `${deflection.limitL360.toFixed(1)} mm`, ratio: deflection.deltaL / Math.max(deflection.limitL360, 1e-9), status: okRow(deflection.liveOK) },
+    { check: 'Long-term total', basis: `λΔ ${deflection.lambdaDelta.toFixed(3)} (ξ = 2.0), L/240`, demand: `${deflection.deltaTotal.toFixed(1)} mm`, limit: `${deflection.limitL240.toFixed(1)} mm`, ratio: deflection.deltaTotal / Math.max(deflection.limitL240, 1e-9), status: okRow(deflection.totalOK) },
+  ] : []
 
-          <Card title="Serviceability (optional)">
-            <Num label="Span" unit="m" value={span} onChange={setSpan} />
-            <Pick label="Support" value={support} onChange={(v) => setSupport(v as BeamSupport)}
-              options={[['simple', 'Simply supported'], ['one-end', 'One end continuous'], ['both-ends', 'Both ends continuous'], ['cantilever', 'Cantilever']]} />
-            <Num label={<>Dead load <KTex tex="w_D" /></>} unit="kN/m" value={svcWD} onChange={setSvcWD} />
-            <Num label={<>Live load <KTex tex="w_L" /></>} unit="kN/m" value={svcWL} onChange={setSvcWL} />
-          </Card>
-
-          <Card title="Factored demands">
-            {!multi && <>
-              <Num label={<KTex tex="M_u" />} unit="kN·m" value={f.Mu} onChange={set('Mu')} />
-              <Num label={<KTex tex="V_u" />} unit="kN" value={f.Vu} onChange={set('Vu')} />
-            </>}
-            {hogging && !multi && (
-              <p className="col-span-full text-xs text-muted">Negative Mu — hogging: designed with |Mu|; the tension steel goes at the TOP.</p>
-            )}
-          </Card>
-
-          {multi && (
-            <fieldset className="rounded-lg border border-hairline bg-sheet p-4">
-              <legend className="px-2 text-[13.5px] font-bold text-ink">Critical sections</legend>
-              <div className="no-print mb-3 flex flex-wrap items-center gap-2">
-                <button type="button"
-                  onClick={() => setSections((ss) => [...ss, { id: uid++, label: `Section ${ss.length + 1}`, x: 0, Mu: 50, Vu: 30 }])}
-                  className="rounded-md border border-brand-line bg-brand-tint px-3 py-1.5 text-sm font-semibold text-brand hover:bg-brand-tint">
-                  + Add section
-                </button>
-                <span className="text-xs text-muted">or auto-detect from <Link to="/beam-analysis" className="text-brand hover:underline">Beam Analysis</Link>. Negative Mu = hogging (top steel).</span>
-              </div>
-              <div className="space-y-3">
-                {sections.map((s) => (
-                  <div key={s.id} className={`rounded-lg border p-3 ${s.id === active?.id ? 'border-brand bg-brand-tint/40' : 'border-hairline bg-sheet-2'}`}>
-                    <div className="mb-2 flex items-center justify-between">
-                      <input value={s.label} onChange={(e) => setSec(s.id, { label: e.target.value })}
-                        className="w-1/2 rounded border border-transparent bg-transparent px-1 text-xs font-bold uppercase tracking-wide text-muted focus:border-field-line focus:bg-sheet" />
-                      <span className="flex gap-3">
-                        <button type="button" onClick={() => setSelId(s.id)} className="text-xs text-brand hover:underline">view</button>
-                        <button type="button" onClick={() => setSections((ss) => ss.filter((q) => q.id !== s.id))} className="text-xs text-fail hover:underline">remove</button>
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <Num label="x" unit="m" value={s.x} onChange={(v) => setSec(s.id, { x: v })} />
-                      <Num label={<KTex tex="M_u" />} unit="kN·m" value={s.Mu} onChange={(v) => setSec(s.id, { Mu: v })} />
-                      <Num label={<KTex tex="V_u" />} unit="kN" value={s.Vu} onChange={(v) => setSec(s.id, { Vu: v })} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </fieldset>
-          )}
-          {selection && (
-            <RebarRanking selection={selection}
-              title={multi ? 'Bar selection — whole member' : 'Bar selection'} />
-          )}
-        </div>
-
-        <div className="space-y-3.5 lg:sticky lg:top-14 lg:self-start">
-          {r && (
-            <VerdictPanel
-              ok={allOK}
-              headline={allOK
-                ? `DESIGN OK — ${r.mode}, ${r.layers.length > 1 ? `${r.layers.length} layers` : 'single layer'}`
-                : 'CHECK FAILED — revise the section'}
-              governing={`Governing: flexure · utilization ${cap ? (demand.Mu / cap.phiMn).toFixed(2) : '—'}${r.mode === 'DRRB' ? ' · DRRB (compression steel engaged)' : ''}`}
-              stats={[
-                { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${fd.barDia}`, unit: hogging ? 'top' : 'bottom' },
-                { label: 'Stirrups', value: r.sAdopt > 0 ? `⌀${f.stirrupDia}` : '—', unit: r.sAdopt > 0 ? `${f.legs}-leg @${f0(r.sAdopt)}` : REGION[r.region] },
-                { label: 'Eff. depth d', value: f0(r.d), unit: 'mm' },
-              ]}
-              checks={checks}
-              footnote={`ρ = ${r.rho.toFixed(4)} within ρmin ${r.rhoMin.toFixed(4)} … ρmax ${r.rhoMax.toFixed(4)} — §9.6.1.2 / §21.2.2`}
-            />
-          )}
-          {multi && (
-            <ResultCard title="Section schedule">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-xs">
-                  <thead>
-                    <tr className="text-left uppercase tracking-wide text-muted">
-                      <th className="py-1 pr-2 font-semibold">Section</th>
-                      <th className="py-1 pr-2 font-semibold">Mode</th>
-                      <th className="py-1 pr-2 font-semibold">Tension</th>
-                      <th className="py-1 pr-2 font-semibold">Compr.</th>
-                      <th className="py-1 font-semibold">Stirrups</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sections.map((s, i) => {
-                      const d = designs[i]
-                      const bad = d ? !sectionOK(d) : true
-                      return (
-                        <tr key={s.id} onClick={() => setSelId(s.id)}
-                          className={`cursor-pointer border-t border-hairline-2 hover:bg-brand-tint ${
-                            bad ? 'bg-fail-tint text-fail' : ''} ${s.id === active?.id ? 'outline outline-1 outline-brand' : ''}`}>
-                          <td className="py-1 pr-2">{s.label}{s.Mu < 0 ? ' (hog)' : ''}</td>
-                          <td className="py-1 pr-2">{d ? d.mode : '—'}</td>
-                          <td className="py-1 pr-2">{d ? `${d.bars}⌀${fd.barDia}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}` : '—'}</td>
-                          <td className="py-1 pr-2">{d && d.comprBars > 0 ? `${d.comprBars}⌀${fd.comprBarDia}` : '—'}</td>
-                          <td className="py-1">{d ? (d.sAdopt > 0 ? `@${f0(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠') : '—'}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <p className="mt-1 text-[11px] text-muted">Click a row to view its drawing, results and worked solution. Red rows have errors.</p>
-            </ResultCard>
-          )}
-
-          <DrawingCard pdfDrawing title={`Section${multi && active ? ` — ${active.label}` : ''}`} meta={`${f0(f.b)} × ${f0(f.h)} · to scale`}>
-            {r && sectionFigure ? (
-              <SheetFigure drawing={sectionFigure} width={420} />
-            ) : (
-              /* Say WHICH input is wrong. "d must be positive" was the only
-                 reason ever printed, and it was the wrong one whenever f'c, fy
-                 or a bar diameter was what the form actually got. */
-              <p className="py-8 text-center text-sm text-faint">
-                {detailingNotes(f)[0] ?? 'Enter a valid section.'}
-              </p>
-            )}
-          </DrawingCard>
-
-          {r && (
-            <ResultCard title={`Results${multi && active ? ` — ${active.label}` : ''}`}>
-              {r.flexNotes.map((n, k) => (
-                <Row key={k} alert label="⚠ Section" value={n} />
-              ))}
-              {hogging && <Row label="Orientation" value="hogging (−Mu)" sub="tension steel at the top" />}
-              <Row label="Effective depth d" value={`${f1(r.d)} mm`}
-                sub={r.layers.length > 1 ? `dt=${f1(r.dt)} · ȳ=${f1(r.yBar)} mm` : undefined} />
-              <Row label="Flexure mode" value={r.mode}
-                sub={r.mode === 'SRRB'
-                  // THE SECTION DRAWING SHOWS BARS THIS NUMBER DOES NOT USE.
-                  // Singly reinforced means φMn came from the tension face
-                  // alone; anything drawn on the other face is the continuity
-                  // steel §409.7.3.8 asks for and the hangers the stirrups
-                  // need. The schedule and the report say the same sentence
-                  // under their own cuts — see `barsNotCounted`.
-                  ? `φMn,max=${f1(r.phiMnMax)} kN·m · from the ${hogging ? 'top' : 'bottom'} steel alone — bars drawn on the other face are continuity/detailing (§409.7.3.8) and are not counted`
-                  : `φMn,max=${f1(r.phiMnMax)} kN·m · compression steel ${r.comprEffective ? 'counted' : "not counted: f's ≤ 0.85f'c"}`} />
-              <Row label="Tension steel" value={`${r.bars} ⌀${f.barDia} mm`}
-                sub={`As=${f0(r.As)} mm² · ${r.usedMin ? 'ρ_min' : `ρ=${r.rho.toFixed(4)}`}`} />
-              <Row label="ρ limits"
-                value={`ρ=${r.rho.toFixed(4)}`}
-                sub={`ρ_min=${r.rhoMin.toFixed(4)} · ρ_b=${r.rhoB.toFixed(4)} · ρ_max=${r.rhoMax.toFixed(4)}`} />
-              <Row label="Layers" value={r.layers.length > 1 ? `${r.layers.length} (${r.layers.join(' + ')})` : '1'}
-                sub={`s_clear=${f0(r.sClear)} ≥ ${f0(r.sMinClear)} mm`} />
-              {r.mode === 'DRRB' && (
-                <Row alert={!r.comprEffective} label="Compression steel"
-                  value={r.comprEffective ? `${r.comprBars} ⌀${f.comprBarDia} mm` : '✗ ineffective'}
-                  sub={r.comprEffective
-                    ? `A's=${f0(r.AsPrime)} mm² · f's=${f1(r.fsPrime)} MPa${r.fsYields ? '' : ' (n.y.)'}`
-                    : `f's=${f1(r.fsPrime)} ≤ 0.85f'c`} />
-              )}
-              {r.comprLayers.length > 0 && (
-                <Row label="Compr. layers"
-                  value={r.comprLayers.length > 1 ? `${r.comprLayers.length} (${r.comprLayers.join(' + ')})` : '1'}
-                  sub={`d'=${f1(r.dPrime)} mm · s'_clear=${f0(r.comprSClear)} ≥ ${f0(r.comprSMinClear)}`} />
-              )}
-              {r.comprLayers.length > 0 && (
-                <Row alert={!r.comprNAOK} label="NA check" value={r.comprNAOK ? '✓ above NA' : '✗ crosses NA'}
-                  sub={`deepest d'=${f0(r.dPrimeExtreme)} vs c=${f0(r.cNA)} mm`} />
-              )}
-              <Row label={<KTex tex="\phi V_c" />} value={`${f1(r.phiVc)} kN`} sub={`Vc=${f1(r.Vc)}`} />
-              <Row alert={r.region === 'inadequate'} label="Shear" value={REGION[r.region]} />
-              <Row label="Stirrups" value={stirrupText(r)}
-                sub={r.region === 'designed' ? `s_req=${f0(r.sReq)} · s_max=${f0(r.sMax)} mm` : undefined} />
-              <Row label="Hooks (135°)" value={`ext ${f0(r.stirrupHookExt)} mm`}
-                sub={`bend Ø ${f0(r.stirrupBendDia)} mm (4ds)`} />
-            </ResultCard>
-          )}
-          {deflection && (
-            <ResultCard title={<span className="flex items-center justify-between">Serviceability — ACI 318-14 §24.2
-              <span className={`rounded px-1.5 py-px font-mono text-[10px] font-semibold ${deflection.liveOK && deflection.totalOK && deflection.hMinOK ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
-                {deflection.liveOK && deflection.totalOK && deflection.hMinOK ? 'PASS' : 'CHECK'}</span></span>}>
-              <Row label="Min. thickness h_min" value={`${deflection.hMin.toFixed(0)} mm`}
-                alert={!deflection.hMinOK}
-                sub={`Table 409.3.1.1 (${deflection.support})${deflection.hMinOK ? ' — h ≥ h_min ✓, deflection check waivable' : ' — h < h_min ✗, deflection governs'}`} />
-              <Row label="Section state" value={deflection.cracked ? 'Cracked (Ma > Mcr)' : 'Uncracked'} />
-              <Row label={<><KTex tex="I_g" /> (gross)</>} value={`${(deflection.Ig / 1e6).toFixed(0)} ×10⁶ mm⁴`} />
-              <Row label={<><KTex tex="I_{cr}" /> (cracked)</>} value={`${(deflection.Icr / 1e6).toFixed(0)} ×10⁶ mm⁴`} />
-              <Row label={<><KTex tex="M_{cr}" /></>} value={`${deflection.Mcr.toFixed(1)} kN·m`} />
-              <Row label={<><KTex tex="I_e" /> (Branson)</>} value={`${(deflection.Ie / 1e6).toFixed(0)} ×10⁶ mm⁴`} />
-              <Row label={<>Immed. dead <KTex tex="\delta_D" /></>} value={`${deflection.deltaD.toFixed(1)} mm`} />
-              <Row label={<>Immed. live <KTex tex="\delta_L" /></>} value={`${deflection.deltaL.toFixed(1)} mm`}
-                alert={!deflection.liveOK}
-                sub={`L/360 = ${deflection.limitL360.toFixed(1)} mm${deflection.liveOK ? ' ✓' : ' ✗'}`} />
-              <Row label={<>Long-term <KTex tex="\lambda_\Delta" /></>}
-                value={deflection.lambdaDelta.toFixed(3)}
-                sub="ξ=2.0 (≥5 yr), §24.2.4.1.1" />
-              <Row label={<>Total <KTex tex="\delta_{total}" /></>}
-                value={`${deflection.deltaTotal.toFixed(1)} mm`}
-                alert={!deflection.totalOK}
-                sub={`L/240 = ${deflection.limitL240.toFixed(1)} mm${deflection.totalOK ? ' ✓' : ' ✗'}`} />
-            </ResultCard>
-          )}
-        </div>
-      </div>
-
-      <div className="no-print">
-        {solution && (
-          <WorkedSolution steps={solution}
-            title={multi && active ? `Calculation report — ${active.label}` : 'Calculation report — worked solution'} />
-        )}
-      </div>
-      </div>
+  const modeToggle = (
+    <div className="flex items-center gap-0.5 rounded-md border border-field-line bg-field p-0.5">
+      {([['single', 'Single section'], ['multi', 'Multiple sections']] as const).map(([v, t]) => (
+        <button key={v} type="button" onClick={() => setMulti(v === 'multi')}
+          className={`rounded px-3 py-1.5 text-[11.5px] font-semibold ${(v === 'multi') === multi ? 'bg-brand text-on-solid' : 'text-muted hover:text-ink'}`}>
+          {t}
+        </button>
+      ))}
     </div>
+  )
+  const scheduleTable = (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="text-left uppercase tracking-wide text-muted">
+            <th className="py-1 pr-2 font-semibold">Section</th><th className="py-1 pr-2 font-semibold">Mode</th>
+            <th className="py-1 pr-2 font-semibold">Tension</th><th className="py-1 pr-2 font-semibold">Compr.</th><th className="py-1 font-semibold">Stirrups</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sections.map((s, i) => {
+            const d = designs[i]
+            const bad = d ? !sectionOK(d) : true
+            return (
+              <tr key={s.id} onClick={() => setSelId(s.id)}
+                className={`cursor-pointer border-t border-hairline-2 hover:bg-brand-tint ${bad ? 'bg-fail-tint text-fail' : ''} ${s.id === active?.id ? 'outline outline-1 outline-brand' : ''}`}>
+                <td className="py-1 pr-2">{s.label}{s.Mu < 0 ? ' (hog)' : ''}</td>
+                <td className="py-1 pr-2">{d ? d.mode : '—'}</td>
+                <td className="py-1 pr-2">{d ? `${d.bars}⌀${fd.barDia}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}` : '—'}</td>
+                <td className="py-1 pr-2">{d && d.comprBars > 0 ? `${d.comprBars}⌀${fd.comprBarDia}` : '—'}</td>
+                <td className="py-1">{d ? (d.sAdopt > 0 ? `@${f0(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠') : '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[11px] text-muted">Click a row to view its drawing, results and worked solution. Red rows have errors.</p>
+    </div>
+  )
+  const { docTitle: _dt, badges: _bg, lh: _lh, onLhChange: _ol, ...pdf } = reportData ?? ({} as NonNullable<typeof reportData>)
+  void _dt; void _bg; void _lh; void _ol
+
+  return (
+    <WorkspacePage title="Rectangular RC Beam" badges={['Concrete', 'ACI 318-14 · NSCP 2015']}
+      intro="A rectangular reinforced-concrete beam: flexure singly or doubly reinforced with bar layers checked for clear spacing, shear with designed stirrups and 135° hooks, and the §424.2 serviceability check when a span and service loads are given. The bar diameter can be chosen by the optimiser or fixed to check an existing drawing."
+      actions={modeToggle}
+      report={reportData ? pdf : undefined}
+      inputs={<>
+        <div className="no-print"><ModelMemberResults kind="beam" onLoad={loadSaved} /></div>
+        <InputGroup title="Section">
+          <label className="col-span-2 flex cursor-pointer items-center gap-2 text-[12.5px] font-semibold text-ink">
+            <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)} className="h-3.5 w-3.5 accent-brand" />
+            Auto-select bar ⌀
+          </label>
+          <Num label="Width b" unit="mm" value={f.b} onChange={set('b')} min={1} />
+          <Num label="Total depth h" unit="mm" value={f.h} onChange={set('h')} min={1} />
+          <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} min={0} />
+          <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={fd.barDia} onChange={set('barDia')} min={1} disabled={autoBar}
+            hint={autoBar ? (adoptedDb ? 'chosen by the optimiser' : 'no compliant ⌀ — see the ranking') : undefined} />
+          <Num label={<>Compr. bar <KTex tex="d_b'" /></>} unit="mm" value={fd.comprBarDia} onChange={set('comprBarDia')} min={1} disabled={autoBar}
+            hint={autoBar ? 'follows the tension bar' : undefined} />
+          <Num label={<>Stirrup <KTex tex="d_s" /></>} unit="mm" value={f.stirrupDia} onChange={set('stirrupDia')} min={1} />
+          <Num label="Stirrup legs" value={f.legs} onChange={set('legs')} min={2} step="1" />
+          <Num label={<>Depth <KTex tex="d" /> (0 = derive)</>} unit="mm" value={f.dGiven ?? 0} onChange={set('dGiven')} />
+        </InputGroup>
+        <InputGroup title="Materials">
+          <Num label={<KTex tex="f'_c" />} unit="MPa" value={f.fc} onChange={set('fc')} />
+          <Num label={<KTex tex="f_y" />} unit="MPa" value={f.fy} onChange={set('fy')} />
+          <Num label={<KTex tex="f_{yt}" />} unit="MPa" value={f.fyt} onChange={set('fyt')} />
+          <Num label="Max. aggregate" unit="mm" value={f.aggregate ?? 20} onChange={set('aggregate')} min={1} />
+        </InputGroup>
+        {!multi ? (
+          <InputGroup title="Factored demands" hint={hogging ? 'Negative Mu — hogging: designed with |Mu|; the tension steel goes at the TOP.' : undefined}>
+            <Num label={<KTex tex="M_u" />} unit="kN·m" value={f.Mu} onChange={set('Mu')} />
+            <Num label={<KTex tex="V_u" />} unit="kN" value={f.Vu} onChange={set('Vu')} />
+          </InputGroup>
+        ) : (
+          <InputGroup title="Critical sections" hint="Negative Mu = hogging (top steel). Or auto-detect them from Beam Analysis.">
+            {sections.map((s) => (
+              <div key={s.id} className={`col-span-2 rounded-lg border p-2.5 ${s.id === active?.id ? 'border-brand bg-brand-tint/40' : 'border-hairline bg-sheet-2'}`}>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <input value={s.label} onChange={(e) => setSec(s.id, { label: e.target.value })} aria-label="Section label"
+                    className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 text-xs font-bold uppercase tracking-wide text-muted focus:border-field-line focus:bg-sheet" />
+                  <button type="button" onClick={() => setSelId(s.id)} className="text-xs text-brand hover:underline">view</button>
+                  <button type="button" onClick={() => setSections((ss) => ss.filter((q) => q.id !== s.id))} className="text-xs text-fail hover:underline">remove</button>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Num label="x" unit="m" value={s.x} onChange={(v) => setSec(s.id, { x: v })} />
+                  <Num label={<KTex tex="M_u" />} unit="kN·m" value={s.Mu} onChange={(v) => setSec(s.id, { Mu: v })} />
+                  <Num label={<KTex tex="V_u" />} unit="kN" value={s.Vu} onChange={(v) => setSec(s.id, { Vu: v })} />
+                </div>
+              </div>
+            ))}
+            <div className="col-span-2 flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => setSections((ss) => [...ss, { id: uid++, label: `Section ${ss.length + 1}`, x: 0, Mu: 50, Vu: 30 }])}
+                className="rounded-md border border-field-line px-2 py-0.5 text-[11px] font-semibold text-brand hover:bg-brand-tint">+ Add section</button>
+              <Link to="/beam-analysis" className="text-[11px] font-semibold text-brand hover:underline">from Beam Analysis</Link>
+            </div>
+          </InputGroup>
+        )}
+        <InputGroup title="Serviceability (optional)" hint="Enter a span and service loads to run §424.2.">
+          <Num label="Span" unit="m" value={span} onChange={setSpan} />
+          <Pick label="Support" value={support} onChange={(v) => setSupport(v as BeamSupport)}
+            options={[['simple', 'Simply supported'], ['one-end', 'One end continuous'], ['both-ends', 'Both ends continuous'], ['cantilever', 'Cantilever']]} />
+          <Num label={<>Dead <KTex tex="w_D" /></>} unit="kN/m" value={svcWD} onChange={setSvcWD} />
+          <Num label={<>Live <KTex tex="w_L" /></>} unit="kN/m" value={svcWL} onChange={setSvcWL} />
+        </InputGroup>
+      </>}
+      checks={r && cap ? <>
+        <CheckCard title={multi && active ? `Design — ${active.label}` : 'Design'} basis={`${r.mode}, ${r.layers.length > 1 ? `${r.layers.length} layers` : 'single layer'}`}
+          status={allOK ? 'pass' : 'fail'} pillLabel={allOK ? 'DESIGN OK' : 'REVISE'}
+          value={`${r.bars}-⌀${fd.barDia}`} unit={hogging ? 'top' : 'bottom'}
+          pairs={[{ label: 'Stirrups', value: r.sAdopt > 0 ? `⌀${f.stirrupDia} ${f.legs}-leg @${f0(r.sAdopt)}` : REGION[r.region] }, { label: 'Eff. depth d', value: `${f0(r.d)} mm` }]} />
+        {checks.map((c) => (
+          <CheckCard key={c.name} title={c.name} basis={c.ratio === null ? 'not run' : 'ACI 318-14 / NSCP 2015'}
+            status={c.ratio === null ? 'info' : c.ratio <= 1.0001 ? 'pass' : 'fail'} pillLabel={c.ratio === null ? 'NOT RUN' : undefined}
+            value={c.ratio === null ? '—' : f2(c.ratio)} formula={c.ratio === null ? c.note : undefined}
+            ratio={c.ratio ?? undefined} ratioLabel="Utilization" />
+        ))}
+      </> : (
+        <CheckCard title="Check the inputs" basis="beam section" status="warn" pillLabel="CHECK" value="—" formula={detailingNotes(f)[0] ?? 'Enter a valid section.'} />
+      )}
+      summary={[
+        { label: 'Section b × h', value: `${f0(f.b)} × ${f0(f.h)} mm, cover ${f0(f.cover)} mm` },
+        { label: "Materials f'c / fy / fyt", value: `${f0(f.fc)} / ${f0(f.fy)} / ${f0(f.fyt)} MPa` },
+        { label: 'Bars', value: `⌀${fd.barDia} tension, ⌀${fd.comprBarDia} compr., ⌀${f.stirrupDia} ${f.legs}-leg stirrups` },
+        { label: multi && active ? `Demands (${active.label})` : 'Demands', value: `Mu ${f1(demand.Mu)} kN·m${hogging ? ' (hogging)' : ''}, Vu ${f1(demand.Vu)} kN` },
+      ]}
+      drawing={{ title: `Section${multi && active ? ` — ${active.label}` : ''}`, node: r && sectionFigure ? (
+        <div>
+          <div data-pdf-drawing><SheetFigure drawing={sectionFigure} width={900} /></div>
+          {sectionNotes.length > 0 && (
+            <div className="mt-4 border-t border-hairline pt-3">
+              <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-[.14em] text-ink-2">Section notes</div>
+              <ol className="list-decimal space-y-1 pl-5 font-mono text-[11.5px] leading-snug text-ink">
+                {sectionNotes.map((n, i) => <li key={i}>{n}</li>)}
+              </ol>
+            </div>
+          )}
+        </div>
+      ) : <p className="py-8 text-center text-sm text-faint">{detailingNotes(f)[0] ?? 'Enter a valid section.'}</p> }}
+      results={resultRows}
+      resultsCaption={r ? `ρ = ${r.rho.toFixed(4)} within ρmin ${r.rhoMin.toFixed(4)} … ρmax ${r.rhoMax.toFixed(4)} — §9.6.1.2 / §21.2.2` : undefined}
+      extraSections={[
+        ...(multi ? [{ title: 'Section schedule', node: scheduleTable }] : []),
+        ...(deflection ? [{ title: 'Serviceability — ACI 318-14 §24.2', node: <ResultsTable rows={deflRows} /> }] : []),
+        ...(selection ? [{ title: multi ? 'Bar selection — whole member' : 'Bar selection', node: <RebarRanking selection={selection} title="Ranked bar choices" /> }] : []),
+      ]}
+      steps={solution ?? [{ title: 'Check the inputs', lines: [{ text: detailingNotes(f)[0] ?? 'Enter a valid section.' }] }]}
+      references={[
+        { topic: 'Flexure', basis: 'rectangular stress block, SRRB/DRRB, φ by strain', source: 'ACI 318-14 §22.2, §21.2; NSCP 2015 §422' },
+        { topic: 'Minimum and maximum steel', basis: 'ρmin, tension-controlled limit', source: 'ACI 318-14 §9.6.1.2, §21.2.2' },
+        { topic: 'Shear', basis: 'Vc and stirrup design, spacing limits', source: 'ACI 318-14 §22.5, §9.7.6.2' },
+        { topic: 'Bar spacing', basis: 'clear spacing ≥ max(25 mm, db, 4/3 dagg)', source: 'ACI 318-14 §25.2.1' },
+        { topic: 'Deflection', basis: 'h_min table, Branson Ie, long-term λΔ', source: 'ACI 318-14 §24.2; NSCP 2015 Table 409.3.1.1' },
+      ]}
+    />
   )
 }

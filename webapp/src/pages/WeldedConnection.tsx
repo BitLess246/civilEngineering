@@ -2,48 +2,24 @@ import { useState } from 'react'
 import { solveWeldedConnection, weldedConnectionSolution, type WeldSegment } from '../engine/weldedConnection'
 import { FEXX_BY_CLASS, type ElectrodeClass } from '../engine/steelDesign'
 import { basisFactor, SAFETY, demandLabel, type DesignBasis } from '../engine/designBasis'
-import { WorkedSolution } from '../components/WorkedSolution'
-import { ReportControls } from '../components/ReportControls'
-import { PageHeader } from '../components/calc'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { WeldedJointMechanics } from '../components/WeldedJointMechanics'
+import { W_SORTED, shapeByName } from '../engine/aiscSections'
+import { defaultColumn, flangeTipSpan, columnForFlange } from '../lib/connectionMechanics'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
 
 // Bracket plate: two vertical fillet lines 200 apart, 250 mm tall.
+/** Every W in the catalogue, light to heavy — for the drawing's column pick. */
+const W_OPTIONS: [string, string][] = W_SORTED.map((w) => [w.name, w.name])
+
 const DEFAULT_SEGS: WeldSegment[] = [
   { id: 'L', x1: 0, y1: 0, x2: 0, y2: 250 },
   { id: 'R', x1: 200, y1: 0, x2: 200, y2: 250 },
 ]
-
-function WeldPlot({ r, segs, px, py }: { r: ReturnType<typeof solveWeldedConnection>; segs: WeldSegment[]; px: number; py: number }) {
-  const xs = segs.flatMap((s) => [s.x1, s.x2]).concat([r.Cx, px])
-  const ys = segs.flatMap((s) => [s.y1, s.y2]).concat([r.Cy, py])
-  const minX = Math.min(...xs), maxX = Math.max(...xs)
-  const minY = Math.min(...ys), maxY = Math.max(...ys)
-  const pad = 40, w = 380, h = 300
-  const sx = (maxX - minX) || 1, sy = (maxY - minY) || 1
-  const sc = Math.min((w - 2 * pad) / sx, (h - 2 * pad) / sy)
-  const X = (x: number) => pad + (x - minX) * sc
-  const Y = (y: number) => h - pad - (y - minY) * sc   // flip Y up
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full">
-      {segs.map((s) => (
-        <line key={s.id} x1={X(s.x1)} y1={Y(s.y1)} x2={X(s.x2)} y2={Y(s.y2)} stroke="#0056b3" strokeWidth={4} strokeLinecap="round" />
-      ))}
-      {r.points.map((p, i) => (
-        <circle key={i} cx={X(p.x)} cy={Y(p.y)} r={i === r.criticalIndex ? 6 : 3}
-          fill={i === r.criticalIndex ? '#dc2626' : '#94a3b8'} />
-      ))}
-      {/* centroid */}
-      <circle cx={X(r.Cx)} cy={Y(r.Cy)} r={4} fill="none" stroke="#059669" strokeWidth={1.5} />
-      <line x1={X(r.Cx) - 8} y1={Y(r.Cy)} x2={X(r.Cx) + 8} y2={Y(r.Cy)} stroke="#059669" strokeWidth={1} />
-      <line x1={X(r.Cx)} y1={Y(r.Cy) - 8} x2={X(r.Cx)} y2={Y(r.Cy) + 8} stroke="#059669" strokeWidth={1} />
-      {/* load point + vector */}
-      <circle cx={X(px)} cy={Y(py)} r={4} fill="#f59e0b" />
-      <line x1={X(px)} y1={Y(py)} x2={X(r.Cx)} y2={Y(r.Cy)} stroke="#f59e0b" strokeDasharray="4 3" strokeWidth={1} />
-    </svg>
-  )
-}
 
 export default function WeldedConnection() {
   const [segs, setSegs] = useState<WeldSegment[]>(DEFAULT_SEGS)
@@ -63,6 +39,10 @@ export default function WeldedConnection() {
   // the sheet saying which basis the number belonged to. The basis is now the
   // control, and it sets the factor (phi = 0.75, or 1/Omega = 1/2.00).
   const [basis, setBasis] = useState<DesignBasis>('LRFD')
+  // DRAWING: the column the bracket is welded to, and the bracket plate's
+  // thickness (which also bounds the fillet size along its edge, §J2.2b).
+  const [colName, setColName] = useState('auto')
+  const [tPlate, setTPlate] = useState(12)
   const phi = basisFactor(basis, 'connection')
 
   const r = solveWeldedConnection({ segments: segs, size, FEXX, phi, load: { P, angleDeg: angle, px, py } })
@@ -72,118 +52,104 @@ export default function WeldedConnection() {
   const addSeg = () => setSegs((ss) => [...ss, { id: `W${ss.length + 1}`, x1: 0, y1: 0, x2: 100, y2: 0 }])
   const delSeg = (i: number) => setSegs((ss) => ss.filter((_, j) => j !== i).map((s, k) => ({ ...s, id: `W${k + 1}` })))
 
+  const steps = weldedConnectionSolution({ segments: segs, size, FEXX, phi, load: { P, angleDeg: angle, px, py } }, r)
+  const ratio = r.capacityPerLen > 0 ? r.fMax / r.capacityPerLen : undefined
+  const report = {
+    docCode: 'S-WC',
+    ok: r.ok,
+    governing: `f_max ${f2(r.fMax)} / ${f2(r.capacityPerLen)} N/mm (${basis}) · ${segs.length} segments, ${f2(r.Lw)} mm of weld`,
+    stats: [
+      { label: `Maximum ${demandLabel(basis, 'P')}`, value: f2(r.maxP), unit: 'kN' },
+      { label: 'Required leg', value: f2(r.reqSize), unit: 'mm' },
+      { label: 'Torsion T', value: f2(r.T / 1000), unit: 'kN·m' },
+    ],
+    checks: [{ name: 'Peak force per length f_max ≤ available', ratio: ratio ?? 0, ok: r.ok }],
+    data: [
+      ['Segments', segs.map((s) => `${s.id} (${s.x1},${s.y1})→(${s.x2},${s.y2})`).join('; ')],
+      ['Fillet leg w', `${size} mm`], ['Electrode', electrode === 'custom' ? `F_EXX ${FEXX} MPa` : `${electrode}XX (${FEXX} MPa)`],
+      ['Design basis', basis], [`Load ${demandLabel(basis, 'P')}`, `${f2(P)} kN at ${f2(angle)}°`], ['Load point', `(${px}, ${py}) mm`],
+    ] as [string, string][],
+    steps,
+  }
+  const cell = 'w-14 rounded border border-hairline bg-sheet px-1 py-0.5 text-right font-mono'
   return (
-        <div>
-      <PageHeader title="Eccentric weld group" badges={['AISC 360-16']} />
-      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <ReportControls title="Welded Connection Report" badges={['AISC 360-16']} />
-      <p className="mt-2 max-w-3xl text-sm text-muted">
-        Elastic (weld-as-a-line) method for an eccentrically-loaded fillet weld group. Each unit length
-        carries the direct share P/L_w plus a torsional share T·ρ/(J/t), T = Pᵧ·eₓ − Pₓ·e_y and
-        J/t = Σ[L³/12 + L·ρ_c²]. The fillet throat is 0.707·w (NSCP 510.2.2 / AISC J2.2), so the
-        available strength per unit length is φ·0.60·F_EXX·0.707·w for LRFD, or the same over Ω for
-        ASD. The applied load must be on the same basis: factored for LRFD, service for ASD.
-        Add straight segments anywhere.
-      </p>
-
-      <div className="mt-6 grid gap-5 lg:grid-cols-[1.1fr_1fr]">
-        <section className="rail-card rounded-lg border border-hairline bg-sheet p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[13.5px] font-bold text-ink">Weld segments (mm)</h2>
-            <button type="button" onClick={addSeg} className="rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">+ Add segment</button>
-          </div>
-          <div className="max-h-56 overflow-auto">
+    <WorkspacePage title="Eccentric Weld Group" badges={['Steel', 'AISC 360-16 §J2 · NSCP 2015']}
+      intro="Elastic (weld-as-a-line) method for an eccentrically loaded fillet weld group. Each unit length carries the direct share P/Lw plus a torsional share T·ρ/(J/t), with T = Py·ex − Px·ey about the group centroid. The throat is 0.707w, so the available strength per length is φ·0.60·F_EXX·0.707w (LRFD) or the same over Ω (ASD), and the load must be on the same basis."
+      report={report}
+      inputs={<>
+        <InputGroup title="Weld segments (mm)">
+          <div className="col-span-2 overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="text-muted"><tr className="text-left"><th className="pr-2 py-1">Weld</th><th className="pr-2">x₁</th><th className="pr-2">y₁</th><th className="pr-2">x₂</th><th className="pr-2">y₂</th><th className="pr-2 text-right">L</th><th /></tr></thead>
+              <thead className="text-muted"><tr className="text-left"><th className="py-1 pr-2">Weld</th><th className="pr-2">x₁</th><th className="pr-2">y₁</th><th className="pr-2">x₂</th><th className="pr-2">y₂</th><th className="pr-2 text-right">L</th><th /></tr></thead>
               <tbody>
                 {segs.map((s, i) => (
                   <tr key={s.id} className="border-t border-hairline-2">
-                    <td className="pr-2 py-1 font-medium">{s.id}</td>
+                    <td className="py-1 pr-2 font-medium">{s.id}</td>
                     {(['x1', 'y1', 'x2', 'y2'] as const).map((k) => (
-                      <td key={k} className="pr-2"><input type="number" value={s[k]} onChange={(e) => setSeg(i, k, num(e.target.value))} className="w-14 rounded border border-hairline px-1 py-0.5" /></td>
+                      <td key={k} className="pr-2"><input type="number" aria-label={`${s.id} ${k}`} value={s[k]} onChange={(e) => setSeg(i, k, num(e.target.value))} className={cell} /></td>
                     ))}
                     <td className="pr-2 text-right font-mono">{f2(Math.hypot(s.x2 - s.x1, s.y2 - s.y1))}</td>
-                    <td className="text-right"><button type="button" onClick={() => delSeg(i)} className="text-muted hover:text-fail">✕</button></td>
+                    <td className="text-right"><button type="button" aria-label={`Remove ${s.id}`} onClick={() => delSeg(i)} className="text-muted hover:text-fail">✕</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            <button type="button" onClick={addSeg} className="mt-2 rounded-md border border-field-line px-2.5 py-1 text-xs font-semibold text-brand hover:bg-brand-tint">+ Add segment</button>
           </div>
-
-          <h2 className="mb-2 mt-4 text-[13.5px] font-bold text-ink">Load &amp; weld</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 text-muted">Design basis</span>
-              <select value={basis} onChange={(e) => setBasis(e.target.value as DesignBasis)}
-                className="rounded-md border border-field-line px-2.5 py-1.5">
-                <option value="LRFD">LRFD — φ = {SAFETY.connection.phi.toFixed(2)}</option>
-                <option value="ASD">ASD — Ω = {SAFETY.connection.omega.toFixed(2)}</option>
-              </select>
-            </label>
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 text-muted">Electrode</span>
-              <select value={electrode}
-                onChange={(e) => {
-                  const v = e.target.value as ElectrodeClass | 'custom'
-                  setElectrode(v)
-                  if (v !== 'custom') setFEXX(FEXX_BY_CLASS[v])
-                }}
-                className="rounded-md border border-field-line px-2.5 py-1.5">
-                {(Object.keys(FEXX_BY_CLASS) as ElectrodeClass[]).map((k) => (
-                  <option key={k} value={k}>{k}XX ({FEXX_BY_CLASS[k]} MPa)</option>
-                ))}
-                <option value="custom">Custom F_EXX…</option>
-              </select>
-            </label>
-            {([[`Load ${demandLabel(basis, 'P')} (kN)`, P, setP], ['Angle (° from +X)', angle, setAngle], ['Fillet leg w (mm)', size, setSize],
-              ['Load at x (mm)', px, setPx], ['Load at y (mm)', py, setPy],
-              ...(electrode === 'custom' ? [['F_EXX (MPa)', FEXX, setFEXX] as const] : []),
-             ] as const).map(([lbl, val, set]) => (
-              <label key={lbl} className="flex flex-col text-sm">
-                <span className="mb-1 text-muted">{lbl}</span>
-                <input type="number" value={val} onChange={(e) => set(num(e.target.value))} className="rounded-md border border-field-line px-2.5 py-1.5" />
-              </label>
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <div className="rounded-lg border border-hairline bg-sheet-2 p-3">
-            <WeldPlot r={r} segs={segs} px={px} py={py} />
-          </div>
-          <div className="rail-card rounded-lg border border-hairline bg-sheet p-4 text-sm">
-            <h2 className="mb-2 text-[13.5px] font-bold text-ink">Results</h2>
-            {[['Total weld length L_w', `${f2(r.Lw)} mm`],
-              ['Centroid C', `(${f2(r.Cx)}, ${f2(r.Cy)}) mm`],
-              ['Load components Pₓ / Pᵧ', `${f2(r.Px)} / ${f2(r.Py)} kN`],
-              ['Eccentricity eₓ / e_y', `${f2(r.ex)} / ${f2(r.ey)} mm`],
-              ['Torsion T = Pᵧ·eₓ − Pₓ·e_y', `${f2(r.T / 1000)} kN·m`],
-              ['Polar inertia J/t = Σ[L³/12 + Lρ²]', `${f2(r.Jt / 1e6)} ×10⁶ mm³`],
-              ['Effective throat 0.707·w', `${f2(r.throat)} mm`],
-              // "Design strength" is the LRFD name for it; under ASD the same
-              // number is the ALLOWABLE strength. AISC calls both the available
-              // strength, which is the one word that is true either way.
-              [`Available strength / length (${basis})`, `${f2(r.capacityPerLen)} N/mm`]].map(([k, v]) => (
-              <div key={k} className="flex justify-between border-t border-hairline-2 py-1"><span className="text-muted">{k}</span><span className="font-mono">{v}</span></div>
-            ))}
-            <div className="flex justify-between border-t border-hairline-2 py-1">
-              <span className="text-muted">Peak force / length f_max (≤ {f2(r.capacityPerLen)})</span>
-              <span className={`font-mono font-semibold ${r.ok ? 'text-ok' : 'text-fail'}`}>{f2(r.fMax)} N/mm {r.ok ? '✓' : '✗'}</span>
-            </div>
-            <div className="flex justify-between border-t border-hairline-2 py-1">
-              <span className="text-muted">Required fillet leg</span>
-              <span className="font-mono">{f2(r.reqSize)} mm</span>
-            </div>
-            <div className="mt-2 flex items-baseline justify-between rounded-lg bg-brand-tint p-2">
-              <span className="text-sm font-semibold text-brand">Maximum {demandLabel(basis, 'P')}</span>
-              <span className="font-mono text-lg font-bold text-brand">{f2(r.maxP)} kN</span>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <WorkedSolution steps={weldedConnectionSolution({ segments: segs, size, FEXX, phi, load: { P, angleDeg: angle, px, py } }, r)} />
-    </div>
-    </div>
+        </InputGroup>
+        <InputGroup title="Weld">
+          <Pick label="Design basis" value={basis} onChange={(v) => setBasis(v as DesignBasis)}
+            options={[['LRFD', `LRFD — φ ${SAFETY.connection.phi.toFixed(2)}`], ['ASD', `ASD — Ω ${SAFETY.connection.omega.toFixed(2)}`]]} />
+          <Pick label="Electrode" value={electrode}
+            onChange={(v) => { const k = v as ElectrodeClass | 'custom'; setElectrode(k); if (k !== 'custom') setFEXX(FEXX_BY_CLASS[k]) }}
+            options={[...(Object.keys(FEXX_BY_CLASS) as ElectrodeClass[]).map((k) => [k, `${k}XX (${FEXX_BY_CLASS[k]} MPa)`] as [ElectrodeClass | 'custom', string]), ['custom', 'Custom F_EXX…']]} />
+          <Num label="Fillet leg w" unit="mm" value={size} onChange={setSize} />
+          {electrode === 'custom' && <Num label="F_EXX" unit="MPa" value={FEXX} onChange={setFEXX} />}
+        </InputGroup>
+        <InputGroup title="Drawing">
+          <Pick label="Column" value={colName} onChange={setColName}
+            options={[['auto', 'Auto — flange fits the welds'], ...W_OPTIONS]} />
+          <Num label="Bracket plate t" unit="mm" value={tPlate} onChange={setTPlate} />
+        </InputGroup>
+        <InputGroup title="Load">
+          <Num label={`Load ${demandLabel(basis, 'P')}`} unit="kN" value={P} onChange={setP} />
+          <Num label="Angle from +x" unit="°" value={angle} onChange={setAngle} />
+          <Num label="Load at x" unit="mm" value={px} onChange={setPx} />
+          <Num label="Load at y" unit="mm" value={py} onChange={setPy} />
+        </InputGroup>
+      </>}
+      checks={<>
+        <CheckCard title="Weld stress" basis={`${basis} · §J2.4`} status={r.ok ? 'pass' : 'fail'}
+          value={f2(r.fMax)} unit="N/mm" ratio={ratio} ratioLabel="f_max ÷ available"
+          pairs={[{ label: 'Available', value: `${f2(r.capacityPerLen)} N/mm` }, { label: 'Required w', value: `${f2(r.reqSize)} mm` }]} />
+        <CheckCard title="Capacity" basis="largest load at this geometry" status="info"
+          value={f2(r.maxP)} unit="kN"
+          pairs={[{ label: 'Torsion T', value: `${f2(r.T / 1000)} kN·m` }, { label: 'Lw', value: `${f2(r.Lw)} mm` }]} />
+      </>}
+      summary={[
+        { label: 'Weld', value: `${segs.length} segments, ${f2(r.Lw)} mm, ${size} mm fillet, ${electrode === 'custom' ? `F_EXX ${FEXX}` : `${electrode}XX`}` },
+        { label: 'Load', value: `${demandLabel(basis, 'P')} ${f2(P)} kN at ${f2(angle)}°, applied at (${px}, ${py})` },
+      ]}
+      drawing={{ title: 'Welded bracket — what the check checks', node: <div data-pdf-drawing>
+        <WeldedJointMechanics segs={segs} r={r} size={size} FEXX={FEXX} px={px} py={py} P={P} angleDeg={angle}
+          Plabel={demandLabel(basis, 'P')} availLabel={basis === 'LRFD' ? 'φRn' : 'Rn/Ω'}
+          column={(colName !== 'auto' && shapeByName(colName)) || (flangeTipSpan(segs) != null ? columnForFlange(flangeTipSpan(segs)!) : undefined) || defaultColumn()!} tPlate={tPlate} />
+      </div> }}
+      results={[
+        { check: 'Weld length and centroid', basis: 'Σ L, Σ L·x / Lw', demand: `${f2(r.Lw)} mm`, limit: `C (${f2(r.Cx)}, ${f2(r.Cy)})`, status: 'info' as const },
+        { check: 'Load components', basis: 'Px / Py', demand: `${f2(r.Px)} / ${f2(r.Py)} kN`, status: 'info' as const },
+        { check: 'Eccentricity', basis: 'ex / ey from C', demand: `${f2(r.ex)} / ${f2(r.ey)} mm`, status: 'info' as const },
+        { check: 'Torsion', basis: 'T = Py·ex − Px·ey', demand: `${f2(r.T / 1000)} kN·m`, status: 'info' as const },
+        { check: 'Polar inertia', basis: 'J/t = Σ[L³/12 + Lρ²]', demand: `${f2(r.Jt / 1e6)} ×10⁶ mm³`, status: 'info' as const },
+        { check: 'Effective throat', basis: '0.707w', demand: `${f2(r.throat)} mm`, status: 'info' as const },
+        { check: 'Peak force per length', basis: `${basis}, φ·0.60·F_EXX·throat`, demand: `${f2(r.fMax)} N/mm`, limit: `${f2(r.capacityPerLen)} N/mm`, ratio, status: r.ok ? 'pass' as const : 'fail' as const },
+        { check: 'Required fillet leg', basis: 'at f_max', demand: `${f2(r.reqSize)} mm`, limit: `${size} mm`, status: r.reqSize <= size ? 'pass' as const : 'fail' as const },
+      ]}
+      steps={steps}
+      references={[
+        { topic: 'Fillet weld strength', basis: '0.60F_EXX on the effective throat', source: 'AISC 360-16 §J2.4, Table J2.5 · NSCP 2015 §510.2' },
+        { topic: 'Eccentric weld groups', basis: 'elastic (weld-as-a-line) method', source: 'Salmon & Johnson, Steel Structures; AISC Manual Part 8' },
+      ]}
+    />
   )
 }

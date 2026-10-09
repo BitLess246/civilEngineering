@@ -3,8 +3,9 @@ import { shapeByName, shapesOf, AISC_SHAPES } from './aiscSections'
 import {
   deriveWSection, beamFlexure, beamFlexureScope, beamShear,
   columnAxial, weakAxisFlexure, combinedLoading,
-  boltShear, weldStrength, beamLoadingSimple, E_STEEL,
+  boltShear, BOLT_Fnv, boltFnv, weldStrength, beamLoadingSimple, E_STEEL,
   boltGroupGeom, boltGeomFromPositions, eccentricBoltGroup, shearTabBlockShear, outOfPlaneBoltGroup, pryingAction,
+  bearingTearout, clearDistance, plyBearing, holeDia,
 } from './steelDesign'
 
 const W250x33 = shapeByName('W250x32.7')!
@@ -286,10 +287,27 @@ describe('combinedLoading §H1-1', () => {
 })
 
 describe('boltShear §J3.6 + §J3.10', () => {
-  it('A325M d=19, threads in plane → phiRn_shear = 0.75·310·π/4·19²/1000', () => {
+  it('A325M d=19, threads in plane → phiRn_shear = 0.75·372·π/4·19²/1000', () => {
     const r = boltShear('A325M', 19, 50, 10, 400, true)
     const Ab = Math.PI / 4 * 19 ** 2
-    expect(r.phiRn_shear).toBeCloseTo(0.75 * 310 * Ab / 1000, 5)
+    expect(r.Fnv).toBe(372)
+    expect(r.phiRn_shear).toBeCloseTo(0.75 * 372 * Ab / 1000, 5)
+  })
+  it('Fnv is AISC 360-16 Table J3.2: Group A 54/68 ksi, Group B 68/84 ksi', () => {
+    // ksi → MPa at 6.895, rounded as the table prints them. 360-10 printed 457
+    // for 68 ksi; 360-16 corrected it to 469.
+    const mpa = (ksi: number) => Math.round(ksi * 6.895)
+    expect(BOLT_Fnv.A325M).toEqual({ N: mpa(54), X: mpa(68) })
+    expect(BOLT_Fnv.A490M).toEqual({ N: mpa(68), X: mpa(84) })
+    expect(BOLT_Fnv).toEqual({ A325M: { N: 372, X: 469 }, A490M: { N: 469, X: 579 } })
+    expect(boltShear('A490M', 22, 1, 20, 400, false).Fnv).toBe(579)
+    expect(boltFnv('A325M', false)).toBe(469)
+  })
+  it('the out-of-plane check reads the same Fnv as the shear check', () => {
+    const g = boltGeomFromPositions([{ id: 'B1', x: 0, y: 0 }, { id: 'B2', x: 0, y: 80 }])
+    for (const grade of ['A325M', 'A490M'] as const)
+      for (const thr of [true, false])
+        expect(outOfPlaneBoltGroup(g, [], 50, 100, grade, 20, thr).Fnv).toBe(boltShear(grade, 20, 1, 10, 400, thr).Fnv)
   })
   it('bearing governs when plate is thin', () => {
     // thin plate → small phiRn_bearing
@@ -425,7 +443,7 @@ describe('outOfPlaneBoltGroup §J3.7', () => {
   })
 
   it('§J3.7 reduced tensile strength decreases with shear stress', () => {
-    const phi = 0.75, Fnt = 620, Fnv = 310
+    const phi = 0.75, Fnt = 620, Fnv = 372
     const withShear = [{ id: 'B3', x: 0, y: 70, Vx: 0, Vy: 0, R: 50, utilShear: 0, fbr: 0,
       fv: 50 * 1000 / ((Math.PI/4)*20**2) }]
     // top bolt only — provide fv for it
@@ -503,10 +521,11 @@ describe('double shear §J3.6', () => {
   })
 
   it('lets bearing govern once shear is doubled', () => {
-    // 20 mm A325M-N on a thin 6 mm ply: shear governs at one plane, bearing at
-    // two. If the governing min() were skipped this test would not move.
-    const single = boltShear('A325M', 20, 150, 6, 400, true, 1)
-    const double = boltShear('A325M', 20, 150, 6, 400, true, 2)
+    // 20 mm A325M-N on a thin 7 mm ply: shear (87.7) governs at one plane,
+    // bearing (100.8) at two. If the governing min() were skipped this test
+    // would not move.
+    const single = boltShear('A325M', 20, 150, 7, 400, true, 1)
+    const double = boltShear('A325M', 20, 150, 7, 400, true, 2)
     expect(single.phiRn).toBeCloseTo(single.phiRn_shear, 9)
     expect(double.phiRn).toBeCloseTo(double.phiRn_bearing, 9)
     expect(double.phiRn).toBeGreaterThan(single.phiRn)
@@ -620,5 +639,29 @@ describe('§G2.1 Cv1 — the 360-16 two-branch form', () => {
         expect(r.Cv1).toBeCloseTo(expected, 9)
       }
     }
+  })
+})
+
+describe('§J3.10(a) bearing and tear-out', () => {
+  it('Rn = min(1.2·lc·t·Fu, 2.4·d·t·Fu), nominal kN', () => {
+    const a = bearingTearout(20, 10, 400, 29)
+    expect(a.Rn_tear).toBeCloseTo(139.2, 9)
+    expect(a.Rn_bear).toBeCloseTo(192, 9)
+    expect(a.Rn).toBeCloseTo(139.2, 9)
+    // the crossover: 1.2·lc = 2.4·d at lc = 2d
+    expect(bearingTearout(20, 10, 400, 40).Rn_tear).toBeCloseTo(bearingTearout(20, 10, 400, 40).Rn_bear, 9)
+    expect(bearingTearout(20, 10, 400, Infinity).Rn).toBeCloseTo(192, 9)
+  })
+
+  it('lc runs to the nearest free edge or next hole along the push, never a missing edge', () => {
+    const bolts = [{ id: 'a', x: 35, y: 40 }, { id: 'b', x: 35, y: 110 }]
+    const down = { x: 0, y: -1 }
+    expect(clearDistance(bolts[0], down, bolts, 22, { yMin: 0 })!.lc).toBeCloseTo(29, 9)
+    expect(clearDistance(bolts[1], down, bolts, 22, { yMin: 0 })!.lc).toBeCloseTo(48, 9)
+    expect(clearDistance(bolts[0], { x: -1, y: 0 }, bolts, 22, { xMax: 70 })!.lc).toBe(Infinity)
+    expect(clearDistance(bolts[0], { x: 0, y: 0 }, bolts, 22, {})).toBeNull()
+    const ply = plyBearing(bolts, () => down, 20, 10, 400, { yMin: 0, yMax: 150, xMax: 70 })
+    expect(ply.map((p) => Math.round(p.Rn * 10) / 10)).toEqual([139.2, 192])
+    expect(holeDia(20)).toBe(22)
   })
 })

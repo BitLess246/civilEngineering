@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { clampTo } from '../lib/clamp'
 import type { ConcreteClass } from '../engine/quantities'
-import { ReportControls } from './ReportControls'
 
 /** Numeric input. */
 export function Num({ label, unit, value, onChange, step = 'any', hint, disabled, min, max }: {
@@ -110,18 +109,3 @@ export function Row({ label, value, sub, alert }: {
     </div>
   )
 }
-
-/** Standard page shell: back link, title, intro, report bar. */
-export function QtyPage({ title, reportTitle, intro, children }: {
-  title: string; reportTitle: string; intro: ReactNode; children: ReactNode
-}) {
-  return (
-    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-      <h1 className="text-[21px] font-extrabold tracking-tight text-ink">{title}</h1>
-      <p className="no-print mt-1 text-[13px] text-muted">{intro}</p>
-      <ReportControls title={reportTitle} />
-      <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">{children}</div>
-    </div>
-  )
-}
-

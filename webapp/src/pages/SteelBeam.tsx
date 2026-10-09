@@ -3,22 +3,22 @@ import { lazy, Suspense, useMemo, useState } from 'react'
 import { calcBeam } from '../lib/calcApi'
 import type { BeamCalcResult } from '../lib/calcApi'
 import { useCalcResult } from '../lib/useCalcResult'
-import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
-import { ReportControls } from '../components/ReportControls'
-import { WorkedSolution } from '../components/WorkedSolution'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import type { SolutionStep } from '../lib/solution'
 import { f1, f2 } from '../lib/format'
 import { sn1, sn2 } from '../lib/solution'
-import { PageHeader } from '../components/calc'
 import { ModelMemberResults } from '../components/ModelMemberResults'
 import { backSolvedServiceLoads, type MemberLoadRequest } from '../lib/modelMemberResults'
-import { ShapePick, CalcBadge, TrialWall, Spinner, Verdict, ZoneBadge, BasisPick, BasisNote } from '../components/steelUi'
+import { ShapePick, CalcBadge, TrialWall, Spinner, BasisPick, BasisNote } from '../components/steelUi'
+import { WShapeSection, SteelBeamElevation } from '../components/steelSketches'
 import { capacityLabel, demandLabel, factorLabel, comboLabel, SAFETY, type DesignBasis } from '../engine/designBasis'
 import { GRADES, shapeOrFirst, type Grade } from '../lib/steelShapes'
 
 const BeamViewer3D = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.BeamViewer3D })))
 
-function BeamTab() {
+export default function SteelBeam() {
   const [shapeName, setShapeName] = useState('W310x38.7')
   const [grade, setGrade]         = useState<Grade>('A572G50')
   const [span,  setSpan]          = useState(6)
@@ -142,89 +142,100 @@ function BeamTab() {
     setWD(r1(dead)); setWL(r1(live))
   }
 
+  const dTot = res ? res.loads.deltaD + res.loads.deltaL : 0
+  const flexOK = utilM <= 1, shearOK = utilV <= 1
+  const dLOK = res ? res.loads.deltaL <= res.loads.limL360 : false
+  const dTOK = res ? dTot <= res.loads.limL240 : false
+  const report = res ? {
+    docCode: 'S-SB',
+    ok: flexOK && shearOK && dLOK && dTOK,
+    governing: `${shapeName} · ${demandLabel(res.basis, 'M')} ${f1(res.loads.Mu)} / ${capacityLabel(res.basis, 'M')} ${f1(res.avail.Mn)} kN·m (${res.flex.governing})`,
+    stats: [
+      { label: capacityLabel(res.basis, 'M'), value: f1(res.avail.Mn), unit: 'kN·m' },
+      { label: capacityLabel(res.basis, 'V'), value: f1(res.avail.Vn), unit: 'kN' },
+      { label: 'LTB zone', value: res.flex.ltbZone, unit: '' },
+    ],
+    checks: [
+      { name: `Flexure §${res.flex.clause}`, ratio: utilM, ok: flexOK },
+      { name: 'Shear §G2.1', ratio: utilV, ok: shearOK },
+      { name: 'Live deflection ≤ L/360', ratio: res.loads.limL360 > 0 ? res.loads.deltaL / res.loads.limL360 : 0, ok: dLOK },
+      { name: 'Total deflection ≤ L/240', ratio: res.loads.limL240 > 0 ? dTot / res.loads.limL240 : 0, ok: dTOK },
+    ],
+    data: [
+      ['Shape', shapeName], ['Grade', `${GRADES[grade].label} (Fy ${Fy} MPa)`], ['Design basis', res.basis],
+      ['Span L', `${f2(span)} m`], ['Unbraced Lb', `${f2(Lb)} m`], ['Cb', f2(Cb)],
+      ['Dead / live', `${f2(wD)} / ${f2(wL)} kN/m`],
+    ] as [string, string][],
+    steps,
+  } : undefined
+
   return (
-    <div>
-      <ModelMemberResults kind="steelBeam" onLoad={loadSaved} />
-      <TrialWall cause={cause} />
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
-      <div className="space-y-5">
-        <Card title={<>Section & grade<CalcBadge loading={loading} error={error} cause={cause} /></>}>
+    <WorkspacePage title="Steel Beam" badges={['Steel', 'AISC 360-16 · NSCP 2015']}
+      intro="A simply supported rolled W under uniform load: §F2 lateral-torsional buckling between the braces of the compression flange, plus §F3 flange local buckling when the flange is not compact, §G2.1 shear, and service deflections against L/360 and L/240. LRFD or ASD."
+      report={report}
+      inputs={<>
+        <div className="no-print"><ModelMemberResults kind="steelBeam" onLoad={loadSaved} /></div>
+        <TrialWall cause={cause} />
+        <InputGroup title="Section and grade">
           <ShapePick value={shapeName} onChange={setShapeName} />
           <BasisPick value={basis} onChange={setBasis} />
-          <BasisNote basis={basis} />
           <Pick label="Steel grade" value={grade} onChange={v => setGrade(v as Grade)}
             options={Object.entries(GRADES).map(([k, v]) => [k as Grade, v.label])} />
-        </Card>
-        <Card title="Span & bracing">
+          <div className="col-span-2"><BasisNote basis={basis} /></div>
+        </InputGroup>
+        <InputGroup title="Span and bracing">
           <Num label="Span L" unit="m" value={span} onChange={setSpan} />
           <Num label="Unbraced Lb" unit="m" value={Lb} onChange={setLb} />
           <Num label="Cb (moment gradient)" value={Cb} onChange={setCb} />
-        </Card>
-        <Card title="Uniform service loads">
+        </InputGroup>
+        <InputGroup title="Uniform service loads">
           <Num label="Dead wD" unit="kN/m" value={wD} onChange={setWD} />
           <Num label="Live wL" unit="kN/m" value={wL} onChange={setWL} />
-        </Card>
-      </div>
-
-      <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
+        </InputGroup>
+      </>}
+      checks={res ? <>
+        <CheckCard title={`Flexure §${res.flex.clause}`} basis={`${res.flex.governing} · LTB ${res.flex.ltbZone}`}
+          status={flexOK ? 'pass' : 'fail'} value={f1(res.avail.Mn)} unit="kN·m" ratio={utilM}
+          ratioLabel={`${demandLabel(res.basis, 'M')} ÷ ${capacityLabel(res.basis, 'M')}`}
+          pairs={[{ label: demandLabel(res.basis, 'M'), value: `${f1(res.loads.Mu)} kN·m` }, { label: 'Flange', value: res.flex.flangeClass }]} />
+        <CheckCard title="Shear §G2.1" basis={factorLabel(res.basis, shearLS)} status={shearOK ? 'pass' : 'fail'}
+          value={f1(res.avail.Vn)} unit="kN" ratio={utilV} ratioLabel={`${demandLabel(res.basis, 'V')} ÷ ${capacityLabel(res.basis, 'V')}`}
+          pairs={[{ label: demandLabel(res.basis, 'V'), value: `${f1(res.loads.Vu)} kN` }, { label: 'Cv1', value: res.shear.Cv1.toFixed(2) }]} />
+        <CheckCard title="Deflection" basis="service, 5wL⁴/384EI" status={dLOK && dTOK ? 'pass' : 'fail'}
+          value={f2(dTot)} unit="mm total" ratio={res.loads.limL240 > 0 ? dTot / res.loads.limL240 : undefined} ratioLabel="δ ÷ L/240"
+          pairs={[{ label: 'δL / L/360', value: `${f2(res.loads.deltaL)} / ${f2(res.loads.limL360)} mm` }, { label: 'L/240', value: `${f2(res.loads.limL240)} mm` }]} />
+        <CalcBadge loading={loading} error={error} cause={cause} />
+      </> : <CalcBadge loading={loading} error={error} cause={cause} />}
+      summary={[
+        { label: 'Section', value: `${shapeName}, ${GRADES[grade].label}` },
+        { label: 'Span', value: `${f2(span)} m, Lb ${f2(Lb)} m, Cb ${f2(Cb)}` },
+        { label: 'Loads', value: `wD ${f2(wD)}, wL ${f2(wL)} kN/m (${basis})` },
+      ]}
+      drawing={{ title: 'Elevation and section', node: <div data-pdf-drawing className="space-y-3">
+        <SteelBeamElevation span={span} Lb={Lb} wD={wD} wL={wL} />
+        {shape.d && shape.bf && shape.tf && shape.tw
+          ? <WShapeSection name={shape.name} d={shape.d} bf={shape.bf} tf={shape.tf} tw={shape.tw} /> : null}
+      </div> }}
+      results={res ? [
+        { check: 'Section', basis: 'Ix · Sx · Zx', demand: `${(res.props.Ix / 1e6).toFixed(1)}×10⁶ · ${(res.props.Sx / 1e3).toFixed(0)}×10³ · ${(res.props.Zx / 1e3).toFixed(0)}×10³`, status: 'info' as const },
+        { check: 'Lp / Lr', basis: '§F2.2', demand: `${f2(res.flex.Lp / 1000)} / ${f2(res.flex.Lr / 1000)} m`, limit: `Lb ${f2(Lb)} m`, status: 'info' as const },
+        ...(res.flex.flangeClass !== 'compact' ? [{ check: 'Flange local buckling', basis: `${res.flex.flangeClass} · §F3.2`, demand: `${f1(res.flex.MnFLB)} kN·m`, status: 'warn' as const }] : []),
+        { check: `Flexure §${res.flex.clause}`, basis: `Mn ${f1(res.flex.Mn)} · ${factorLabel(res.basis, 'flexure')}`, demand: `${f1(res.loads.Mu)} kN·m`, limit: `${f1(res.avail.Mn)} kN·m`, ratio: utilM, status: flexOK ? 'pass' as const : 'fail' as const },
+        { check: 'Shear §G2.1', basis: `Cv1 ${res.shear.Cv1.toFixed(2)} · ${factorLabel(res.basis, shearLS)}`, demand: `${f1(res.loads.Vu)} kN`, limit: `${f1(res.avail.Vn)} kN`, ratio: utilV, status: shearOK ? 'pass' as const : 'fail' as const },
+        { check: 'Live deflection', basis: 'L/360', demand: `${f2(res.loads.deltaL)} mm`, limit: `${f2(res.loads.limL360)} mm`, ratio: res.loads.limL360 > 0 ? res.loads.deltaL / res.loads.limL360 : undefined, status: dLOK ? 'pass' as const : 'fail' as const },
+        { check: 'Total deflection', basis: 'L/240', demand: `${f2(dTot)} mm`, limit: `${f2(res.loads.limL240)} mm`, ratio: res.loads.limL240 > 0 ? dTot / res.loads.limL240 : undefined, status: dTOK ? 'pass' as const : 'fail' as const },
+      ] : []}
+      extraSections={[{ title: '3D view', node: (
         <Suspense fallback={<Spinner />}>
           <BeamViewer3D shape={shape} span={span} wDead={wD} wLive={wL} />
         </Suspense>
-
-        {res && (<>
-          <ResultCard title="Section properties">
-            <Row label="A"  value={`${shape.A.toLocaleString()} mm²`} />
-            <Row label="Ix" value={`${(res.props.Ix/1e6).toFixed(1)} ×10⁶ mm⁴`} />
-            <Row label="Sx" value={`${(res.props.Sx/1e3).toFixed(0)} ×10³ mm³`} />
-            <Row label="Zx" value={`${(res.props.Zx/1e3).toFixed(0)} ×10³ mm³`} />
-            <Row label="Lp / Lr" value={`${f2(res.flex.Lp/1000)} / ${f2(res.flex.Lr/1000)} m`} />
-          </ResultCard>
-          <ResultCard title={<>Flexure §{res.flex.clause} <ZoneBadge zone={res.flex.ltbZone} /></>}>
-            <Row label={capacityLabel(res.basis, 'M')} value={`${f1(res.avail.Mn)} kN·m`}
-              sub={`Mn = ${f1(res.flex.Mn)} (${res.flex.governing}) · ${factorLabel(res.basis, 'flexure')}`} />
-            {/* A noncompact flange is not a footnote — it is the reason Mn is
-                below Mp, so the card says so rather than only the steps. */}
-            {res.flex.flangeClass !== 'compact' && (
-              <Row label="Flange (B4.1b)" value={`${res.flex.flangeClass} — §F3.2 Mn = ${f1(res.flex.MnFLB)} kN·m`} />
-            )}
-            <Row alert={utilM>1} label={`${demandLabel(res.basis, 'M')} / ${capacityLabel(res.basis, 'M')}`}
-              value={<Verdict pass={utilM<=1} value={`${(utilM*100).toFixed(0)} %`} />} />
-          </ResultCard>
-          <ResultCard title="Shear §G2.1">
-            <Row label={capacityLabel(res.basis, 'V')} value={`${f1(res.avail.Vn)} kN`}
-              sub={`Cv1=${res.shear.Cv1.toFixed(2)} · ${factorLabel(res.basis, shearLS)}`} />
-            <Row alert={utilV>1} label={`${demandLabel(res.basis, 'V')} / ${capacityLabel(res.basis, 'V')}`}
-              value={<Verdict pass={utilV<=1} value={`${(utilV*100).toFixed(0)} %`} />} />
-          </ResultCard>
-          <ResultCard title="Deflection">
-            <Row alert={res.loads.deltaL>res.loads.limL360} label="δL ≤ L/360" value={<Verdict pass={res.loads.deltaL<=res.loads.limL360} value={`${f2(res.loads.deltaL)} mm`} />} />
-            <Row alert={res.loads.deltaD+res.loads.deltaL>res.loads.limL240} label="δtotal ≤ L/240" value={<Verdict pass={res.loads.deltaD+res.loads.deltaL<=res.loads.limL240} value={`${f2(res.loads.deltaD+res.loads.deltaL)} mm`} />} />
-          </ResultCard>
-        </>)}
-      </div>
-
-      </div>
-
-      {res && (
-        <div>
-          <WorkedSolution steps={steps} title="Beam Design — step-by-step (AISC 360-16 §F, §G)" />
-        </div>
-      )}
-    </div>
-  )
-}
-
-export default function SteelBeam() {
-  return (
-    <div>
-      <PageHeader title="Steel Beam Design" badges={['AISC 360-16']} />
-      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <p className="no-print mt-1 text-muted">AISC 360-16 §F2/§F3 flexure — lateral-torsional buckling, plus §F3.2 flange local buckling when the flange is not compact — §G2.1 shear, and service deflections against L/360 and L/240. 3D scene and a step-by-step solution.</p>
-        <ReportControls title="Steel Beam Design Report" />
-        <div className="mt-5">
-          <BeamTab />
-        </div>
-      </div>
-    </div>
+      ) }]}
+      steps={steps}
+      references={[
+        { topic: 'Flexure', basis: 'yielding, LTB; FLB for a noncompact flange', source: 'AISC 360-16 §F2, §F3 · NSCP 2015 §506' },
+        { topic: 'Shear', basis: 'web shear, Cv1', source: 'AISC 360-16 §G2.1' },
+        { topic: 'Width-to-thickness', basis: 'compact / noncompact / slender', source: 'AISC 360-16 Table B4.1b' },
+      ]}
+    />
   )
 }

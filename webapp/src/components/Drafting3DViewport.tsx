@@ -27,7 +27,7 @@ import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import type { DraftProject, DraftLevel, DraftElement } from '../engine/drafting3d'
 import type { RectSection } from '../engine/model'
-import { draftToStructuralModel, clampOpeningAt, resolveFinishMaterial, projectOnWall } from '../engine/drafting3d'
+import { draftToStructuralModel, clampOpeningAt, resolveFinishMaterial, projectOnWall, panelCorners } from '../engine/drafting3d'
 import { Member3D, Nodes3D, Slab3D, Wall3D, GridBubbles3D } from './modelSpace/scene'
 
 const DOOR_COLOR = '#8b5e3c'      // timber leaf
@@ -108,7 +108,10 @@ function Opening3D({ el, level, sections, selected, onPick }: {
 }
 
 /** A ceiling: the finish plane at the storey top, in its material colour.
- *  Architectural only — never part of the exported frame. */
+ *  Architectural only — never part of the exported frame. Built from the
+ *  four plan corners as drawn, so a skewed or rotated room gets a matching
+ *  ceiling (the old axis-aligned box also took its depth from the joints'
+ *  ELEVATION and came out zero-deep). */
 function Ceiling3D({ el, level, selected, onPick }: {
   el: DraftElement
   level: DraftLevel
@@ -116,39 +119,31 @@ function Ceiling3D({ el, level, selected, onPick }: {
   onPick: () => void
 }) {
   const geo = useMemo(() => {
-    if (!el.corners) return null
-    const pts = el.corners.map(cid => level.nodes.get(cid)).filter((n): n is NonNullable<typeof n> => !!n)
-    if (pts.length !== 4) return null
-    const mid = pts.reduce((s, p) => s.add(new THREE.Vector3(p.x, 0, p.y)), new THREE.Vector3()).multiplyScalar(0.25)
-    const sx = Math.max(
-      Math.abs(pts[1].x - pts[0].x), Math.abs(pts[2].x - pts[0].x),
-      Math.abs(pts[1].x - pts[3].x), Math.abs(pts[2].x - pts[3].x),
-    )
-    const sz = Math.max(
-      Math.abs(pts[1].z - pts[0].z), Math.abs(pts[2].z - pts[0].z),
-      Math.abs(pts[1].z - pts[3].z), Math.abs(pts[2].z - pts[3].z),
-    )
+    const pts = panelCorners(level, el)
+    if (!pts) return null
     // the ceiling plane sits just under the storey top (the soffit it finishes)
     const y = level.elevation + level.height - 0.03
+    const v = pts.map(p => worldOf(p.x, p.y, y))
+    const fill = new THREE.BufferGeometry().setFromPoints([v[0], v[1], v[2], v[0], v[2], v[3]])
+    fill.computeVertexNormals()
     // Ceiling finishes are near-white by nature — on the white backdrop the
     // fill alone washes out, so the plane carries a visible edge outline too.
-    const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(sx, 0.04, sz))
-    return { centre: new THREE.Vector3(mid.x, y, mid.z), sx, sz, edges }
+    const outline = new THREE.BufferGeometry().setFromPoints([v[0], v[1], v[1], v[2], v[2], v[3], v[3], v[0]])
+    return { fill, outline }
   }, [el, level])
 
   if (!geo) return null
   const mat = resolveFinishMaterial(el.materialId)
   return (
-    <group position={geo.centre}>
-      <mesh onClick={(e) => { e.stopPropagation(); onPick() }}>
-        <boxGeometry args={[geo.sx, 0.04, geo.sz]} />
+    <group>
+      <mesh geometry={geo.fill} onClick={(e) => { e.stopPropagation(); onPick() }}>
         <meshStandardMaterial
           color={selected ? SEL_COLOR : mat.color}
           transparent opacity={selected ? 0.8 : 0.55}
           side={THREE.DoubleSide}
         />
       </mesh>
-      <lineSegments geometry={geo.edges}>
+      <lineSegments geometry={geo.outline}>
         <lineBasicMaterial color={selected ? SEL_COLOR : '#64748b'} />
       </lineSegments>
     </group>
@@ -177,8 +172,11 @@ export function Drafting3DViewport({ project, selectedIds, onSelect, style }: Dr
   const levelsList = useMemo(() => Array.from(project.levels.values()), [project])
 
   /** Members that exist only to CARRY a wall (the exported frame's self-weight
-   *  path) — hidden here, drawn by the wall itself instead. */
-  const wallMemberIds = useMemo(() => new Set((model.walls ?? []).map(w => w.member)), [model])
+   *  path) — hidden here, drawn by the wall itself instead. A wall riding on
+   *  a beam the user DREW keeps that beam visible: only carriers the export
+   *  invented (they take the wall's own id) are hidden. */
+  const wallMemberIds = useMemo(
+    () => new Set((model.walls ?? []).filter(w => w.member === w.id).map(w => w.member)), [model])
 
   const slabTint = useMemo(() => {
     const tints = new Map<string, string>()

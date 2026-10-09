@@ -336,6 +336,18 @@ export function combinedLoading(
 
 export type BoltGrade = 'A325M' | 'A490M'
 
+/** Nominal bolt shear stress Fnv, MPa — AISC 360-16 Table J3.2. A325M is
+ *  Group A (54 / 68 ksi), A490M Group B (68 / 84 ksi); N = threads included in
+ *  the shear plane, X = excluded. 360-10's metric column printed 457 for 68 ksi;
+ *  360-16 corrected the conversion to 469 (68 × 6.895). One table, so the
+ *  calculator, the out-of-plane check and the model-space tabs cannot drift. */
+export const BOLT_Fnv: Record<BoltGrade, { N: number; X: number }> = {
+  A325M: { N: 372, X: 469 },
+  A490M: { N: 469, X: 579 },
+}
+export const boltFnv = (grade: BoltGrade, threadsInPlane: boolean): number =>
+  BOLT_Fnv[grade][threadsInPlane ? 'N' : 'X']
+
 export interface BoltResult {
   Ab: number; Fnv: number
   phiRn_shear: number   // kN per bolt
@@ -361,9 +373,7 @@ export function boltShear(
   threadsInPlane = true, nShear = 1
 ): BoltResult {
   const Ab  = (Math.PI / 4) * db * db
-  const Fnv = grade === 'A325M'
-    ? (threadsInPlane ? 310 : 372)
-    : (threadsInPlane ? 372 : 457)   // Table J3.2
+  const Fnv = boltFnv(grade, threadsInPlane)   // Table J3.2
   const Rn_shear   = (Fnv * Ab * nShear) / 1000
   const Rn_bearing = (2.4 * Fu_conn * db * t_conn) / 1000
   const phiRn_shear   = PHI_J * Rn_shear
@@ -374,6 +384,103 @@ export function boltShear(
     Rn_shear, Rn_bearing, Rn: Math.min(Rn_shear, Rn_bearing),
   }
 }
+
+// ─── Bearing and tear-out at a bolt hole §J3.10(a) ────────────────────────
+// Rn = 1.2·lc·t·Fu ≤ 2.4·d·t·Fu   (deformation at the hole a design concern)
+// lc = clear distance, in the direction of the force, from the edge of the
+// hole to the edge of the adjacent hole or of the material. The first term is
+// TEAR-OUT — the plug of steel in front of the bolt shearing out along two
+// planes — and for an end bolt at a normal edge distance it governs: at ⌀20,
+// 40 mm edge, lc = 29 mm and 1.2·29 = 34.8 < 2.4·20 = 48.
+
+/** Hole diameter, mm — standard hole, d + 2 (as the block-shear check takes it). */
+export const holeDia = (db: number) => db + 2
+
+export interface BoltBearingRn {
+  /** 1.2·lc·t·Fu, kN — Infinity when nothing lies in front of the bolt. */
+  Rn_tear: number
+  /** 2.4·d·t·Fu, kN. */
+  Rn_bear: number
+  /** The lesser, kN — the nominal bearing strength of this bolt on this ply. */
+  Rn: number
+}
+
+export function bearingTearout(db: number, t: number, Fu: number, lc: number): BoltBearingRn {
+  const Rn_tear = Number.isFinite(lc) ? (1.2 * Math.max(0, lc) * t * Fu) / 1000 : Infinity
+  const Rn_bear = (2.4 * db * t * Fu) / 1000
+  return { Rn_tear, Rn_bear, Rn: Math.min(Rn_tear, Rn_bear) }
+}
+
+/** The free edges of a ply, mm, in its own frame; an absent side has no free
+ *  edge that way (a welded face, or material that runs on). */
+export interface FreeEdges { xMin?: number; xMax?: number; yMin?: number; yMax?: number }
+
+/**
+ * lc for one bolt, mm: from its hole edge along `dir` (the way the bolt pushes
+ * the ply) to the nearest free edge or the edge of the next hole whose bore
+ * the line passes through. Null when the push is zero; Infinity when nothing
+ * lies in front of it (then only the 2.4·d·t·Fu cap applies).
+ */
+export function clearDistance(
+  bolt: { x: number; y: number }, dir: { x: number; y: number },
+  others: readonly { x: number; y: number }[], dh: number, edges: FreeEdges,
+): { lc: number; to: { x: number; y: number } } | null {
+  const l = Math.hypot(dir.x, dir.y)
+  if (l < 1e-9) return null
+  const ux = dir.x / l, uy = dir.y / l
+  let tEdge = Infinity
+  if (ux > 1e-9 && edges.xMax != null) tEdge = Math.min(tEdge, (edges.xMax - bolt.x) / ux)
+  if (ux < -1e-9 && edges.xMin != null) tEdge = Math.min(tEdge, (edges.xMin - bolt.x) / ux)
+  if (uy > 1e-9 && edges.yMax != null) tEdge = Math.min(tEdge, (edges.yMax - bolt.y) / uy)
+  if (uy < -1e-9 && edges.yMin != null) tEdge = Math.min(tEdge, (edges.yMin - bolt.y) / uy)
+  let best = Number.isFinite(tEdge) ? tEdge - dh / 2 : Infinity
+  for (const o of others) {
+    if (o.x === bolt.x && o.y === bolt.y) continue
+    const rx = o.x - bolt.x, ry = o.y - bolt.y
+    const along = rx * ux + ry * uy
+    if (along <= 0) continue
+    if (Math.abs(rx * uy - ry * ux) >= dh / 2) continue
+    best = Math.min(best, along - dh)
+  }
+  if (!Number.isFinite(best)) return { lc: Infinity, to: { x: bolt.x, y: bolt.y } }
+  const lc = Math.max(0, best)
+  return { lc, to: { x: bolt.x + ux * (dh / 2 + lc), y: bolt.y + uy * (dh / 2 + lc) } }
+}
+
+/** One bolt's bearing on one ply: its lc and nominal strength. */
+export interface PlyBearing extends BoltBearingRn { id: string; lc: number }
+
+/**
+ * Every bolt's §J3.10(a) bearing on one ply. `forces` carry each bolt's
+ * (Vx, Vy) as the eccentric solver returns them; `pushOf` turns that into the
+ * direction the bolt pushes THIS ply (the tab and the beam web are pushed
+ * opposite ways). Positions absolute, in the ply's frame, mm.
+ */
+export function plyBearing(
+  bolts: readonly { id: string; x: number; y: number }[],
+  pushOf: (id: string) => { x: number; y: number },
+  db: number, t: number, Fu: number, edges: FreeEdges,
+): PlyBearing[] {
+  const dh = holeDia(db)
+  return bolts.map((b) => {
+    const c = clearDistance(b, pushOf(b.id), bolts, dh, edges)
+    const lc = c ? c.lc : Infinity
+    return { id: b.id, lc, ...bearingTearout(db, t, Fu, lc) }
+  })
+}
+
+// ─── Fillet size limits §J2.2b ─────────────────────────────────────────────
+/** Table J2.4: the MINIMUM fillet for the thinner part joined, mm — 3 up to
+ *  6 mm thick, 5 to 13, 6 to 19, 8 above. */
+export function minFilletSize(tThinner: number): number {
+  if (tThinner <= 6) return 3
+  if (tThinner <= 13) return 5
+  if (tThinner <= 19) return 6
+  return 8
+}
+/** §J2.2b(b): the MAXIMUM fillet along the edge of a part t thick, mm — t
+ *  below 6 mm, t − 2 from 6 mm up. */
+export const maxFilletAlongEdge = (t: number) => (t < 6 ? t : t - 2)
 
 // ─── Fillet weld §J2.4 ────────────────────────────────────────────────────
 // Effective throat = 0.707·w (equal-leg fillet), 60° loading angle → θ = 0°.
@@ -623,9 +730,7 @@ export function outOfPlaneBoltGroup(
 ): OutOfPlaneResult {
   const k = basisFactor(basis, 'connection')   // φ, or 1/Ω
   const Fnt = BOLT_Fnt[boltGrade]
-  const Fnv = boltGrade === 'A325M'
-    ? (threadInPlane ? 310 : 372)
-    : (threadInPlane ? 372 : 457)
+  const Fnv = boltFnv(boltGrade, threadInPlane)
   const Ab = (Math.PI / 4) * db * db
   const M_op = Vu * e_out   // kN·mm
 

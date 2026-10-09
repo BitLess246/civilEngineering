@@ -9,24 +9,20 @@ import { ColumnSchematic } from '../components/ColumnSchematic'
 import { SheetFigure } from '../components/modelSpace/figures'
 import { calcColumnSection } from '../lib/calcFigures'
 import { columnSectionNotes } from '../lib/scheduleFigures'
-import {
-  PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport,
-  type LetterheadState, type VerdictStat, type VerdictCheck,
-} from '../components/calc'
+import { type VerdictStat, type VerdictCheck } from '../components/calc'
 import { ModelMemberResults } from '../components/ModelMemberResults'
 import type { MemberLoadRequest } from '../lib/modelMemberResults'
-import { initialLetterhead } from '../lib/letterhead'
 import { InteractionDiagram } from '../components/InteractionDiagram'
-import { WorkedSolution } from '../components/WorkedSolution'
 import { axialColumnSolution, eccentricColumnSolution, slendernessSolution } from '../lib/columnSolution'
 import { optimizeColumnRebar } from '../engine/columnRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
 import { buildRebarSelectionSolution, withRebarSelection } from '../lib/rebarSolution'
-import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard, type ResultRow } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
 import { Math as KTex } from '../lib/math'
 import { f0, f1, f2 } from '../lib/format'
 import type { SolutionStep } from '../lib/solution'
-import 'katex/dist/katex.min.css'
 
 type Mode = 'axial' | 'eccentric'
 type LoadInput = 'direct' | 'individual'
@@ -34,7 +30,6 @@ type BarMode = 'design' | 'analyze'
 
 export default function ColumnDesign() {
   const [mode, setMode] = useState<Mode>('axial')
-  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead('C-01 · Rev A'))
   const [shape, setShape] = useState<ColumnShape>('tied')
   const [b, setB] = useState(400); const [h, setH] = useState(400); const [D, setD] = useState(400)
   const [cover, setCover] = useState(40)
@@ -230,293 +225,182 @@ export default function ColumnDesign() {
     setColLen(Math.round(c.L * 1000)); setLu(c.L)
   }
 
-  return (
-    <div>
-      <PageHeader title="RC Column" badges={['ACI 318-14', 'NSCP 2015']} />
-      {/* PrintReport carries the letterhead card AND the export button in one; this
-          bare one is the fallback for when the design has not solved. It lives HERE,
-          under the page header, because the report card had been rendering at the very
-          bottom of the column page while every other calculator puts it at the top. */}
-      {!(axial && solution.length > 0) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
-      {axial && solution.length > 0 && (
-        <PrintReport
-          docTitle={tied ? 'Tied RC Column' : 'Spiral RC Column'} docCode="C-01" badges={['ACI 318-14', 'NSCP 2015']}
-          ok={(eccentric ? util !== null && util <= 1 && !unstable : axial.axialOK) && axial.rhoOK}
-          governing={eccentric
-            ? (unstable ? 'Slender column unstable — Pu ≥ 0.75·Pc' : `P–M interaction · utilization ${util !== null ? util.toFixed(2) : '—'}`)
-            : `Axial φPn,max = ${f1(axial.phiPnMax)} kN`}
-          lh={lh} onLhChange={(patch) => setLh((v) => ({ ...v, ...patch }))}
-          stats={[
-            { label: 'Bars', value: `${axial.bars}-⌀${dbEff}` },
-            { label: tied ? 'Ties' : 'Spiral pitch', value: tied ? `⌀${Math.max(tieDia, axial.tieDiaMin)} @${f0(axial.tieSpacingFinal)}` : `@${f0(axial.spiralPitch)}`, unit: 'mm' },
-            { label: 'φPn,max', value: f1(axial.phiPnMax), unit: 'kN' },
-            ...(eccentric && slender ? [{
-              label: 'Column class',
-              value: slender.slender ? 'LONG (slender)' : 'SHORT',
-            }] : []),
-          ]}
-          checks={eccentric && util !== null ? [{ name: 'P–M interaction Pu/φPn', ratio: util, ok: util <= 1.0001 }] : []}
-          data={[
-            ['Section', tied ? `${b} × ${h} mm (tied)` : `⌀${D} mm (spiral)`], ['Clear cover', `${cover} mm`],
-            ["Concrete f'c", `${fc} MPa`], ['Steel fy / fyt', `${fy} / ${fyt} MPa`],
-            ['Bar ⌀ / tie ⌀', `${barDia} / ${tieDia} mm`], ['ρ provided', `${(axial.rho * 100).toFixed(2)} %`],
-            ['Pu', `${f1(Pu)} kN`], ...(eccentric ? [['Mu', `${f1(Mu)} kN·m`] as [string, string]] : []),
-          ]}
-          steps={solution}
-          drawingTitle="Column Section"
-          drawing={sectionFigure ? <SheetFigure drawing={sectionFigure} width={420} />
-            : <ColumnSchematic shape="spiral" b={b} h={h} D={D} cover={cover}
-              barDia={dbEff} tieDia={tieDia} bars={axial?.bars ?? numBars} tieSpacing={axial?.spiralPitch} />}
-        />
+  const resultRows: ResultRow[] = axial ? [
+    ...axial.inputNotes.map((n) => ({ check: 'Section', basis: 'geometry', demand: n, status: 'fail' as const })),
+    ...(eccentric && slender ? [unstable
+      ? { check: 'Slenderness', basis: '§406.6.4', demand: `Pu ≥ 0.75·Pc (${f1(0.75 * slender.Pc)} kN) — unstable`, status: 'fail' as const }
+      : { check: 'Magnified moment Mc', basis: `δ ${slender.delta.toFixed(3)} · ${slender.slender ? 'slender' : 'short'}`, demand: `${f2(slender.Mc)} kN·m`, status: 'info' as const }] : []),
+    ...(eccentric && util !== null && cap ? [{ check: 'P–M interaction', basis: `e ${f0((MuEff / Pu) * 1000)} mm`, demand: `${f1(Pu)} kN`, limit: `φPn ${f1(cap.phi * cap.Pn)} kN`, ratio: util, status: util <= 1 ? 'pass' as const : 'fail' as const }] : []),
+    { check: 'Longitudinal bars', basis: `ρ ${(axial.rho * 100).toFixed(2)} % (1–8 %, §410.6.1.1)`, demand: `${axial.bars}-⌀${dbEff}`, status: axial.inputNotes.length > 0 ? 'info' : axial.rhoOK ? 'pass' : 'fail' },
+    { check: 'Axial capacity φPn,max', basis: `Po ${f1(axial.Po)} kN · ${axial.alpha.toFixed(2)}Po cap`, demand: `${f1(Pu)} kN`, limit: `${f1(axial.phiPnMax)} kN`, ratio: axial.phiPnMax > 0 ? Pu / axial.phiPnMax : undefined, status: eccentric ? 'info' : axial.axialOK ? 'pass' : 'fail' },
+    ...(tied ? [
+      { check: 'Ties', basis: axial.tieSpacingLabel, demand: `⌀${Math.max(tieDia, axial.tieDiaMin)} @ ${f0(axial.tieSpacingFinal)} mm`, status: 'info' as const },
+      ...(system !== 'gravity' && axial.seismicSConf !== undefined ? [
+        { check: 'Confinement zone lo', basis: system === 'smf' ? '§418.7.5.1' : '§418.4.3', demand: `${f0(axial.seismicLoZone ?? 0)} mm`, status: 'info' as const },
+        { check: 'Spacing in lo', basis: system === 'smf' ? '§418.7.5.4' : '§418.4.3', demand: `${f0(axial.seismicSConf)} mm`, status: 'info' as const },
+        ...(system === 'smf' && axial.seismicSOut !== undefined ? [{ check: 'Spacing outside lo', basis: '§418.7.5.5', demand: `${f0(axial.seismicSOut)} mm`, status: 'info' as const }] : []),
+      ] : []),
+    ] : [{ check: 'Spiral', basis: `ρs ${axial.rhoS.toFixed(4)}`, demand: `⌀${tieDia} @ ${f0(axial.spiralPitch)} mm`, status: axial.pitchClearOK ? 'pass' as const : 'fail' as const }]),
+    ...(eccentric && inter ? [{ check: 'Balanced point', basis: `eb ${f0(inter.balanced.eb * 1000)} mm`, demand: `Pb ${f1(inter.balanced.Pb)} kN, Mb ${f1(inter.balanced.Mb)} kN·m`, status: 'info' as const }] : []),
+  ] : [{ check: 'Column', basis: 'invalid input', demand: 'Positive section, materials and load.', status: 'warn' as const }]
+
+  const pmTable = eccentric && inter && tableRows.length > 0 ? (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="border-b border-hairline text-left uppercase tracking-wide text-muted">
+            {['Point', 'c (mm)', 'εt', 'φ', 'Pn (kN)', 'Mn (kN·m)', 'φPn (kN)', 'φMn (kN·m)'].map((t) => <th key={t} className="pb-1.5 pr-3 font-semibold">{t}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-b border-hairline-2 bg-sheet-2">
+            <td className="py-1 pr-3 font-semibold text-muted">Max. axial cap</td>
+            <td className="py-1 pr-3 text-muted">—</td><td className="py-1 pr-3 text-muted">—</td><td className="py-1 pr-3 text-muted">0.65</td>
+            <td className="py-1 pr-3 text-muted">{f1(inter.PnMax)}</td><td className="py-1 pr-3 text-muted">0</td>
+            <td className="py-1 pr-3 font-semibold text-ink">{f1(0.65 * inter.PnMax)}</td><td className="py-1 font-semibold text-ink">0</td>
+          </tr>
+          {tableRows.map((row, i) => (
+            <tr key={i} className={`border-b border-hairline-2 last:border-0 ${row.isBalanced ? 'bg-brand-tint' : ''}`}>
+              <td className={`py-1 pr-3 ${row.isBalanced ? 'font-semibold text-brand' : 'text-muted'}`}>{row.label}</td>
+              <td className="py-1 pr-3 text-muted">{f0(row.c)}</td>
+              <td className="py-1 pr-3 text-muted">{row.et.toFixed(4)}</td>
+              <td className="py-1 pr-3 text-muted">{row.phi.toFixed(2)}</td>
+              <td className="py-1 pr-3 text-muted">{f1(row.Pn)}</td>
+              <td className="py-1 pr-3 text-muted">{f1(Math.abs(row.Mn))}</td>
+              <td className={`py-1 pr-3 font-semibold ${row.isBalanced ? 'text-brand' : 'text-ink'}`}>{f1(Math.max(0, row.phiPn))}</td>
+              <td className={`py-1 font-semibold ${row.isBalanced ? 'text-brand' : 'text-ink'}`}>{f1(Math.max(0, row.phiMn))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {cap && (
+        <p className="mt-2 text-[11px] text-muted">
+          Demand Pu = {f1(Pu)} kN, Mu = {f1(MuEff)} kN·m — capacity at e = {f0((MuEff / Pu) * 1000)} mm: φPn = {f1(cap.phi * cap.Pn)} kN, utilisation {util !== null ? `${(util * 100).toFixed(0)} %` : '—'}. Balanced: Pb = {f1(inter.balanced.Pb)} kN, Mb = {f1(inter.balanced.Mb)} kN·m.
+        </p>
       )}
-      {/* Same container as the letterhead — keeps the card aligned with the
-          rest of the page and out of the printed report. */}
-      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7">
-        <ModelMemberResults kind="column" onLoad={loadSaved} />
-      </div>
-      <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
-
-      <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
-        <div className="space-y-5">
-          <Card title="Column"
-            hint={!eccentric && barMode === 'design' ? (
-              <label className="no-print flex min-h-[24px] cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-muted">
-                <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
-                  className="h-3.5 w-3.5 accent-brand" />
-                Auto-select cage
-              </label>
-            ) : undefined}>
-            <Pick label="Loading" value={mode} onChange={(v) => setMode(v as Mode)}
-              options={[['axial', 'Concentric (axial)'], ['eccentric', 'Eccentric (P + M)']]} />
-            <Pick label="Shape" value={eccentric ? 'tied' : shape} onChange={(v) => setShape(v as ColumnShape)}
-              options={eccentric ? [['tied', 'Tied rectangular']] : [['tied', 'Tied rectangular'], ['spiral', 'Spiral circular']]} />
-            {tied ? <>
-              <Num label="Width b" unit="mm" value={b} onChange={setB} min={1} />
-              <Num label="Depth h (bending dir.)" unit="mm" value={h} onChange={setH} min={1} />
-            </> : (
-              <Num label="Diameter D" unit="mm" value={D} onChange={setD} min={1} />
-            )}
-            <Num label="Clear cover" unit="mm" value={cover} onChange={setCover} min={0} />
-            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={dbEff} onChange={setBarDia} min={1}
-              disabled={!!cageChoice}
-              hint={cageChoice ? (cageChoice.db ? 'chosen by the optimiser' : 'no compliant cage — see the ranking') : undefined} />
-            <Num label={tied ? <>Tie <KTex tex="d_t" /></> : <>Spiral <KTex tex="d_s" /></>} unit="mm" value={tieDia} onChange={setTieDia} min={1} />
-            <Pick label="Bars" value={eccentric ? 'analyze' : barMode} onChange={(v) => setBarMode(v as BarMode)}
-              options={eccentric ? [['analyze', 'Given count']] : [['design', 'Design automatically'], ['analyze', 'Given count']]} />
-            {(barMode === 'analyze' || eccentric) && (
-              <Num label="No. of bars" value={numBars} onChange={setNumBars} min={tied ? 4 : 6} step="1" />
-            )}
-            {eccentric && (
-              <Pick label="Bar distribution" value={layout} onChange={(v) => setLayout(v as BarLayout)}
-                options={[['all-around', 'All four faces'], ['two-face', 'Two faces (⟂ to h)']]} />
-            )}
-          </Card>
-
-          <Card title="Materials">
-            <Num label={<KTex tex="f'_c" />} unit="MPa" value={fc} onChange={setFc} min={1} />
-            <Num label={<KTex tex="f_y" />} unit="MPa" value={fy} onChange={setFy} min={1} />
-            <Num label={<KTex tex="f_{yt}" />} unit="MPa" value={fyt} onChange={setFyt} min={1} />
-          </Card>
-
-          <Card title="Lateral system / seismic">
-            <Pick label="System" value={system} onChange={v => setSystem(v as LateralSystem)}
-              options={[
-                ['gravity', 'Gravity only (§425.7.2)'],
-                ['imf', 'IMF — Intermediate MF (§418.4.3)'],
-                ['smf', 'SMF — Special MF (§418.7.5)'],
-              ]} />
-            {system !== 'gravity' && (
-              <Num label="Clear height Lu" unit="mm" value={colLen} onChange={setColLen} />
-            )}
-            {system === 'smf' && (
-              <>
-                <Num label="Max lateral bar spacing hx" unit="mm" value={hx} onChange={setHx} />
-                <p className="col-span-full text-[10px] text-muted">
-                  hx = centre-to-centre of outermost laterally restrained bars (≤ 350 mm).
-                  Set 0 to use the column least dimension as the default.
-                </p>
-              </>
-            )}
-          </Card>
-
-          <Card title="Loads">
-            <Pick label="Load entry" value={loadInput} onChange={(v) => setLoadInput(v as LoadInput)}
-              options={[['individual', 'Individual (D & L)'], ['direct', 'Factored Pu']]} />
-            {loadInput === 'individual' ? <>
-              <Num label={<>Dead <KTex tex="D" /></>} unit="kN" value={dead} onChange={setDead} />
-              <Num label={<>Live <KTex tex="L" /></>} unit="kN" value={live} onChange={setLive} />
-              <p className="col-span-full text-xs text-muted">Pu = max(1.4D, 1.2D+1.6L) = {f0(Pu)} kN</p>
-            </> : (
-              <Num label={<KTex tex="P_u" />} unit="kN" value={PuDirect} onChange={setPuDirect} />
-            )}
-            {eccentric && <Num label={<KTex tex="M_u" />} unit="kN·m" value={Mu} onChange={setMu} />}
-          </Card>
-
-          {eccentric && (
-            <Card title="Slenderness (nonsway)">
-              <Pick label="Consider slenderness" value={slenderOn ? 'yes' : 'no'} onChange={(v) => setSlenderOn(v === 'yes')}
-                options={[['no', 'No — short column'], ['yes', 'Yes — magnify moment']]} />
-              {slenderOn && <>
-                <Num label="k" value={kEff} onChange={setKEff} />
-                <Num label={<KTex tex="L_u" />} unit="m" value={Lu} onChange={setLu} />
-                <Num label={<KTex tex="M_1" />} unit="kN·m" value={M1} onChange={setM1} />
-                <Num label={<KTex tex="M_2" />} unit="kN·m" value={M2} onChange={setM2} />
-                <Num label="EI (0 = 0.4EcIg/1.6)" unit="kN·m²" value={EIin} onChange={setEIin} />
-                <p className="col-span-full text-xs text-muted">
-                  Sheet convention: M1/M2 negative for single curvature.
-                </p>
-              </>}
-            </Card>
-          )}
-          {cageChoice && <RebarRanking selection={cageChoice.selection} title="Cage selection" />}
-        </div>
-
-        <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
-          {verdict && (
-            <VerdictPanel ok={verdict.ok} headline={verdict.headline} governing={verdict.governing}
-              stats={verdict.stats} checks={verdict.checks} footnote={verdict.footnote} />
-          )}
-
-
-          {/* The same card the beam page uses — graph-paper ground, title and
-              section meta in a header strip above the drawing. The two pages
-              draw the same kind of thing and should look like it. */}
-          <DrawingCard pdfDrawing title="Section"
-            meta={`${tied ? `${f0(b)} × ${f0(h)}` : `⌀${f0(D)}`} · ${axial?.bars ?? numBars} ⌀${dbEff} · to scale`}>
-            {sectionFigure ? <SheetFigure drawing={sectionFigure} width={420} /> : (
-              // A SPIRAL column keeps the drawn schematic: `columnCage` builds
-              // rectangular tied cages, so there is no spiral cage to cut, and
-              // a rectangle standing in for one would be worse than a picture
-              // that says what it is.
-              <ColumnSchematic shape="spiral" b={b} h={h} D={D} cover={cover}
-                barDia={dbEff} tieDia={tieDia} bars={axial?.bars ?? numBars}
-                tieSpacing={axial?.spiralPitch} />
-            )}
-          </DrawingCard>
-
-          {axial && (
-            <ResultCard title="Results">
-              {eccentric && slender && (unstable ? (
-                <Row alert label="Slender column UNSTABLE" value={`Pu ≥ 0.75·Pc (${f1(0.75 * slender.Pc)} kN)`}
-                  sub="δ undefined (§406.6.4) — enlarge the section or reduce kLu" />
-              ) : (
-                <Row label="Magnified Mc" value={`${f2(slender.Mc)} kN·m`}
-                  sub={`δ=${slender.delta.toFixed(3)} · ${slender.slender ? 'slender' : 'short'}`} />
-              ))}
-              {eccentric && util !== null && cap && (
-                <Row alert={util > 1} label="Utilisation" value={`${(util * 100).toFixed(0)} %`}
-                  sub={`φPn=${f1(cap.phi * cap.Pn)} kN @ e=${f0((MuEff / Pu) * 1000)} mm`} />
-              )}
-              {/* The section itself, before any capacity means anything. Both
-                  verdicts are forced false while these stand, so they have to
-                  be visible or the page fails with no reason given. */}
-              {axial.inputNotes.map((n, k) => (
-                <Row key={k} alert label="⚠ Section" value={n} />
-              ))}
-              <Row label="Bars" value={`${axial.bars} ⌀${dbEff} mm`}
-                sub={`ρ=${(axial.rho * 100).toFixed(2)}%${
-                  // Only claim §410.6.1.1 when ρ is what actually failed — the
-                  // flag is also forced down by a non-physical section.
-                  axial.inputNotes.length > 0 ? ''
-                    : axial.rhoOK ? ' ✓' : ' ✗ (1–8%)'}`} />
-              <Row alert={!axial.axialOK && !eccentric} label={<KTex tex="\phi P_{n,max}" />}
-                value={`${f1(axial.phiPnMax)} kN`}
-                sub={`Po=${f1(axial.Po)} · ${axial.alpha.toFixed(2)}Po cap`} />
-              {tied ? (<>
-                <Row label="Ties" value={`⌀${Math.max(tieDia, axial.tieDiaMin)} @ ${f0(axial.tieSpacingFinal)} mm`}
-                  sub={axial.tieSpacingLabel} />
-                {system !== 'gravity' && axial.seismicSConf !== undefined && (<>
-                  <Row label="Conf. zone length lo" value={`${f0(axial.seismicLoZone ?? 0)} mm`}
-                    sub={system === 'smf' ? '§418.7.5.1' : '§418.4.3'} />
-                  <Row label="s (in conf. zone)" value={`${f0(axial.seismicSConf)} mm`}
-                    sub={system === 'smf' ? '§418.7.5.4' : '§418.4.3'} />
-                  {system === 'smf' && axial.seismicSOut !== undefined && (
-                    <Row label="s (outside lo)" value={`${f0(axial.seismicSOut)} mm`} sub="§418.7.5.5" />
-                  )}
-                </>)}
-              </>) : (
-                <Row alert={!axial.pitchClearOK} label="Spiral" value={`⌀${tieDia} @ ${f0(axial.spiralPitch)} mm pitch`}
-                  sub={`ρs=${axial.rhoS.toFixed(4)}`} />
-              )}
-              {eccentric && inter && (
-                <Row label="Balanced point" value={`Pb=${f1(inter.balanced.Pb)} kN`}
-                  sub={`Mb=${f1(inter.balanced.Mb)} · eb=${f0(inter.balanced.eb * 1000)} mm`} />
-              )}
-            </ResultCard>
-          )}
-
-          {eccentric && inter && (
-            <div className="rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
-              <InteractionDiagram r={inter} Pu={Pu} Mu={MuEff} />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {eccentric && inter && tableRows.length > 0 && (
-        <div className="mt-6 print-avoid-break rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
-          <h2 className="mb-3 text-[1.02rem] font-bold text-brand">P–M Interaction Table — Design Envelope (φP<sub>n</sub>, φM<sub>n</sub>)</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-hairline text-left uppercase tracking-wide text-muted">
-                  <th className="pb-1.5 pr-3 font-semibold">Point</th>
-                  <th className="pb-1.5 pr-3 font-semibold">c (mm)</th>
-                  <th className="pb-1.5 pr-3 font-semibold">εt</th>
-                  <th className="pb-1.5 pr-3 font-semibold">φ</th>
-                  <th className="pb-1.5 pr-3 font-semibold">Pn (kN)</th>
-                  <th className="pb-1.5 pr-3 font-semibold">Mn (kN·m)</th>
-                  <th className="pb-1.5 pr-3 font-semibold">φPn (kN)</th>
-                  <th className="pb-1.5 font-semibold">φMn (kN·m)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {/* Compression cap */}
-                <tr className="border-b border-hairline-2 bg-sheet-2">
-                  <td className="py-1 pr-3 font-semibold text-muted">Max. axial cap</td>
-                  <td className="py-1 pr-3 text-muted">—</td>
-                  <td className="py-1 pr-3 text-muted">—</td>
-                  <td className="py-1 pr-3 text-muted">0.65</td>
-                  <td className="py-1 pr-3 text-muted">{f1(inter.PnMax)}</td>
-                  <td className="py-1 pr-3 text-muted">0</td>
-                  <td className="py-1 pr-3 font-semibold text-ink">{f1(0.65 * inter.PnMax)}</td>
-                  <td className="py-1 font-semibold text-ink">0</td>
-                </tr>
-                {tableRows.map((row, i) => (
-                  <tr key={i}
-                    className={`border-b border-hairline-2 last:border-0 ${row.isBalanced ? 'bg-purple-50' : ''}`}>
-                    <td className={`py-1 pr-3 ${row.isBalanced ? 'font-semibold text-purple-700' : 'text-muted'}`}>
-                      {row.label}
-                    </td>
-                    <td className="py-1 pr-3 text-muted">{f0(row.c)}</td>
-                    <td className="py-1 pr-3 text-muted">{row.et.toFixed(4)}</td>
-                    <td className="py-1 pr-3 text-muted">{row.phi.toFixed(2)}</td>
-                    <td className="py-1 pr-3 text-muted">{f1(row.Pn)}</td>
-                    <td className="py-1 pr-3 text-muted">{f1(Math.abs(row.Mn))}</td>
-                    <td className={`py-1 pr-3 font-semibold ${row.isBalanced ? 'text-purple-700' : 'text-ink'}`}>
-                      {f1(Math.max(0, row.phiPn))}
-                    </td>
-                    <td className={`py-1 font-semibold ${row.isBalanced ? 'text-purple-700' : 'text-ink'}`}>
-                      {f1(Math.max(0, row.phiMn))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {cap && (
-            <p className="mt-2 text-[11px] text-muted">
-              Demand: P<sub>u</sub>={f1(Pu)} kN · M<sub>u</sub>={f1(MuEff)} kN·m —
-              capacity at e={f0((MuEff / Pu) * 1000)} mm: φP<sub>n</sub>={f1(cap.phi * cap.Pn)} kN,
-              utilisation {util !== null ? `${(util * 100).toFixed(0)}%` : '—'}.
-              Balanced: P<sub>b</sub>={f1(inter.balanced.Pb)} kN, M<sub>b</sub>={f1(inter.balanced.Mb)} kN·m.
-            </p>
-          )}
-        </div>
-      )}
-
-      <div className="no-print">{solution.length > 0 && <WorkedSolution steps={solution} title="Calculation report — worked solution" />}</div>
-      </div>
     </div>
+  ) : null
+
+  const sectionNode = sectionFigure ? <SheetFigure drawing={sectionFigure} width={420} />
+    : <ColumnSchematic shape="spiral" b={b} h={h} D={D} cover={cover} barDia={dbEff} tieDia={tieDia} bars={axial?.bars ?? numBars} tieSpacing={axial?.spiralPitch} />
+
+  return (
+    <WorkspacePage title="RC Column" badges={['Concrete', 'ACI 318-14 · NSCP 2015']}
+      intro="A tied or spiral reinforced-concrete column: concentric axial design with the cage chosen by the optimiser, or an eccentric P–M check of a given cage with nonsway slenderness magnification, plus the gravity, IMF and SMF confinement rules for the ties."
+      report={axial && verdict && solution.length > 0 ? {
+        docCode: 'C-01', ok: verdict.ok, governing: verdict.governing,
+        stats: [
+          { label: 'Bars', value: `${axial.bars}-⌀${dbEff}` },
+          { label: tied ? 'Ties' : 'Spiral pitch', value: tied ? `⌀${Math.max(tieDia, axial.tieDiaMin)} @${f0(axial.tieSpacingFinal)}` : `@${f0(axial.spiralPitch)}`, unit: 'mm' },
+          { label: 'φPn,max', value: f1(axial.phiPnMax), unit: 'kN' },
+          ...(eccentric && slender ? [{ label: 'Column class', value: slender.slender ? 'LONG (slender)' : 'SHORT' }] : []),
+        ],
+        // the same checks the screen shows — axial mode used to print none
+        checks: verdict.checks.map((c) => ({ name: c.name, ratio: c.ratio, ok: c.ratio !== null && c.ratio <= 1.0001 })),
+        data: [
+          ['Section', tied ? `${b} × ${h} mm (tied)` : `⌀${D} mm (spiral)`], ['Clear cover', `${cover} mm`],
+          ["Concrete f'c", `${fc} MPa`], ['Steel fy / fyt', `${fy} / ${fyt} MPa`],
+          ['Bar ⌀ / tie ⌀', `${dbEff} / ${tieDia} mm`], ['ρ provided', `${(axial.rho * 100).toFixed(2)} %`],
+          ['Pu', `${f1(Pu)} kN`], ...(eccentric ? [['Mu', `${f1(Mu)} kN·m`] as [string, string]] : []),
+        ],
+        steps: solution, drawingTitle: 'Column Section',
+      } : undefined}
+      inputs={<>
+        <div className="no-print"><ModelMemberResults kind="column" onLoad={loadSaved} /></div>
+        <InputGroup title="Column">
+          {!eccentric && barMode === 'design' && (
+            <label className="col-span-2 flex cursor-pointer items-center gap-2 text-[12.5px] font-semibold text-ink">
+              <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)} className="h-3.5 w-3.5 accent-brand" />
+              Auto-select cage
+            </label>
+          )}
+          <Pick label="Loading" value={mode} onChange={(v) => setMode(v as Mode)} options={[['axial', 'Concentric (axial)'], ['eccentric', 'Eccentric (P + M)']]} />
+          <Pick label="Shape" value={eccentric ? 'tied' : shape} onChange={(v) => setShape(v as ColumnShape)}
+            options={eccentric ? [['tied', 'Tied rectangular']] : [['tied', 'Tied rectangular'], ['spiral', 'Spiral circular']]} />
+          {tied ? <>
+            <Num label="Width b" unit="mm" value={b} onChange={setB} min={1} />
+            <Num label="Depth h (bending)" unit="mm" value={h} onChange={setH} min={1} />
+          </> : <Num label="Diameter D" unit="mm" value={D} onChange={setD} min={1} />}
+          <Num label="Clear cover" unit="mm" value={cover} onChange={setCover} min={0} />
+          <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={dbEff} onChange={setBarDia} min={1} disabled={!!cageChoice}
+            hint={cageChoice ? (cageChoice.db ? 'chosen by the optimiser' : 'no compliant cage — see the ranking') : undefined} />
+          <Num label={tied ? <>Tie <KTex tex="d_t" /></> : <>Spiral <KTex tex="d_s" /></>} unit="mm" value={tieDia} onChange={setTieDia} min={1} />
+          <Pick label="Bars" value={eccentric ? 'analyze' : barMode} onChange={(v) => setBarMode(v as BarMode)}
+            options={eccentric ? [['analyze', 'Given count']] : [['design', 'Design automatically'], ['analyze', 'Given count']]} />
+          {(barMode === 'analyze' || eccentric) && <Num label="No. of bars" value={numBars} onChange={setNumBars} min={tied ? 4 : 6} step="1" />}
+          {eccentric && <Pick label="Bar distribution" value={layout} onChange={(v) => setLayout(v as BarLayout)} options={[['all-around', 'All four faces'], ['two-face', 'Two faces (⟂ to h)']]} />}
+        </InputGroup>
+        <InputGroup title="Materials">
+          <Num label={<KTex tex="f'_c" />} unit="MPa" value={fc} onChange={setFc} min={1} />
+          <Num label={<KTex tex="f_y" />} unit="MPa" value={fy} onChange={setFy} min={1} />
+          <Num label={<KTex tex="f_{yt}" />} unit="MPa" value={fyt} onChange={setFyt} min={1} />
+        </InputGroup>
+        <InputGroup title="Lateral system" hint={system === 'smf' ? 'hx = centre-to-centre of the outermost laterally restrained bars (≤ 350 mm); 0 uses the least dimension.' : undefined}>
+          <div className="col-span-2">
+            <Pick label="System" value={system} onChange={(v) => setSystem(v as LateralSystem)}
+              options={[['gravity', 'Gravity only (§425.7.2)'], ['imf', 'IMF — Intermediate MF (§418.4.3)'], ['smf', 'SMF — Special MF (§418.7.5)']]} />
+          </div>
+          {system !== 'gravity' && <Num label="Clear height Lu" unit="mm" value={colLen} onChange={setColLen} />}
+          {system === 'smf' && <Num label="Max bar spacing hx" unit="mm" value={hx} onChange={setHx} />}
+        </InputGroup>
+        <InputGroup title="Loads" hint={loadInput === 'individual' ? `Pu = max(1.4D, 1.2D + 1.6L) = ${f0(Pu)} kN` : undefined}>
+          <div className="col-span-2">
+            <Pick label="Load entry" value={loadInput} onChange={(v) => setLoadInput(v as LoadInput)} options={[['individual', 'Individual (D & L)'], ['direct', 'Factored Pu']]} />
+          </div>
+          {loadInput === 'individual' ? <>
+            <Num label={<>Dead <KTex tex="D" /></>} unit="kN" value={dead} onChange={setDead} />
+            <Num label={<>Live <KTex tex="L" /></>} unit="kN" value={live} onChange={setLive} />
+          </> : <Num label={<KTex tex="P_u" />} unit="kN" value={PuDirect} onChange={setPuDirect} />}
+          {eccentric && <Num label={<KTex tex="M_u" />} unit="kN·m" value={Mu} onChange={setMu} />}
+        </InputGroup>
+        {eccentric && (
+          <InputGroup title="Slenderness (nonsway)" hint={slenderOn ? 'Sheet convention: M1/M2 negative for single curvature.' : undefined}>
+            <div className="col-span-2">
+              <Pick label="Consider slenderness" value={slenderOn ? 'yes' : 'no'} onChange={(v) => setSlenderOn(v === 'yes')} options={[['no', 'No — short column'], ['yes', 'Yes — magnify moment']]} />
+            </div>
+            {slenderOn && <>
+              <Num label="k" value={kEff} onChange={setKEff} />
+              <Num label={<KTex tex="L_u" />} unit="m" value={Lu} onChange={setLu} />
+              <Num label={<KTex tex="M_1" />} unit="kN·m" value={M1} onChange={setM1} />
+              <Num label={<KTex tex="M_2" />} unit="kN·m" value={M2} onChange={setM2} />
+              <Num label="EI (0 = 0.4EcIg/1.6)" unit="kN·m²" value={EIin} onChange={setEIin} />
+            </>}
+          </InputGroup>
+        )}
+      </>}
+      checks={verdict && axial ? <>
+        <CheckCard title="Design" basis={verdict.governing} status={verdict.ok ? 'pass' : 'fail'} pillLabel={verdict.ok ? 'DESIGN OK' : 'REVISE'}
+          value={verdict.stats[0].value} unit={verdict.stats[0].unit}
+          pairs={verdict.stats.slice(1).map((st) => ({ label: st.label, value: `${st.value}${st.unit ? ` ${st.unit}` : ''}` }))} />
+        {verdict.checks.map((c) => (
+          <CheckCard key={c.name} title={c.name} basis="ACI 318-14 / NSCP 2015" status={c.ratio === null ? 'info' : c.ratio <= 1.0001 ? 'pass' : 'fail'}
+            pillLabel={c.ratio === null ? 'NOT RUN' : undefined} value={c.ratio === null ? '—' : f2(c.ratio)} ratio={c.ratio ?? undefined} ratioLabel="Utilization" />
+        ))}
+      </> : (
+        <CheckCard title="Check the inputs" basis="column" status="warn" pillLabel="CHECK" value="—" formula="Positive section, materials and load." />
+      )}
+      summary={[
+        { label: 'Section', value: tied ? `${f0(b)} × ${f0(h)} mm tied, cover ${f0(cover)} mm` : `⌀${f0(D)} mm spiral, cover ${f0(cover)} mm` },
+        { label: "Materials f'c / fy / fyt", value: `${f0(fc)} / ${f0(fy)} / ${f0(fyt)} MPa` },
+        { label: 'Loads', value: `Pu ${f1(Pu)} kN${eccentric ? `, Mu ${f1(Mu)} kN·m` : ''}` },
+        { label: 'System', value: system === 'gravity' ? 'gravity only' : system.toUpperCase() },
+      ]}
+      drawing={{ title: 'Section', node: <div data-pdf-drawing>{sectionNode}</div> }}
+      resultsCaption={verdict?.footnote}
+      results={resultRows}
+      extraSections={[
+        ...(eccentric && inter ? [{ title: 'Interaction diagram', node: <InteractionDiagram r={inter} Pu={Pu} Mu={MuEff} /> }] : []),
+        ...(pmTable ? [{ title: 'P–M interaction table — design envelope', node: pmTable }] : []),
+        ...(cageChoice ? [{ title: 'Cage selection', node: <RebarRanking selection={cageChoice.selection} title="Ranked cages" /> }] : []),
+      ]}
+      steps={solution.length ? solution : [{ title: 'Check the inputs', lines: [{ text: 'Positive section, materials and load.' }] }]}
+      references={[
+        { topic: 'Axial capacity', basis: 'Po, 0.80 / 0.85 Po cap, φ', source: 'ACI 318-14 §22.4; NSCP 2015 §422.4' },
+        { topic: 'P–M interaction', basis: 'strain compatibility, φ by εt', source: 'ACI 318-14 §22.4, §21.2.2' },
+        { topic: 'Slenderness', basis: 'nonsway moment magnification', source: 'ACI 318-14 §6.6.4' },
+        { topic: 'Reinforcement limits', basis: 'ρ between 1 % and 8 %', source: 'NSCP 2015 §410.6.1.1' },
+        { topic: 'Ties and confinement', basis: 'gravity, IMF, SMF', source: 'NSCP 2015 §425.7.2, §418.4.3, §418.7.5' },
+      ]}
+    />
   )
 }

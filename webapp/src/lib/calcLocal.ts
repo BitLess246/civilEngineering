@@ -11,10 +11,12 @@ import {
   deriveWSection, beamFlexure, beamShear, beamLoadingSimple,
   columnAxial, weakAxisFlexure, combinedLoading,
   boltGroupGeom, boltShear, eccentricBoltGroup, outOfPlaneBoltGroup,
-  pryingAction, shearTabBlockShear, boltGeomFromPositions,
+  pryingAction, shearTabBlockShear, boltGeomFromPositions, plyBearing,
+  minFilletSize, maxFilletAlongEdge,
 } from '../engine/steelDesign'
+import { solveWeldedConnection } from '../engine/weldedConnection'
 import { shapeByName } from '../engine/aiscSections'
-import { available, type DesignBasis } from '../engine/designBasis'
+import { available, basisFactor, type DesignBasis } from '../engine/designBasis'
 import type {
   BeamCalcInput, BeamCalcResult,
   ColumnCalcInput, ColumnCalcResult,
@@ -78,12 +80,76 @@ export function localConnection(i: ConnectionCalcInput): ConnectionCalcResult {
   const nShear = i.nShear ?? 1
   const basis: DesignBasis = i.basis ?? 'LRFD'
   const phiRnBolt = boltShear(i.boltGrade, i.db, i.Vu, i.tPlate, i.FuPlate, i.threads, nShear)
-  const avail = {
-    shear:     available(phiRnBolt.Rn_shear,   basis, 'connection'),
-    bearing:   available(phiRnBolt.Rn_bearing, basis, 'connection'),
-    governing: available(phiRnBolt.Rn,         basis, 'connection'),
+  // The forces come first: §J3.10(a) bearing depends on which way each bolt
+  // pushes the tab, so tear-out is per bolt, not one number for the group.
+  const shearAvail = available(phiRnBolt.Rn_shear, basis, 'connection')
+  const eccentric = eccentricBoltGroup(geom, i.Vu, i.Hu, i.ex_load, i.ey_load, shearAvail, i.db, i.tPlate)
+  // The tab, in its own frame: welded along x = 0, free on the other three
+  // sides — W and H from the outermost bolts plus the entered edge distances.
+  const abs = geom.bolts.map((b) => ({ id: b.id, x: b.x + geom.Cx, y: b.y + geom.Cy }))
+  const tabW = Math.max(...abs.map((b) => b.x)) + i.ex_edge
+  const tabH = Math.max(...abs.map((b) => b.y)) + i.ey
+  const force = new Map(eccentric.bolts.map((f) => [f.id, f]))
+  // Vu acts DOWN on the tab (the beam's reaction, delivered through the bolts)
+  const onTab = plyBearing(abs, (id) => {
+    const f = force.get(id)
+    return f ? { x: f.Vx, y: -f.Vy } : { x: 0, y: -1 }
+  }, i.db, i.tPlate, i.FuPlate, { xMax: tabW, yMin: 0, yMax: tabH })
+  // The beam web bears too, pushed the other way (the bolts carry the beam's
+  // reaction UP into its web). The web runs on into the flanges, so it can
+  // only tear toward the next hole or out of the beam end, 13 mm past the
+  // support face.
+  const web = i.twWeb && i.twWeb > 0
+    ? plyBearing(abs, (id) => {
+      const f = force.get(id)
+      return f ? { x: -f.Vx, y: f.Vy } : { x: 0, y: 1 }
+    }, i.db, i.twWeb, i.FuWeb ?? 450, { xMin: 13 })
+    : null
+  // each bolt against the least of its shear, tab and web strengths; the
+  // worst ratio governs, and what limits that bolt is reported
+  type By = ConnectionCalcResult['boltGovernedBy']
+  let boltUtil = 0, boltGoverning = abs[0]?.id ?? '', boltGovernedBy: By = 'bolt shear'
+  const bearing = onTab.map((t, k) => {
+    const w = web?.[k]
+    const cands: [number, By][] = [
+      [phiRnBolt.Rn_shear, 'bolt shear'],
+      [t.Rn, t.Rn_tear < t.Rn_bear ? 'tab tear-out' : 'tab bearing'],
+      ...(w ? [[w.Rn, w.Rn_tear < w.Rn_bear ? 'web tear-out' : 'web bearing'] as [number, By]] : []),
+    ]
+    const [Rn, by] = cands.reduce((a, b) => (b[0] < a[0] ? b : a))
+    const avail = available(Rn, basis, 'connection')
+    const R = force.get(t.id)?.R ?? 0
+    const u = avail > 0 ? R / avail : Infinity
+    if (u > boltUtil) { boltUtil = u; boltGoverning = t.id; boltGovernedBy = by }
+    return { ...t, availBearing: available(t.Rn, basis, 'connection'), avail }
+  })
+  const webBearing = web ? web.map((b) => ({ ...b, availBearing: available(b.Rn, basis, 'connection') })) : null
+
+  // The tab welds: two fillets along the support face, x = 0 from 0 to the tab
+  // height, carrying the bolt group's load where it acts — the centroid plus
+  // the entered eccentricity, so the weld sees V, H and the moment V·a about
+  // its own line. Two equal fillets on one line = one line of twice the throat.
+  let weld: ConnectionCalcResult['weld'] = null
+  if (i.weldSize && i.weldSize > 0) {
+    const FEXX = i.FEXX ?? 482
+    const Px = i.Hu, Py = -i.Vu
+    const P = Math.hypot(Px, Py)
+    const r = solveWeldedConnection({
+      segments: [{ id: 'W', x1: 0, y1: 0, x2: 0, y2: tabH }], size: 2 * i.weldSize, FEXX,
+      phi: basisFactor(basis, 'connection'),
+      load: { P, angleDeg: P > 0 ? (Math.atan2(Py, Px) * 180) / Math.PI : -90, px: geom.Cx + i.ex_load, py: geom.Cy + i.ey_load },
+    })
+    const wMin = minFilletSize(i.tPlate), wMax = maxFilletAlongEdge(i.tPlate)
+    const sizeOk = i.weldSize >= wMin - 1e-9 && i.weldSize <= wMax + 1e-9
+    const util = r.capacityPerLen > 0 ? r.fMax / r.capacityPerLen : Infinity
+    weld = { w: i.weldSize, FEXX, L: tabH, fMax: r.fMax, availPerLen: r.capacityPerLen, util, wMin, wMax, sizeOk, ok: sizeOk && util <= 1 + 1e-9 }
   }
-  const eccentric = eccentricBoltGroup(geom, i.Vu, i.Hu, i.ex_load, i.ey_load, avail.governing, i.db, i.tPlate)
+  const worstBearing = Math.min(...bearing.map((b) => b.availBearing), ...(webBearing ?? []).map((b) => b.availBearing))
+  const avail = {
+    shear:     shearAvail,
+    bearing:   worstBearing,
+    governing: Math.min(shearAvail, worstBearing),
+  }
   const outOfPlane = i.e_out > 0
     ? outOfPlaneBoltGroup(geom, eccentric.bolts, i.e_out, i.Vu, i.boltGrade, i.db, i.threads, basis)
     : null
@@ -98,7 +164,9 @@ export function localConnection(i: ConnectionCalcInput): ConnectionCalcResult {
     : shearTabBlockShear(i.nRows, i.sy, i.ey, i.ey, i.ex_edge, i.db, i.tPlate, i.FyPlate, i.FuPlate)
   return {
     geom, phiRnBolt, eccentric, outOfPlane, prying, blockShear,
-    maxVu: eccentric.Rmax > 1e-9 ? (i.Vu * avail.governing) / eccentric.Rmax : Infinity,
+    // the elastic method is linear in the load, so the worst ratio scales Vu
+    maxVu: boltUtil > 1e-12 ? i.Vu / boltUtil : Infinity,
+    bearing, boltUtil, boltGoverning, boltGovernedBy, webBearing, weld,
     tauMax: (eccentric.Rmax * 1000) / (phiRnBolt.Ab * nShear),
     basis, avail,
     availBlockShear: blockShear.map((c) =>

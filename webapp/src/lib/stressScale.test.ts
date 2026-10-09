@@ -141,7 +141,7 @@ describe('the ramps', () => {
   it('give a diverging field a pale centre and saturated ends', () => {
     // Blue for compression, red for tension, pale at zero — the convention
     // these plots are read with.
-    const lo = stressColorRGB(0, true), mid = stressColorRGB(0.5, true), hi = stressColorRGB(1, true)
+    const lo = stressColorRGB(0, true, 'perceptual'), mid = stressColorRGB(0.5, true, 'perceptual'), hi = stressColorRGB(1, true, 'perceptual')
     expect(lo[2]).toBeGreaterThan(lo[0])        // low end is blue-dominant
     expect(hi[0]).toBeGreaterThan(hi[2])        // high end is red-dominant
     const spread = (c: number[]) => Math.max(...c) - Math.min(...c)
@@ -155,7 +155,7 @@ describe('the ramps', () => {
     // rainbow returns to mid-lightness at cyan and at yellow, inventing
     // contour bands the data never had.
     const lum = (t: number) => {
-      const [r, g, b] = stressColorRGB(t, false)
+      const [r, g, b] = stressColorRGB(t, false, 'perceptual')
       return 0.2126 * r + 0.7152 * g + 0.0722 * b
     }
     let prev = -Infinity
@@ -165,6 +165,24 @@ describe('the ramps', () => {
       prev = l
     }
     expect(lum(1)).toBeGreaterThan(lum(0) + 0.5)   // and it actually spans
+  })
+
+  it('default to the FEA spectrum — dark blue → cyan → green → yellow → red', () => {
+    // The palette FEA post-processors draw stress in, for signed and unsigned
+    // fields alike: the reader finds the peak by looking for red.
+    for (const signed of [false, true]) {
+      const [r0, g0, b0] = stressColorRGB(0, signed)
+      expect(b0).toBeGreaterThan(0.5); expect(r0).toBe(0); expect(g0).toBe(0)          // dark blue
+      const [rc, gc, bc] = stressColorRGB(0.375, signed)
+      expect([rc, gc, bc]).toEqual([0, 1, 1])                                           // cyan
+      const [rm, gm, bm] = stressColorRGB(0.5, signed)
+      expect(gm).toBe(1); expect(rm).toBeLessThan(0.6); expect(bm).toBeLessThan(0.6)    // green
+      expect(stressColorRGB(0.625, signed)).toEqual([1, 1, 0])                          // yellow
+      expect(stressColorRGB(0.875, signed)).toEqual([1, 0, 0])                          // red
+    }
+    // the shader's nine stops are the legend's nine stops
+    expect(rampStops(false)).toBe(rampStops(true))
+    expect(rampStops(false, 'perceptual')).not.toBe(rampStops(true, 'perceptual'))
   })
 
   it('emit parseable rgb() and clamp out-of-range t', () => {

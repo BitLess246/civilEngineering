@@ -1,35 +1,13 @@
 import { useState } from 'react'
 import { designMicropile } from '../engine/micropile'
-import { ReportControls } from '../components/ReportControls'
 import { buildMicropileSolution } from '../lib/geotechSolutions'
-import { WorkedSolution } from '../components/WorkedSolution'
-import { PageHeader, CalcBody } from '../components/calc'
-import { Card, ResultCard } from '../components/qty'
+import { Num, Pick } from '../components/qty'
+import { InputGroup, CheckCard } from '../components/workspace'
+import { WorkspacePage } from '../components/WorkspacePage'
+import { MicropileDrawing } from '../components/pileSketches'
 
-function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
 const f0 = (n: number) => (Number.isFinite(n) ? Math.round(n).toString() : '—')
-
-function Field({ label, value, onChange, unit, step = 'any' }: {
-  label: string; value: number; onChange: (v: number) => void; unit?: string; step?: string
-}) {
-  return (
-    <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-muted">{label}{unit ? ` (${unit})` : ''}</span>
-      <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-field-line px-2.5 py-1.5" />
-    </label>
-  )
-}
-
-function Out({ label, value, ok }: { label: string; value: string; ok?: boolean }) {
-  return (
-    <div className="flex items-baseline justify-between border-t border-hairline-2 py-1 text-sm">
-      <span className="text-muted">{label}</span>
-      <span className={`font-mono font-medium ${ok === undefined ? 'text-ink' : ok ? 'text-ok' : 'text-fail'}`}>{value}</span>
-    </div>
-  )
-}
 
 export default function Micropile() {
   const [barDia, setBarDia] = useState(32)
@@ -53,90 +31,64 @@ export default function Micropile() {
 
   const solution = buildMicropileSolution({ mode, barDia, fyBar, groutDia, fcGrout, casing, casingOD, casingID, fyCasing, bondDia, bondLength, alphaBond, P }, r)
 
-  const report = {
-    docCode: 'G-MP',
-    ok: r.ok,
-    governing: `${r.governs === 'bond' ? 'Grout-to-ground bond' : 'Structural capacity'} governs · FS ${f2(r.fs)}`,
-    stats: [
-      { label: 'Allowable capacity', value: f2(r.allowable), unit: 'kN' },
-      { label: 'Applied load P', value: f2(P), unit: 'kN' },
-      { label: 'Bond length required', value: f2(r.bondLengthReq), unit: 'm' },
-    ],
-    checks: [
-      { name: `Governing capacity (${r.governs})`, ratio: r.allowable > 0 ? P / r.allowable : 0, ok: r.ok },
-    ],
-    data: [
-      ['Load case', mode],
-      ['Applied load P', `${f2(P)} kN`],
-      ['Bar ⌀ / fy', `${barDia} mm / ${fyBar} MPa`],
-      ['Grout ⌀ / f′c', `${groutDia} mm / ${fcGrout} MPa`],
-      ['Permanent casing', casing ? `yes — OD ${casingOD} / ID ${casingID} mm, fy ${fyCasing} MPa` : 'no'],
-      ['Bond ⌀', `${f2(bondDia)} m`],
-      ['Bond length provided', `${f2(bondLength)} m`],
-      ['Grout-to-ground bond αbond', `${f2(alphaBond)} kPa`],
-      ['Allowable structural', `${f2(r.structural)} kN`],
-      ['Ultimate bond Qult', `${f2(r.Qult)} kN`],
-      ['Allowable bond Qbond', `${f2(r.Qbond)} kN`],
-      ['Governing mode', r.governs],
-    ] as [string, string][],
-    steps: solution,
-  }
-
+  const util = r.allowable > 0 ? P / r.allowable : Infinity
   return (
-        <div>
-      <PageHeader title="Micropile — axial capacity" badges={['FHWA-NHI-05-039']} />
-      <ReportControls title="Micropile" badges={['FHWA-NHI-05-039']} report={report} />
-      <CalcBody>
-        <div className="space-y-5">
-          <p className="text-[13px] text-muted">
-            FHWA-NHI-05-039 allowable-stress check: structural capacity of the bar/casing/grout vs the
-            grout-ground bond capacity of the bonded zone. Governing allowable = the smaller of the two.
-          </p>
-
-          <Card title="Section">
-            <Field label="Bar Ø" unit="mm" value={barDia} onChange={setBarDia} />
-            <Field label="Fy bar" unit="MPa" value={fyBar} onChange={setFyBar} />
-            <Field label="Grout Ø (drill)" unit="mm" value={groutDia} onChange={setGroutDia} />
-            <Field label="f′c grout" unit="MPa" value={fcGrout} onChange={setFcGrout} />
-            <label className="col-span-full flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={casing} onChange={(e) => setCasing(e.target.checked)} />
-              <span>Permanent steel casing</span>
-            </label>
-            {casing && <Field label="Casing OD" unit="mm" value={casingOD} onChange={setCasingOD} />}
-            {casing && <Field label="Casing ID" unit="mm" value={casingID} onChange={setCasingID} />}
-            {casing && <Field label="Fy casing" unit="MPa" value={fyCasing} onChange={setFyCasing} />}
-          </Card>
-
-          <Card title="Bond zone & demand">
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 text-[11.5px] font-semibold text-muted">Load mode</span>
-              <select value={mode} onChange={(e) => setMode(e.target.value as 'compression' | 'tension')}
-                className="text-[13px]">
-                <option value="compression">Compression</option>
-                <option value="tension">Tension</option>
-              </select>
-            </label>
-            <Field label="Bond Ø" unit="m" value={bondDia} onChange={setBondDia} step="0.01" />
-            <Field label="Bond length" unit="m" value={bondLength} onChange={setBondLength} />
-            <Field label="αbond" unit="kPa" value={alphaBond} onChange={setAlphaBond} />
-            <Field label="Axial demand P" unit="kN" value={P} onChange={setP} />
-          </Card>
-
-          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
-        </div>
-
-        <ResultCard title="Results">
-          <Out label="Structural allowable" value={`${f0(r.structural)} kN`} />
-          <Out label="Bond Qult / allowable (FS 2)" value={`${f0(r.Qult)} / ${f0(r.Qbond)} kN`} />
-          <Out label={`Governing allowable (${r.governs})`} value={`${f0(r.allowable)} kN`} />
-          <Out label="FS (allowable / demand)" value={f2(r.fs)} ok={r.ok} />
-          <Out label="Bond length for FS = 2" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
-          <p className="mt-2 text-[10px] text-faint">
-            Structural: 0.40·f′c·Agrout + 0.47·Fy·As (compression), 0.55·Fy·As (tension). Bond:
-            π·Dbond·Lbond·αbond / FS. Verify buckling in very soft soils and group/settlement effects separately.
-          </p>
-        </ResultCard>
-      </CalcBody>
-    </div>
+    <WorkspacePage title="Micropile" badges={['Geotechnical', 'FHWA-NHI-05-039']}
+      intro="FHWA-NHI-05-039 allowable-stress check: the structural capacity of the bar, casing and grout against the grout-to-ground bond capacity of the bonded zone; the governing allowable is the smaller of the two."
+      inputs={<>
+        <InputGroup title="Section">
+          <Num label="Bar ⌀" unit="mm" value={barDia} onChange={setBarDia} />
+          <Num label="Bar Fy" unit="MPa" value={fyBar} onChange={setFyBar} />
+          <Num label="Grout ⌀ (drill)" unit="mm" value={groutDia} onChange={setGroutDia} />
+          <Num label="Grout f′c" unit="MPa" value={fcGrout} onChange={setFcGrout} />
+          <label className="col-span-2 flex items-center gap-2 text-[12.5px] font-semibold text-ink">
+            <input type="checkbox" checked={casing} onChange={(e) => setCasing(e.target.checked)} className="accent-brand" />
+            Permanent steel casing
+          </label>
+          {casing && <>
+            <Num label="Casing OD" unit="mm" value={casingOD} onChange={setCasingOD} />
+            <Num label="Casing ID" unit="mm" value={casingID} onChange={setCasingID} />
+            <Num label="Casing Fy" unit="MPa" value={fyCasing} onChange={setFyCasing} />
+          </>}
+        </InputGroup>
+        <InputGroup title="Bond zone and demand">
+          <div className="col-span-2">
+            <Pick label="Load mode" value={mode} onChange={(v) => setMode(v as 'compression' | 'tension')} options={[['compression', 'Compression'], ['tension', 'Tension']]} />
+          </div>
+          <Num label="Bond ⌀" unit="m" value={bondDia} onChange={setBondDia} step="0.01" />
+          <Num label="Bond length" unit="m" value={bondLength} onChange={setBondLength} />
+          <Num label="αbond" unit="kPa" value={alphaBond} onChange={setAlphaBond} />
+          <Num label="Axial demand P" unit="kN" value={P} onChange={setP} />
+        </InputGroup>
+      </>}
+      checks={<>
+        <CheckCard title="Governing capacity" basis={`${r.governs === 'bond' ? 'grout-to-ground bond' : 'structural'} governs`} status={r.ok ? 'pass' : 'fail'}
+          value={f0(r.allowable)} unit="kN allowable" ratio={Number.isFinite(util) ? util : undefined} ratioLabel="P ÷ allowable"
+          pairs={[{ label: 'Structural', value: `${f0(r.structural)} kN` }, { label: 'Bond (FS 2)', value: `${f0(r.Qbond)} kN` }]} />
+        <CheckCard title="Bond length" basis="for FS = 2 on the bond" status={bondLength >= r.bondLengthReq ? 'pass' : 'fail'}
+          value={f2(r.bondLengthReq)} unit="m required" formula="Lb = 2 P / (π Db αbond)"
+          pairs={[{ label: 'Provided', value: `${f2(bondLength)} m` }, { label: 'Ultimate bond', value: `${f0(r.Qult)} kN` }]} />
+      </>}
+      summary={[
+        { label: 'Bar', value: `⌀${barDia} mm, Fy ${fyBar} MPa` },
+        { label: 'Grout', value: `⌀${groutDia} mm, f′c ${fcGrout} MPa` },
+        { label: 'Casing', value: casing ? `${casingOD}/${casingID} mm, Fy ${fyCasing} MPa` : 'none' },
+        { label: 'Bond zone', value: `⌀${f2(bondDia)} m × ${f2(bondLength)} m, α ${f2(alphaBond)} kPa` },
+      ]}
+      drawing={{ title: 'Bond zone and section', node: <div data-pdf-drawing><MicropileDrawing barDia={barDia} groutDia={groutDia} casing={casing} casingOD={casingOD} casingID={casingID}
+        bondDia={bondDia} bondLength={bondLength} mode={mode} P={P} /></div> }}
+      resultsCaption="Structural: 0.40·f′c·Agrout + 0.47·Fy·As (compression), 0.55·Fy·As (tension). Bond: π·Db·Lb·αbond / FS. Verify buckling in very soft soils, and group and settlement effects, separately."
+      results={[
+        { check: 'Structural allowable', basis: mode === 'compression' ? '0.40 f′c Ag + 0.47 Fy As' : '0.55 Fy As', demand: `${f0(r.structural)} kN`, status: 'info' as const },
+        { check: 'Bond allowable', basis: 'π Db Lb αbond / 2', demand: `${f0(r.Qbond)} kN`, status: 'info' as const },
+        { check: 'Demand vs governing', basis: r.governs, demand: `${f0(P)} kN`, limit: `${f0(r.allowable)} kN`, ratio: Number.isFinite(util) ? util : undefined, status: r.ok ? 'pass' as const : 'fail' as const },
+        { check: 'Bond length', basis: 'required for FS 2', demand: `${f2(r.bondLengthReq)} m`, limit: `${f2(bondLength)} m`, status: bondLength >= r.bondLengthReq ? 'pass' as const : 'fail' as const },
+      ]}
+      steps={solution}
+      references={[
+        { topic: 'Structural capacity', basis: 'allowable-stress bar + casing + grout', source: 'FHWA-NHI-05-039, Micropile Design and Construction, Ch. 5' },
+        { topic: 'Grout-to-ground bond', basis: 'αbond by soil and grouting method', source: 'FHWA-NHI-05-039, Ch. 5' },
+      ]}
+    />
   )
 }

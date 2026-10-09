@@ -1,8 +1,8 @@
-import { useState, type JSX } from 'react'
+import type { JSX } from 'react'
 import type { CalcPdfInput } from '../lib/calcPdf'
 import { ExportPdfButton } from './ExportPdfButton'
-import { LetterheadCard } from './calc'
-import { loadProfile, letterheadDefaults } from '../lib/auth/profile'
+import { LetterheadCard, type LetterheadState } from './calc'
+import { useReportLetterhead } from '../lib/reportLetterhead'
 import { BRAND_MARK, BRAND_TAIL, docLabel } from '../lib/brand'
 
 /**
@@ -37,28 +37,42 @@ export interface ReportControlsProps {
  * grid — ahead of the page's themed content. Pages with structured results
  * use the full PrintReport instead (components/calc.tsx).
  */
-export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], report }: ReportControlsProps): JSX.Element {
-  // Seeded from the saved profile, as INITIAL state rather than an effect —
-  // an effect would overwrite whatever the user had already typed on a
-  // re-render, and this is a starting value, not a binding.
-  const [defaults] = useState(() => letterheadDefaults(loadProfile()))
-  const [project, setProject] = useState(defaults.project)
-  const [sheet, setSheet] = useState('')
-  const [preparedBy, setPreparedBy] = useState(defaults.preparedBy)
-  const today = new Date().toISOString().slice(0, 10)
-
-  const print = () => {
-    const prev = document.title
-    document.title = title + (project ? ` — ${project}` : '')
-    window.print()
-    window.setTimeout(() => { document.title = prev }, 500)
-  }
-
+/** The print-only calc-sheet header: document strip, wordmark, title, badges, letterhead grid. */
+export function PrintLetterhead({ title, badges, lh, today }: {
+  title: string; badges: string[]; lh: LetterheadState; today: string
+}): JSX.Element {
   const lhCells: [string, string, boolean][] = [
-    ['Project', project || '—', false], ['Sheet', sheet || '—', true],
-    ['Prepared by', preparedBy || '—', false], ['Date', today, true],
+    ['Project', lh.project || '—', false], ['Sheet', lh.sheet || '—', true],
+    ['Prepared by', lh.preparedBy || '—', false], ['Date', today, true],
   ]
+  return (
+    <div className="print-only mb-4">
+      <div className="flex items-baseline justify-between border-b border-hairline-2 pb-1.5 font-mono text-[9px] text-faint">
+        <span>{docLabel(title)}</span>
+        <span>{lh.sheet || '—'} · {today}</span>
+      </div>
+      <div className="mt-3 flex items-baseline gap-2">
+        <span className="text-[14px] font-extrabold tracking-[.14em]">{BRAND_MARK}</span>
+        {BRAND_TAIL && <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>}
+      </div>
+      <h1 className="mt-2 text-[24px] font-extrabold tracking-tight text-ink">{title}</h1>
+      <div className="mt-2 flex gap-2">
+        {badges.map((b) => <span key={b} className="rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[9.5px] font-medium text-brand">{b}</span>)}
+      </div>
+      <div className="mt-4 grid grid-cols-4 overflow-hidden rounded-lg border border-hairline">
+        {lhCells.map(([k, v, mono]) => (
+          <div key={k} className="border-r border-hairline-2 px-3.5 py-2 last:border-r-0">
+            <p className="text-[8.5px] font-semibold uppercase tracking-widest text-faint">{k}</p>
+            <p className={`mt-0.5 text-[11px] font-semibold text-ink ${mono ? 'font-mono font-medium' : ''}`}>{v}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
+export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], report }: ReportControlsProps): JSX.Element {
+  const { lh, setLh, today, print } = useReportLetterhead(title)
   return (
     <>
       {/* Screen: the SAME letterhead card the calc-template pages use. It used
@@ -67,15 +81,11 @@ export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], re
           like two apps. One card, one style. */}
       <div className="no-print mt-4">
         <LetterheadCard
-          lh={{ project, sheet, preparedBy }}
-          onChange={(p) => {
-            if (p.project !== undefined) setProject(p.project)
-            if (p.sheet !== undefined) setSheet(p.sheet)
-            if (p.preparedBy !== undefined) setPreparedBy(p.preparedBy)
-          }}
+          lh={lh}
+          onChange={setLh}
           action={report ? (
             <ExportPdfButton {...report} docTitle={title} badges={badges}
-              lh={{ project, sheet, preparedBy }}
+              lh={lh}
               className="inline-flex flex-none items-center gap-2 rounded-md bg-brand px-3.5 py-1.5 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-50" />
           ) : (
             <button type="button" onClick={print}
@@ -86,28 +96,7 @@ export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], re
       </div>
 
       {/* Print: calc-sheet letterhead header */}
-      <div className="print-only mb-4">
-        <div className="flex items-baseline justify-between border-b border-hairline-2 pb-1.5 font-mono text-[9px] text-faint">
-          <span>{docLabel(title)}</span>
-          <span>{sheet || '—'} · {today}</span>
-        </div>
-        <div className="mt-3 flex items-baseline gap-2">
-          <span className="text-[14px] font-extrabold tracking-[.14em]">{BRAND_MARK}</span>
-          {BRAND_TAIL && <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>}
-        </div>
-        <h1 className="mt-2 text-[24px] font-extrabold tracking-tight text-ink">{title}</h1>
-        <div className="mt-2 flex gap-2">
-          {badges.map((b) => <span key={b} className="rounded border border-brand-line bg-brand-tint px-1.5 py-px font-mono text-[9.5px] font-medium text-brand">{b}</span>)}
-        </div>
-        <div className="mt-4 grid grid-cols-4 overflow-hidden rounded-lg border border-hairline">
-          {lhCells.map(([k, v, mono]) => (
-            <div key={k} className="border-r border-hairline-2 px-3.5 py-2 last:border-r-0">
-              <p className="text-[8.5px] font-semibold uppercase tracking-widest text-faint">{k}</p>
-              <p className={`mt-0.5 text-[11px] font-semibold text-ink ${mono ? 'font-mono font-medium' : ''}`}>{v}</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      <PrintLetterhead title={title} badges={badges} lh={lh} today={today} />
     </>
   )
 }
