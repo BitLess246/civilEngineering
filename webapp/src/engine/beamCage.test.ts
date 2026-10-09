@@ -542,14 +542,33 @@ describe('buildBeamCage — faces in layers', () => {
     expect(ys(cage, 'top').has(at(yTop - pitch))).toBe(true)
   })
 
-  it('aligns the upper layer over the extreme layer\'s inner bars — §407.7.2', () => {
-    // 4 bottom bars spread on the even grid; the 2 above sit over the inner
-    // slots, where the stirrup's corner bend still leaves room.
+  it('starts the upper layer AT the stirrups on both sides', () => {
+    // A (4+2) face: the 2 upper bars spread on their own grid corner to
+    // corner — ON the stirrup line, both sides — not pulled to the centre
+    // over the extreme layer's inner slots. (The design spreads every layer
+    // that way; the cut has to draw the same stack.)
     const cage = buildBeamCage(stacked)
     const upper = cage.runs.filter((r) => r.role === 'bottom'
       && r.path.some((p) => Math.round(p[1] * 1e6) === at(yBot + pitch)))
     expect(upper).toHaveLength(2)
-    for (const r of upper) expect(Math.abs(r.path[0][2])).toBeCloseTo(half / 3, 9)
+    for (const r of upper) expect(Math.abs(r.path[0][2])).toBeCloseTo(half, 9)
+    // ...and the pair straddles the web: one bar per side, not two on one line
+    expect(upper[0]!.path[0][2]).toBeCloseTo(-half, 9)
+    expect(upper[1]!.path[0][2]).toBeCloseTo(half, 9)
+  })
+
+  it('stacks a fuller upper layer corner to corner as well', () => {
+    // Layers richer than the extreme one already spread on their own grid;
+    // they keep doing so — three bars land on −half, 0, +half. (7 bars, so
+    // the [4, 3] stack sums to the face's own count.)
+    const cage = buildBeamCage({ ...stacked, botBars: 7, botLayers: [4, 3] })
+    const upper = cage.runs.filter((r) => r.role === 'bottom'
+      && r.path.some((p) => Math.round(p[1] * 1e6) === at(yBot + pitch)))
+    expect(upper).toHaveLength(3)
+    const zs = upper.map((r) => r.path[0][2]).sort((a, b) => a - b)
+    expect(zs[0]).toBeCloseTo(-half, 9)
+    expect(zs[1]).toBeCloseTo(0, 9)
+    expect(zs[2]).toBeCloseTo(half, 9)
   })
 
   it('gives the continuous bars the extreme layer\'s outermost places', () => {

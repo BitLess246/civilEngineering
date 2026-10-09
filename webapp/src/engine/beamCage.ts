@@ -73,7 +73,9 @@ export interface BeamCageInput {
    * layer for `botLayers`, the top layer for `topLayers`).
    *
    * A face given no layers — or layers whose sum is not its own bar count —
-   * draws in one row, as before.
+   * draws in one row, as before. Every layer that IS drawn runs corner to
+   * corner: its outermost bars sit on the stirrup line, both sides, exactly
+   * like the extreme layer's — not over the extreme layer's inner slots.
    */
   botLayers?: number[]
   topLayers?: number[]
@@ -467,15 +469,17 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
    * 2 to 10 a side, 18 of 5562 bar pairs were coincident; with one layout,
    * none can be.
    *
-   * IN LAYERS, the same rule per layer, stacked: §407.7.2 puts upper-layer
-   * bars directly over bottom-layer bars, so each layer above the first takes
-   * a centred run of the extreme layer's grid instead of spreading on a grid
-   * of its own — a second layer of 2 over a bottom layer of 4 sits over the
-   * two inner bars, which is where the stirrup's corner bend still leaves
-   * room, and the callout's "(4+2)" becomes a picture the cut agrees with.
-   * The continuous bars still take the outermost places first, walking inward
-   * and up (down, for top steel), so the corners remain the bars that run
-   * through.
+   * IN LAYERS, the same rule per layer, stacked: every layer spreads on its
+   * OWN even grid across the full face width, so its outermost bars land on
+   * the stirrup line both sides — the way a bar-bending sheet draws a stack,
+   * and the way the section cut reads it. Seating an upper layer over the
+   * extreme layer's INNER slots drew the second pair of a (4+2) face pulled
+   * toward the centre with nothing at the stirrups above them — a picture no
+   * detailer would cut from, and one the design's own per-layer layout
+   * (each layer spread corner to corner at its §407.7.1 clear spacing)
+   * contradicted. The vertical pitch stays §407.7.2. The continuous bars
+   * still take the outermost places first, walking inward and up (down, for
+   * top steel), so the corners remain the bars that run through.
    */
   const faceSlots = (layers: number[]): { v: number; layer: number }[] => {
     const n0 = Math.max(1, layers[0] ?? 1)
@@ -488,12 +492,11 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
     }
     const out: { v: number; layer: number }[] = []
     layers.forEach((n, li) => {
-      // The extreme layer owns the grid. A layer fuller than it (a caller that
-      // stacked the face the other way up) re-spreads over the same width —
-      // the honest layout for the count it was handed.
-      const pos = li === 0 || n >= n0
-        ? (li === 0 ? grid : Array.from({ length: n }, (_, k) => spread(n, k)))
-        : grid.slice(Math.floor((n0 - n) / 2), Math.floor((n0 - n) / 2) + n)
+      // Corner to corner, every layer: its own grid over the full face width,
+      // starting at the stirrups on both sides. The extreme layer's grid is
+      // reused only when the counts match, so the rows read as columns where
+      // they can — never squeezed to the centre where they must not.
+      const pos = li === 0 ? grid : Array.from({ length: n }, (_, k) => spread(n, k))
       out.push(...outermostFirst(pos).map((v) => ({ v, layer: li })))
     })
     return out
