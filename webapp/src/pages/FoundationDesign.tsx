@@ -519,7 +519,9 @@ export default function FoundationDesign() {
       ]}
       drawing={view ? { title: 'Plan and section', node: <div data-pdf-drawing>
         <FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H}
-          position={form.position} d={view.dProvided} pressure={view.offset ?? view.ecc} />
+          position={form.position} d={view.dProvided} pressure={view.offset ?? view.ecc}
+          columnWidthY={rectCol ? colWidthY : undefined}
+          bars={{ db: dbEff, cover: form.cover, long: view.long, short: view.short }} />
       </div> } : undefined}
       resultsCaption={caption}
       results={view ? [
