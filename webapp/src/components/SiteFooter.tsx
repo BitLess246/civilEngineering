@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { SITE, businessName, addressLines, missingSiteFields } from '../lib/siteConfig'
+import { SITE, businessName, missingSiteFields } from '../lib/siteConfig'
 import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
 
 /**
@@ -11,7 +11,6 @@ import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
  * a refund policy on it.
  */
 export function SiteFooter() {
-  const addr = addressLines()
   const incomplete = missingSiteFields().length > 0
   return (
     <footer className="no-print mt-12 border-t border-hairline bg-sheet">
@@ -49,7 +48,11 @@ export function SiteFooter() {
 
         <address className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] not-italic leading-5 text-muted">
           {SITE.legalName.trim() && <span className="font-semibold text-ink-2">{SITE.legalName}</span>}
-          {addr.map((l) => <span key={l}>{l}</span>)}
+          {/* THE FOOTER NAMES THE CITY, NOT THE STREET. The registered address
+              in full stays where a provider or a notice needs it — /contact,
+              /terms and /privacy read it from SITE.address — while the strip
+              every page carries stops at the city. */}
+          {SITE.address.city.trim() && <span>{SITE.address.city}</span>}
           <a href={`mailto:${SITE.supportEmail}`} className="inline-flex min-h-[24px] items-center hover:text-brand">{SITE.supportEmail}</a>
         </address>
 
