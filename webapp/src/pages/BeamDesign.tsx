@@ -164,20 +164,45 @@ export default function BeamDesign() {
   // returns, a second layer, nor the arrangement the sheets draw for the same
   // beam. The callout is composed by the schedule's own `beamSectionNotes`, so
   // the calculator and the schedule cannot word the same section differently.
+  // THE DRAWING'S LAYER LIMIT. The cut shows the arrangement the design
+  // stacked only while that arrangement stays a buildable truth: the layout
+  // converged (flexOK covers a diverging stack and one that never settles),
+  // the top tension layer stays below the N.A. the figure itself draws, and
+  // the deepest compression layer stays above it. Past any of those the face
+  // falls back to one row and a note says why — steel drawn on the wrong side
+  // of the axis the strain diagram carries is a contradiction on one sheet of
+  // paper.
+  const drawLayers = useMemo(() => {
+    if (!r) return { tension: undefined as number[] | undefined, compr: undefined as number[] | undefined }
+    return {
+      tension: r.flexOK && r.tensionNAOK ? r.layers : undefined,
+      compr: r.flexOK && r.comprNAOK ? r.comprLayers : undefined,
+    }
+  }, [r])
   const sectionNotes = useMemo(() => (r ? [
     `d = ${Math.round(r.d)} mm TO THE ${hogging ? 'BOTTOM' : 'TOP'} FACE`,
     ...beamSectionNotes(
       { x: 0, label: '', hogging, design: {
-        bars: r.bars, sAdopt: r.sAdopt, sHinge: r.sHinge, legs: fd.legs, layers: r.layers,
-        comprBars: r.comprBars, comprLayers: r.comprLayers,
+        bars: r.bars, sAdopt: r.sAdopt, sHinge: r.sHinge, legs: fd.legs,
+        // The callout names the arrangement the PICTURE shows: a stack the
+        // limit withheld is described one row, like the cut draws it.
+        layers: drawLayers.tension ?? [r.bars],
+        comprBars: r.comprBars, comprLayers: drawLayers.compr ?? [r.comprBars],
         mode: r.mode, comprEffective: r.comprEffective,
       } },
       { b: fd.b, h: fd.h, cover: fd.cover, barDia: fd.barDia, tieDia: fd.stirrupDia },
     ),
+    ...(r && !r.flexOK ? ['LAYERED LAYOUT NOT DRAWN — THE SECTION SHOWS ONE ROW'] : []),
+    ...(r && r.flexOK && !r.tensionNAOK
+      ? [`TOP TENSION LAYER CROSSES THE NEUTRAL AXIS (c = ${Math.round(r.cProv)} mm) — LAYERS NOT DRAWN, ONE ROW SHOWN`]
+      : []),
+    ...(r && r.flexOK && !r.comprNAOK
+      ? ['DEEPEST COMPRESSION LAYER CROSSES THE NEUTRAL AXIS — LAYERS NOT DRAWN, ONE ROW SHOWN']
+      : []),
     // The reason comes from the engine: "enlarge it" is right for a
     // diverging layout and wrong for a mistyped bar diameter.
     ...r.flexNotes.map((n) => n.toUpperCase()),
-  ] : []), [r, fd, hogging])
+  ] : []), [r, fd, hogging, drawLayers])
   // The notes print BELOW the figure as text, not inside the SVG — a long
   // callout was clipped at the figure's edge.
   const sectionFigure = useMemo(() => {
@@ -187,8 +212,9 @@ export default function BeamDesign() {
       ...rect, stirrupDia: fd.stirrupDia,
       bars: r.bars, comprBars: r.comprBars, hogging, spacing: r.sAdopt,
       // The arrangement the design measured d to — the cut has to show the
-      // layers the note "(4+2)" and the d dimension both speak for.
-      layers: r.layers, comprLayers: r.comprLayers,
+      // layers the note "(4+2)" and the d dimension both speak for — limited
+      // to the layers that are still a real arrangement (see drawLayers).
+      layers: drawLayers.tension, comprLayers: drawLayers.compr,
       title: `SECTION — ${f0(fd.b)}×${f0(fd.h)}`,
       notes: [],
     })
@@ -198,7 +224,7 @@ export default function BeamDesign() {
       b: fd.b, h: fd.h, d: r.d, dPrime: r.dPrime, fc: fd.fc, fy: fd.fy,
       s: beamStressBlock(r, fd.fc, fd.fy), hogging,
     })
-  }, [r, fd, hogging, sectionGeomOK])
+  }, [r, fd, hogging, sectionGeomOK, drawLayers.tension, drawLayers.compr])
   const stress = useMemo(() => (r && sectionGeomOK ? beamStressBlock(r, fd.fc, fd.fy) : null), [r, fd.fc, fd.fy, sectionGeomOK])
   // The selection is appended, not prepended: it justifies the bar chosen for
   // the steel the flexure steps above derived, so it reads after them.
@@ -360,6 +386,7 @@ export default function BeamDesign() {
     { check: 'Steel ratio', basis: `ρ_min ${r.rhoMin.toFixed(4)} · ρ_b ${r.rhoB.toFixed(4)}`, demand: r.rho.toFixed(4), limit: `ρ_max ${r.rhoMax.toFixed(4)}`, status: okRow(r.rho <= r.rhoMax + 1e-9) },
     { check: 'Bar layers', basis: `clear spacing ≥ ${f0(r.sMinClear)} mm`, demand: r.layers.length > 1 ? `${r.layers.length} (${r.layers.join(' + ')})` : '1', limit: `${f0(r.sClear)} mm clear`, status: okRow(r.sClear >= r.sMinClear - 1e-9) },
     ...(r.mode === 'DRRB' ? [{ check: 'Compression steel', basis: `f's ${f1(r.fsPrime)} MPa${r.fsYields ? '' : ' (not yielding)'}`, demand: r.comprEffective ? `${r.comprBars}-⌀${fd.comprBarDia} (A's ${f0(r.AsPrime)} mm²)` : 'ineffective', status: okRow(r.comprEffective) }] : []),
+    ...(r.layers.length > 1 || !r.tensionNAOK ? [{ check: 'Tension below NA', basis: `top layer ${f0(r.dTopLayer)} mm vs c ${f0(r.cProv)} mm`, demand: r.tensionNAOK ? 'below NA' : 'crosses NA', status: okRow(r.tensionNAOK) }] : []),
     ...(r.comprLayers.length > 0 ? [{ check: 'Compression above NA', basis: `deepest d' ${f0(r.dPrimeExtreme)} mm vs c ${f0(r.cNA)} mm`, demand: r.comprNAOK ? 'above NA' : 'crosses NA', status: okRow(r.comprNAOK) }] : []),
     { check: 'Concrete shear φVc', basis: `Vc ${f1(r.Vc)} kN`, demand: `${f1(r.phiVc)} kN`, status: 'info' },
     { check: 'Shear region', basis: REGION[r.region], demand: stirrupText(r), status: r.region === 'inadequate' ? 'fail' : 'pass' },

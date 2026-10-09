@@ -103,6 +103,20 @@ export function centroidRise(layers: number[], pitch: number): number {
 }
 
 /**
+ * Depth of the INNERMOST tension layer below the compression face, mm.
+ *
+ * The extreme layer sits at `dt`; every further layer one `pitch` inside it.
+ * This is the layer the neutral-axis check turns on — the one nearest the
+ * N.A. — and the depth the section drawing's tension stack reaches. A bar at
+ * or above the N.A. develops no tension, so when this depth reaches the axis
+ * the deepest layers of the stack are steel the stress block puts on the
+ * wrong side of the section.
+ */
+export function innerTensionDepth(layers: number[], pitch: number, dt: number): number {
+  return dt - Math.max(0, layers.length - 1) * pitch
+}
+
+/**
  * How far off the beam's centreline a longitudinal bar may sit, mm, if it is
  * to pass the supporting column's own verticals — `BeamCageInput.maxBarOffset`.
  *

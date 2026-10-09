@@ -114,7 +114,7 @@ function complianceOf(
       clause: 'NSCP 2015 §422.2 · §409.3.1',
       label: 'the bar layout converges — d does not collapse toward d′',
       pass: r.flexOK,
-      detail: r.flexOK ? undefined : 'the section cannot accommodate the steel it needs',
+      detail: r.flexOK ? undefined : r.flexNotes[0] ?? 'the section cannot accommodate the steel it needs',
     },
     {
       id: 'compression-effective',
@@ -133,6 +133,15 @@ function complianceOf(
         : 'compression layer above the neutral axis — n/a, none counted',
       pass: r.comprNAOK,
       na: !drrb,
+    },
+    {
+      id: 'tension-below-na',
+      clause: 'NSCP 2015 §422.2.1',
+      label: 'the top tension layer stays below the neutral axis',
+      pass: r.tensionNAOK,
+      detail: r.tensionNAOK
+        ? undefined
+        : `top layer ${r.dTopLayer.toFixed(0)} mm vs c ${r.cProv.toFixed(0)} mm`,
     },
     {
       id: 'tension-controlled',

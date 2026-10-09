@@ -16,7 +16,7 @@ import { compact, positive, nonNegative, atLeast, finite, effectiveDepth } from 
 import { beta1 } from './loads'
 import { Ec as concreteEc } from './slabDeflection'
 import { crackedInertia, deflCoeff, longTermMultiplier, minBeamThickness, type BeamSupport } from './beamDeflection'
-import { splitLayers, centroidRise, barLayoutWidth, LAYER_CLEAR } from './barLayers'
+import { splitLayers, centroidRise, barLayoutWidth, innerTensionDepth, LAYER_CLEAR } from './barLayers'
 import { oneWayVc } from './shear'
 
 export interface BeamDesignInput {
@@ -206,15 +206,25 @@ export interface BeamDesignResult {
   dPrimeExtreme: number
   /** Deepest compression layer stays above the neutral axis (in compression). */
   comprNAOK: boolean
+  /** Neutral-axis depth from the PROVIDED steel — a/β1, or the DRRB design c —
+   *  mm. The depth the section drawing's N.A. line reads. */
+  cProv: number
+  /** Depth of the TOPMOST (innermost) tension layer from the compression
+   *  face, mm — the layer the neutral-axis check turns on. */
+  dTopLayer: number
+  /** Topmost tension layer stays below the neutral axis (in tension). */
+  tensionNAOK: boolean
   // Stirrup detailing (§407.3.2 bend, §425.3.2 hook)
   stirrupBendDia: number   // inside bend diameter = 4·ds (⌀16 and smaller), mm
   stirrupHookExt: number   // 135° hook extension = max(6·ds, 75), mm
   /**
    * False when the section does not yield a real, buildable design.
    *
-   * Two ways that happens, and `flexNotes` says which:
+   * Three ways that happens, and `flexNotes` says which:
    *  - the bar layout diverges (d collapses toward d', or a stack keeps
    *    growing) — the section cannot accommodate the steel it needs;
+   *  - the layer layout does not converge within the iteration cap — d never
+   *    settles, so no arrangement is described at all;
    *  - a detailing input is not physical (see `flexNotes`), so the numbers
    *    below describe no beam at all.
    *
@@ -367,6 +377,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   let layers: number[] = [0]
   let comprLayers: number[] = []
   let layerIters = 0
+  let converged = false
   let mode: FlexureMode = 'SRRB'
   let rhoB = 0, rhoMaxV = 0, AsMax = 0, aMax = 0, MnMax = 0, phiMnMax = 0
   let As = 0, rho = 0, usedMin = false, asFloorGoverns = false, bars = 0, yBar = 0, comprYBar = 0
@@ -489,9 +500,21 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     const stable = sameVec(newLayers, layers) && sameVec(newComprLayers, comprLayers)
     layers = newLayers
     comprLayers = newComprLayers
-    if (stable && Math.abs(dNew - d) < 1e-9 && Math.abs(dPrimeNew - dPrime) < 1e-9) break
+    if (stable && Math.abs(dNew - d) < 1e-9 && Math.abs(dPrimeNew - dPrime) < 1e-9) {
+      converged = true
+      break
+    }
     d = dNew
     dPrime = dPrimeNew
+  }
+
+  // The passes ran out with the arrangement still moving — d never settled, so
+  // the steel, the d it was measured to and the picture they describe are not
+  // one layout but a disagreement. Reported like the other dead ends; the
+  // sheet says so and the drawing falls back to one row.
+  if (!converged && flexOK) {
+    flexOK = false
+    flexNotes.push('the layer layout did not converge — d kept moving between passes. Enlarge it.')
   }
 
   // Actual clear spacing in the fullest layer on each face.
@@ -594,6 +617,21 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const aReq = blockDepth(As)
   const aProv = blockDepth(Math.max(As, AsProv))
 
+  // ── The neutral axis the section is READ at ──
+  //
+  // The N.A. line the section drawing and the strain diagram carry is the one
+  // the PROVIDED steel sits against: a/β1 on a singly reinforced section, the
+  // DRRB design c (a_max/β1) once compression steel is counted. One number,
+  // so the picture and the checks below cannot read two different axes.
+  const cProv = mode === 'DRRB' && cNA > 0 ? cNA : aProv / b1
+  // §422.2 — a bar at or above the neutral axis develops no tension. Layers
+  // stack one §407.7.2 pitch inside the extreme layer, so the TOP tension
+  // layer is the one nearest the axis: it must stay below it, or the deepest
+  // bars of the stack are steel the stress block puts on the wrong side of
+  // the section. The compression side has the mirror check (`comprNAOK`).
+  const dTopLayer = innerTensionDepth(layers, pitch, dt)
+  const tensionNAOK = layers.length === 0 || dTopLayer > cProv + 1e-9
+
   return {
     AsProv, a: aProv, aReq,
     seismicSConf, hingeGovern, sHinge,
@@ -606,6 +644,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     As1, As2, MnResid, cNA, fsPrime, fsYields, AsPrime, comprBars, comprEffective, flexOK, flexNotes,
     comprSMinClear, comprMaxPerLayer, comprLayers, comprSClear, comprYBar,
     dPrimeExtreme, comprNAOK,
+    cProv, dTopLayer, tensionNAOK,
     stirrupBendDia, stirrupHookExt,
     Vc, phiVc, region, legs, legSpacingLimit, Av, VsReq, VsMax, sReq, sMax, sAdopt,
   }
