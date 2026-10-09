@@ -317,7 +317,13 @@ export default function BeamDesign() {
       ['Max. aggregate size', `${f.aggregate ?? 20} mm`],
       ['Bar ⌀ / stirrup ⌀', `${fd.barDia} / ${fd.stirrupDia} mm (${fd.legs}-leg)`],
       ['Moment Mu', `${f1(demand.Mu)} kN·m${hogging ? ' (hogging)' : ''}`],
-      ['Shear Vu', `${f1(demand.Vu)} kN`], ['ρ / ρmin / ρmax', `${r.rho.toFixed(4)} / ${r.rhoMin.toFixed(4)} / ${r.rhoMax.toFixed(4)}`],
+      ['Shear Vu', `${f1(demand.Vu)} kN`],
+      // ρ off the engine is the REQUIRED ratio (As,req / b·d); the bars the
+      // schedule actually carries give a larger ρ_prov. Unlabelled, the two
+      // were indistinguishable and a checker could not tell which one the
+      // ρmax comparison used. (Audit fix 5.)
+      ['ρ_req / ρ,min / ρ,max', `${r.rho.toFixed(4)} / ${r.rhoMin.toFixed(4)} / ${r.rhoMax.toFixed(4)}`],
+      ['ρ_prov (provided bars)', `${(r.AsProv / (fd.b * r.d)).toFixed(4)} (As,prov = ${f0(r.AsProv)} mm²)`],
       ...(stress ? [['Internal couple', `a = ${f0(stress.a)} mm, c = ${f0(stress.c)} mm, C = ${f1(stress.Cc + stress.Cs)} kN, T = ${f1(stress.T)} kN`] as [string, string]] : []),
       // the section's notes left the drawing; the PDF keeps them here
       ...sectionNotes.map((n, i) => [`Section note ${i + 1}`, n] as [string, string]),

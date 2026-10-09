@@ -100,8 +100,15 @@ export function chooseBar(candidates: readonly BarCandidate[]): BarChoice {
  *
  *     s ≤ min( 380·(280/fs) − 2.5cc , 300·(280/fs) )
  *
- * with fs taken as ⅔fy per §24.3.2.1 when the stress is not computed, and cc
- * the clear cover to the tension bars. This is the SERVICEABILITY gate: a
+ * with fs taken as ⅔fy per §24.3.2.1 when the stress is not computed.
+ *
+ * `clearCover` is the code's cc — the clear cover to the SURFACE of the
+ * flexural-tension bars, stirrup included (the crack forms around THEM; Wight,
+ * 7th ed., Ex. 9-3: cc = 1.5 in. cover + 0.375 in. stirrup = 1.875 in.). A
+ * caller holding cover-to-stirrup must add the stirrup Ø before passing it:
+ * omitting it understated cc by ds and over-stated the limit by 2.5·ds — 285
+ * vs 260 mm on the default 300×500 beam with a ⌀10 stirrup. Slabs and mats
+ * (no stirrups) pass the plain cover. This is the SERVICEABILITY gate: a
  * section can be strong enough and still crack visibly because its bars are
  * too far apart, which is exactly the failure a strength-only chooser misses.
  */

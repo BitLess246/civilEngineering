@@ -92,53 +92,72 @@ export interface BeamRebarChoice {
  *
  * Order matters: the first failure is what gets reported, and "the section is
  * too shallow" must not be reported as "the bars do not fit".
+ *
+ * Clauses cite NSCP 2015 — the concrete chapter's 4-prefixed numbering. The
+ * same sheet quotes §422.5.5.1 in its body text, so an item saying "ACI 318-14
+ * §22.5.5.1" next to it read as two different codes; ACI 318-14's number is
+ * this one minus the chapter-4 prefix.
  */
 function complianceOf(
   i: BeamDesignInput, r: BeamDesignResult, sMaxCrack: number, sMinClear: number,
 ): ComplianceCheck[] {
   const util = r.phiMnMax > 0 ? i.Mu / r.phiMnMax : Infinity
+  // The two compression-steel checks are only REAL when the design actually
+  // counted compression bars. On an SRRB — every ordinary beam — they used to
+  // print "compression steel yields usefully … PASS" with a zero bar count,
+  // which is a vacuous pass and reads as if the section had compression steel
+  // that was checked. Flagged `na` instead: same gate outcome, honest label.
+  const drrb = r.mode === 'DRRB' && r.comprBars > 0
   return [
     {
       id: 'layout-converged',
-      clause: 'ACI 318-14 §22.2 · §9.3.1',
+      clause: 'NSCP 2015 §422.2 · §409.3.1',
       label: 'the bar layout converges — d does not collapse toward d′',
       pass: r.flexOK,
       detail: r.flexOK ? undefined : 'the section cannot accommodate the steel it needs',
     },
     {
       id: 'compression-effective',
-      clause: 'ACI 318-14 §22.2.2',
-      label: "compression steel yields usefully (f′s > 0.85f′c)",
+      clause: 'NSCP 2015 §422.2.2',
+      label: drrb
+        ? "compression steel yields usefully (f′s > 0.85f′c)"
+        : 'compression steel — n/a, singly reinforced (none counted)',
       pass: r.mode !== 'DRRB' || r.comprEffective,
+      na: !drrb,
     },
     {
       id: 'compression-above-na',
-      clause: 'ACI 318-14 §22.2.1',
-      label: 'the deepest compression layer stays above the neutral axis',
+      clause: 'NSCP 2015 §422.2.1',
+      label: drrb
+        ? 'the deepest compression layer stays above the neutral axis'
+        : 'compression layer above the neutral axis — n/a, none counted',
       pass: r.comprNAOK,
+      na: !drrb,
     },
     {
       id: 'tension-controlled',
-      clause: 'ACI 318-14 §21.2.2 · §9.3.3.1',
+      clause: 'NSCP 2015 §421.2.2 · §409.3.3.1',
       label: 'tension-controlled — ρ within the ρmax ceiling at εt = 0.005',
       pass: r.mode === 'DRRB' || r.rho <= r.rhoMax + 1e-9,
-      detail: `ρ = ${r.rho.toFixed(4)} vs ρmax = ${r.rhoMax.toFixed(4)}`,
+      // ρ here is the REQUIRED ratio the strength equation solved for — label
+      // it as such; the provided bars give ρ_prov, which is larger.
+      detail: `ρ_req = ${r.rho.toFixed(4)} vs ρmax = ${r.rhoMax.toFixed(4)}`,
     },
     {
       id: 'min-steel',
-      clause: 'ACI 318-14 §9.6.1.2',
+      clause: 'NSCP 2015 §409.6.1.2',
       label: 'minimum flexural steel',
       pass: r.As >= r.rhoMin * (i.bMin ?? i.b) * r.d - 1e-6,
     },
     {
       id: 'min-bars',
-      clause: 'ACI 318-14 §9.7.2.1',
+      clause: 'NSCP 2015 §409.7.2.1',
       label: 'at least two bars',
       pass: r.bars >= MIN_BARS,
     },
     {
       id: 'bars-fit',
-      clause: 'ACI 318-14 §25.2.1',
+      clause: 'NSCP 2015 §425.2.1',
       label: 'the bars fit the web at the required clear spacing',
       pass: r.maxPerLayer >= MIN_BARS && r.sClear >= sMinClear - 1e-6,
       detail: `clear ${r.sClear.toFixed(0)} mm vs ${sMinClear.toFixed(0)} mm required`,
@@ -151,15 +170,15 @@ function complianceOf(
     },
     {
       id: 'crack-spacing',
-      clause: 'ACI 318-14 §24.3.2',
+      clause: 'NSCP 2015 §424.3.2',
       label: 'bar spacing within the crack-control limit',
       pass: barSpacingOf(i, r) <= sMaxCrack + 1e-6,
       detail: `s = ${barSpacingOf(i, r).toFixed(0)} mm vs ${sMaxCrack.toFixed(0)} mm`,
     },
     {
       id: 'flexural-capacity',
-      clause: 'ACI 318-14 §22.2',
-      label: 'φMn ≥ Mu',
+      clause: 'NSCP 2015 §422.2',
+      label: r.mode === 'DRRB' ? 'φMn ≥ Mu' : 'the section closes singly reinforced — Mu ≤ φMn,max',
       pass: r.mode === 'DRRB' ? r.flexOK : util <= 1 + 1e-9,
     },
   ]
@@ -225,7 +244,12 @@ export function optimizeBeamRebar(
     // §25.2.1 clear spacing — taken from the design result rather than
     // recomputed, so the gate and the layout can never disagree.
     const sMinClear = r.sMinClear
-    const sMaxCrack = crackSpacingLimit(i.fy, i.cover)
+    // §24.3.2's cc is the clear cover to the FLEXURAL-TENSION bars, measured to
+    // their surface — the crack forms around THEM, not around the stirrup, so
+    // the stirrup Ø rides on top of the cover (Wight 7th ed. Ex. 9-3: cc = 1.5
+    // + 0.375 = 1.875 in.). Passing the cover-to-stirrup alone understated cc
+    // by ds and over-stated the limit by 2.5·ds — 285 vs 260 mm here.
+    const sMaxCrack = crackSpacingLimit(i.fy, i.cover + i.stirrupDia)
 
     const Ab = (Math.PI / 4) * db * db
     const layout: RebarLayout = {
@@ -243,7 +267,7 @@ export function optimizeBeamRebar(
   }
 
   const ctx: ScoreContext = {
-    sMax: crackSpacingLimit(i.fy, i.cover),
+    sMax: crackSpacingLimit(i.fy, i.cover + i.stirrupDia),
     sMinCode: Math.max(25, (4 / 3) * (opts.aggregate ?? 20)),
     sComfort: opts.sComfort ?? 40,
     maxLayers: MAX_LAYERS,
@@ -338,7 +362,7 @@ export function optimizeBeamMember(
 
     // From the design result, not recomputed — see `optimizeBeamRebar`.
     const sMinClear = designs[0].design.sMinClear
-    const sMaxCrack = crackSpacingLimit(geom.fy, geom.cover)
+    const sMaxCrack = crackSpacingLimit(geom.fy, geom.cover + geom.stirrupDia)
 
     // Compliance across the WHOLE member: a check passes only if it passes at
     // every section, and it reports the first section where it did not.
@@ -375,7 +399,7 @@ export function optimizeBeamMember(
   }
 
   const ctx: ScoreContext = {
-    sMax: crackSpacingLimit(geom.fy, geom.cover),
+    sMax: crackSpacingLimit(geom.fy, geom.cover + geom.stirrupDia),
     sMinCode: Math.max(25, (4 / 3) * (opts.aggregate ?? 20)),
     sComfort: opts.sComfort ?? 40,
     maxLayers: MAX_LAYERS,
