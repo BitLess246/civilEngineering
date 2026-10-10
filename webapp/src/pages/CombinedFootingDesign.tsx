@@ -309,11 +309,21 @@ export default function CombinedFootingDesign() {
       results={rows}
       extraSections={samples ? [{ title: 'Soil reaction, shear and moment', node: (
         <div className={`gap-6 ${DIAGRAM_GRID}`}>
-          <Diagram xs={samples.x} ys={samples.w} title="SOIL REACTION (w)" unit="kN/m" color="#16a34a" vlines={vlines} markExtrema={!flexible} decimals={1} />
-          <Diagram xs={samples.x} ys={samples.V} title="SHEAR (Vu)" unit="kN" color="#dc2626" vlines={vlines} decimals={0} />
-          <Diagram xs={samples.x} ys={samples.M} title="MOMENT (Mu)" unit="kN·m" color="#0056b3" vlines={vlines} decimals={0} />
+          {/* data-pdf-figure: the export button lifts each diagram into the
+              PDF as its own figure, captioned by the data-figure-title. */}
+          <div data-pdf-figure data-figure-title="SOIL REACTION (w)">
+            <Diagram xs={samples.x} ys={samples.w} title="SOIL REACTION (w)" unit="kN/m" color="#16a34a" vlines={vlines} markExtrema={!flexible} decimals={1} />
+          </div>
+          <div data-pdf-figure data-figure-title="SHEAR (Vu)">
+            <Diagram xs={samples.x} ys={samples.V} title="SHEAR (Vu)" unit="kN" color="#dc2626" vlines={vlines} decimals={0} />
+          </div>
+          <div data-pdf-figure data-figure-title="MOMENT (Mu)">
+            <Diagram xs={samples.x} ys={samples.M} title="MOMENT (Mu)" unit="kN·m" color="#0056b3" vlines={vlines} decimals={0} />
+          </div>
           {flexible && flex && (
-            <Diagram xs={flex.samples.x} ys={flex.samples.y} title="SETTLEMENT (y, + down)" unit="mm" color="#7c3aed" vlines={vlines} decimals={2} />
+            <div data-pdf-figure data-figure-title="SETTLEMENT (y, + down)">
+              <Diagram xs={flex.samples.x} ys={flex.samples.y} title="SETTLEMENT (y, + down)" unit="mm" color="#7c3aed" vlines={vlines} decimals={2} />
+            </div>
           )}
         </div>
       ) }] : []}

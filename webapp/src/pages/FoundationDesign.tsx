@@ -15,6 +15,9 @@ import { netBearing } from '../engine/bearing'
 import { factoredLoad } from '../engine/loads'
 import { MIN_FOOTING_DEPTH, type ColumnPosition } from '../engine/shear'
 import { FootingSchematic } from '../components/FootingSchematic'
+import { Diagram } from '../components/Diagram'
+import { DIAGRAM_GRID } from '../lib/diagramLabel'
+import { stripSamples, type StripSamples } from '../lib/footingDiagrams'
 import { ExcelImport } from '../components/ExcelImport'
 import type { BatchResult } from '../lib/foundationExcel'
 import { buildFoundationSolution, type SolutionCtx } from '../lib/foundationSolution'
@@ -336,6 +339,69 @@ export default function FoundationDesign() {
   }
 
   const kern = view?.offset ?? null
+
+  // ── The design strip's diagrams ────────────────────────────────────
+  // Built on the SAME model the checks quote: the factored net pressure qu
+  // uniform on the design strip (the strip the flexure step designs — long:
+  // By wide; short: Bx wide), the column load spread over its footprint.
+  // The marks are the stations the sheet closes on: the §22.5 one-way
+  // sections at d beyond each face, and the faces where Mu is taken. A
+  // diagram on any other pressure would disagree with the sheet beside it.
+  const strips: { axis: string; s: StripSamples; qu: number; dProvided: number; eccentric: boolean }[] | null =
+    useMemo(() => {
+      if (!view) return null
+      const mk = (axis: string, L: number, stripW: number, cM: number) => ({
+        axis,
+        s: stripSamples({ L, stripW, qu: view.qu, Pu: ultimateLoad, c: cM, d: view.dProvided }),
+        qu: view.qu, dProvided: view.dProvided, eccentric: view.loading === 'eccentric',
+      })
+      if (view.type !== 'rectangular') {
+        // Square (and the eccentric pilot, square-only): one strip, the
+        // smaller column dimension giving the governing cantilever — the
+        // arm the engine itself sized the mat on.
+        const c = globalThis.Math.min(colWidth, colWidthY) / 1000
+        return [mk(ecc ? 'along the eccentricity (x)' : 'long (x)', view.Bx, view.By, c)]
+      }
+      return [
+        mk('long (x) — strip By', view.Bx, view.By, colWidth / 1000),
+        mk('short (y) — strip Bx', view.By, view.Bx, colWidthY / 1000),
+      ]
+    }, [view, ultimateLoad, colWidth, colWidthY, ecc])
+
+  const diagramSections = (strips ?? []).map((st) => ({
+    title: `Pressure, shear and moment — ${st.axis}`,
+    node: (
+      <div>
+        <p className="mb-2 text-xs text-muted">
+          The design strip on the factored net pressure q<sub>u</sub> = {f2(st.qu)} kPa — the pressure the
+          checks quote, uniform over the strip the flexure step designs. The column load is spread over its
+          footprint; marks show the column faces, where M<sub>u</sub> is taken (§13.2.7.1), and the §22.5
+          one-way sections at d = {f0(st.dProvided)} mm beyond them.{st.eccentric
+            ? ' The eccentric design acts on the peak pressure qu,max — the service trapezoid is drawn on the section.'
+            : ''}
+        </p>
+        <div className={DIAGRAM_GRID}>
+          <div data-pdf-figure data-figure-title={`SOIL PRESSURE (w) — ${st.axis.toUpperCase()}`}>
+            <Diagram xs={st.s.x} ys={st.s.w} title={`SOIL PRESSURE (w) — ${st.axis.toUpperCase()}`}
+              unit="kN/m" color="#16a34a" markExtrema={false} decimals={1} />
+          </div>
+          <div data-pdf-figure data-figure-title={`SHEAR (Vu) — ${st.axis.toUpperCase()}`}>
+            <Diagram xs={st.s.x} ys={st.s.V} title={`SHEAR (Vu) — ${st.axis.toUpperCase()}`}
+              unit="kN" color="#dc2626" markExtrema={false} decimals={0}
+              vlines={st.s.crits
+                ? [{ x: st.s.crits[0], label: 'crit @ d' }, { x: st.s.crits[1], label: 'crit @ d' }]
+                : []} />
+          </div>
+          <div data-pdf-figure data-figure-title={`MOMENT (Mu) — ${st.axis.toUpperCase()}`}>
+            <Diagram xs={st.s.x} ys={st.s.M} title={`MOMENT (Mu) — ${st.axis.toUpperCase()}`}
+              unit="kN·m" color="#0056b3" markExtrema={false} decimals={0}
+              vlines={[{ x: st.s.faces[0], label: 'col face' }, { x: st.s.faces[1], label: 'col face' }]} />
+          </div>
+        </div>
+      </div>
+    ),
+  }))
+
   const steelRow = (label: string, st: DirSteel): ResultRow => ({
     check: label, basis: st.usedMin ? `minimum (${st.minGoverning === 'slab' ? '§24.4.3.2' : '§9.6.1.2'})` : `ρ ${st.rho.toFixed(4)}`,
     demand: `As ${f0(st.As)} mm²`, limit: `${st.bars} ⌀${dbEff} @ ${f0(st.spacing)} mm`, status: 'info',
@@ -537,6 +603,7 @@ export default function FoundationDesign() {
         ...(view.short ? [steelRow('Steel — short (y)', view.short), { check: 'Central band (short)', basis: `≈ ${(view.short.bandFraction * 100).toFixed(0)}% in By`, demand: `${view.short.bandBars} of ${view.short.bars} bars`, status: 'info' as const }] : []),
       ] : []}
       extraSections={[
+        ...diagramSections,
         ...(matChoice ? [{ title: 'Mat selection', node: <RebarRanking selection={matChoice.selection} title="Mat selection" name={nameMat} /> }] : []),
         ...(batch ? [{ title: `Batch schedule (${batch.designed}/${batch.rows.length} designed)`, node: (
           <div className="overflow-x-auto">

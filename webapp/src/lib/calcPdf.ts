@@ -52,6 +52,12 @@ export interface CalcPdfInput {
   /** PNG data URL of the page's schematic — see `svgToPng`. */
   drawing?: string | null
   drawingTitle?: string
+  /**
+   * Further figures after the drawing — the design's diagrams (soil pressure,
+   * shear, moment), captured from the page's own rendering. Numbered FIG 2…
+   * (FIG 1 is the drawing; a page with no drawing numbers its diagrams from 1).
+   */
+  figures?: readonly { png: string; title: string }[]
   fileName?: string
 }
 
@@ -61,7 +67,7 @@ const slug = (s: string) =>
 export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
   const {
     docTitle, docCode, badges, ok, governing, lh,
-    stats = [], checks = [], data = [], steps = [], drawing, drawingTitle, fileName,
+    stats = [], checks = [], data = [], steps = [], drawing, drawingTitle, figures = [], fileName,
   } = input
 
   const s = createSheet()
@@ -133,6 +139,17 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
   if (drawing) {
     section('Drawing')
     await s.figure(drawing, `FIG 1 · ${(drawingTitle ?? docTitle).toUpperCase()}`, 150)
+  }
+
+  // The design's own diagrams, in the order the page lays them out. They sit
+  // AFTER the drawing — the geometry first, then the demands it carries — and
+  // each is captioned with the title the page labels it on screen, so the PDF
+  // reads the same either way.
+  if (figures.length > 0) {
+    section('Design Diagrams')
+    for (let f = 0; f < figures.length; f++) {
+      await s.figure(figures[f].png, `FIG ${drawing ? f + 2 : f + 1} · ${figures[f].title}`, 120)
+    }
   }
 
   s.signatures(lh.preparedBy)
