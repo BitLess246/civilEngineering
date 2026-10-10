@@ -179,20 +179,27 @@ function punchingStep(c: SolutionCtx): SolutionStep {
   }
 }
 
-function oneWayStep(c: SolutionCtx, B: number, dReq: number, label: string, cDimMm?: number): SolutionStep {
+function oneWayStep(c: SolutionCtx, B: number, dReq: number, label: string, cDimMm?: number, widthM?: number): SolutionStep {
   const cm = (cDimMm ?? Math.min(c.columnWidth, c.columnWidthY ?? c.columnWidth)) / 1000
   const d = c.analysis === 'analyze' ? c.dProvided : dReq
   const arm = (B - cm) / 2 - d / 1000
-  const Vu = c.qu * B * Math.max(0, arm)
-  const phiVc = 0.75 * oneWayVc({ fc: c.fc, b: B * 1000, d })
+  // The demand is quoted on the DESIGN STRIP — the strip the flexure step
+  // designs (long: b = By; short: b = Bx; on a square pad b = B). It used to
+  // be printed over a strip as wide as the SPAN, which cancels in the depth
+  // solve but printed a Vu (and a φVc) the diagram on the design strip could
+  // not reproduce. Both sides scale linearly, so every verdict is unchanged;
+  // the printed numbers and the figure now agree.
+  const width = widthM ?? B
+  const Vu = c.qu * width * Math.max(0, arm)
+  const phiVc = 0.75 * oneWayVc({ fc: c.fc, b: width * 1000, d })
   const pass = phiVc >= Vu
   return {
     title: `One-way (beam) shear${label ? ` — ${label}` : ''}${c.analysis === 'design' ? ' — required depth' : ''}`,
     lines: [
-      txt('One-way shear is checked on a section a distance d from the column face (ACI §22.5); the soil pressure beyond that section produces V_u.'),
+      txt(`One-way shear is checked on a section a distance d from the column face (ACI §22.5); the soil pressure beyond that section produces V_u on the design strip — width b = ${sn2(width)} m${Math.abs(width - B) > 1e-9 ? `, the strip the flexure step designs (not the ${sn2(B)} m span)` : ' (b = B here)'} — the strip the diagrams draw.`),
       eq(String.raw`a_v = \tfrac{B-c}{2} - d = \tfrac{${sn2(B)}-${sn3(cm)}}{2} - ${sn3(d / 1000)} = ${sn3(arm)}\ \text{m}`),
-      eq(String.raw`V_u = q_u B\,a_v = ${sn2(c.qu)}(${sn2(B)})(${sn3(arm)}) = ${sn1(Vu)}\ \text{kN}`),
-      eq(String.raw`\phi V_c = 0.75\cdot 0.17\sqrt{f'_c}\,B d = ${sn1(phiVc)}\ \text{kN} \;${pass ? '\\ge' : '<'}\; V_u\;${pass ? '\\checkmark' : '\\times'}`),
+      eq(String.raw`V_u = q_u\,b\,a_v = ${sn2(c.qu)}(${sn2(width)})(${sn3(arm)}) = ${sn1(Vu)}\ \text{kN}`),
+      eq(String.raw`\phi V_c = 0.75\cdot 0.17\sqrt{f'_c}\,b\,d = ${sn1(phiVc)}\ \text{kN} \;${pass ? '\\ge' : '<'}\; V_u\;${pass ? '\\checkmark' : '\\times'}`),
     ],
     note: c.analysis === 'design' ? `Required d = ${sn0(dReq)} mm.` : undefined,
   }
@@ -256,17 +263,20 @@ function shearRecheckStep(c: SolutionCtx): SolutionStep {
   const betaC = Math.max(cx, cyDim) / Math.min(cx, cyDim)
   const VuP = c.ultimateLoad - c.qu * cs.Ao * 1e-6
   const phiVcP = 0.75 * twoWayVc({ fc: c.fc, bo: cs.bo, d, betaC, position: c.position })
-  const one = (B: number, cDimMm: number) => {
-    const arm = (B - cDimMm / 1000) / 2 - d / 1000
+  const one = (B: number, cDimMm: number | undefined, width: number) => {
+    const cm = (cDimMm ?? Math.min(c.columnWidth, c.columnWidthY ?? c.columnWidth)) / 1000
+    const arm = (B - cm) / 2 - d / 1000
     return {
-      Vu: c.qu * B * Math.max(0, arm),
-      phiVc: 0.75 * oneWayVc({ fc: c.fc, b: B * 1000, d }),
-      arm, B,
+      Vu: c.qu * width * Math.max(0, arm),
+      phiVc: 0.75 * oneWayVc({ fc: c.fc, b: width * 1000, d }),
+      arm, B, width,
     }
   }
   const rect = c.type !== 'square'
-  const longs = one(c.Bx, c.columnWidth)
-  const shorts = rect ? one(c.By, cyDim) : null
+  // Same design-strip basis as the one-way steps above — and the same column
+  // dimension the engine sized with (the smaller one on a square pad).
+  const longs = rect ? one(c.Bx, c.columnWidth, c.By) : one(c.Bx, undefined, c.Bx)
+  const shorts = rect ? one(c.By, cyDim, c.Bx) : null
   const all = [{ n: 'punching', ok: phiVcP >= VuP }, { n: 'one-way', ok: longs.phiVc >= longs.Vu },
     ...(shorts ? [{ n: 'one-way (short)', ok: shorts.phiVc >= shorts.Vu }] : [])]
   const pass = all.every((x) => x.ok)
@@ -386,8 +396,10 @@ export function buildFoundationSolution(c: SolutionCtx): SolutionStep[] {
   } else {
     const cy = c.columnWidthY ?? c.columnWidth
     steps.push(
-      oneWayStep(c, c.Bx, c.dBeamLong, 'long (x)', c.columnWidth),
-      oneWayStep(c, c.By, c.dBeamShort, 'short (y)', cy),
+      // Each direction on its OWN design strip — the strip its flexure step
+      // designs: long spans Bx and is By wide, short spans By and is Bx wide.
+      oneWayStep(c, c.Bx, c.dBeamLong, 'long (x)', c.columnWidth, c.By),
+      oneWayStep(c, c.By, c.dBeamShort, 'short (y)', cy, c.Bx),
       thicknessStep(c),
       ...(c.analysis === 'design' ? [shearRecheckStep(c)] : []),
       flexureStep(c, c.Bx, c.By, c.long, 'long (x)', c.columnWidth),
