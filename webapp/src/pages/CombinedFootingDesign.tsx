@@ -174,6 +174,30 @@ export default function CombinedFootingDesign() {
   const trap = result?.shape[0] === 'T'
   const plan = result ? (trap ? `${f2(result.Bx)} × (${f2(result.By1)}→${f2(result.By2)}) m` : `${f2(result.Bx)} × ${f2(result.By)} m`) : ''
   const flexBearingOK = flexible ? !!flex && flex.bearingOK : true
+
+  // ── The plan's bars, quoted from the schedule the results table prints ──
+  // The longitudinal groups are the governing section of each sign (the
+  // active method's — the Winkler solution designs its own); the transverse
+  // bands are the rigid method's, banded at c + 2d about each column with
+  // the transverse strip's own effective depth dT.
+  const longAll = longSections ?? result?.longSections ?? []
+  const governing = (top: boolean) =>
+    [...longAll].filter((sec) => sec.top === top).sort((a, b) => b.bars - a.bars)[0] ?? null
+  const dT = result ? result.Dc - form.cover - 1.5 * form.barDia : 0
+  const barSpec = result ? {
+    db: form.barDia,
+    cover: form.cover,
+    bottom: (() => { const g = governing(false); return g ? { bars: g.bars, spacing: g.spacing } : null })(),
+    top: (() => { const g = governing(true); return g ? { bars: g.bars, spacing: g.spacing } : null })(),
+    transverse: result.transverse.map((t, i) => ({
+      label: i === 0 ? 'C1' : 'C2',
+      xc: i === 0 ? result.x1 : result.x2,
+      c: (i === 0 ? form.col1Width : form.col2Width) / 1000,
+      spacing: t.spacing,
+      d: dT,
+    })),
+  } : null
+
   const report = result && solutionSteps ? {
     docCode: 'F-02',
     ok: result.qNet > 0 && flexBearingOK,
@@ -301,7 +325,8 @@ export default function CombinedFootingDesign() {
       drawing={result ? { title: 'Plan', node: <div data-pdf-drawing>
         <CombinedFootingSchematic
           shape={result.shape} Bx={result.Bx} By={result.By} By1={result.By1} By2={result.By2}
-          x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width} />
+          x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width}
+          bars={barSpec} />
       </div> } : undefined}
       resultsCaption={flexible
         ? 'Flexible (Winkler) method: EI·y⁗ + ks·B·y = column loads, solved with Hermitian beam elements and consistent foundation springs; geometry and thickness are inherited from the rigid sizing. φ: shear 0.75, flexure 0.90.'
