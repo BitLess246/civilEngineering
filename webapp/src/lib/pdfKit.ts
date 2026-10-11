@@ -270,7 +270,7 @@ export function createSheet(): Sheet {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     lastY: () => (doc as any).lastAutoTable?.finalY as number | undefined,
 
-    brandHeader({ docLabel, title, sheet, today, ok, governing, badges, verdictLabel }) {
+    brandHeader({ docLabel, title, sheet, today, ok, governing, badges, verdictLabel, verdictTone }) {
       s.setF('mono', 'normal', 6.4, FAINT)
       doc.text(docLabel, M, s.y)
       doc.text(`${sheet} · ${today}`, M + CONTENT_W, s.y, { align: 'right' })
