@@ -960,9 +960,33 @@ function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: numbe
  */
 export type RecoverFilter = ReadonlySet<string>
 
+/**
+ * Reject malformed second-order options before assembling a tangent. In
+ * particular, silently filling missing fixedAxial entries with zero changes
+ * the requested geometric stiffness and can understate P-Δ effects.
+ */
+function validatePDeltaOpts(opts: PDeltaOpts | undefined, memberCount: number): void {
+  if (!opts?.pDelta) return
+  if (opts.maxIter !== undefined && (!Number.isInteger(opts.maxIter) || opts.maxIter < 1)) {
+    throw new RangeError('P-Δ maxIter must be a positive integer')
+  }
+  if (opts.tol !== undefined && (!Number.isFinite(opts.tol) || opts.tol <= 0)) {
+    throw new RangeError('P-Δ tol must be a finite positive number')
+  }
+  if (opts.fixedAxial !== undefined) {
+    if (opts.fixedAxial.length !== memberCount) {
+      throw new RangeError(`P-Δ fixedAxial must contain one axial force per member (expected ${memberCount}, received ${opts.fixedAxial.length})`)
+    }
+    if (opts.fixedAxial.some((n) => !Number.isFinite(n))) {
+      throw new RangeError('P-Δ fixedAxial values must all be finite numbers in kN (tension positive)')
+    }
+  }
+}
+
 export function solveWithGeometry(
   precomp: FramePrecomp, loads: F3Load[], opts?: PDeltaOpts, recover?: RecoverFilter,
 ): F3Result | null {
+  validatePDeltaOpts(opts, precomp.members.length)
   const { idx, members, geoms, shellGeoms, ndof, free, freeIdx, Kff, Kff_raw, supports, diaT, diaNi } = precomp
   let pdStatus: F3PDeltaStatus | undefined
   // Axial state of the FINAL tangent when P-Δ ran — reactions must then be
