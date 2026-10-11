@@ -49,12 +49,27 @@ export function ExportPdfButton({
       const svg = document.querySelector(drawingSelector)
       const drawing = svg instanceof SVGSVGElement ? await svgToPng(svg) : null
       const figures: { png: string; title: string }[] = []
+      const capturedSvgs = new Set<SVGSVGElement>()
+      if (svg instanceof SVGSVGElement) capturedSvgs.add(svg)
       for (const el of document.querySelectorAll(figuresSelector)) {
         const fsvg = el.querySelector('svg')
         if (!(fsvg instanceof SVGSVGElement)) continue
+        capturedSvgs.add(fsvg)
         const png = await svgToPng(fsvg)
         if (png) figures.push({ png, title: el.getAttribute('data-figure-title') ?? 'Diagram' })
       }
+      // Legacy standalone pages do not always tag their drawings. Capture
+      // substantial SVG diagrams/charts as figures rather than silently
+      // dropping them; tiny interface icons are deliberately excluded.
+      for (const candidate of document.querySelectorAll('main svg, [data-pdf-report-root] svg')) {
+        if (!(candidate instanceof SVGSVGElement) || capturedSvgs.has(candidate)) continue
+        const rect = candidate.getBoundingClientRect()
+        if (rect.width < 140 || rect.height < 90) continue
+        const png = await svgToPng(candidate)
+        if (png) figures.push({ png, title: candidate.getAttribute('aria-label') || candidate.closest('[data-figure-title]')?.getAttribute('data-figure-title') || 'Diagram / chart' })
+        capturedSvgs.add(candidate)
+      }
+
       // Capture the live input state at export time, not merely the page's
       // short summary. This includes values that affect the calculation but
       // are not repeated in the result headline.
@@ -63,7 +78,7 @@ export function ExportPdfButton({
         if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) continue
         if (el instanceof HTMLInputElement && (el.type === 'hidden' || el.type === 'button' || el.type === 'submit')) continue
         if (el.closest('[data-ai-ignore]')) continue
-        const label = el.labels?.[0]?.innerText?.trim().replace(/\\s+/g, ' ')
+        const label = el.labels?.[0]?.innerText?.trim().replace(/\s+/g, ' ')
           || el.getAttribute('aria-label') || el.name || el.id
         if (!label) continue
         let value = ''
@@ -80,7 +95,7 @@ export function ExportPdfButton({
       for (const table of document.querySelectorAll('[data-pdf-report-root] table, main table')) {
         const text = Array.from(table.querySelectorAll('tr'))
           .map((tr) => Array.from(tr.querySelectorAll('th,td')).map((cell) => cell.innerText.trim()).join(' | '))
-          .filter(Boolean).join('\\n')
+          .filter(Boolean).join('\n')
         if (!text || seenTables.has(text)) continue
         seenTables.add(text)
         capturedDetails.push({ title: table.getAttribute('aria-label') || table.caption?.innerText || 'Rendered table data', text })
