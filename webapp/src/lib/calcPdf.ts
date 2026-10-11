@@ -188,6 +188,57 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
     }
   }
 
+  if (resultRows.length > 0) {
+    section('Complete Results & Capacity Checks')
+    const theme = s.tableTheme([1])
+    autoTable(doc, {
+      ...theme, startY: s.y,
+      head: [['Check', 'Basis / provision', 'Demand / result', 'Limit', 'Util.', 'Status']],
+      body: resultRows.map((r) => [r.check, r.basis, r.demand, r.limit ?? '—', r.ratio == null ? '—' : r.ratio.toFixed(3), r.status.toUpperCase()]),
+      styles: { ...(theme.styles as object), fontSize: 6.3, cellPadding: 1.2, overflow: 'linebreak' },
+      columnStyles: { 0: { cellWidth: 34 }, 1: { cellWidth: 39 }, 2: { cellWidth: 35 }, 3: { cellWidth: 25 }, 4: { cellWidth: 16 }, 5: { cellWidth: 18 } },
+    })
+    s.y = (s.lastY() ?? s.y) + 4
+  }
+
+  if (assumptions.length > 0) {
+    section('Assumptions & Method')
+    s.setF('sans', 'normal', 7, MUTED)
+    for (const note of assumptions) {
+      const lines = doc.splitTextToSize(`• ${note}`, 182)
+      s.ensure(lines.length * 3.4 + 2)
+      for (const line of lines) { doc.text(line, 14, s.y); s.y += 3.4 }
+      s.y += 1
+    }
+    s.y += 2
+  }
+
+  if (details.length > 0) {
+    section('Additional Schedules & Calculator Data')
+    for (const item of details) {
+      s.ensure(10)
+      s.setF('sans', 'bold', 7.2, MUTED)
+      doc.text(item.title, 14, s.y); s.y += 4
+      s.setF('sans', 'normal', 6.6, MUTED)
+      const lines = doc.splitTextToSize(item.text || 'No text data available.', 182)
+      s.ensure(lines.length * 3.2 + 2)
+      for (const line of lines) { doc.text(line, 14, s.y); s.y += 3.2 }
+      s.y += 2
+    }
+  }
+
+  if (references.length > 0) {
+    section('References & Code Basis')
+    const theme = s.tableTheme()
+    autoTable(doc, {
+      ...theme, startY: s.y,
+      head: [['Topic', 'Basis used', 'Source']],
+      body: references.map((r) => [r.topic, r.basis, r.source]),
+      styles: { ...(theme.styles as object), fontSize: 6.3, cellPadding: 1.3, overflow: 'linebreak' },
+      columnStyles: { 0: { cellWidth: 36 }, 1: { cellWidth: 72 }, 2: { cellWidth: 59 } },
+    })
+    s.y = (s.lastY() ?? s.y) + 4
+  }
   // ── Code scope & review notes ──
   // These notes are not optional: they travel with the exported calculation
   // even when a check was not evaluated or the tool uses a non-ACI method.
