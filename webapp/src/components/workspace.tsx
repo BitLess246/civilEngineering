@@ -49,7 +49,7 @@ export function Workspace({ title, badges, intro, actions, inputs, checks, docum
         </aside>
         <aside aria-label="Checks"
           className="no-print grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-start-2 lg:row-start-1 xl:col-start-3 xl:sticky xl:top-3 xl:max-h-[calc(100vh-1.5rem)] xl:grid-cols-1 xl:overflow-y-auto xl:overscroll-contain">
-          {checks}
+          <div data-pdf-detail="Check cards">{checks}</div>
         </aside>
         <div className="min-w-0 lg:col-start-2 lg:row-start-2 xl:row-start-1">{document}</div>
       </div>
