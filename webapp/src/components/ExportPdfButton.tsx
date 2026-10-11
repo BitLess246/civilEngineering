@@ -46,7 +46,8 @@ export function ExportPdfButton({
     setBusy(true)
     setFailed(false)
     try {
-      const svg = document.querySelector(drawingSelector)
+      const reportRoot = document.querySelector('[data-pdf-calc-root]') ?? document.querySelector('main') ?? document.body
+      const svg = reportRoot.querySelector(drawingSelector) ?? document.querySelector(drawingSelector)
       const drawing = svg instanceof SVGSVGElement ? await svgToPng(svg) : null
       const figures: { png: string; title: string }[] = []
       const capturedSvgs = new Set<SVGSVGElement>()
@@ -61,7 +62,7 @@ export function ExportPdfButton({
       // Legacy standalone pages do not always tag their drawings. Capture
       // substantial SVG diagrams/charts as figures rather than silently
       // dropping them; tiny interface icons are deliberately excluded.
-      for (const candidate of document.querySelectorAll('main svg, [data-pdf-report-root] svg')) {
+      for (const candidate of reportRoot.querySelectorAll('svg')) {
         if (!(candidate instanceof SVGSVGElement) || capturedSvgs.has(candidate)) continue
         const rect = candidate.getBoundingClientRect()
         if (rect.width < 140 || rect.height < 90) continue
@@ -74,7 +75,7 @@ export function ExportPdfButton({
       // short summary. This includes values that affect the calculation but
       // are not repeated in the result headline.
       const capturedData: [string, string][] = []
-      for (const el of document.querySelectorAll('input, select, textarea')) {
+      for (const el of reportRoot.querySelectorAll('input, select, textarea')) {
         if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) continue
         if (el instanceof HTMLInputElement && (el.type === 'hidden' || el.type === 'button' || el.type === 'submit')) continue
         if (el.closest('[data-ai-ignore]')) continue
@@ -92,7 +93,7 @@ export function ExportPdfButton({
       // report payload.
       const capturedDetails: { title: string; text: string }[] = []
       const seenTables = new Set<string>()
-      for (const table of document.querySelectorAll('[data-pdf-report-root] table, main table')) {
+      for (const table of reportRoot.querySelectorAll('table')) {
         const text = Array.from(table.querySelectorAll('tr'))
           .map((tr) => Array.from(tr.querySelectorAll('th,td')).map((cell) => cell.innerText.trim()).join(' | '))
           .filter(Boolean).join('\n')
@@ -100,11 +101,11 @@ export function ExportPdfButton({
         seenTables.add(text)
         capturedDetails.push({ title: table.getAttribute('aria-label') || table.caption?.innerText || 'Rendered table data', text })
       }
-      for (const el of document.querySelectorAll('[data-pdf-detail]')) {
+      for (const el of reportRoot.querySelectorAll('[data-pdf-detail]')) {
         const text = el.textContent?.trim()
         if (text) capturedDetails.push({ title: el.getAttribute('data-pdf-detail') || 'Additional calculator data', text })
       }
-      const capturedAssumptions = Array.from(document.querySelectorAll('[data-pdf-assumption]'))
+      const capturedAssumptions = Array.from(reportRoot.querySelectorAll('[data-pdf-assumption]'))
         .map((el) => el.textContent?.trim()).filter((v): v is string => Boolean(v))
 
       const { generateCalcPdf } = await import('../lib/calcPdf')
