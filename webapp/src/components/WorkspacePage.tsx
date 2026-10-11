@@ -66,6 +66,7 @@ export function WorkspacePage(p: WorkspacePageProps) {
   const resultsNum = p.drawing ? 3 : 2
   const report = useWorkspaceReport(p.title, p.badges, structuredReport)
   return (
+    <div data-pdf-calc-root>
     <Workspace title={p.title} badges={p.badges} intro={p.intro} actions={p.actions}
       inputs={<InputRail>{report.group}{p.inputs}</InputRail>}
       checks={p.checks}
@@ -97,5 +98,6 @@ export function WorkspacePage(p: WorkspacePageProps) {
         </div>
       }
     />
+    </div>
   )
 }
