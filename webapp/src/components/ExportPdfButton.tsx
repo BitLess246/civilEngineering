@@ -99,7 +99,7 @@ export function ExportPdfButton({
           .filter(Boolean).join('\n')
         if (!text || seenTables.has(text)) continue
         seenTables.add(text)
-        capturedDetails.push({ title: table.getAttribute('aria-label') || table.caption?.innerText || 'Rendered table data', text })
+        capturedDetails.push({ title: table.getAttribute('aria-label') || table.caption?.textContent || 'Rendered table data', text })
       }
       for (const el of reportRoot.querySelectorAll('[data-pdf-detail]')) {
         const text = el.textContent?.trim()
@@ -113,7 +113,7 @@ export function ExportPdfButton({
       // data. The warning in ReportControls makes clear this is a fallback,
       // not a substitute for exposing internal assumptions from calculation code.
       if (!document.querySelector('[data-pdf-calc-root]')) {
-        const transcript = reportRoot.innerText?.trim()
+        const transcript = (reportRoot instanceof HTMLElement ? reportRoot.innerText : reportRoot.textContent)?.trim()
         if (transcript) capturedDetails.push({ title: 'Rendered calculator content transcript', text: transcript })
       }
 
