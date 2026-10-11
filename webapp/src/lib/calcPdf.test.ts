@@ -16,12 +16,12 @@ describe('standalone calculator PDF scope notes', () => {
       { name: 'Deflection', ratio: null, ok: false },
       { name: 'Punching shear', ratio: null, ok: false },
     ])
-    expect(notes).toHaveLength(3)
+    expect(notes).toHaveLength(4)
     expect(notes[2]).toContain('Deflection, Punching shear')
     expect(notes[2]).toContain('excluded from the PASS verdict')
   })
 
   it('does not add a not-evaluated warning when all checks have ratios', () => {
-    expect(buildCalcPdfScopeNotes([{ name: 'Flexure', ratio: 0.82, ok: true }])).toHaveLength(2)
+    expect(buildCalcPdfScopeNotes([{ name: 'Flexure', ratio: 0.82, ok: true }])).toHaveLength(3)
   })
 })
