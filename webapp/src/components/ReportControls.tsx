@@ -74,7 +74,7 @@ export function PrintLetterhead({ title, badges, lh, today }: {
 export function ReportControls({ title, badges = ['Code basis not specified'], report }: ReportControlsProps): JSX.Element {
   const { lh, setLh, today } = useReportLetterhead(title)
   const effectiveReport: CalcReportData = report ?? {
-    docCode: 'CALC-01', ok: false,
+    docCode: 'CALC-01', ok: false, verdictLabel: 'NOT ASSESSED', verdictTone: 'neutral',
     governing: 'No page-specific structured result summary was supplied. Review the captured input and data appendices; this report is not a verified design verdict.',
     assumptions: ['This page has not supplied its complete structured report payload. The PDF includes captured form values and rendered tables where available, but hidden calculation assumptions, formulas, or non-tabular results may be missing and require manual verification.'],
   }
