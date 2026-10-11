@@ -46,8 +46,8 @@ export function WorkspacePage(p: WorkspacePageProps) {
   const structuredReport: CalcReportData = {
     docCode: p.report?.docCode ?? 'CALC-01',
     ok: p.report?.ok ?? derivedOk,
-    verdictLabel: p.report?.verdictLabel ?? (hasEvaluatedVerdict ? undefined : 'NOT ASSESSED'),
-    verdictTone: p.report?.verdictTone ?? (hasEvaluatedVerdict ? (derivedOk ? 'pass' : 'fail') : 'neutral'),
+    verdictLabel: p.report?.verdictLabel ?? (p.report?.ok !== undefined || hasEvaluatedVerdict ? undefined : 'NOT ASSESSED'),
+    verdictTone: p.report?.verdictTone ?? (p.report?.ok !== undefined ? (p.report.ok ? 'pass' : 'fail') : hasEvaluatedVerdict ? (derivedOk ? 'pass' : 'fail') : 'neutral'),
     governing: p.report?.governing ?? (derivedGoverning
       ? `${derivedGoverning.check}: ${derivedGoverning.demand}${derivedGoverning.limit ? ` / limit ${derivedGoverning.limit}` : ''}`
       : 'No evaluated result rows supplied; review the included inputs and calculation details.'),
