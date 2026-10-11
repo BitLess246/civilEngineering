@@ -71,24 +71,25 @@ export function PrintLetterhead({ title, badges, lh, today }: {
   )
 }
 
-export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], report }: ReportControlsProps): JSX.Element {
-  const { lh, setLh, today, print } = useReportLetterhead(title)
+export function ReportControls({ title, badges = ['Code basis not specified'], report }: ReportControlsProps): JSX.Element {
+  const { lh, setLh, today } = useReportLetterhead(title)
+  const effectiveReport: CalcReportData = report ?? {
+    docCode: 'CALC-01', ok: false,
+    governing: 'No page-specific structured result summary was supplied. Review the captured input and data appendices; this report is not a verified design verdict.',
+    assumptions: ['This page has not supplied its complete structured report payload. The PDF includes captured form values and rendered tables where available, but hidden calculation assumptions, formulas, or non-tabular results may be missing and require manual verification.'],
+  }
   return (
     <>
-      {/* Screen: the SAME letterhead card the calc-template pages use. It used
-          to be a second implementation here — outlined inputs in a flex row
-          rather than the borderless grid — so the two halves of the app looked
-          like two apps. One card, one style. */}
       <div className="no-print mt-4">
         <LetterheadCard
           lh={lh}
           onChange={setLh}
-          action=<ExportPdfButton {...effectiveReport} docTitle={title} badges={badges}
-            lh={lh}
-            className="inline-flex flex-none items-center gap-2 rounded-md bg-brand px-3.5 py-1.5 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-50" />
+          action={
+            <ExportPdfButton {...effectiveReport} docTitle={title} badges={badges}
+              lh={lh}
+              className="inline-flex flex-none items-center gap-2 rounded-md bg-brand px-3.5 py-1.5 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-50" />
+          } />
       </div>
-
-      {/* Print: calc-sheet letterhead header */}
       <PrintLetterhead title={title} badges={badges} lh={lh} today={today} />
     </>
   )
