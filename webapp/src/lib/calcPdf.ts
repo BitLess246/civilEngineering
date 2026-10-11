@@ -92,6 +92,7 @@ export function buildCalcPdfScopeNotes(checks: readonly CalcCheckRow[] = []): st
   const notes = [
     'PASS applies only to the checks explicitly listed in this report. It is not certification of compliance with every provision that may apply to the project.',
     'The engineer of record must verify the inputs, units, load combinations, boundary conditions, material properties, detailing, assumptions, and applicable jurisdiction requirements before relying on these results.',
+    'Only assumptions explicitly supplied by the calculator are reproduced here. Any internal default, idealization, omitted load case, or method limitation must be declared by that calculator before the report can be treated as complete.',
   ]
   const notChecked = checks.filter((c) => c.ratio === null).map((c) => c.name)
   if (notChecked.length) {
