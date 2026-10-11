@@ -83,16 +83,9 @@ export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], re
         <LetterheadCard
           lh={lh}
           onChange={setLh}
-          action={report ? (
-            <ExportPdfButton {...report} docTitle={title} badges={badges}
-              lh={lh}
-              className="inline-flex flex-none items-center gap-2 rounded-md bg-brand px-3.5 py-1.5 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-50" />
-          ) : (
-            <button type="button" onClick={print}
-              className="inline-flex flex-none items-center gap-2 rounded-md bg-brand px-3.5 py-1.5 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover">
-              ⎙ Export report
-            </button>
-          )} />
+          action=<ExportPdfButton {...effectiveReport} docTitle={title} badges={badges}
+            lh={lh}
+            className="inline-flex flex-none items-center gap-2 rounded-md bg-brand px-3.5 py-1.5 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-50" />
       </div>
 
       {/* Print: calc-sheet letterhead header */}
