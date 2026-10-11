@@ -171,6 +171,19 @@ export async function buildModelPdfInto(
   // later, when two revisions of the same frame are lying on the same desk.
   if (snapshot) paintSnapshot(sh, snapshot)
 
+  // ── Code scope & review notes ──
+  // This section is deliberately unconditional: hiding optional report sections
+  // must not hide limitations that affect interpretation of the design verdict.
+  rule('Code Scope & Review Notes')
+  setF('sans', 'normal', 6.6, MUTED)
+  for (const note of report.limitations) {
+    const lines = doc.splitTextToSize(`REVIEW NOTE — ${note}`, CONTENT_W)
+    ensure(lines.length * 3.2 + 2)
+    for (const line of lines) { doc.text(line, M, sh.y); sh.y += 3.2 }
+    sh.y += 1.1
+  }
+  sh.y += 2
+
   // ── 3D model snapshot ──
   if (modelImg && want.has('snapshot')) await sh.figure(modelImg, 'FIG 1 · 3D STRUCTURAL MODEL — ANALYSIS SNAPSHOT')
 
