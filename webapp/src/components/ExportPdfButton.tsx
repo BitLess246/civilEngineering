@@ -95,7 +95,7 @@ export function ExportPdfButton({
       const seenTables = new Set<string>()
       for (const table of reportRoot.querySelectorAll('table')) {
         const text = Array.from(table.querySelectorAll('tr'))
-          .map((tr) => Array.from(tr.querySelectorAll('th,td')).map((cell) => cell.innerText.trim()).join(' | '))
+          .map((tr) => Array.from(tr.querySelectorAll('th,td')).map((cell) => cell.textContent?.trim() ?? '').join(' | '))
           .filter(Boolean).join('\n')
         if (!text || seenTables.has(text)) continue
         seenTables.add(text)
