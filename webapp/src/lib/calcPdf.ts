@@ -34,6 +34,17 @@ import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
  */
 export interface CalcCheckRow { name: string; ratio: number | null; ok: boolean; note?: string }
 
+export interface CalcPdfResultRow {
+  check: string
+  basis: string
+  demand: string
+  limit?: string
+  ratio?: number
+  status: 'pass' | 'fail' | 'warn' | 'info'
+}
+export interface CalcPdfReference { topic: string; basis: string; source: string }
+export interface CalcPdfDetail { title: string; text: string }
+
 export interface CalcPdfInput {
   /** Element name — 'Rectangular RC Beam'. Heads the sheet and the file name. */
   docTitle: string
@@ -43,11 +54,22 @@ export interface CalcPdfInput {
   ok: boolean
   /** One line under the verdict chip — what governs, and at what utilisation. */
   governing: string
+  /** Use neutral status for report-only pages with no evaluated verdict. */
+  verdictLabel?: string
+  verdictTone?: 'pass' | 'fail' | 'neutral'
   lh: LetterheadState
   stats?: readonly VerdictStat[]
   checks?: readonly CalcCheckRow[]
-  /** Input echo, as label/value pairs. Laid out in two columns. */
+  /** Every result row shown in the calculator's Results Summary. */
+  resultRows?: readonly CalcPdfResultRow[]
+  /** Input echo, including hidden/non-visible values supplied by the calculator. */
   data?: readonly [string, string][]
+  /** Method assumptions and scope statements used by the calculation. */
+  assumptions?: readonly string[]
+  /** References shown in the calculator's References tab. */
+  references?: readonly CalcPdfReference[]
+  /** Additional schedules/tables represented as report-ready text. */
+  details?: readonly CalcPdfDetail[]
   steps?: readonly SolutionStep[]
   /** PNG data URL of the page's schematic — see `svgToPng`. */
   drawing?: string | null
@@ -64,10 +86,28 @@ export interface CalcPdfInput {
 const slug = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'report'
 
+/**
+ * Scope notes for standalone calculator PDFs. Keep these independent of any
+ * one design code: the same exporter is used by structural, quantity, and
+ * other engineering tools with different standards and methods.
+ */
+export function buildCalcPdfScopeNotes(checks: readonly CalcCheckRow[] = []): string[] {
+  const notes = [
+    'PASS applies only to the checks explicitly listed in this report. It is not certification of compliance with every provision that may apply to the project.',
+    'The engineer of record must verify the inputs, units, load combinations, boundary conditions, material properties, detailing, assumptions, and applicable jurisdiction requirements before relying on these results.',
+    'Only assumptions explicitly supplied by the calculator are reproduced here. Any internal default, idealization, omitted load case, or method limitation must be declared by that calculator before the report can be treated as complete.',
+  ]
+  const notChecked = checks.filter((c) => c.ratio === null).map((c) => c.name)
+  if (notChecked.length) {
+    notes.push(`Not evaluated by this calculation: ${notChecked.join(', ')}. These items are excluded from the PASS verdict and require separate review where applicable.`)
+  }
+  return notes
+}
+
 export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
   const {
     docTitle, docCode, badges, ok, governing, lh,
-    stats = [], checks = [], data = [], steps = [], drawing, drawingTitle, figures = [], fileName,
+    stats = [], checks = [], resultRows = [], data = [], assumptions = [], references = [], details = [], steps = [], drawing, drawingTitle, figures = [], fileName,
   } = input
 
   const s = createSheet()
@@ -76,7 +116,7 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
   const sheet = lh.sheet || docCode
   const docLabel = brandDocLabel(`${docTitle} — Calculation Report`)
 
-  s.brandHeader({ docLabel, title: `${docTitle} — Design Calculation`, sheet, today, ok, governing, badges })
+  s.brandHeader({ docLabel, title: `${docTitle} — Design Calculation`, sheet, today, ok, governing, badges, verdictLabel: input.verdictLabel, verdictTone: input.verdictTone })
   s.letterheadGrid([
     ['PROJECT', lh.project || '—', false], ['SHEET', sheet, true],
     ['PREPARED BY', lh.preparedBy || '—', false], ['DATE', today, true],
@@ -152,10 +192,74 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
     }
   }
 
+  if (resultRows.length > 0) {
+    section('Complete Results & Capacity Checks')
+    const theme = s.tableTheme([1])
+    autoTable(doc, {
+      ...theme, startY: s.y,
+      head: [['Check', 'Basis / provision', 'Demand / result', 'Limit', 'Util.', 'Status']],
+      body: resultRows.map((r) => [r.check, r.basis, r.demand, r.limit ?? '—', r.ratio == null ? '—' : r.ratio.toFixed(3), r.status.toUpperCase()]),
+      styles: { ...(theme.styles as object), fontSize: 6.3, cellPadding: 1.2, overflow: 'linebreak' },
+      columnStyles: { 0: { cellWidth: 34 }, 1: { cellWidth: 39 }, 2: { cellWidth: 35 }, 3: { cellWidth: 25 }, 4: { cellWidth: 16 }, 5: { cellWidth: 18 } },
+    })
+    s.y = (s.lastY() ?? s.y) + 4
+  }
+
+  if (assumptions.length > 0) {
+    section('Assumptions & Method')
+    s.setF('sans', 'normal', 7, MUTED)
+    for (const note of assumptions) {
+      const lines = doc.splitTextToSize(`• ${note}`, 182)
+      s.ensure(lines.length * 3.4 + 2)
+      for (const line of lines) { doc.text(line, 14, s.y); s.y += 3.4 }
+      s.y += 1
+    }
+    s.y += 2
+  }
+
+  if (details.length > 0) {
+    section('Additional Schedules & Calculator Data')
+    for (const item of details) {
+      s.ensure(10)
+      s.setF('sans', 'bold', 7.2, MUTED)
+      doc.text(item.title, 14, s.y); s.y += 4
+      s.setF('sans', 'normal', 6.6, MUTED)
+      const lines = doc.splitTextToSize(item.text || 'No text data available.', 182)
+      s.ensure(lines.length * 3.2 + 2)
+      for (const line of lines) { doc.text(line, 14, s.y); s.y += 3.2 }
+      s.y += 2
+    }
+  }
+
+  if (references.length > 0) {
+    section('References & Code Basis')
+    const theme = s.tableTheme()
+    autoTable(doc, {
+      ...theme, startY: s.y,
+      head: [['Topic', 'Basis used', 'Source']],
+      body: references.map((r) => [r.topic, r.basis, r.source]),
+      styles: { ...(theme.styles as object), fontSize: 6.3, cellPadding: 1.3, overflow: 'linebreak' },
+      columnStyles: { 0: { cellWidth: 36 }, 1: { cellWidth: 72 }, 2: { cellWidth: 59 } },
+    })
+    s.y = (s.lastY() ?? s.y) + 4
+  }
+  // ── Code scope & review notes ──
+  // These notes are not optional: they travel with the exported calculation
+  // even when a check was not evaluated or the tool uses a non-ACI method.
+  section('Code Scope & Review Notes')
+  s.setF('sans', 'normal', 6.6, MUTED)
+  for (const note of buildCalcPdfScopeNotes(checks)) {
+    const lines = doc.splitTextToSize(note, 182)
+    s.ensure(lines.length * 3.2 + 2)
+    for (const line of lines) { doc.text(line, 14, s.y); s.y += 3.2 }
+    s.y += 1.1
+  }
+  s.y += 2
+
   s.signatures(lh.preparedBy)
   s.disclaimer(
     COMPUTED_BY + ' '
-    + 'Load factors per NSCP 2015 §203.3; strength reduction factors per ACI 318-14 Table 21.2.1. '
+    + 'Calculation record generated from the displayed inputs and implemented checks. '
     + `Project: ${lh.project || '—'}.`,
   )
   s.pageFooters(docLabel, sheet, today, lh.project)

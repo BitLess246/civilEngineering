@@ -39,13 +39,42 @@ export interface WorkspacePageProps {
 }
 
 export function WorkspacePage(p: WorkspacePageProps) {
-  const report = useWorkspaceReport(p.title, p.badges, p.report)
+  const hasEvaluatedVerdict = p.results.some((r) => r.status === 'pass' || r.status === 'fail' || r.status === 'warn')
+  const derivedOk = p.results.length > 0 && p.results.every((r) => r.status !== 'fail')
+  const derivedGoverning = [...p.results]
+    .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1))[0]
+  const structuredReport: CalcReportData = {
+    docCode: p.report?.docCode ?? 'CALC-01',
+    ok: p.report?.ok ?? derivedOk,
+    verdictLabel: p.report?.verdictLabel ?? (p.report?.ok !== undefined || hasEvaluatedVerdict ? undefined : 'NOT ASSESSED'),
+    verdictTone: p.report?.verdictTone ?? (p.report?.ok !== undefined ? (p.report.ok ? 'pass' : 'fail') : hasEvaluatedVerdict ? (derivedOk ? 'pass' : 'fail') : 'neutral'),
+    governing: p.report?.governing ?? (derivedGoverning
+      ? `${derivedGoverning.check}: ${derivedGoverning.demand}${derivedGoverning.limit ? ` / limit ${derivedGoverning.limit}` : ''}`
+      : 'No evaluated result rows supplied; review the included inputs and calculation details.'),
+    ...p.report,
+    data: [...(p.report?.data ?? []), ...p.summary.map((item) => [item.label, item.value] as [string, string])],
+    resultRows: p.results,
+    steps: p.report?.steps ?? p.steps,
+    assumptions: [...(p.report?.assumptions ?? []), ...(typeof p.intro === 'string' ? [p.intro] : [])],
+    references: p.report?.references ?? p.references.map((ref) => ({
+      topic: ref.topic,
+      basis: typeof ref.basis === 'string' ? ref.basis : 'See calculator reference notes',
+      source: ref.source,
+    })),
+    details: [
+      ...(p.report?.details ?? []),
+      ...(p.extraSections ?? []).filter((item) => typeof item.node === 'string').map((item) => ({ title: item.title, text: String(item.node) })),
+    ],
+  }
   const resultsNum = p.drawing ? 3 : 2
+  const report = useWorkspaceReport(p.title, p.badges, structuredReport)
   return (
+    <div data-pdf-calc-root>
     <Workspace title={p.title} badges={p.badges} intro={p.intro} actions={p.actions}
       inputs={<InputRail>{report.group}{p.inputs}</InputRail>}
       checks={p.checks}
       document={
+        <div data-pdf-report-root>
         <DocPanel tabs={[
           {
             id: 'sheet', label: 'Drawing sheet', content: (
@@ -56,20 +85,22 @@ export function WorkspacePage(p: WorkspacePageProps) {
                 {p.drawing && (
                   <DocSection num={2} title={p.drawing.title} card
                     aside={<span className="no-print rounded-full border border-ok-line bg-ok-tint px-2 py-0.5 text-[10px] font-bold text-ok">LIVE</span>}>
-                    {p.drawing.node}
+                    <div data-pdf-drawing>{p.drawing.node}</div>
                   </DocSection>
                 )}
                 <DocSection num={resultsNum} title="Results summary"><ResultsTable rows={p.results} caption={p.resultsCaption} /></DocSection>
                 {p.extraSections?.map((x, i) => (
-                  <DocSection key={x.title} num={resultsNum + 1 + i} title={x.title}>{x.node}</DocSection>
+                  <DocSection key={x.title} num={resultsNum + 1 + i} title={x.title}><div data-pdf-detail={x.title}>{x.node}</div></DocSection>
                 ))}
               </>
             ),
           },
           { id: 'calc', label: 'Calculations', content: <WorkedSolution steps={p.steps} title={`${p.title} — step by step`} /> },
-          { id: 'refs', label: 'References', content: <DocSection num="R" title="Basis of each result"><ReferenceList items={p.references} /></DocSection> },
+          { id: 'refs', label: 'References', content: <DocSection num="R" title="Basis of each result"><div data-pdf-detail="Reference notes"><ReferenceList items={p.references} /></div></DocSection> },
         ]} />
+        </div>
       }
     />
+    </div>
   )
 }

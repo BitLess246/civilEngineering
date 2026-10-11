@@ -35,6 +35,11 @@ describe('buildModelReport', () => {
     expect(rpt.props).toEqual(props)
   })
 
+  it('states report scope limitations explicitly', () => {
+    expect(rpt.limitations[0]).toContain('does not certify compliance with every provision')
+    expect(rpt.limitations[1]).toContain('engineer of record must verify')
+  })
+
   it('summary checks cover each populated group and agree with row verdicts', () => {
     const names = rpt.checks.map((c) => c.name)
     expect(names).toContain('RC beams & girders')
@@ -370,6 +375,8 @@ describe('traceability — the twelve governing members', () => {
     expect(t.rows.some((r) => r[0].startsWith('Column '))).toBe(true)
     for (const row of t.rows) {
       expect(row[3]).toMatch(/Mu |Pu /)          // demand, as the analysis found it
+      if (row[0].startsWith('Beam ')) expect(row[3]).toMatch(/Mu .* kN·m · Vu .* kN$/)
+      if (row[0].startsWith('Column ')) expect(row[3]).toMatch(/Pu .* kN · Mu .* kN·m · Muy .* kN·m$/)
       expect(row[4]).toMatch(/As |φPn /)         // required steel, as the design computed it
       expect(row[5]).toMatch(/⌀/)                // provided bars, as the schedule carries them
       expect(row[6]).toMatch(/^\d[\d.]*$|^—$/)   // utilisation: a bare number, or — when the design has no ratio
