@@ -2408,7 +2408,13 @@ async function designStructureWithPool(
  */
 function framePoolSizeFor(model: StructuralModel, opts: AnalyzeOptions): number {
   const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
-  return frameWorkerCount(buildComboTasks(lateral, opts).length + 3)
+  // Conservative upper-bound estimate: each subdivided quad can introduce
+  // roughly (subdiv + 1)^2 mesh nodes. The shell mesher shares nodes, so this
+  // intentionally errs high to avoid replicating large factorizations in RAM.
+  const subdiv = Math.max(1, Math.min(6, Math.floor(model.shellSubdiv ?? 1)))
+  const estimatedNodes = model.nodes.length + model.plates.length * (subdiv + 1) ** 2
+  const estimatedDofs = estimatedNodes * 6
+  return frameWorkerCount(buildComboTasks(lateral, opts).length + 3, undefined, estimatedDofs)
 }
 
 /** Async (Worker-pool) version of designStructure. Spawns N frame-solve workers
