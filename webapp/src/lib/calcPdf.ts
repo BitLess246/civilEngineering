@@ -64,6 +64,23 @@ export interface CalcPdfInput {
 const slug = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'report'
 
+/**
+ * Scope notes for standalone calculator PDFs. Keep these independent of any
+ * one design code: the same exporter is used by structural, quantity, and
+ * other engineering tools with different standards and methods.
+ */
+export function buildCalcPdfScopeNotes(checks: readonly CalcCheckRow[] = []): string[] {
+  const notes = [
+    'PASS applies only to the checks explicitly listed in this report. It is not certification of compliance with every provision that may apply to the project.',
+    'The engineer of record must verify the inputs, units, load combinations, boundary conditions, material properties, detailing, assumptions, and applicable jurisdiction requirements before relying on these results.',
+  ]
+  const notChecked = checks.filter((c) => c.ratio === null).map((c) => c.name)
+  if (notChecked.length) {
+    notes.push(`Not evaluated by this calculation: ${notChecked.join(', ')}. These items are excluded from the PASS verdict and require separate review where applicable.`)
+  }
+  return notes
+}
+
 export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
   const {
     docTitle, docCode, badges, ok, governing, lh,
@@ -152,10 +169,23 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
     }
   }
 
+  // ── Code scope & review notes ──
+  // These notes are not optional: they travel with the exported calculation
+  // even when a check was not evaluated or the tool uses a non-ACI method.
+  section('Code Scope & Review Notes')
+  s.setF('sans', 'normal', 6.6, MUTED)
+  for (const note of buildCalcPdfScopeNotes(checks)) {
+    const lines = doc.splitTextToSize(note, 182)
+    s.ensure(lines.length * 3.2 + 2)
+    for (const line of lines) { doc.text(line, 14, s.y); s.y += 3.2 }
+    s.y += 1.1
+  }
+  s.y += 2
+
   s.signatures(lh.preparedBy)
   s.disclaimer(
     COMPUTED_BY + ' '
-    + 'Load factors per NSCP 2015 §203.3; strength reduction factors per ACI 318-14 Table 21.2.1. '
+    + 'Calculation record generated from the displayed inputs and implemented checks. '
     + `Project: ${lh.project || '—'}.`,
   )
   s.pageFooters(docLabel, sheet, today, lh.project)
