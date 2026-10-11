@@ -54,6 +54,9 @@ export interface CalcPdfInput {
   ok: boolean
   /** One line under the verdict chip — what governs, and at what utilisation. */
   governing: string
+  /** Use neutral status for report-only pages with no evaluated verdict. */
+  verdictLabel?: string
+  verdictTone?: 'pass' | 'fail' | 'neutral'
   lh: LetterheadState
   stats?: readonly VerdictStat[]
   checks?: readonly CalcCheckRow[]
@@ -113,7 +116,7 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
   const sheet = lh.sheet || docCode
   const docLabel = brandDocLabel(`${docTitle} — Calculation Report`)
 
-  s.brandHeader({ docLabel, title: `${docTitle} — Design Calculation`, sheet, today, ok, governing, badges })
+  s.brandHeader({ docLabel, title: `${docTitle} — Design Calculation`, sheet, today, ok, governing, badges, verdictLabel: input.verdictLabel, verdictTone: input.verdictTone })
   s.letterheadGrid([
     ['PROJECT', lh.project || '—', false], ['SHEET', sheet, true],
     ['PREPARED BY', lh.preparedBy || '—', false], ['DATE', today, true],
