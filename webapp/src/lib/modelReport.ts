@@ -67,6 +67,8 @@ export interface ModelReport {
   /** One row per element type: which member governs it, where it stands, and
    *  how close it came. The whole design on one page, ahead of the detail. */
   governingTable?: ReportTable
+  /** Explicit limitations and manual-review items; these describe scope, not new design checks. */
+  limitations: string[]
 }
 
 const f0 = (v: number) => v.toFixed(0)
@@ -698,7 +700,7 @@ export function buildModelReport(
     const d = s.design
     traceRows.push([
       `Beam ${b.id}`, memberLoc(b.id) ?? '—', b.gov ?? '—',
-      `Mu ${f1(Math.abs(s.Mu))} · Vu ${f1(s.Vu)} kN·m`,
+      `Mu ${f1(Math.abs(s.Mu))} kN·m · Vu ${f1(s.Vu)} kN`,
       `As ${f0(d.As)} mm²`,
       `${d.bars}⌀${sec?.barDia ?? '?'}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''} · ${d.legs}L-⌀${sec?.tieDia ?? '?'} @ ${
         d.sHinge > 0 && d.sHinge < d.sAdopt - 1
@@ -713,7 +715,7 @@ export function buildModelReport(
     const sec = sectionFor(c.id)
     traceRows.push([
       `Column ${c.id}`, memberLoc(c.id) ?? '—', c.gov ?? '—',
-      `Pu ${f1(c.Pu)} · Mu ${f1(c.Mu)} · Muy ${f1(c.Muy)} kN·m`,
+      `Pu ${f1(c.Pu)} kN · Mu ${f1(c.Mu)} kN·m · Muy ${f1(c.Muy)} kN·m`,
       `φPn ${f1(c.phiPn)} kN (${c.biaxialMethod})`,
       `${c.bars}⌀${sec?.barDia ?? '?'} · ties ⌀${sec?.tieDia ?? '?'} @ ${Math.round(c.tieSpacingFinal)} mm`,
       f2(c.util),
@@ -757,5 +759,28 @@ export function buildModelReport(
     }
     : undefined
 
-  return { ok, governing, stats, checks, props, tables, groups, trace, governingTable }
+  // A passing implemented check is not the same as certification of every
+  // applicable code provision. Keep scope and known workflow limitations
+  // visible in the exported document, even when the user omits the status appendix.
+  const limitations = [
+    'A PASS means the implemented checks listed in this report passed; it does not certify compliance with every provision that may apply to the project.',
+    'The engineer of record must verify the model, loads and combinations, support conditions, material inputs, bracing, detailing, geotechnical assumptions, and jurisdiction-specific requirements.',
+  ]
+  if (design.unchecked.length) {
+    limitations.push(`Members not design-checked by this workflow: ${design.unchecked.map((u) => `${u.id} (${u.shape})`).join(', ')}. These members are not covered by a PASS verdict.`)
+  }
+  if (design.pDeltaIssues.length) {
+    limitations.push(`P-Delta convergence failed for: ${design.pDeltaIssues.join(', ')}. Review the analysis failure; first-order results must not be treated as a successful second-order result.`)
+  }
+  if (design.pDeltaSkipped.length) {
+    limitations.push(`P-Delta was not run for: ${design.pDeltaSkipped.join(', ')}. The reported design forces use first-order results for these cases.`)
+  }
+  if (design.steelColumns.length) {
+    limitations.push('The implemented AISC 360-16 steel-column workflow is not the Direct Analysis Method (DAM). Independently verify the applicable analysis method, effective-length and bracing assumptions, second-order effects, notional loads, and stiffness reductions.')
+  }
+  if (irregular?.length) {
+    limitations.push('Seismic irregularities were flagged. This report identifies the flags but does not by itself demonstrate that all additional analysis, design, and detailing requirements triggered by those irregularities have been satisfied.')
+  }
+
+  return { ok, governing, stats, checks, props, tables, groups, trace, governingTable, limitations }
 }
