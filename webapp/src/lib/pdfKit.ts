@@ -189,6 +189,7 @@ export interface BrandHeader {
    * 23% supported by its data would be actively misleading.
    */
   verdictLabel?: string
+  verdictTone?: 'pass' | 'fail' | 'neutral'
 }
 
 /** A fresh A4 sheet with the embedded font subsets registered. */
@@ -307,17 +308,21 @@ export function createSheet(): Sheet {
       // second one mid-word. `TITLE_RESERVED_W` keeps the title clear of the
       // widest of them.
       {
-        const label = verdictLabel ?? (ok ? 'DESIGN OK' : 'CHECK FAILED')
-        s.setF('sans', 'bold', 8.4, ok ? OK_FG : FAIL_FG)
+        const tone = verdictTone ?? (ok ? 'pass' : 'fail')
+        const fg = tone === 'pass' ? OK_FG : tone === 'fail' ? FAIL_FG : MUTED
+        const bg = tone === 'pass' ? OK_BG : tone === 'fail' ? FAIL_BG : [247, 247, 244] as RGB
+        const edge = tone === 'pass' ? OK_EDGE : tone === 'fail' ? FAIL_EDGE : HAIR
+        const label = verdictLabel ?? (tone === 'pass' ? 'DESIGN OK' : tone === 'fail' ? 'CHECK FAILED' : 'NOT ASSESSED')
+        s.setF('sans', 'bold', 8.4, fg)
         const w = Math.min(TITLE_RESERVED_W - 4, Math.max(52, doc.getTextWidth(label) + 7))
         const x = M + CONTENT_W - w, cy = s.y - 9
-        doc.setFillColor(...(ok ? OK_BG : FAIL_BG))
-        doc.setDrawColor(...(ok ? OK_EDGE : FAIL_EDGE))
+        doc.setFillColor(...bg)
+        doc.setDrawColor(...edge)
         doc.setLineWidth(0.25)
         doc.roundedRect(x, cy, w, 14.6, 1.6, 1.6, 'FD')
-        s.setF('sans', 'bold', 8.4, ok ? OK_FG : FAIL_FG)
+        s.setF('sans', 'bold', 8.4, fg)
         doc.text(label, x + 3.5, cy + 5.4, { charSpace: 0.2 })
-        s.setF('sans', 'normal', 5.6, ok ? [77, 122, 95] : [169, 91, 71])
+        s.setF('sans', 'normal', 5.6, tone === 'pass' ? [77, 122, 95] : tone === 'fail' ? [169, 91, 71] : MUTED)
         doc.text(doc.splitTextToSize(governing, w - 7).slice(0, 3), x + 3.5, cy + 8.8)
       }
       s.y += 4.5
