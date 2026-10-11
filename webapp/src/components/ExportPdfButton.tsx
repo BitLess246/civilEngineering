@@ -108,6 +108,15 @@ export function ExportPdfButton({
       const capturedAssumptions = Array.from(reportRoot.querySelectorAll('[data-pdf-assumption]'))
         .map((el) => el.textContent?.trim()).filter((v): v is string => Boolean(v))
 
+      // For older non-workspace pages, preserve the complete rendered textual
+      // content as a searchable appendix until that page supplies typed report
+      // data. The warning in ReportControls makes clear this is a fallback,
+      // not a substitute for exposing internal assumptions from calculation code.
+      if (!document.querySelector('[data-pdf-calc-root]')) {
+        const transcript = reportRoot.innerText?.trim()
+        if (transcript) capturedDetails.push({ title: 'Rendered calculator content transcript', text: transcript })
+      }
+
       const { generateCalcPdf } = await import('../lib/calcPdf')
       await generateCalcPdf({
         ...report,
