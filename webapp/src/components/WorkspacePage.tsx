@@ -39,8 +39,32 @@ export interface WorkspacePageProps {
 }
 
 export function WorkspacePage(p: WorkspacePageProps) {
-  const report = useWorkspaceReport(p.title, p.badges, p.report)
+  const derivedOk = p.results.length > 0 && p.results.every((r) => r.status !== 'fail')
+  const derivedGoverning = [...p.results]
+    .sort((a, b) => (b.ratio ?? -1) - (a.ratio ?? -1))[0]
+  const structuredReport: CalcReportData = {
+    docCode: p.report?.docCode ?? 'CALC-01',
+    ok: p.report?.ok ?? derivedOk,
+    governing: p.report?.governing ?? (derivedGoverning
+      ? `${derivedGoverning.check}: ${derivedGoverning.demand}${derivedGoverning.limit ? ` / limit ${derivedGoverning.limit}` : ''}`
+      : 'No evaluated result rows supplied; review the included inputs and calculation details.'),
+    ...p.report,
+    data: [...(p.report?.data ?? []), ...p.summary.map((item) => [item.label, item.value] as [string, string])],
+    resultRows: p.results,
+    steps: p.report?.steps ?? p.steps,
+    assumptions: [...(p.report?.assumptions ?? []), ...(typeof p.intro === 'string' ? [p.intro] : [])],
+    references: p.report?.references ?? p.references.map((ref) => ({
+      topic: ref.topic,
+      basis: typeof ref.basis === 'string' ? ref.basis : 'See calculator reference notes',
+      source: ref.source,
+    })),
+    details: [
+      ...(p.report?.details ?? []),
+      ...(p.extraSections ?? []).map((item) => ({ title: item.title, text: 'See the attached calculator data section; page-specific structured table export should be provided for full row-level detail.' })),
+    ],
+  }
   const resultsNum = p.drawing ? 3 : 2
+  const report = useWorkspaceReport(p.title, p.badges, structuredReport)
   return (
     <Workspace title={p.title} badges={p.badges} intro={p.intro} actions={p.actions}
       inputs={<InputRail>{report.group}{p.inputs}</InputRail>}
