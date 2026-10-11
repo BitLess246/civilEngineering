@@ -14,10 +14,16 @@ export const MAX_FRAME_WORKERS = 8
 export function frameWorkerCount(
   taskCount: number,
   hardwareConcurrency = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency ?? 4 : 4,
+  estimatedDofs = 0,
 ): number {
   const tasks = Number.isFinite(taskCount) ? Math.max(1, Math.floor(taskCount)) : 1
   const cores = Number.isFinite(hardwareConcurrency) ? Math.max(1, Math.floor(hardwareConcurrency)) : 4
-  return Math.max(1, Math.min(MAX_FRAME_WORKERS, Math.max(1, cores - 1), tasks))
+  const dofs = Number.isFinite(estimatedDofs) ? Math.max(0, estimatedDofs) : 0
+  // Dense factorization memory grows faster than model size. These conservative
+  // tiers limit duplicated solver state for large models; benchmark data should
+  // tune the thresholds before claiming optimality.
+  const memoryCap = dofs >= 20000 ? 2 : dofs >= 8000 ? 4 : MAX_FRAME_WORKERS
+  return Math.max(1, Math.min(MAX_FRAME_WORKERS, memoryCap, Math.max(1, cores - 1), tasks))
 }
 
 interface PendingTask {
