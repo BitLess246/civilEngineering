@@ -23,8 +23,8 @@ export interface ReportControlsProps {
    * Structured results. When present the page exports a real PDF calc sheet —
    * the same one Model Space produces, via the shared `pdfKit`.
    *
-   * Optional because the pages are being converted in batches: one without it
-   * still falls back to the browser print path rather than losing its export.
+   * Optional for legacy pages. Those still use the structured exporter, but the
+   * PDF flags that page-specific result/assumption data was not supplied.
    */
   report?: CalcReportData
 }
