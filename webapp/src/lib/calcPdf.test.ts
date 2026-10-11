@@ -17,8 +17,9 @@ describe('standalone calculator PDF scope notes', () => {
       { name: 'Punching shear', ratio: null, ok: false },
     ])
     expect(notes).toHaveLength(4)
-    expect(notes[2]).toContain('Deflection, Punching shear')
-    expect(notes[2]).toContain('excluded from the PASS verdict')
+    expect(notes[2]).toContain('internal default, idealization, omitted load case')
+    expect(notes[3]).toContain('Deflection, Punching shear')
+    expect(notes[3]).toContain('excluded from the PASS verdict')
   })
 
   it('does not add a not-evaluated warning when all checks have ratios', () => {
