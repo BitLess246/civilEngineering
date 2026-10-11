@@ -80,7 +80,7 @@ export function WorkspacePage(p: WorkspacePageProps) {
                 {p.drawing && (
                   <DocSection num={2} title={p.drawing.title} card
                     aside={<span className="no-print rounded-full border border-ok-line bg-ok-tint px-2 py-0.5 text-[10px] font-bold text-ok">LIVE</span>}>
-                    {p.drawing.node}
+                    <div data-pdf-drawing>{p.drawing.node}</div>
                   </DocSection>
                 )}
                 <DocSection num={resultsNum} title="Results summary"><ResultsTable rows={p.results} caption={p.resultsCaption} /></DocSection>
