@@ -55,8 +55,51 @@ export function ExportPdfButton({
         const png = await svgToPng(fsvg)
         if (png) figures.push({ png, title: el.getAttribute('data-figure-title') ?? 'Diagram' })
       }
+      // Capture the live input state at export time, not merely the page's
+      // short summary. This includes values that affect the calculation but
+      // are not repeated in the result headline.
+      const capturedData: [string, string][] = []
+      for (const el of document.querySelectorAll('input, select, textarea')) {
+        if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) continue
+        if (el instanceof HTMLInputElement && (el.type === 'hidden' || el.type === 'button' || el.type === 'submit')) continue
+        if (el.closest('[data-ai-ignore]')) continue
+        const label = el.labels?.[0]?.innerText?.trim().replace(/\\s+/g, ' ')
+          || el.getAttribute('aria-label') || el.name || el.id
+        if (!label) continue
+        let value = ''
+        if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) value = el.checked ? 'Yes' : 'No'
+        else value = el.value
+        if (value !== '') capturedData.push([label, value])
+      }
+
+      // Include actual rendered tables (result schedules, reinforcement tables,
+      // etc.) even when the calculator did not manually duplicate them into its
+      // report payload.
+      const capturedDetails: { title: string; text: string }[] = []
+      const seenTables = new Set<string>()
+      for (const table of document.querySelectorAll('[data-pdf-report-root] table, main table')) {
+        const text = Array.from(table.querySelectorAll('tr'))
+          .map((tr) => Array.from(tr.querySelectorAll('th,td')).map((cell) => cell.innerText.trim()).join(' | '))
+          .filter(Boolean).join('\\n')
+        if (!text || seenTables.has(text)) continue
+        seenTables.add(text)
+        capturedDetails.push({ title: table.getAttribute('aria-label') || table.caption?.innerText || 'Rendered table data', text })
+      }
+      for (const el of document.querySelectorAll('[data-pdf-detail]')) {
+        const text = el.textContent?.trim()
+        if (text) capturedDetails.push({ title: el.getAttribute('data-pdf-detail') || 'Additional calculator data', text })
+      }
+      const capturedAssumptions = Array.from(document.querySelectorAll('[data-pdf-assumption]'))
+        .map((el) => el.textContent?.trim()).filter((v): v is string => Boolean(v))
+
       const { generateCalcPdf } = await import('../lib/calcPdf')
-      await generateCalcPdf({ ...report, drawing, figures })
+      await generateCalcPdf({
+        ...report,
+        data: [...(report.data ?? []), ...capturedData],
+        details: [...(report.details ?? []), ...capturedDetails],
+        assumptions: [...(report.assumptions ?? []), ...capturedAssumptions],
+        drawing, figures,
+      })
     } catch (e) {
       // Surfaced on the button rather than swallowed — a silent no-op on an
       // export button reads as a broken page.
