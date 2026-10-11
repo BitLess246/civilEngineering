@@ -117,7 +117,9 @@ export class FramePool {
           this.queue.push({ id, loads, opts, recover: rec, resolve, reject })
         }
       } catch (cause) {
-        reject(cause instanceof Error ? cause : new Error(String(cause)))
+        const error = cause instanceof Error ? cause : new Error(String(cause))
+        reject(error)
+        this.fail(error)
       }
     })
   }
