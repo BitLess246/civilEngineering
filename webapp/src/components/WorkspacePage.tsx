@@ -91,7 +91,7 @@ export function WorkspacePage(p: WorkspacePageProps) {
             ),
           },
           { id: 'calc', label: 'Calculations', content: <WorkedSolution steps={p.steps} title={`${p.title} — step by step`} /> },
-          { id: 'refs', label: 'References', content: <DocSection num="R" title="Basis of each result"><ReferenceList items={p.references} /></DocSection> },
+          { id: 'refs', label: 'References', content: <DocSection num="R" title="Basis of each result"><div data-pdf-detail="Reference notes"><ReferenceList items={p.references} /></div></DocSection> },
         ]} />
       }
     />
