@@ -34,6 +34,17 @@ import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
  */
 export interface CalcCheckRow { name: string; ratio: number | null; ok: boolean; note?: string }
 
+export interface CalcPdfResultRow {
+  check: string
+  basis: string
+  demand: string
+  limit?: string
+  ratio?: number
+  status: 'pass' | 'fail' | 'warn' | 'info'
+}
+export interface CalcPdfReference { topic: string; basis: string; source: string }
+export interface CalcPdfDetail { title: string; text: string }
+
 export interface CalcPdfInput {
   /** Element name — 'Rectangular RC Beam'. Heads the sheet and the file name. */
   docTitle: string
@@ -46,8 +57,16 @@ export interface CalcPdfInput {
   lh: LetterheadState
   stats?: readonly VerdictStat[]
   checks?: readonly CalcCheckRow[]
-  /** Input echo, as label/value pairs. Laid out in two columns. */
+  /** Every result row shown in the calculator's Results Summary. */
+  resultRows?: readonly CalcPdfResultRow[]
+  /** Input echo, including hidden/non-visible values supplied by the calculator. */
   data?: readonly [string, string][]
+  /** Method assumptions and scope statements used by the calculation. */
+  assumptions?: readonly string[]
+  /** References shown in the calculator's References tab. */
+  references?: readonly CalcPdfReference[]
+  /** Additional schedules/tables represented as report-ready text. */
+  details?: readonly CalcPdfDetail[]
   steps?: readonly SolutionStep[]
   /** PNG data URL of the page's schematic — see `svgToPng`. */
   drawing?: string | null
@@ -84,7 +103,7 @@ export function buildCalcPdfScopeNotes(checks: readonly CalcCheckRow[] = []): st
 export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
   const {
     docTitle, docCode, badges, ok, governing, lh,
-    stats = [], checks = [], data = [], steps = [], drawing, drawingTitle, figures = [], fileName,
+    stats = [], checks = [], resultRows = [], data = [], assumptions = [], references = [], details = [], steps = [], drawing, drawingTitle, figures = [], fileName,
   } = input
 
   const s = createSheet()
