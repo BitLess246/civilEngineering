@@ -60,7 +60,7 @@ export function WorkspacePage(p: WorkspacePageProps) {
     })),
     details: [
       ...(p.report?.details ?? []),
-      ...(p.extraSections ?? []).map((item) => ({ title: item.title, text: 'See the attached calculator data section; page-specific structured table export should be provided for full row-level detail.' })),
+      ...(p.extraSections ?? []).filter((item) => typeof item.node === 'string').map((item) => ({ title: item.title, text: String(item.node) })),
     ],
   }
   const resultsNum = p.drawing ? 3 : 2
@@ -70,6 +70,7 @@ export function WorkspacePage(p: WorkspacePageProps) {
       inputs={<InputRail>{report.group}{p.inputs}</InputRail>}
       checks={p.checks}
       document={
+        <div data-pdf-report-root>
         <DocPanel tabs={[
           {
             id: 'sheet', label: 'Drawing sheet', content: (
@@ -85,7 +86,7 @@ export function WorkspacePage(p: WorkspacePageProps) {
                 )}
                 <DocSection num={resultsNum} title="Results summary"><ResultsTable rows={p.results} caption={p.resultsCaption} /></DocSection>
                 {p.extraSections?.map((x, i) => (
-                  <DocSection key={x.title} num={resultsNum + 1 + i} title={x.title}>{x.node}</DocSection>
+                  <DocSection key={x.title} num={resultsNum + 1 + i} title={x.title}><div data-pdf-detail={x.title}>{x.node}</div></DocSection>
                 ))}
               </>
             ),
@@ -93,6 +94,7 @@ export function WorkspacePage(p: WorkspacePageProps) {
           { id: 'calc', label: 'Calculations', content: <WorkedSolution steps={p.steps} title={`${p.title} — step by step`} /> },
           { id: 'refs', label: 'References', content: <DocSection num="R" title="Basis of each result"><div data-pdf-detail="Reference notes"><ReferenceList items={p.references} /></div></DocSection> },
         ]} />
+        </div>
       }
     />
   )
