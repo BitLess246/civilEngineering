@@ -2412,7 +2412,7 @@ function framePoolSizeFor(model: StructuralModel, opts: AnalyzeOptions): number 
   // roughly (subdiv + 1)^2 mesh nodes. The shell mesher shares nodes, so this
   // intentionally errs high to avoid replicating large factorizations in RAM.
   const subdiv = Math.max(1, Math.min(6, Math.floor(model.shellSubdiv ?? 1)))
-  const estimatedNodes = model.nodes.length + model.plates.length * (subdiv + 1) ** 2
+  const estimatedNodes = model.nodes.length + (opts.useShells ? model.plates.length * (subdiv + 1) ** 2 : 0)
   const estimatedDofs = estimatedNodes * 6
   return frameWorkerCount(buildComboTasks(lateral, opts).length + 3, undefined, estimatedDofs)
 }
