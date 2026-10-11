@@ -444,7 +444,7 @@ export function ReportBar({ title, lh, onChange }: {
       {field('Prepared by', 'preparedBy', 'Engineer, CE')}
       <ExportPdfButton
         docTitle={title} docCode="CALC-01" badges={['Code basis not specified']}
-        ok={false}
+        ok={false} verdictLabel="NOT ASSESSED" verdictTone="neutral"
         governing="No page-specific structured result summary was supplied. Review captured data; this is not a verified design verdict."
         assumptions={['This legacy page has not supplied a complete structured report payload. Captured inputs, tables, diagrams, and rendered text may not include hidden calculation assumptions or internal defaults; manual review is required.']}
         lh={lh}
