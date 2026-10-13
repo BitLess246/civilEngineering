@@ -35,10 +35,13 @@ A.update = (t) => {
   const rot = lerp(0, -4, pull) + lerp(0, 9, ease(t, 3.45, 3.98, E.inExpo))
   tf(s.world, `translate(${W / 2}px, ${H / 2}px) rotate(${rot}deg) scale(${sc}) translate(${-W / 2}px, ${-H / 2}px)`)
   s.world.style.transformOrigin = '0 0'
+  // a row shear on the off-beat, alternate rows opposite ways — the hero rides
+  // its row too, or its neighbour slides over it and leaves a hole beside it
+  const shear = (j) => (j % 2 ? 1 : -1) * 120 * (ease(t, 2.72, 3.0, E.outExpo) - ease(t, 3.22, 3.45, E.inOutCubic))
   for (const c of s.cells) {
     if (c.hero) {
       const inP = spring(t - 0.05, 2.2, 0.55)
-      tf(c.bg, `scale(${clamp(inP, 0, 1.2)})`); op(c.bg, t > 0.05 ? 1 : 0)
+      tf(c.bg, `translate(${shear(c.j)}px, 0) scale(${clamp(inP, 0, 1.2)})`); op(c.bg, t > 0.05 ? 1 : 0)
       const v = t < 0.75 ? 0 : t < 1.25 ? 0.5 : 1
       c.ff.set(v, t > 0.3 && t < 1.5 && Math.floor(t * 4) % 2 === 0 || (t >= 0.6 && t < 1.5))
       c.ff.bx.style.borderColor = t >= 1.5 ? '#0f4c92' : c.ff.bx.style.borderColor
@@ -46,9 +49,7 @@ A.update = (t) => {
     }
     const at = 2.0 + c.d * 0.055
     const p = spring(t - at, 2.6, 0.5)
-    // a row shear on the off-beat, alternate rows opposite ways
-    const sh = (c.j % 2 ? 1 : -1) * 120 * (ease(t, 2.72, 3.0, E.outExpo) - ease(t, 3.22, 3.45, E.inOutCubic))
-    tf(c.bg, `translate(${sh}px, 0) scale(${clamp(p, 0, 1.15)})`)
+    tf(c.bg, `translate(${shear(c.j)}px, 0) scale(${clamp(p, 0, 1.15)})`)
     op(c.bg, t >= at ? 1 : 0)
     c.ff.set(ease(t, at + 0.1, at + 0.45, E.lin), false)
   }
