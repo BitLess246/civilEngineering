@@ -4,8 +4,8 @@ import { OrbitControls } from '@react-three/drei'
 import { SceneText } from '../components/SceneText'
 import * as THREE from 'three'
 import { generateTruss, solveTrussEnvelope, selfWeightLoads, type TrussType, type TrussModel } from '../engine/truss'
-import { designTruss, type MemberDesign, type TrussSection } from '../engine/trussDesign'
-import { optimizeTruss, type GroupingMode } from '../engine/trussOptimize'
+import { designTruss, compressionScope, trussNotAssessed, type MemberDesign, type TrussSection } from '../engine/trussDesign'
+import { optimizeTruss, trussSectionOf, rejectionNote, type GroupingMode } from '../engine/trussOptimize'
 import { FAMILIES, shapesOf, shapeByName, effectiveSection, type SectionFamily, type EffectiveSection } from '../engine/aiscSections'
 import { trussTakeoff, costTrussBill } from '../engine/trussTakeoff'
 import { SectionShape } from '../components/SectionShape'
@@ -82,7 +82,7 @@ export default function TrussSpace() {
   const [E, setE] = useState(200000); const [Fy, setFy] = useState(248); const [K, setK] = useState(1.0)
   const [family, setFamily] = useState<SectionFamily>('L')
   const [shapeName, setShapeName] = useState('L102x102x9.5')
-  const [double, setDouble] = useState(true)        // double angle (2L) when family = L
+  const [double, setDouble] = useState(false)       // double angle (2L) when family = L — off by default: §E4/§E6 for built-up angles are not implemented, so a 2L cannot pass in compression
   const [gap, setGap] = useState(0)                 // separator/gusset plate thickness, mm (0 = touching)
   const [selected, setSelected] = useState<string | null>(null)
   const [steelUnitPrice, setSteelUnitPrice] = useState(80)       // ₱ per kg
@@ -122,7 +122,10 @@ export default function TrussSpace() {
     const shp = shapeByName(shapeName) ?? shapesOf(family)[0]
     return effectiveSection(shp, double && shp.family === 'L', gap)
   }, [customSec, csA, csRx, csRy, shapeName, family, double, gap])
-  const section: TrussSection = useMemo(() => ({ A: eff.A, r: eff.rmin, E, Fy, K }), [eff, E, Fy, K])
+  const section: TrussSection = useMemo(() => trussSectionOf(eff, { E, Fy, K }), [eff, E, Fy, K])
+  // Fail closed: a hand-picked section whose compression strength the member
+  // check does not cover cannot pass a truss that has compression members.
+  const scope = useMemo(() => compressionScope(eff, E, Fy), [eff, E, Fy])
 
   // load cases: Dead = self-weight (section-derived) + dead joint loads; Live =
   // live joint loads. Envelope over the NSCP gravity combinations.
@@ -158,8 +161,12 @@ export default function TrussSpace() {
 
   const design = useMemo(() => {
     if (opt) return { members: opt.members, maxUtil: Math.max(0, ...opt.members.map((m) => m.util)), allOK: opt.ok && opt.members.every((m) => m.ok) }
-    return result ? designTruss(result.forces, section) : null
-  }, [opt, result, section])
+    if (!result) return null
+    const d = designTruss(result.forces, section)
+    const needsComp = result.forces.some((f) => f.N <= 1e-6)
+    return needsComp && !scope.supported ? { ...d, allOK: false } : d
+  }, [opt, result, section, scope])
+  const notAssessed = useMemo(() => opt?.notAssessed ?? (result ? trussNotAssessed(result.forces) : []), [opt, result])
   const shapes3d = useMemo(() => {
     if (customSec) {   // illustrative solid square (no real profile for a custom section)
       const h = Math.sqrt(eff.A) / 1000 / 2
@@ -364,6 +371,20 @@ export default function TrussSpace() {
               ))}
               <Row label="Reactions / forces from" value={result.reactionCombo} sub="member forces enveloped over 1.4D & 1.2D+1.6L" />
               {design && <Row alert={!design.allOK} label="Design" value={design.allOK ? `OK · max util ${(design.maxUtil * 100).toFixed(0)}%` : `✗ max util ${(design.maxUtil * 100).toFixed(0)}%`} />}
+              {!opt && !scope.supported && result.forces.some((f) => f.N <= 1e-6) && (
+                <p className="mt-2 text-[11px] text-fail">
+                  ✗ {scope.reason}. The compression members are not checked, so this design cannot pass —
+                  pick another section, or turn on auto-sizing.
+                </p>
+              )}
+              {notAssessed.length > 0 && (
+                <div className="mt-2 text-[11px] text-muted">
+                  <p className="font-semibold">Not checked here:</p>
+                  <ul className="list-inside list-disc">
+                    {notAssessed.map((n) => <li key={n}>{n}</li>)}
+                  </ul>
+                </div>
+              )}
             </ResultCard>
           )}
 
@@ -376,7 +397,9 @@ export default function TrussSpace() {
                   value={g.section?.label ?? 'no section fits'}
                   sub={g.section
                     ? `util ${(g.maxUtil * 100).toFixed(0)}% · KL/r ${g.maxSlenderness.toFixed(0)}${g.tensionSlendernessOK ? '' : ' ⚠'} · ${g.group.members.length} members · ${g.weightKg.toFixed(0)} kg`
-                    : `${g.rejected.length} candidates rejected`} />
+                    : `${g.rejected.length} candidates rejected${g.rejected.some((x) => x.gate === 'scope')
+                      ? ` (${g.rejected.filter((x) => x.gate === 'scope').length} outside the compression check — e.g. ${rejectionNote(g.rejected.find((x) => x.gate === 'scope')!.label, 'scope', g.rejected.find((x) => x.gate === 'scope')!.reason)})`
+                      : ''}`} />
               ))}
               <Row label="Steel in members" value={`${opt.totalWeightKg.toFixed(0)} kg`}
                 sub={opt.uniformWeightKg
