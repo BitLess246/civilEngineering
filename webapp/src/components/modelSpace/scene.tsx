@@ -21,6 +21,7 @@ import { type V3 } from '../../engine/frame3d'
 import { dashSpans } from '../../engine/dashPattern'
 import { planGridLines } from '../../engine/planGrid'
 import { memberFrame, frameBasis } from '../../lib/memberFrame'
+import { slabPrism } from '../../lib/slabPrism'
 import { memberDiagramRibbon, type DiagramComp } from '../../engine/memberDiagram3d'
 import { footingPrism } from '../../engine/footingLayout'
 import { shapeByName, effectiveSection } from '../../engine/aiscSections'
@@ -318,12 +319,17 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
   // concrete it belongs to. So the box hangs below the node, at the plate's own
   // thickness rather than a fixed 100 mm.
   const thick = Math.max(0.02, thickness ?? SLAB_FALLBACK_T)
-  const { mid, sx, sz } = useMemo(() => {
-    const mid = corners.reduce((s, c) => s.add(c.clone()), new THREE.Vector3()).multiplyScalar(0.25)
-    const sx = Math.abs(corners[1].x - corners[0].x) || Math.abs(corners[2].x - corners[0].x)
-    const sz = Math.abs(corners[3].z - corners[0].z) || Math.abs(corners[2].z - corners[0].z)
-    return { mid, sx, sz }
-  }, [corners])
+  // The panel through its four corner NODES (`slabPrism`) — not a box sized
+  // off two edges, which a moved corner node left behind.
+  const prism = useMemo(() => {
+    if (corners.length < 4) return null
+    const { positions, index } = slabPrism(corners.slice(0, 4).map((c) => [c.x, c.y, c.z] as const), thick)
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+    g.setIndex(index)
+    g.computeVertexNormals()
+    return g
+  }, [corners, thick])
 
   // Timber deck: joist lines spanning the shorter edge, repeated at the joist
   // spacing along the longer edge (matching the woodSlab design), drawn just
@@ -409,11 +415,9 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
         </lineSegments>
         {/* Same invisible pick target as a member's — the outline is too thin
             to click, and a panel has to stay selectable in wireframe. */}
-        <mesh position={[mid.x, mid.y - thick / 2, mid.z]}
-          onClick={(e) => { e.stopPropagation(); onPick() }}>
-          <boxGeometry args={[sx * 0.96, thick, sz * 0.96]} />
+        {prism && <mesh geometry={prism} onClick={(e) => { e.stopPropagation(); onPick() }}>
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
+        </mesh>}
       </group>
     )
   }
@@ -421,8 +425,7 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
   if (deckGeo) {
     return (
       <group onClick={(e) => { e.stopPropagation(); onPick() }}>
-        <mesh position={[mid.x, mid.y - thick / 2, mid.z]}>
-          <boxGeometry args={[sx * 0.96, thick, sz * 0.96]} />
+        <mesh geometry={prism ?? undefined}>
           <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : '#c8a06a'}
             transparent opacity={selected ? 0.6 : 0.3} depthWrite={style === 'solid'} />
         </mesh>
@@ -433,10 +436,10 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
     )
   }
 
+  if (!prism) return null
   return (
-    <mesh position={[mid.x, mid.y - thick / 2, mid.z]}
+    <mesh geometry={prism}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
-      <boxGeometry args={[sx * 0.96, thick, sz * 0.96]} />
       <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : (color ?? '#7ba6d4')}
         transparent opacity={selected ? 0.85 : 0.45} depthWrite={style === 'solid'} />
     </mesh>

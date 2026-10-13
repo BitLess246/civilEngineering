@@ -271,6 +271,23 @@ export interface BridgeOpts {
   shellSubdiv?: number
 }
 
+/** A tributary edge load laid on an edge `s` times as long (positions × s,
+ *  intensity ÷ s — same total), then scaled by `k`. */
+function stretchLoad(ld: BeamLoad, s: number, k: number): BeamLoad {
+  switch (ld.type) {
+    case 'udl': return { ...ld, x1: ld.x1 * s, x2: ld.x2 * s, w: (ld.w * k) / s }
+    case 'vdl': return { ...ld, x1: ld.x1 * s, x2: ld.x2 * s, w1: (ld.w1 * k) / s, w2: (ld.w2 * k) / s }
+    case 'point': return { ...ld, x: ld.x * s, P: ld.P * k }
+    default: return ld
+  }
+}
+
+/** Area of the triangle a-b-c, m². */
+function triArea(a: F3Node, b: F3Node, c: F3Node): number {
+  const u = [b.x - a.x, b.y - a.y, b.z - a.z], v = [c.x - a.x, c.y - a.y, c.z - a.z]
+  return Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]) / 2
+}
+
 export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): BridgeResult {
   const useShells = opts?.useShells ?? !!model.shellElements
   const nodes: F3Node[] = model.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z }))
@@ -406,6 +423,18 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
     const lxSpan = Math.hypot(c1.x - c0.x, c1.y - c0.y, c1.z - c0.z)   // edge c0→c1 (and c3→c2)
     const lzSpan = Math.hypot(c3.x - c0.x, c3.y - c0.y, c3.z - c0.z)   // edge c0→c3 (and c1→c2)
     const trib = distributePanel(lxSpan, lzSpan, areaLoads)
+    // The tributary pattern is a RECTANGLE's (lx × lz, load-conserving). A
+    // panel whose corner node has moved — a skewed bay, a raking column's top —
+    // is not one: its two "long" edges are not both lx long, and laying a 7 m
+    // edge load on a 6 m beam over-loaded the panel (a 6 × 5 bay with one corner
+    // 1 m out took 339.5 kN of a 10 kPa load whose true total is 325.0). So each
+    // edge's pattern is STRETCHED onto its real edge (same total per edge, same
+    // shape), and the panel is scaled by true area ÷ lx·lz. A rectangle is the
+    // identity on both counts and skips them — rectangular results are unchanged
+    // to the bit.
+    const quadArea = triArea(c0, c1, c2) + triArea(c0, c2, c3)
+    const areaRatio = quadArea / (lxSpan * lzSpan)
+    const panelScale = Math.abs(areaRatio - 1) > 1e-9 ? areaRatio : 1
 
     // pair the panel's long/short tributary edges with the actual corner edges
     const xEdges: [F3Node, F3Node][] = [[c0, c1], [c3, c2]]
@@ -426,8 +455,11 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
       const m = memberByPair.get(`${a.id}|${b.id}`)
       if (!m) { orphanEdges.push(`${plate.id}:${a.id}-${b.id}`); continue }
       const sameDir = m.i === a.id
-      const L = trEdge.length
-      for (const ld of trEdge.loads) {
+      const realL = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
+      const st = Math.abs(realL / trEdge.length - 1) > 1e-9 ? realL / trEdge.length : 1   // stretch
+      const L = st === 1 ? trEdge.length : realL
+      for (const ld0 of trEdge.loads) {
+        const ld = st === 1 && panelScale === 1 ? ld0 : stretchLoad(ld0, st, panelScale)
         const f3 = edgeLoadToMember(ld, m.id, sameDir, L)
         if (f3) loads.push(f3)
       }
