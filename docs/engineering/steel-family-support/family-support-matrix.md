@@ -11,9 +11,9 @@ The matrix below is a roadmap-level assessment of the current code paths. Reconf
 | W | Doubly symmetric I-shape | Present | Partial; implemented W-based checks have explicit limits, including noncompact/slender web cases | Can be enumerated | Baseline: close existing gaps first |
 | HSS rectangular/square | Closed box; local buckling and wall slenderness are important | Present | **Phase 1 shipped** (`hssDesign.ts`): §F7 yielding/FLB/WLB/LTB (noncompact by F7-2/F7-6; slender flange/web → unchecked), §G4 shear, §E3 + §E7 gate (slender wall → unchecked), §H1 with both axes. Connections (Chapter K) not designed — reported | Truss: scope-gated (#949) | 1 |
 | PIPE / round HSS | Circular closed section; different flexure/compression/shear behavior | Present | **Phase 1 shipped**: §F8 compact/noncompact/slender up to D/t < 0.45E/Fy, §G5 shear, §E3 + §E7 gate, §H1. Connections not designed — reported | Truss: scope-gated (#949) | 1 |
-| C | Open, singly symmetric channel; shear-center and torsional behavior matter | Present | Unchecked (beam and column) — a column used to drop its moments from §H1-1 and could pass on axial alone; fixed in phase 1 | Can be enumerated; verify all applicable checks | 2 |
+| C | Open, singly symmetric channel; shear-center and torsional behavior matter | Present | Compression: §E4 flexural-torsional (shear centre from DG9, matches the Manual's eo) + §E7 — designed as truss members. Frame beam/column still unchecked (flexure §F2-for-channels not wired) | Can be enumerated; verify all applicable checks | 2 |
 | L | Unsymmetrical angle; eccentricity and principal axes matter | Present | Unchecked as a frame member (same column fix); truss members use §E5 (#949) | Can be enumerated; verify all applicable checks | 2 |
-| WT | Tee; stem/flange orientation and tee-specific limit states matter | Present | Explicitly out of scope in the current W-section flexure path; AISC §F9 is noted as not implemented | Can be enumerated; verify all applicable checks | 3 |
+| WT | Tee; stem/flange orientation and tee-specific limit states matter | Present | Compression: §E4 flexural-torsional + §E7 (`steelCompression.ts`) — designed as truss members. Frame members still unchecked: §F9 flexure not implemented | Can be enumerated; verify all applicable checks | 3 |
 
 ## Required support statuses
 

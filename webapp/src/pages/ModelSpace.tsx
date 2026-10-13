@@ -6361,7 +6361,7 @@ export default function ModelSpace() {
           {/* Steel column schedule (full width) */}
           {design.steelColumns.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel column schedule — AISC §E3 + §H1-1<SchedChip items={design.steelColumns} ok={(c) => c.ok} /></h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Steel column schedule — AISC Ch. E + §H1-1<SchedChip items={design.steelColumns} ok={(c) => c.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-muted">
@@ -6380,7 +6380,6 @@ export default function ModelSpace() {
                   {design.steelColumns.flatMap((c) => {
                     const key = `col-${c.id}`
                     const open = expanded === key
-                    const E_STEEL = 200000
                     const rows = [
                       <tr key={c.id}
                         className={`sched-row cursor-pointer border-t border-hairline-2 hover:bg-brand-tint ${c.ok ? '' : 'bg-fail-tint text-fail'}`}
@@ -6421,18 +6420,19 @@ export default function ModelSpace() {
                                 </tbody>
                               </table>
                             </div>
-                            {/* §E3 Axial check */}
+                            {/* Chapter E axial check */}
                             <div className="min-w-[210px]">
-                              <p className="mb-1 text-[11px] font-bold text-muted uppercase tracking-wide">§E3 Axial compression</p>
+                              <p className="mb-1 text-[11px] font-bold text-muted uppercase tracking-wide">§{c.compClause ?? 'E3'} Axial compression</p>
                               <table className="text-[11px] leading-5">
                                 <tbody>
                                   {[
+                                    ['Kx · Ky', `${c.Kx.toFixed(2)} · ${c.Ky.toFixed(2)} (${c.braced ? 'braced' : 'sway'})`],
                                     ['KLx/rx', c.slendernessX.toFixed(1)],
                                     ['KLy/ry', c.slendernessY.toFixed(1)],
-                                    ['Governing KL/r', c.slenderness.toFixed(1)],
-                                    ['Fe = π²E/(KL/r)²', `${c.Fe.toFixed(1)} MPa`],
-                                    ['4.71√(E/Fy)', `${(4.71 * Math.sqrt(E_STEEL / (c.Fcr > 0 ? c.Pu / (c.phiPn / 0.9 / c.A || 1) : 345))).toFixed(1)}`],
+                                    ['Buckling mode', c.compMode ?? 'flexural'],
+                                    [c.compMode && c.compMode !== 'flexural' ? 'Fe (§E4)' : 'Fe = π²E/(KL/r)²', `${c.Fe.toFixed(1)} MPa`],
                                     ['Fcr', `${c.Fcr.toFixed(1)} MPa`],
+                                    ['Ae (§E7)', c.Ae != null && c.Ae < c.A - 1e-6 ? `${c.Ae.toFixed(0)} of ${c.A.toFixed(0)} mm²` : `= Ag (${c.A.toFixed(0)} mm²)`],
                                     ['φPn (φ=0.9)', `${f1(c.phiPn)} kN`],
                                     ['Pu', `${f1(c.Pu)} kN`],
                                     ['Pu/φPn', `${(c.Pu / (c.phiPn || 1) * 100).toFixed(1)}%`],
@@ -6461,7 +6461,7 @@ export default function ModelSpace() {
                               </table>
                             </div>
                           </div>
-                          <p className="mt-2 text-[10px] text-muted">K = 1.0 (conservative). §E3: 4.71√(E/Fy) threshold. §H1-1a when Pu/φPn ≥ 0.2, else §H1-1b.</p>
+                          <p className="mt-2 text-[10px] text-muted">K from the alignment chart (sway unless the frame is marked braced); torsional length Lz = L. Fcr by §E3-2/-3 from the least of the flexural and §E4 Fe; φPn = 0.9·Fcr·Ae. §H1-1a when Pu/φPn ≥ 0.2, else §H1-1b.</p>
                         </td>
                       </tr>
                     )
@@ -6470,7 +6470,7 @@ export default function ModelSpace() {
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-muted">
-                §E3 axial buckling (governing KL/r, K = 1.0), §H1-1 combined axial + flexure. Ratio ≤ 100% passes. Click a row to expand the worked solution.
+                Chapter E axial strength — §E3 flexural, §E4 torsional / flexural-torsional, §E7 slender elements — and §H1-1 combined axial + flexure. Ratio ≤ 100% passes. Click a row to expand the worked solution.
               </p>
             </div>
           )}

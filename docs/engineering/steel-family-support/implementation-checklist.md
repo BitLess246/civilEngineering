@@ -29,7 +29,7 @@ Shipped in the frame pipeline (`hssDesign.ts`); slender-element strengths
 - [x] Implement validated HSS property derivation or authoritative property lookup. (I = A·r² tabulated; Z scaled from geometry by I_tab/I_geom — HSS8×8×½ and 6×6×¼ within 2 % of the Manual, on the low side)
 - [x] Implement validated PIPE/round-section properties. (Pipe 4 Std Z = 4.05 in³)
 - [ ] Implement applicable tension checks. (frame members carry no §D tension check yet — same as W)
-- [x] Implement applicable compression and stability checks. (§E3; §E7 slender walls → unchecked)
+- [x] Implement applicable compression and stability checks. (§E3 + §E7 effective area — `steelCompression.ts`)
 - [x] Implement family-specific flexure and shear checks. (§F7, §F8, §G4, §G5)
 - [x] Implement applicable combined-force checks. (§H1 with both axes)
 - [x] Implement local wall slenderness/classification and relevant limits.

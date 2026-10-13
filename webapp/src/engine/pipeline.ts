@@ -36,10 +36,10 @@ import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { momentRatioLimits } from './beamMomentRatios'
 import { checkAnchorGroup, type AnchorGroupResult } from './anchorDesign'
 import { designPostBase, type PostBaseResult } from './postBase'
-import { shapeByName, nextHeavierW, nextLighterW, nextHeavierInFamily, nextLighterInFamily, effectiveSection, type AiscShape } from './aiscSections'
+import { shapeByName, nextHeavierW, nextLighterW, nextHeavierInFamily, nextLighterInFamily, type AiscShape } from './aiscSections'
 import { hssKind, hssProps, hssFlexure, hssShear, hssDesignable } from './hssDesign'
-import { compressionScope } from './trussDesign'
-import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, columnAxial, combinedLoading, weakAxisFlexure } from './steelDesign'
+import { steelCompression } from './steelCompression'
+import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, combinedLoading, weakAxisFlexure } from './steelDesign'
 import type { PlateClass, FlexureClause } from './steelDesign'
 import { columnKFactors, type ColumnK } from './effectiveLength'
 import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef, woodAdjusted } from './woodDesign'
@@ -426,6 +426,9 @@ export interface SteelColumnScheduleRow {
   d: number; bf: number; tf: number; tw: number; A: number; rx: number; ry: number
   Fcr: number; Fe: number
   slendernessX: number; slendernessY: number
+  /** §E7 effective area (mm²), the buckling mode that set Fcr, and the clauses
+   *  behind φPn ("E3", "E4 + E7", …). */
+  Ae?: number; compMode?: 'flexural' | 'torsional' | 'flexural-torsional'; compClause?: string
 }
 /** A steel brace: the member (§D2/§E3/§E7) and each end's gusset (HSS
  *  slotted over it; Whitmore, block shear, UFM interfaces). */
@@ -832,7 +835,10 @@ function designSteelColumnRow(
   const Kx = pick(k?.Kz)   // strong axis ← sway about global Z
   const Ky = pick(k?.Kx)   // weak axis   ← sway about global X
 
-  const axial = columnAxial(shape, Fy, mr.L, Kx, Ky)
+  // Chapter E in full: §E3 about both axes, §E4 torsional / flexural-
+  // torsional (Lcz = L, Kz = 1: no warping restraint is assumed at the ends),
+  // §E7 effective area of slender elements at the governing Fcr.
+  const axial = steelCompression(shape, Fy, Kx * mr.L * 1000, Ky * mr.L * 1000, mr.L * 1000)
   let phiMnx = Infinity, phiMny = Infinity, flexureNote: string | undefined
   if (shape.family === 'W' || shape.family === 'WT') {
     const props = deriveWSection(shape)
@@ -853,15 +859,12 @@ function designSteelColumnRow(
     // load alone (audit, steel-family support). It is unchecked instead.
     flexureNote = `${shape.name} is family ${shape.family} — member flexure is not implemented for this family`
   }
-  // §E7 / §E4: the §E3 φPn is the whole compression strength only for a
-  // section with nonslender elements and no torsional mode — the same gate
-  // the truss check uses. Single angles pass it for TRUSS members (§E5), not
-  // for a frame column, which is caught by the flexure note above.
-  const comp = compressionScope(effectiveSection(shape), 200000, Fy)
-  if (!comp.supported && !flexureNote) flexureNote = comp.reason
+  // a compression case Chapter E does not cover (a single angle outside
+  // §E5) — caught by the flexure note above for every family that reaches
+  // here, kept as a backstop so a refused φPn can never read as zero demand
+  if (!axial.applicable && !flexureNote) flexureNote = axial.reason
   const comb = combinedLoading(Pu, axial.phiPn, Mux, phiMnx, Muy, phiMny)
-  const E_STEEL = 200000
-  const Fe = axial.slenderness > 0 ? (Math.PI ** 2 * E_STEEL) / axial.slenderness ** 2 : Infinity
+  const Fe = axial.Fe
   // a hollow section reports its outside depth/width and wall in the W slots,
   // so base plates, pedestals and drawings get a real footprint
   const hp = hssKind(shape) ? hssProps(shape) : null
@@ -877,6 +880,7 @@ function designSteelColumnRow(
     d, bf: bf ?? 0, tf: tf ?? 0, tw: tw ?? 0, A, rx, ry,
     Fcr: axial.Fcr, Fe,
     slendernessX: axial.slendernessX, slendernessY: axial.slendernessY,
+    Ae: axial.Ae, compMode: axial.mode, compClause: axial.clause,
   }
 }
 

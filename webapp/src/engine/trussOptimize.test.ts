@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  optimizeTruss, groupMembers, sizeGroup, candidateSections, rejectionNote,
+  optimizeTruss, groupMembers, sizeGroup, candidateSections, rejectionNote, trussSectionOf,
   SLENDER_LIMIT_COMPRESSION, SLENDER_PREFERENCE_TENSION, type TrussGroup,
 } from './trussOptimize'
 import { designTrussMember, compressionScope } from './trussDesign'
@@ -314,27 +314,23 @@ describe('scope gate — fail closed on compression the check does not cover', (
   const strut = group([f('s', -50, 2, 'diagonal')])
   const tie = group([f('t', 50, 2, 'diagonal')])
 
-  it('never adopts a tee, channel or double angle for a compression group', () => {
-    const r = sizeGroup(strut, candidateSections(['WT', 'C', 'L'], { doubleAngles: true }), MAT)
-    expect(r.ok).toBe(true)
-    expect(r.section!.family).toBe('L')
-    expect(r.section!.double).toBe(false)
-    // each excluded kind on its own: everything rejected on scope, with the clause
-    for (const [fams, dbl, word] of [[['C'], false, 'channel'], [['WT'], false, 'tee'], [['L'], true, '§E6']] as const) {
-      const only = candidateSections([...fams], { doubleAngles: dbl }).filter((c) => !dbl || c.double)
-      const x = sizeGroup(strut, only, MAT)
-      expect(x.section, word).toBeNull()
-      expect(x.rejected.every((q) => q.gate === 'scope' && q.reason!.includes(word)), word).toBe(true)
-    }
-    // slender angle legs are rejected on scope too (§E7), not on strength
-    expect(r.rejected.some((x) => x.gate === 'scope' && x.reason!.includes('§E7'))).toBe(true)
+  it('never adopts a double angle for a compression group (§E6) — every 2L is rejected on scope', () => {
+    const only = candidateSections(['L'], { doubleAngles: true }).filter((c) => c.double)
+    const x = sizeGroup(strut, only, MAT)
+    expect(x.section).toBeNull()
+    expect(x.rejected.every((q) => q.gate === 'scope' && q.reason!.includes('§E6'))).toBe(true)
   })
 
-  it('a group with only tees in compression has no section — not a light unchecked one', () => {
-    const r = sizeGroup(strut, candidateSections(['WT']), MAT)
-    expect(r.ok).toBe(false)
-    expect(r.section).toBeNull()
-    expect(r.rejected.every((x) => x.gate === 'scope')).toBe(true)
+  it('a tee or channel strut is now DESIGNED by Chapter E (§E4 flexural-torsional), at a utilisation it actually meets', () => {
+    for (const fam of ['WT', 'C'] as const) {
+      const r = sizeGroup(strut, candidateSections([fam]), MAT)
+      expect(r.ok, fam).toBe(true)
+      expect(r.section!.family).toBe(fam)
+      expect(r.maxUtil).toBeLessThanOrEqual(1)
+      // the adopted section's φPn is the Chapter E one, not A·Fcr at Lc/r
+      const d = designTrussMember(f('s', -50, 2, 'diagonal'), trussSectionOf(r.section!, MAT))
+      expect(d.util).toBeCloseTo(r.maxUtil, 9)
+    }
   })
 
   it('tension groups may use any family — §D2(a) yielding holds for all of them', () => {
@@ -344,7 +340,8 @@ describe('scope gate — fail closed on compression the check does not cover', (
   })
 
   it('a ZERO-force member counts as compression for the gate', () => {
-    const r = sizeGroup(group([f('z', 0, 2, 'vertical')]), candidateSections(['WT']), MAT)
+    const only2L = candidateSections(['L'], { doubleAngles: true }).filter((c) => c.double)
+    const r = sizeGroup(group([f('z', 0, 2, 'vertical')]), only2L, MAT)
     expect(r.section).toBeNull()
   })
 
