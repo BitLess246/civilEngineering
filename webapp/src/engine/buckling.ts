@@ -17,7 +17,7 @@
 // Units: coordinates m; E MPa; A mm²; I mm⁴; forces kN; λ dimensionless.
 // ─────────────────────────────────────────────────────────────────────────────
 import type { StructuralModel } from './model'
-import { precomputeFrame, kgLocal, solveWithGeometry } from './frame3d'
+import { precomputeFrame, geometricLocal, solveWithGeometry } from './frame3d'
 import type { MemberGeom } from './frame3d'
 import { modelToFrame3D } from './modelBridge'
 import { symSolve, matVec } from './fem'
@@ -63,7 +63,7 @@ function assembleKgff(
     const g = geoms[mi]
     const Ni = N[mi]
     if (Ni === 0) continue
-    const kgg = mul(mul(transpose(g.T), kgLocal(Ni, g.L)), g.T)
+    const kgg = mul(mul(transpose(g.T), geometricLocal(g, Ni)), g.T)
     for (let a = 0; a < 12; a++) {
       const ia = freeIdx.get(g.dofs[a])
       if (ia === undefined) continue

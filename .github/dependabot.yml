@@ -1,0 +1,11 @@
+# GEN-04: workflow actions are pinned to commit SHAs; Dependabot proposes the
+# bumps as reviewable PRs instead of a mutable tag moving under us.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
