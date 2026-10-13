@@ -133,7 +133,7 @@ import { UpgradeNotice } from '../components/UpgradeNotice'
 import { downloadText } from '../lib/downloadSvg'
 import { ExchangeMenu } from '../components/modelSpace/ExchangeMenu'
 import type { SolverKind } from '../lib/featureGate'
-import { BaseHardware3D, Footing3D, GridBubbles3D, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
+import { BaseHardware3D, Footing3D, GridBubbles3D, HorizonGrid, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
 import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/modelSpace/sceneTokens'
 import { ActionBtn, DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
@@ -2257,7 +2257,7 @@ export default function ModelSpace() {
                 <ambientLight intensity={0.85} />
                 <directionalLight position={[12, 18, 8]} intensity={0.9} />
                 <FitView box={modelBox} dir={[1, 0.8, 1]} />
-                <gridHelper args={[40, 40, '#e2e8f0', '#eef2f7']} />
+                <HorizonGrid model={model} />
                 <GridBubbles3D model={model} />
                 {!deformActive && model.members.map((m) => {
                   const a = nodePos.get(m.i), bb = nodePos.get(m.j)

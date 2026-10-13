@@ -12,13 +12,14 @@
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { SceneText } from '../../components/SceneText'
-import { Edges } from '@react-three/drei'
+import { Edges, Grid } from '@react-three/drei'
 import { surfaceKey, surfaceMaterial, WIRE_OPACITY, type SurfaceStyle } from './viewMode'
 import { flightSolid, type PlacedStair } from '../../engine/stairPlacement'
 import * as THREE from 'three'
 import type { StructuralModel, WoodDeck, ModelLoad } from '../../engine/model'
 import { type V3 } from '../../engine/frame3d'
 import { dashSpans } from '../../engine/dashPattern'
+import { planGridLines } from '../../lib/planGrid'
 import { memberDiagramRibbon, type DiagramComp } from '../../engine/memberDiagram3d'
 import { footingPrism } from '../../engine/footingLayout'
 import { shapeByName, effectiveSection } from '../../engine/aiscSections'
@@ -456,6 +457,25 @@ export function Support3D({ p }: { p: THREE.Vector3 }) {
   )
 }
 
+/** The floor: a 1 m / 5 m grid on the base plane that runs out to the horizon
+ *  and fades there, instead of a 40 m square a large model overhangs. One
+ *  shader plane (drei `Grid`, infinite mode), so its cost does not grow with
+ *  its reach. Sits a hair below the base so bubbles and footings draw on top. */
+export function HorizonGrid({ model }: { model: StructuralModel | null }) {
+  const { y, fade } = useMemo(() => {
+    if (!model?.nodes.length) return { y: 0, fade: 150 }
+    const xs = model.nodes.map((n) => n.x), zs = model.nodes.map((n) => n.z)
+    const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs), 10)
+    return { y: Math.min(...model.nodes.map((n) => n.y)), fade: Math.max(150, span * 10) }
+  }, [model])
+  return (
+    <Grid position={[0, y - 0.005, 0]} infiniteGrid followCamera={false}
+      cellSize={1} cellThickness={0.6} cellColor="#e2e8f0"
+      sectionSize={5} sectionThickness={1} sectionColor="#cbd5e1"
+      fadeDistance={fade} fadeStrength={1.5} />
+  )
+}
+
 /** A labelled bubble (white disc + ring + letter/number) lying flat on the floor
  *  at the end of a grid line, ETABS-style. */
 
@@ -472,27 +492,15 @@ export function AxisBubble({ x, y, z, r, label }: { x: number; y: number; z: num
 }
 
 /** ETABS-style plan grid on the floor: column lines (A, B, …) parallel to Z and
- *  rows (1, 2, …) parallel to X, derived from the unique node coordinates. Bubbles
- *  sit 3 m off the top (letters) and left (numbers) edges only; a dimension line 2 m
- *  off each edge — with 45° architectural ticks and the bay spacing (m) sitting above
- *  the line — reports the bay widths. Flat on the base plane (1 m = one floor square). */
-
-/** ETABS-style plan grid on the floor: column lines (A, B, …) parallel to Z and
- *  rows (1, 2, …) parallel to X, derived from the unique node coordinates. Bubbles
- *  sit 3 m off the top (letters) and left (numbers) edges only; a dimension line 2 m
- *  off each edge — with 45° architectural ticks and the bay spacing (m) sitting above
- *  the line — reports the bay widths. Flat on the base plane (1 m = one floor square). */
+ *  rows (1, 2, …) parallel to X, set out on the COLUMNS (`planGridLines`) — not on
+ *  every node, which on a meshed slab put a bubble every 0.6 m. Bubbles sit 3 m
+ *  off the top (letters) and left (numbers) edges only; a dimension line 2 m off
+ *  each edge — with 45° architectural ticks and the bay spacing (m) sitting above
+ *  the line — reports the bay widths. Flat on the base plane. */
 export function GridBubbles3D({ model }: { model: StructuralModel }) {
   const g = useMemo(() => {
     if (!model.nodes.length) return null
-    const uniq = (vals: number[]) => {
-      const out: number[] = []
-      for (const v of [...vals].sort((a, b) => a - b))
-        if (!out.length || Math.abs(v - out[out.length - 1]) > 0.05) out.push(v)
-      return out
-    }
-    const xs = uniq(model.nodes.map((n) => n.x))
-    const zs = uniq(model.nodes.map((n) => n.z))
+    const { xs, zs } = planGridLines(model)
     if (xs.length < 2 && zs.length < 2) return null
     const y0 = Math.min(...model.nodes.map((n) => n.y))
     const x0 = xs[0], x1 = xs[xs.length - 1], z0 = zs[0], z1 = zs[zs.length - 1]
