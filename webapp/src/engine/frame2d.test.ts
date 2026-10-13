@@ -99,7 +99,7 @@ describe('frame2d — portal frame', () => {
 })
 
 describe('frame2d — NSCP combinations', () => {
-  it('runs all 7; 1.2D + 1.6L governs for D+L loading', () => {
+  it('runs all 8; 1.2D + 1.6L governs for D+L loading', () => {
     const nodes: FNode[] = [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 6, y: 0 }]
     const members: FMember[] = [{ id: 'm', i: 'a', j: 'b', ...sec }]
     const supports: FSupport[] = [{ node: 'a', type: 'pin' }, { node: 'b', type: 'roller' }]
@@ -108,7 +108,7 @@ describe('frame2d — NSCP combinations', () => {
       { kind: 'member-udl', member: 'm', w: 5, cat: 'L' },
     ]
     const res = analyzeFrame2D(nodes, members, supports, loads)!
-    expect(res.perCombo).toHaveLength(7)
+    expect(res.perCombo).toHaveLength(8)
     expect(res.perCombo[res.govIdx].combo.name).toContain('1.2D + 1.6L')
     const wu = 1.2 * 8 + 1.6 * 5
     expect(res.perCombo[res.govIdx].result!.Mmax).toBeCloseTo((wu * 36) / 8, 2)

@@ -37,17 +37,27 @@ export interface Combo { name: string; f: Partial<Record<LoadCategory, number>> 
  * ASCE 7-16 §2.3.4) is locked-in like dead load, so it rides at 1.2 in every
  * combination that carries the factored dead load; it is omitted from the 0.9D
  * uplift combinations so it can never be credited to relieve net uplift.
+ *
+ * Eq. 203-3 is `1.2D + 1.6(Lr or R) + (f₁L or 0.5W)` — two alternatives, not
+ * one sum. It is emitted as two combinations: the f₁L one in its historical
+ * slot [2], the 0.5W one appended last so every other index stays put. Summing
+ * them (as this did until Oct 2026) was conservative only where the live-load
+ * effect has the same sign as the rest; at a location where L relieves (a
+ * cantilever back-span, pattern effects) it under-reported the 0.5W case.
+ * (Lr, S and R stay grouped: S is zero in the Philippines and Lr/R are both
+ * downward roof loads, so their sum bounds the "or" from above.)
  */
 export function nscpCombos(f1 = 1.0): Combo[] {
   const lf = f1 === 1 ? '1.0L' : `${f1}L`
   return [
     { name: '1.4D', f: { D: 1.4, T: 1.2 } },                                                   // 203-1
     { name: '1.2D + 1.6L + 0.5(Lr|S|R)', f: { D: 1.2, L: 1.6, Lr: 0.5, S: 0.5, R: 0.5, T: 1.2 } },     // 203-2
-    { name: `1.2D + 1.6(Lr|S|R) + (${lf}|0.5W)`, f: { D: 1.2, Lr: 1.6, S: 1.6, R: 1.6, L: f1, W: 0.5, T: 1.2 } }, // 203-3
+    { name: `1.2D + 1.6(Lr|S|R) + ${lf}`, f: { D: 1.2, Lr: 1.6, S: 1.6, R: 1.6, L: f1, T: 1.2 } },     // 203-3 (f₁L)
     { name: `1.2D + 1.0W + ${lf} + 0.5(Lr|S|R)`, f: { D: 1.2, W: 1.0, L: f1, Lr: 0.5, S: 0.5, R: 0.5, T: 1.2 } }, // 203-4
     { name: '0.9D + 1.0W', f: { D: 0.9, W: 1.0 } },                                            // 203-6
     { name: `1.2D + 1.0E + ${lf} + 0.2S`, f: { D: 1.2, E: 1.0, L: f1, S: 0.2, T: 1.2 } },      // 203-5
     { name: '0.9D + 1.0E', f: { D: 0.9, E: 1.0 } },                                            // 203-7
+    { name: '1.2D + 1.6(Lr|S|R) + 0.5W', f: { D: 1.2, Lr: 1.6, S: 1.6, R: 1.6, W: 0.5, T: 1.2 } },    // 203-3 (0.5W)
   ]
 }
 
