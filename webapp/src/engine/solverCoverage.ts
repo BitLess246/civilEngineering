@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 568
+export const SOLVER_TEST_COUNT = 572
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -499,6 +499,22 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "frame3d — P-Δ second order (vertical cantilever, L = 4)",
         "name": "base moment is amplified in step with the drift"
+      },
+      {
+        "suite": "frame3d — P-Δ second order (vertical cantilever, L = 4)",
+        "name": "rejects fixedAxial arrays that do not match the member count"
+      },
+      {
+        "suite": "frame3d — P-Δ second order (vertical cantilever, L = 4)",
+        "name": "rejects non-finite fixedAxial forces instead of silently treating them as zero"
+      },
+      {
+        "suite": "frame3d — P-Δ second order (vertical cantilever, L = 4)",
+        "name": "validates P-Δ iteration controls"
+      },
+      {
+        "suite": "frame3d — P-Δ second order (vertical cantilever, L = 4)",
+        "name": "ignores P-Δ-only options when second-order analysis is disabled"
       },
       {
         "suite": "frame3d — P-Δ second order (vertical cantilever, L = 4)",
