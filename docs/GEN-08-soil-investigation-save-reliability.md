@@ -35,3 +35,14 @@ The concern is that a failed save may cause edits to be lost, reverted, or prese
 - The UI accurately communicates whether changes are persisted.
 - Retry and reload behavior are tested.
 - Concurrent or stale updates are handled deliberately where relevant.
+
+## Status — fixed (October 2026)
+
+Traced in `webapp/src/lib/useInvestigation.ts` (the hook) and `webapp/src/engine/soils/store.ts`. **This was a real data-loss bug.** `persist` called `store.save` *before* it updated state. On a full quota or blocked storage, `localStorage.setItem` threw out of the edit handler, the state update never ran, and the field snapped back. The edit was gone and nothing appeared on screen except an uncaught `quota` error in the console (reproduced in Chromium on `main`).
+
+- The edit now goes to state first, then `trySave` writes it and returns `{ ok, savedAt } | { ok: false, error }` instead of throwing.
+- The page shows a `role="alert"` banner with a **Retry save** action and a recovery hint (export JSON, or delete an old investigation).
+- When the browser blocks site storage entirely, the reads of `localStorage` itself throw. `defaultBackend` now catches that, falls back to memory flagged `persistent: false`, and the page says that nothing will survive closing the tab.
+- Writing the "active investigation" key is best-effort and can no longer throw out of an effect.
+- Evidence: four new `store.test.ts` cases (quota, other error, success, blocked storage). A Chromium run with `setItem` forced to throw keeps the edit on screen and shows the banner; the same run on `main` loses the edit.
+- Multi-tab or multi-user concurrency is out of scope here. Storage is per-browser, and cloud sync is explicit and manual (see the Cloud backup panel).

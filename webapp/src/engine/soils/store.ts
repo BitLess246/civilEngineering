@@ -34,6 +34,8 @@ export interface StorageBackend {
   setItem(key: string, value: string): void
   removeItem(key: string): void
   keys(): string[]
+  /** False when writes do not survive a reload (the in-memory fallback). */
+  persistent?: boolean
 }
 
 /** In-memory backend for tests / non-browser environments. */
@@ -44,14 +46,21 @@ export function memoryBackend(seed?: Record<string, string>): StorageBackend {
     setItem: (k, v) => void map.set(k, v),
     removeItem: (k) => void map.delete(k),
     keys: () => [...map.keys()],
+    persistent: false,
   }
 }
 
 /** Browser localStorage backend, or an in-memory fallback when unavailable. */
 export function defaultBackend(): StorageBackend {
-  const ls = typeof globalThis !== 'undefined' ? (globalThis as { localStorage?: Storage }).localStorage : undefined
+  // Reading `localStorage` itself throws (SecurityError) when site data is
+  // blocked, before any call is made — treat that like no storage at all.
+  let ls: Storage | undefined
+  try {
+    ls = typeof globalThis !== 'undefined' ? (globalThis as { localStorage?: Storage }).localStorage : undefined
+  } catch { ls = undefined }
   if (!ls) return memoryBackend()
   return {
+    persistent: true,
     getItem: (k) => ls.getItem(k),
     setItem: (k, v) => ls.setItem(k, v),
     removeItem: (k) => ls.removeItem(k),
@@ -138,6 +147,29 @@ export function createStore(backend: StorageBackend = defaultBackend()): SoilsSt
     exists(id) {
       return backend.getItem(keyOf(id)) != null
     },
+  }
+}
+
+export type SaveOutcome = { ok: true; savedAt: string } | { ok: false; error: string }
+
+/**
+ * Save without throwing (GEN-08). `localStorage.setItem` throws on a full
+ * quota or blocked storage; letting that escape an edit handler lost the edit
+ * with nothing on screen. The caller keeps the edit in memory either way and
+ * shows this outcome.
+ */
+export function trySave(store: SoilsStore, id: string, investigation: Investigation): SaveOutcome {
+  try {
+    return { ok: true, savedAt: store.save(id, investigation).savedAt }
+  } catch (e) {
+    const name = (e as { name?: string })?.name
+    const quota = name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    return {
+      ok: false,
+      error: quota
+        ? 'Browser storage is full, so this change is not saved. Export the investigation to a file, or delete an old one, then retry.'
+        : `This change is not saved: ${(e as Error)?.message ?? String(e)}. Export the investigation to a file to keep it.`,
+    }
   }
 }
 
