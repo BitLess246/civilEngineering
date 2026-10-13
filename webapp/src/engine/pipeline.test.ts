@@ -428,19 +428,19 @@ describe('directional lateral load cases (STAAD-style envelope)', () => {
     return [mk('E+X', 'Fx', 1), mk('E-X', 'Fx', -1), mk('E+Z', 'Fz', 1), mk('E-Z', 'Fz', -1)]
   }
 
-  it('expands the two E-combos over four directions (13 runs) and envelopes per member', () => {
+  it('expands the two E-combos over four directions (14 runs) and envelopes per member', () => {
     const r = designStructure(makeModel(), soil, {}, { lateral: dirCases() })!
-    // 7 combos: 2 with E → ×4 = 8; 3 with W (no W cases) → 3; 2 gravity → 2  = 13
-    expect(r.cases).toHaveLength(13)
+    // 8 combos: 2 with E → ×4 = 8; 4 with W (no W cases) → 4; 2 gravity → 2  = 14
+    expect(r.cases).toHaveLength(14)
     expect(r.cases.some((c) => c.includes('E+X'))).toBe(true)
     expect(r.cases.some((c) => c.includes('E-Z'))).toBe(true)
     // a column is governed by a seismic direction, recorded on the row
     expect(r.columns.some((c) => /E[+-][XZ]/.test(c.gov ?? ''))).toBe(true)
   })
 
-  it('gravity-only model still runs exactly the 7 NSCP combinations', () => {
+  it('gravity-only model still runs exactly the 8 NSCP combinations', () => {
     const r = designStructure(makeModel(), soil)!
-    expect(r.cases).toHaveLength(7)
+    expect(r.cases).toHaveLength(8)
     expect(r.beams.every((b) => (b.gov ?? '').length > 0)).toBe(true)
   })
 
@@ -448,8 +448,8 @@ describe('directional lateral load cases (STAAD-style envelope)', () => {
     const m = makeModel()
     m.loads = [...m.loads, ...seismicXcase(m).loads]   // +X node loads ONLY in the model
     const r = designStructure(m, soil)!                // no opts.lateral → default path
-    // 7 combos: 2 with E → ×2 (E+/E-) = 4; 3 with W (no W loads) → 3; 2 gravity → 2 = 9
-    expect(r.cases).toHaveLength(9)
+    // 8 combos: 2 with E → ×2 (E+/E-) = 4; 4 with W (no W loads) → 4; 2 gravity → 2 = 10
+    expect(r.cases).toHaveLength(10)
     expect(r.cases.filter((c) => c.includes('· E+'))).toHaveLength(2)
     expect(r.cases.filter((c) => c.includes('· E-'))).toHaveLength(2)
     // the reversal is actually enveloped: both senses govern somewhere (windward
@@ -467,6 +467,37 @@ describe('directional lateral load cases (STAAD-style envelope)', () => {
     const foot = (n: string) => r.footings.find((f) => f.node === n)!
     expect(foot('n0.0.0').Pu).toBeCloseTo(foot('n1.0.0').Pu, 5)
     expect(foot('n0.1.0').Pu).toBeCloseTo(foot('n1.1.0').Pu, 5)
+  })
+
+  // audit CODE-02: an incomplete lateral set cannot silently pass
+  it('an X-only seismic set on a 3D frame is reported and fails designOK', () => {
+    const m = makeModel()
+    m.loads = [...m.loads, ...seismicXcase(m).loads]
+    const r = designStructure(m, soil)!
+    // the default path supplied the reversal, so only the missing axis is flagged
+    expect(r.lateralCoverage!.map((g) => g.code)).toEqual(['one-axis'])
+    expect(designOK(r)).toBe(false)
+  })
+  it('a one-sided caller-supplied set is reported by name', () => {
+    const m = makeModel()
+    const eX = seismicXcase(m)
+    const r = designStructure(m, soil, {}, { lateral: [eX] })!
+    const rev = r.lateralCoverage!.find((g) => g.code === 'no-reversal')!
+    expect(rev.cases).toEqual([eX.name])
+    expect(designOK(r)).toBe(false)
+  })
+  it('a complete ±X/±Z set raises nothing', () => {
+    const m = makeModel()
+    const flip = (c: LateralCase, name: string, swap: boolean, sgn: number): LateralCase => ({
+      name, kind: c.kind,
+      loads: c.loads.map((l) => l.kind === 'node'
+        ? { ...l, Fx: swap ? 0 : sgn * (l.Fx ?? 0), Fz: swap ? sgn * (l.Fx ?? 0) : 0 }
+        : l),
+    })
+    const eX = seismicXcase(m)
+    const lateral = [flip(eX, 'E+X', false, 1), flip(eX, 'E-X', false, -1), flip(eX, 'E+Z', true, 1), flip(eX, 'E-Z', true, -1)]
+    const r = designStructure(m, soil, {}, { lateral })!
+    expect(r.lateralCoverage).toEqual([])
   })
 })
 

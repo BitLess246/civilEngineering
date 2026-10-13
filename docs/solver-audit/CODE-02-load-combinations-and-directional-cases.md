@@ -1,7 +1,7 @@
 # CODE-02 — Load Combination and Directional-Case Verification
 
 **Severity:** Verification required  
-**Status:** Independent code-compliance review needed  
+**Status:** ◐ Partly addressed — see *Resolution* below; independent code-compliance review still needed  
 **Affected area:** Load-combination generation and lateral load cases
 
 ## Observation
@@ -29,3 +29,33 @@ This audit did not independently establish that the full combination set, factor
 - Combination coverage is independently checked against the exact code edition and applicable provisions.
 - Tests verify both factors and case membership, not just that a non-empty list is produced.
 - Missing directional cases cannot silently result in an incomplete design envelope.
+
+## Resolution (October 2026)
+
+What shipped, against the recommended actions:
+
+- **(2) Factors and companion rules.** NSCP 2015 Eq. 203-3 is now two
+  alternatives, `1.2D + 1.6(Lr|S|R) + f₁L` and `1.2D + 1.6(Lr|S|R) + 0.5W`. The
+  old single combination summed both, so wherever L relieves the 0.5W effect
+  it under-reported that case. `nscpCombos` returns 8 combinations; indices
+  0–6 are unchanged.
+- **(4) Incomplete lateral sets.** `lateralCoverage.ts` checks the directional
+  E/W cases the envelope is built from. It flags a case with no
+  opposite-sense twin (§208.5.1.1, §207B), and a structure spanning plan in X
+  and Z that is loaded along one axis only (§208.5.1.1, §208.8.1, §207B);
+  planar frames are exempt from the axis check. The result is
+  `StructureDesign.lateralCoverage`. A non-empty list fails `designOK`, adds a
+  failed check and a limitation to the report, and shows a banner in Model
+  Space. The optimizers drive to `sizingOK` instead (designOK without this
+  gate), because resizing members cannot add a missing load direction.
+- **(5) Exact tests.** `beamAnalysis.test.ts` pins every factor of every
+  combination for f₁ = 1.0 and 0.5. `pipeline.test.ts` shows an X-only set
+  and a one-sided set are reported and fail the design, and that a full
+  ±X/±Z set raises nothing.
+
+Still open:
+
+- **(1, 3)** An independent code-by-code matrix covering the AISC 360 and
+  ASCE-referenced workflows, by a reviewer outside this codebase.
+- **(6)** The governing combination name is already in the report (`govName`
+  and each member's `gov`); a per-case source table is not.

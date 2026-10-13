@@ -5520,6 +5520,14 @@ export default function ModelSpace() {
               </ul>
             </div>
           )}
+          {(design.lateralCoverage?.length ?? 0) > 0 && (
+            <div className="rounded-xl border border-fail-line bg-fail-tint p-3 text-sm text-fail">
+              <p className="font-bold">⚠ The lateral load cases are incomplete — the design envelope is missing a direction, so it cannot pass.</p>
+              <ul className="mt-1 list-inside list-disc">
+                {design.lateralCoverage!.map((g) => <li key={g.kind + g.code}>{g.message}</li>)}
+              </ul>
+            </div>
+          )}
           {design.pDeltaSkipped.length > 0 && (
             <div className="rounded-xl border border-fail-line bg-fail-tint p-3 text-sm text-fail">
               <p className="font-bold">⚠ P-Δ was NOT run for {design.pDeltaSkipped.length} load case(s) — the model has more degrees of freedom than the second-order tangent can be factored at, so these carry FIRST-ORDER forces.</p>

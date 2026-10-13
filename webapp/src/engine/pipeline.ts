@@ -15,6 +15,7 @@ import { stitchResult } from './memberSplit'
 import type { BridgeResult } from './modelBridge'
 import { FramePool, frameWorkerCount } from './framePool'
 import { nscpCombos, type Combo } from './beamAnalysis'
+import { lateralCaseCoverage, type LateralCoverageIssue } from './lateralCoverage'
 import type { ProgressFn } from './progress'
 import { designBeam, type BeamDesignResult } from './beamDesign'
 import { jointBarRoom } from './barLayers'
@@ -556,12 +557,26 @@ export interface StructureDesign {
   /** Cases whose P-Δ ran with shell elements present: the frame carries its
    *  geometric stiffness, the shells do not (informational, not a failure). */
   pDeltaShellsFirstOrder?: string[]
+  /** Gaps in the directional E/W case set the envelope was built from — a case
+   *  with no opposite-sense twin (§208.5.1.1, §207B) or a 3D structure loaded
+   *  along one plan axis only (§208.5.1.1/§208.8.1). The envelope is then
+   *  incomplete, so non-empty ⇒ designOK is false (audit CODE-02). */
+  lateralCoverage?: LateralCoverageIssue[]
 }
 
 /** Every check the pipeline runs must pass — members, foundations, slabs
  *  (DDM + §408.3.1.2 + §424.2 deflection), shear walls, steel joints and the
- *  §418.7.3.2 strong-column/weak-beam hierarchy. Nothing green is unchecked. */
+ *  §418.7.3.2 strong-column/weak-beam hierarchy. Nothing green is unchecked —
+ *  and the envelope those checks ran over must be complete: a one-sided or
+ *  one-axis lateral case set fails the design (audit CODE-02). */
 export function designOK(d: StructureDesign): boolean {
+  return sizingOK(d) && (d.lateralCoverage ?? []).length === 0
+}
+
+/** `designOK` minus the lateral-coverage gate: everything RESIZING can fix.
+ *  The optimizers drive to this — a missing load direction is an input gap no
+ *  section change closes, so looping on it would only grow members to the cap. */
+export function sizingOK(d: StructureDesign): boolean {
   return d.beams.every((b) => b.ok) && d.prestressed.every((p) => p.ok) && d.columns.every((c) => c.ok)
     && d.steelBeams.every((b) => b.ok) && d.steelColumns.every((c) => c.ok)
     && d.woodBeams.every((b) => b.ok) && d.woodColumns.every((c) => c.ok)
@@ -2175,6 +2190,8 @@ function designFromRuns(
       && !r.result.pDelta.skipped).map((r) => r.name),
     pDeltaSkipped: runs.filter((r) => r.result.pDelta?.skipped).map((r) => r.name),
     pDeltaShellsFirstOrder: runs.filter((r) => r.result.pDelta?.shellsFirstOrder).map((r) => r.name),
+    // fail-loud: a one-sided / one-axis lateral set is an incomplete envelope (CODE-02)
+    lateralCoverage: lateralCaseCoverage(model, opts.lateral?.length ? opts.lateral : defaultLateralCases(model)),
   }
   partialDesign.joints = designSteelJoints(model, partialDesign)
   partialDesign.beamJoints = designBeamBeamJoints(model, partialDesign)
@@ -2477,11 +2494,11 @@ export async function optimizeStructureAsync(
     ;({ m: work, d: design } = await detail(work, design, 'Optimize · initial'))
     const initialDesign = design   // pre-optimization state, for the report's initial-vs-final table
     const initialModel = work      // its geometry, for the same table
-    steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
+    steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: sizingOK(design) })
 
     let iter = 0
     let stopReason: string | undefined
-    while (!designOK(design) && iter++ < maxIter) {
+    while (!sizingOK(design) && iter++ < maxIter) {
       const act = buildGrowActions(design, work, memSecId)
       if (act.n === 0) {                        // not fixable by growing anything
         stopReason = stopReasonFor(design, 'growing sections or thicknesses cannot fix the remaining checks (adjust soil bearing, footing plan, section shapes or DDM layout)')
@@ -2502,9 +2519,9 @@ export async function optimizeStructureAsync(
       const d = await designStructureWithPool(work, soil, plan, opts, pool, sub(`Optimize iter ${iter}`))
       if (!d) break
       ;({ m: work, d: design } = await detail(work, d, `Optimize iter ${iter}`))
-      steps.push({ iter, grown: act.n, fails: countFails(design), ok: designOK(design), changes: growChanges })
+      steps.push({ iter, grown: act.n, fails: countFails(design), ok: sizingOK(design), changes: growChanges })
     }
-    const converged = designOK(design)
+    const converged = sizingOK(design)
     const preEconomy = work
     if (!converged && !stopReason)
       stopReason = stopReasonFor(design, `iteration cap (${maxIter}) reached — check spans and loads`)
@@ -2529,7 +2546,7 @@ export async function optimizeStructureAsync(
         const trial = settle(withSizes(work, batchSizes))
         if (!sectionsChanged(work, trial)) break   // hierarchy reverted every shrink — no progress
         const d = await designStructureWithPool(trial, soil, plan, opts, pool)
-        if (d && designOK(d)) { work = trial; design = d } else { batchOk = false }
+        if (d && sizingOK(d)) { work = trial; design = d } else { batchOk = false }
       }
       // Phase 2 — shrink b for RC sections (As = ρ·b·d; narrower b may still satisfy demand)
       let bBatchOk = true
@@ -2547,7 +2564,7 @@ export async function optimizeStructureAsync(
         const trial = settle(withSizes(work, batchSizes))
         if (!sectionsChanged(work, trial)) break   // hierarchy reverted every shrink — no progress
         const d = await designStructureWithPool(trial, soil, plan, opts, pool)
-        if (d && designOK(d)) { work = trial; design = d } else { bBatchOk = false }
+        if (d && sizingOK(d)) { work = trial; design = d } else { bBatchOk = false }
       }
       // Phase 3 — trim slab thickness (economy): only panels comfortably inside the
       // §424.2 deflection limits shrink, and never below §408.3.1.2 hmin (or 100 mm).
@@ -2571,7 +2588,7 @@ export async function optimizeStructureAsync(
         const trial = settle(withPlateThickness(work, trims, soil.gammaConc))
         if (!sectionsChanged(work, trial)) break
         const d = await designStructureWithPool(trial, soil, plan, opts, pool)
-        if (d && designOK(d)) { work = trial; design = d } else { sBatchOk = false }
+        if (d && sizingOK(d)) { work = trial; design = d } else { sBatchOk = false }
       }
 
       // Fine-tune: sequential per-section trials. Each call to designStructureWithPool
@@ -2604,7 +2621,7 @@ export async function optimizeStructureAsync(
           if (!sectionsChanged(work, trial)) { onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++hDone, total: hCandidates.length, detail: `pass ${guard}: h↓ — ${s0.name} reverted` }); continue }
           const d = await designStructureWithPool(trial, soil, plan, opts, pool)
           onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++hDone, total: hCandidates.length, detail: `pass ${guard}: h↓ — tested ${s0.name}` })
-          if (d && designOK(d)) { work = trial; design = d; improved = true; hSucceededIds.add(s0.id) }
+          if (d && sizingOK(d)) { work = trial; design = d; improved = true; hSucceededIds.add(s0.id) }
         }
 
         // Phase B — b↓: sections not helped by h↓, still under-utilised
@@ -2624,7 +2641,7 @@ export async function optimizeStructureAsync(
           if (!sectionsChanged(work, trial)) { onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++bDone, total: bCandidates.length, detail: `pass ${guard}: b↓ — ${s0.name} reverted` }); continue }
           const d = await designStructureWithPool(trial, soil, plan, opts, pool)
           onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++bDone, total: bCandidates.length, detail: `pass ${guard}: b↓ — tested ${s0.name}` })
-          if (d && designOK(d)) { work = trial; design = d; improved = true }
+          if (d && sizingOK(d)) { work = trial; design = d; improved = true }
         }
       }
       if (tryBars) {
@@ -3215,14 +3232,14 @@ export function optimizeStructure(
   ;({ m: work, d: design } = detail(work, design, 'Optimize · initial'))
   const initialDesign = design   // pre-optimization state, for the report's initial-vs-final table
   const initialModel = work      // its geometry, for the same table
-  steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
+  steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: sizingOK(design) })
 
   // GROW: jump each failing section by the estimated steps needed to satisfy
   // demand/capacity, re-enforce the hierarchy and refresh self-weight so the
   // heavier sections feed back into the demands on the next iteration.
   let iter = 0
   let stopReason: string | undefined
-  while (!designOK(design) && iter++ < maxIter) {
+  while (!sizingOK(design) && iter++ < maxIter) {
     const act = buildGrowActions(design, work, memSecId)
     if (act.n === 0) {                          // not fixable by growing anything
       stopReason = stopReasonFor(design, 'growing sections or thicknesses cannot fix the remaining checks (adjust soil bearing, footing plan, section shapes or DDM layout)')
@@ -3243,9 +3260,9 @@ export function optimizeStructure(
     const d = designStructure(work, soil, plan, opts, sub(`Optimize iter ${iter}`))
     if (!d) break
     ;({ m: work, d: design } = detail(work, d, `Optimize iter ${iter}`))
-    steps.push({ iter, grown: act.n, fails: countFails(design), ok: designOK(design), changes: growChanges })
+    steps.push({ iter, grown: act.n, fails: countFails(design), ok: sizingOK(design), changes: growChanges })
   }
-  const converged = designOK(design)
+  const converged = sizingOK(design)
   const preEconomy = work
   if (!converged && !stopReason)
     stopReason = stopReasonFor(design, `iteration cap (${maxIter}) reached — check spans and loads`)
@@ -3283,10 +3300,10 @@ export function optimizeStructure(
       const screen = designStructure(trial, soil, plan, opts, undefined, gov, drops)
       // `null` means the reduced sweep produced no runs at all — inconclusive,
       // so fall through to the full design rather than reject on it.
-      if (screen && !designOK(screen)) return null
+      if (screen && !sizingOK(screen)) return null
     }
     const d = designStructure(trial, soil, plan, opts, undefined, undefined, drops)
-    return d && designOK(d) ? d : null
+    return d && sizingOK(d) ? d : null
   }
 
   // SHRINK: first try trimming all sections simultaneously (batch pass) — much

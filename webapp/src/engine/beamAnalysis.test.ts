@@ -4,7 +4,7 @@ import { solveFEM, analyzeBeam, threeMoment, nscpCombos, NSCP_COMBOS, applyCombo
 describe('NSCP §203.3.1 — f₁ live-load factor', () => {
   it('f₁ scales L in eqs 203-3/4/5 only; default export is the 1.0 set', () => {
     const c1 = nscpCombos(1.0), c05 = nscpCombos(0.5)
-    expect(c1).toHaveLength(7)
+    expect(c1).toHaveLength(8)   // 203-3 is two alternatives
     expect(c05[1].f.L).toBe(1.6)                         // 203-2 always 1.6L
     expect(c1[2].f.L).toBe(1.0); expect(c05[2].f.L).toBe(0.5)   // 203-3
     expect(c1[3].f.L).toBe(1.0); expect(c05[3].f.L).toBe(0.5)   // 203-4
@@ -31,6 +31,35 @@ describe('NSCP §203.3.1 — f₁ live-load factor', () => {
 const E = 25000      // MPa
 const I = 3.125e9    // mm⁴ (≈ 250×500 gross)
 const EI = E * I * 1e-9  // kN·m²
+
+describe('NSCP §203.3.1 — exact combination set (audit CODE-02)', () => {
+  // Pins every factor and every combination's MEMBERSHIP, not just the count:
+  // a dropped T or a 0.5 where 1.0 belongs changes no length assertion.
+  const expected = (f1: number) => [
+    { D: 1.4, T: 1.2 },                                                 // 203-1
+    { D: 1.2, L: 1.6, Lr: 0.5, S: 0.5, R: 0.5, T: 1.2 },                // 203-2
+    { D: 1.2, Lr: 1.6, S: 1.6, R: 1.6, L: f1, T: 1.2 },                 // 203-3 (f₁L)
+    { D: 1.2, W: 1.0, L: f1, Lr: 0.5, S: 0.5, R: 0.5, T: 1.2 },         // 203-4
+    { D: 0.9, W: 1.0 },                                                 // 203-6
+    { D: 1.2, E: 1.0, L: f1, S: 0.2, T: 1.2 },                          // 203-5
+    { D: 0.9, E: 1.0 },                                                 // 203-7
+    { D: 1.2, Lr: 1.6, S: 1.6, R: 1.6, W: 0.5, T: 1.2 },                // 203-3 (0.5W)
+  ]
+  for (const f1 of [1.0, 0.5])
+    it(`f₁ = ${f1}: every factor of every combination`, () => {
+      expect(nscpCombos(f1).map((c) => c.f)).toEqual(expected(f1))
+    })
+  it('203-3 is two alternatives — 0.5W never rides with L (it would relieve it)', () => {
+    const c = nscpCombos(1.0).filter((x) => x.name.startsWith('1.2D + 1.6(Lr|S|R)'))
+    expect(c).toHaveLength(2)
+    expect(c.filter((x) => x.f.W).every((x) => !x.f.L)).toBe(true)
+  })
+  it('every lateral combo has its 0.9D counter-gravity partner (203-6, 203-7)', () => {
+    const c = nscpCombos(1.0)
+    for (const k of ['E', 'W'] as const)
+      expect(c.some((x) => x.f.D === 0.9 && x.f[k] === 1.0 && Object.keys(x.f).length === 2)).toBe(true)
+  })
+})
 
 describe('FEM — closed-form checks', () => {
   it('simply supported + UDL: R = wL/2, Mmax = wL²/8, δmax = 5wL⁴/384EI', () => {
@@ -101,9 +130,9 @@ describe('analyzeBeam — NSCP combinations', () => {
     { type: 'udl', x1: 0, x2: 6, w: 5, cat: 'L' },
   ]
 
-  it('runs all 7 combos; 1.2D+1.6L governs for D+L loading', () => {
+  it('runs all 8 combos; 1.2D+1.6L governs for D+L loading', () => {
     const res = analyzeBeam(supports, loads, 6, E, I)!
-    expect(res.perCombo).toHaveLength(7)
+    expect(res.perCombo).toHaveLength(8)
     expect(res.perCombo[res.govIdx].combo.name).toContain('1.2D + 1.6L')
     const wu = 1.2 * 8 + 1.6 * 5    // 17.6
     expect(res.perCombo[res.govIdx].result!.Mmax).toBeCloseTo((wu * 36) / 8, 1)

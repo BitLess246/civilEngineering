@@ -275,6 +275,8 @@ export function buildModelReport(
     checks.push({ name: 'Unchecked members', detail: design.unchecked.map((u) => `${u.id} (${u.shape})`).join(', '), ratio: null, ok: false })
   if (design.pDeltaIssues.length)
     checks.push({ name: 'P-Δ convergence', detail: `failed: ${design.pDeltaIssues.join(', ')}`, ratio: null, ok: false })
+  for (const g of design.lateralCoverage ?? [])
+    checks.push({ name: `Lateral cases (${g.kind})`, detail: g.message, ratio: null, ok: false })
   if (design.pDeltaSkipped.length)
     checks.push({ name: 'P-Δ not run', detail: `model past the second-order DOF limit, first-order forces used: ${design.pDeltaSkipped.join(', ')}`, ratio: null, ok: false })
   // seismic regularity (advisory — does not gate designOK; irregular structures
@@ -774,6 +776,9 @@ export function buildModelReport(
   }
   if (design.pDeltaSkipped.length) {
     limitations.push(`P-Delta was not run for: ${design.pDeltaSkipped.join(', ')}. The reported design forces use first-order results for these cases.`)
+  }
+  if (design.lateralCoverage?.length) {
+    limitations.push(`The lateral load cases are incomplete, so the design envelope is too: ${design.lateralCoverage.map((g) => g.message).join(' ')} Add the missing directions and re-run before relying on a PASS.`)
   }
   if (design.pDeltaShellsFirstOrder?.length) {
     limitations.push(`P-Delta for ${design.pDeltaShellsFirstOrder.join(', ')} includes geometric stiffness for frame members only. Shell walls and slabs enter the second-order solve with their elastic stiffness, so their own in-plane buckling and P-δ softening are not captured.`)

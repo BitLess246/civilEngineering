@@ -422,7 +422,7 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       },
       {
         "suite": "frame2d — NSCP combinations",
-        "name": "runs all 7; 1.2D + 1.6L governs for D+L loading"
+        "name": "runs all 8; 1.2D + 1.6L governs for D+L loading"
       }
     ]
   },
