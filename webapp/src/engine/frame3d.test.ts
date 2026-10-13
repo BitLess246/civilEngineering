@@ -258,6 +258,43 @@ describe('frame3d — P-Δ second order (vertical cantilever, L = 4)', () => {
     expect(Math.abs(r.members[0].My[0])).toBeGreaterThan(H * L)
   })
 
+  it('rejects fixedAxial arrays that do not match the member count', () => {
+    expect(() => solveFrame3D(colNodes, colMem, sup, lat, {
+      pDelta: true, fixedAxial: [],
+    })).toThrow(/fixedAxial must contain one axial force per member/)
+    expect(() => solveFrame3D(colNodes, colMem, sup, lat, {
+      pDelta: true, fixedAxial: [-Pe, -Pe],
+    })).toThrow(/expected 1, received 2/)
+  })
+
+  it('rejects non-finite fixedAxial forces instead of silently treating them as zero', () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(() => solveFrame3D(colNodes, colMem, sup, lat, {
+        pDelta: true, fixedAxial: [bad],
+      })).toThrow(/fixedAxial values must all be finite/)
+    }
+  })
+
+  it('validates P-Δ iteration controls', () => {
+    for (const maxIter of [0, -1, 1.5, Number.NaN]) {
+      expect(() => solveFrame3D(colNodes, colMem, sup, lat, {
+        pDelta: true, maxIter,
+      })).toThrow(/maxIter must be a positive integer/)
+    }
+    for (const tol of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => solveFrame3D(colNodes, colMem, sup, lat, {
+        pDelta: true, tol,
+      })).toThrow(/tol must be a finite positive number/)
+    }
+  })
+
+  it('ignores P-Δ-only options when second-order analysis is disabled', () => {
+    // Backward compatibility: options are inert when pDelta is not requested.
+    expect(() => solveFrame3D(colNodes, colMem, sup, lat, {
+      pDelta: false, maxIter: 0, tol: -1, fixedAxial: [],
+    })).not.toThrow()
+  })
+
   it('fixedAxial builds a CONSTANT geometric tangent (lateral-only solve, linear in load)', () => {
     const P = 0.25 * Pe
     // lateral-only load, geometric stiffness frozen at compression P (member axial
