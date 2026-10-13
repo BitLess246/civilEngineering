@@ -26,9 +26,10 @@ exists to close that class of gap; extend it whenever the pipeline consumes a
 new engine.
 
 **Shipped since:** E1/E2 (#577), E3 (#578), R1/R2 (#579), S1 (#580), R5 (#581),
-S2/S3 (#587). **Highest open risks now:** R3/R4 (two tabs silently overwrite
-each other's schedule; a full quota reverts the edit without saying so), S4
-(a stale webhook retry can restore a cancelled plan).
+S2/S3 (#587). R4 (#591) and S4 (#593) have since shipped too; see `docs/AuditRemediation.md`
+for the live board. The October re-audit closed what they left: GEN-05 (#942,
+concurrent webhook deliveries) and GEN-08 (#943, the soil-investigation store)
+— see the 13 October section.
 
 **The guest trial gate is LIVE, as of 14 August 2026.** Everything it needed is
 deployed: all three migrations applied (`20260813000000` project-limit trigger,
@@ -75,6 +76,44 @@ repository's own visibility.
 The deploy job is gone (Sept 2026). Deleting it stops future publishes; it does
 **not** unpublish what is already served. That is *Settings → Pages → Source:
 None*, and it has to be done by hand in the repository settings.
+
+## 13 October 2026 — audit fixes, new logo, media (PRs #930–#946)
+
+**Every open PR from the October audits is merged:** #930–#938 (report code-scope transparency, roadmap docs, adaptive worker pool, P-Δ option validation, worker crash handling, the solver/general/perf audit records in `docs/`). Only #789, a do-not-merge spike, is left open.
+
+**Audit findings implemented** (each with tests that fail on the old code):
+- **#939 FEM-01 (L3).** P-Δ, the reaction residual and buckling were adding the *uncondensed* `kgLocal(N)` to members with end releases, so a pin carried moment under axial load. `geometricLocal(g, N)` now condenses Kg through the member's released shape (`kgRel`, built once per unit N). Errors on the old code: leaning-column drift 1.3 % off, buckling λ 17.5 % off; both now match the closed forms.
+- **#940 FEM-02…05.**
+  - Diagram stations are added at every shear zero, so `Mmax` is the true peak.
+  - The shell drilling penalty is scaled off the rotational diagonal.
+  - Zero-length members and degenerate shell triangles throw a `RangeError` naming the element.
+  - `pDelta.shellsFirstOrder` is reported, and the design summary and report state that shells carry no geometric stiffness.
+- **#941 GEN-04 / PERF-05.**
+  - Actions are pinned to SHAs and the Supabase CLI to 2.120.0; Dependabot proposes the bumps.
+  - CI runs `npm run budget` (`webapp/scripts/bundleBudget.mjs`). Gzip budgets: initial JS 200 kB, CSS 25 kB, ModelSpace 240 kB, solverWorker 140 kB, any lazy chunk 330 kB. Raising a budget is a deliberate edit to that file.
+- **#942 GEN-05** (the concurrent-delivery race S4's ordering check could not see).
+  - The billing webhook applies events through `public.apply_billing_event` (migration `20261013000000`): read-check-write in one transaction behind `for update`, timestamps compared as `timestamptz`, `service_role` only. A cancel racing a redelivered purchase can no longer restore the paid plan.
+  - Before the migration existed, the function fell back to the old path on PGRST202.
+  - **Deployed and verified in production:** the migration is recorded, the function body matches the repo, grants are `service_role` only, and the edge-function deploy for #942 succeeded.
+  - Specs: `apply_billing_event.spec.sql` (18 rules) and `apply_billing_event_race.spec.sh` (two sessions), run against Postgres 16.
+- **#943 GEN-08** (the soil-investigation store, which R4's fix had not covered). A full or blocked `localStorage` no longer loses a Soil Investigation edit. State updates first; `trySave` reports `{ ok | error }`; the page shows a Retry save alert, plus a notice when storage is non-persistent. Verified in Chromium against `main`.
+- Already correct, so no change: CODE-01 (the report already disclaims the AISC Direct Analysis Method) and `siteConfig.siteUrl` (already `https://www.zetastruct.app`).
+- Deliberately left: FEM-06 (lumping is documented), PERF-01 (the dense P-Δ tangent is documented and bounded), GEN-01/02/03 (owner or infra decisions).
+
+**New logo (#945).** A folded-strip Z on a 64 grid, all edges at 0° or 45°, with the diagonal over the top bar and under the bottom bar. ZETA is Archivo Expanded SemiBold; the tagline is IBM Plex Mono. Text is outlined.
+- **One geometry, every output.** `scripts/brand/brand.py` writes `branding/*.svg`, `webapp/public/favicon.svg`, `webapp/src/lib/brandArt.ts` and `scripts/showreel/brandArt.js`; `scripts/brand/render.mjs` writes the PNGs. Fonts are not committed; `brand.py` documents the download.
+- **In the app**, `components/BrandMark.tsx` (`ZetaMark`, `ZetaLogo`; the wordmark is `currentColor`) replaces the typed wordmark in the rail, collapsed rail, top bar, home nav, footer and printed calc/report headers.
+- **Site assets:** favicon (+48 px PNG), `apple-touch-icon`, 192/512/maskable icons, `site.webmanifest`, and `og-image.png` re-rendered with the lockup.
+- `branding/README.md` has the usage rules and the social avatars.
+
+**Media (#946).**
+- Both reels are rebuilt with the new mark (`scripts/showreel/brand.js`): it folds on, and amber stays the one glowing signal.
+- **New:** three 30 s vertical how-to reels (Beam Design, Isolated Footing, Retaining Wall) in `scripts/showreel/howto/`. `BRIEF.md` holds the rules, structure and free/paid facts; `reels.json` drives the generic timeline, and there is one score per reel.
+- **New:** 13 feed posts at 1080×1350 from the same captures, in `branding/social/` with `CAPTIONS.md`. Generator: `scripts/showreel/social/`.
+- Web encodes are in `docs/media/`. Masters are on the orphan branches `media/showreel-master`, `media/calculators-reel-master` and `media/howto-reels-master`.
+- All plan claims follow `lib/plans.ts`. Calculators are free (guest: 5 runs per calculator; free account: unlimited plus 3 projects). Pro is US$19/mo or $205/yr; Max is US$49/mo or $529/yr.
+
+**Still open:** 25 Dependabot alerts on `main`; the items flagged under the workspace section below; GEN-01/02/03; S5 in `docs/AuditRemediation.md`.
 
 ## Calculator workspace layout + Drafting3D overhaul (PRs #886–#896, Oct 2026)
 
