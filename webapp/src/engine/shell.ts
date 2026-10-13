@@ -51,6 +51,10 @@ export function triFrame(p1: V3, p2: V3, p3: V3): TriFrame {
   const v1 = sub(p2, p1), v2 = sub(p3, p1)
   const n = cross(v1, v2)
   const A = len(n) / 2
+  // Collinear or coincident corners give A = 0 and NaN axes downstream; say so
+  // instead. Relative to the longest edge so the test is scale-free.
+  const e2 = Math.max(dot(v1, v1), dot(v2, v2), dot(sub(v2, v1), sub(v2, v1)))
+  if (!(A > 1e-10 * e2)) throw new RangeError('degenerate shell triangle (collinear or coincident corners)')
   const xh = norm(v1)
   const zh = norm(n)
   const yh = cross(zh, xh)
@@ -189,8 +193,12 @@ export function triShell(p1: V3, p2: V3, p3: V3, E: number, nu: number, t: numbe
   for (let i = 0; i < 9; i++) for (let j = 0; j < 9; j++) KL[bMap[i]][bMap[j]] += Kb[i][j]
   // drilling penalty on θz (5,11,17) — small absolute stiffness removes the
   // local zero-energy mode without polluting results (standard flat-shell fix).
+  // Scaled off the ROTATIONAL diagonal (θx, θy: kN·m/rad, the drilling DOF's
+  // own units). The translational terms are kN/m — a different dimension —
+  // and on a thick membrane-dominated panel they are orders larger, which made
+  // the "small" penalty a stiff rotational spring at every mesh node.
   let kmax = 0
-  for (let i = 0; i < 18; i++) kmax = Math.max(kmax, Math.abs(KL[i][i]))
+  for (const i of [3, 4, 9, 10, 15, 16]) kmax = Math.max(kmax, Math.abs(KL[i][i]))
   const kd = drill * kmax
   for (const d of [5, 11, 17]) KL[d][d] += kd
 

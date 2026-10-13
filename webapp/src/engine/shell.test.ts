@@ -489,3 +489,14 @@ describe('triShell — the global stiffness is EXACTLY symmetric', () => {
     }
   })
 })
+
+describe('triShell — drilling penalty in rotational units (FEM-02)', () => {
+  it('kd = drill × the largest ROTATIONAL diagonal, independent of the membrane terms', () => {
+    // flat in x–y with p1→p2 along x, so local = global and θz is DOF 5
+    const K = triShell([0, 0, 0], [2, 0, 0], [0, 2, 0], 25e6, 0.2, 0.6).Ke
+    const rot = Math.max(...[3, 4, 9, 10, 15, 16].map((i) => Math.abs(K[i][i])))
+    const trans = Math.max(...[0, 1, 2].map((i) => Math.abs(K[i][i])))
+    expect(trans).toBeGreaterThan(rot)            // the case that used to inflate kd
+    expect(K[5][5]).toBeCloseTo(1e-3 * rot, 6)
+  })
+})

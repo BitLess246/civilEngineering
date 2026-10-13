@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 572
+export const SOLVER_TEST_COUNT = 577
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -691,6 +691,22 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "P-Δ past the dense-tangent ceiling",
         "name": "skips the iteration and returns the FIRST-ORDER answer, labelled"
+      },
+      {
+        "suite": "frame3d — diagram extrema land on the true peak (FEM-04)",
+        "name": "Mmax = w0·L²/(9√3) exactly, with a station at the shear zero x = L/√3"
+      },
+      {
+        "suite": "frame3d — diagram extrema land on the true peak (FEM-04)",
+        "name": "adds no station when the shear keeps its sign (cantilever UDL)"
+      },
+      {
+        "suite": "frame3d — degenerate elements are named, not NaN (FEM-05)",
+        "name": "a zero-length member throws with its id"
+      },
+      {
+        "suite": "frame3d — degenerate elements are named, not NaN (FEM-05)",
+        "name": "a collinear shell triangle throws with its id"
       }
     ]
   },
@@ -811,6 +827,10 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "triShell — the global stiffness is EXACTLY symmetric",
         "name": "holds bit-for-bit on tilted, skewed triangles"
+      },
+      {
+        "suite": "triShell — drilling penalty in rotational units (FEM-02)",
+        "name": "kd = drill × the largest ROTATIONAL diagonal, independent of the membrane terms"
       }
     ]
   },

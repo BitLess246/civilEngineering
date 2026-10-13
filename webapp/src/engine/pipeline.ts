@@ -553,6 +553,9 @@ export interface StructureDesign {
    *  folded into `pDeltaIssues`. Also fails the design: the user asked for a
    *  second-order analysis and did not get one. */
   pDeltaSkipped: string[]
+  /** Cases whose P-Δ ran with shell elements present: the frame carries its
+   *  geometric stiffness, the shells do not (informational, not a failure). */
+  pDeltaShellsFirstOrder?: string[]
 }
 
 /** Every check the pipeline runs must pass — members, foundations, slabs
@@ -2171,6 +2174,7 @@ function designFromRuns(
     pDeltaIssues: runs.filter((r) => r.result.pDelta && !r.result.pDelta.converged
       && !r.result.pDelta.skipped).map((r) => r.name),
     pDeltaSkipped: runs.filter((r) => r.result.pDelta?.skipped).map((r) => r.name),
+    pDeltaShellsFirstOrder: runs.filter((r) => r.result.pDelta?.shellsFirstOrder).map((r) => r.name),
   }
   partialDesign.joints = designSteelJoints(model, partialDesign)
   partialDesign.beamJoints = designBeamBeamJoints(model, partialDesign)

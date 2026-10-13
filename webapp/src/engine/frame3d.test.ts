@@ -1012,3 +1012,42 @@ describe('P-Δ past the dense-tangent ceiling', () => {
     expect(first.pDelta).toBeUndefined()
   })
 })
+
+describe('frame3d — diagram extrema land on the true peak (FEM-04)', () => {
+  // Simply supported (bending released at a, pin at b) under a triangular
+  // load 0 → w0: Mmax = w0·L²/(9√3) at x = L/√3 — between any two of the 24
+  // uniform stations, so the old sampling under-reported the peak.
+  const L = 6, w0 = 12
+  const sec = { E: 200e6, G: 77e6, A: 0.01, Iy: 1e-4, Iz: 1e-4, J: 2e-4 }
+  const nodes: F3Node[] = [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }]
+  const members: F3Member[] = [{ id: 'm', i: 'a', j: 'b', ...sec, relI: [false, false, false, false, true, true] }]
+  const sup: F3Support[] = [{ node: 'a', fixity: 'fixed' }, { node: 'b', fixity: 'pin' }]
+
+  it('Mmax = w0·L²/(9√3) exactly, with a station at the shear zero x = L/√3', () => {
+    const mm = solveFrame3D(nodes, members, sup, [{ kind: 'member-vdl', member: 'm', x1: 0, x2: L, w1: 0, w2: -w0, cat: 'D' }])!.members[0]
+    const exact = (w0 * L * L) / (9 * Math.sqrt(3))
+    expect(mm.Mmax).toBeCloseTo(exact, 8)
+    expect(Math.max(...mm.Mz.map(Math.abs))).toBeCloseTo(exact, 8)
+    expect(mm.xs.some((x) => Math.abs(x - L / Math.sqrt(3)) < 1e-7)).toBe(true)
+  })
+
+  it('adds no station when the shear keeps its sign (cantilever UDL)', () => {
+    const mm = solveFrame3D(nodes, [{ id: 'm', i: 'a', j: 'b', ...sec }], [{ node: 'a', fixity: 'fixed' }],
+      [{ kind: 'member-udl', member: 'm', w: -10, cat: 'D' }])!.members[0]
+    expect(mm.xs.length).toBe(25)
+  })
+})
+
+describe('frame3d — degenerate elements are named, not NaN (FEM-05)', () => {
+  const sec = { E: 200e6, G: 77e6, A: 0.01, Iy: 1e-4, Iz: 1e-4, J: 2e-4 }
+  it('a zero-length member throws with its id', () => {
+    const nodes: F3Node[] = [{ id: 'a', x: 1, y: 2, z: 3 }, { id: 'b', x: 1, y: 2, z: 3 }]
+    expect(() => precomputeFrame(nodes, [{ id: 'B7', i: 'a', j: 'b', ...sec }], [{ node: 'a', fixity: 'fixed' }]))
+      .toThrow(/member B7 has zero length/)
+  })
+  it('a collinear shell triangle throws with its id', () => {
+    const nodes: F3Node[] = [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: 1, y: 0, z: 0 }, { id: 'c', x: 2, y: 0, z: 0 }]
+    expect(() => precomputeFrame(nodes, [], [{ node: 'a', fixity: 'fixed' }], undefined,
+      [{ id: 'S3', nodes: ['a', 'b', 'c'], E: 25e6, nu: 0.2, t: 0.15 }])).toThrow(/shell S3 .*degenerate/)
+  })
+})

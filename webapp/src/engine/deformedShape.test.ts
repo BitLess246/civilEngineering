@@ -155,8 +155,14 @@ function compare(extra: Partial<F3Member> = {}, beamRelJ?: F3Member['relJ'], bea
       const node = fine.nodes.find((q) => q.id === `${id}_${s}`)!
       const k = fine.nodes.indexOf(node)
       const truth = fine.r.d.slice(6 * k, 6 * k + 3)
-      // stations are L/24 apart; sub-node s sits on station 2s
-      const j = Math.round((s / 12) * (n - 1))
+      // sub-node s sits on a uniform station (L/24 apart); extra stations at
+      // shear zeros can sit between them, so find it by position, not index
+      let j = 0
+      for (let q = 1; q < n; q++) {
+        const dq = Math.hypot(f.base[q][0] - node.x, f.base[q][1] - node.y, f.base[q][2] - node.z)
+        const dj = Math.hypot(f.base[j][0] - node.x, f.base[j][1] - node.y, f.base[j][2] - node.z)
+        if (dq < dj) j = q
+      }
       const drawn = f.disp[j]
       expect(Math.hypot(f.base[j][0] - node.x, f.base[j][1] - node.y, f.base[j][2] - node.z)).toBeLessThan(1e-9)
       worst = Math.max(worst, Math.hypot(drawn[0] - truth[0], drawn[1] - truth[1], drawn[2] - truth[2]))

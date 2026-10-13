@@ -775,6 +775,9 @@ export function buildModelReport(
   if (design.pDeltaSkipped.length) {
     limitations.push(`P-Delta was not run for: ${design.pDeltaSkipped.join(', ')}. The reported design forces use first-order results for these cases.`)
   }
+  if (design.pDeltaShellsFirstOrder?.length) {
+    limitations.push(`P-Delta for ${design.pDeltaShellsFirstOrder.join(', ')} includes geometric stiffness for frame members only. Shell walls and slabs enter the second-order solve with their elastic stiffness, so their own in-plane buckling and P-δ softening are not captured.`)
+  }
   if (design.steelColumns.length) {
     limitations.push('The implemented AISC 360-16 steel-column workflow is not the Direct Analysis Method (DAM). Independently verify the applicable analysis method, effective-length and bracing assumptions, second-order effects, notional loads, and stiffness reductions.')
   }

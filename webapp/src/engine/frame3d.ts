@@ -110,6 +110,11 @@ export interface F3PDeltaStatus {
    *  different thing from a diverged one — callers must not report it as
    *  instability. */
   skipped?: 'dense-tangent'
+  /** Set when the model has shell elements: Kɡ is assembled from frame
+   *  members only, so walls and slabs enter the second-order solve with their
+   *  ELASTIC stiffness — their own in-plane compression does not soften them.
+   *  Frame P-Δ is still captured; shell buckling/P-δ is not. */
+  shellsFirstOrder?: true
 }
 
 /**
@@ -393,9 +398,13 @@ export interface ShellGeom {
 
 function prepShellGeom(sh: F3Shell, nm: Map<string, F3Node>, idx: Map<string, number>): ShellGeom {
   const [na, nb, nc] = sh.nodes.map((id) => nm.get(id)!)
-  const { Ke, A, f } = triShell(
-    [na.x, na.y, na.z], [nb.x, nb.y, nb.z], [nc.x, nc.y, nc.z], sh.E, sh.nu, sh.t,
-  )
+  let tri: ReturnType<typeof triShell>
+  try {
+    tri = triShell([na.x, na.y, na.z], [nb.x, nb.y, nb.z], [nc.x, nc.y, nc.z], sh.E, sh.nu, sh.t)
+  } catch (e) {
+    throw new RangeError(`frame3d: shell ${sh.id} (${sh.nodes.join(', ')}): ${(e as Error).message}`, { cause: e })
+  }
+  const { Ke, A, f } = tri
   const dofs: number[] = []
   for (const id of sh.nodes) { const ni = idx.get(id)!; for (let k = 0; k < 6; k++) dofs.push(6 * ni + k) }
   return { id: sh.id, Ke, dofs, A, normal: f.R[2], nodeIds: sh.nodes }
@@ -555,6 +564,10 @@ function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, n
   const pj: V3 = [nj.x + offJ[0], nj.y + offJ[1], nj.z + offJ[2]]
   const dir: V3 = sub(pj, pi)
   const L = Math.hypot(...dir)
+  // A zero-length element has singular stiffness and NaN local axes; name it
+  // here rather than let NaN reach the factor (meshValidation catches this for
+  // models, but solver input can also come from the API or a split/offset).
+  if (!(L > 1e-9)) throw new RangeError(`frame3d: member ${m.id} has zero length between its ends (${m.i} → ${m.j}, offsets included)`)
   const R = localAxes(dir, m.rot ?? 0)
   const EA = (m.E * m.A) / 1000
   const GJ = m.G * m.J * 1e-9
@@ -901,14 +914,8 @@ function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: numbe
 
   const f = matVec(g.kl, dl).map((v, k) => v - ml.feq[k])
 
-  const NS = 24
-  const xsSet = new Set<number>()
-  for (let k = 0; k <= NS; k++) xsSet.add((g.L * k) / NS)
-  ml.pts.forEach((pt) => { xsSet.add(Math.max(0, pt.a - 1e-6)); xsSet.add(pt.a); xsSet.add(Math.min(g.L, pt.a + 1e-6)) })
-  const xs = [...xsSet].sort((a, b) => a - b)
-
-  const NN: number[] = [], Vy: number[] = [], Vz: number[] = [], TT: number[] = [], My: number[] = [], Mz: number[] = []
-  for (const x of xs) {
+  // Internal actions at x along the member (local axes, end-i origin).
+  const at = (x: number) => {
     let n = -(f[0] + distShear(ml, 0, x))
     let vy = f[1] + distShear(ml, 1, x)
     let vz = f[2] + distShear(ml, 2, x)
@@ -928,7 +935,40 @@ function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: numbe
         my -= pt.Pz * (x - pt.a)
       }
     }
-    NN.push(n); Vy.push(vy); Vz.push(vz); TT.push(-f[3]); My.push(my); Mz.push(mz)
+    return { n, vy, vz, mz, my }
+  }
+
+  const NS = 24
+  const xsSet = new Set<number>()
+  for (let k = 0; k <= NS; k++) xsSet.add((g.L * k) / NS)
+  ml.pts.forEach((pt) => { xsSet.add(Math.max(0, pt.a - 1e-6)); xsSet.add(pt.a); xsSet.add(Math.min(g.L, pt.a + 1e-6)) })
+  const grid = [...xsSet].sort((a, b) => a - b)
+  // dM/dx = V, so a moment extremum sits where the shear changes sign. Between
+  // two stations V is continuous (point loads carry their own ±1e-6 stations),
+  // so a sign change brackets the root: bisect it and add it as a station so
+  // Mmax and the plotted peak are the true extremum, not the nearest of 24
+  // samples (a UDL beam with unequal end moments peaks between stations).
+  const sh = grid.map(at)
+  for (let k = 0; k + 1 < grid.length; k++) {
+    if (grid[k + 1] - grid[k] < 1e-5) continue
+    for (const key of ['vy', 'vz'] as const) {
+      const v0 = sh[k][key], v1 = sh[k + 1][key]
+      if (!(v0 * v1 < 0)) continue
+      let lo = grid[k], hi = grid[k + 1], vlo = v0
+      for (let it = 0; it < 50 && hi - lo > 1e-9 * g.L; it++) {
+        const mid = 0.5 * (lo + hi), vm = at(mid)[key]
+        if (vm * vlo <= 0) hi = mid
+        else { lo = mid; vlo = vm }
+      }
+      xsSet.add(0.5 * (lo + hi))
+    }
+  }
+  const xs = [...xsSet].sort((a, b) => a - b)
+
+  const NN: number[] = [], Vy: number[] = [], Vz: number[] = [], TT: number[] = [], My: number[] = [], Mz: number[] = []
+  for (const x of xs) {
+    const r = at(x)
+    NN.push(r.n); Vy.push(r.vy); Vz.push(r.vz); TT.push(-f[3]); My.push(r.my); Mz.push(r.mz)
   }
   return {
     id: m.id, L: g.L, f, xs, N: NN, Vy, Vz, T: TT, My, Mz,
@@ -1192,7 +1232,7 @@ export function solveWithGeometry(
     Mmax: Math.max(...results.map((r) => r.Mmax), 0),
     Vmax: Math.max(...results.map((r) => r.Vmax), 0),
     Nmax: Math.max(...results.map((r) => r.Nmax), 0),
-    ...(pdStatus ? { pDelta: pdStatus } : {}),
+    ...(pdStatus ? { pDelta: shellGeoms.length && !pdStatus.skipped ? { ...pdStatus, shellsFirstOrder: true as const } : pdStatus } : {}),
   }
 }
 
