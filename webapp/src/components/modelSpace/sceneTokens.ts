@@ -150,15 +150,19 @@ export type TribKind = keyof typeof TRIB_COLOR
  *  edges) + trapezoids (long edges) for two-way panels, or two rectangles for
  *  one-way (long/short ≥ 2). Returned as filled polygons just above the slab. */
 export function slabTributaryPolys(c: THREE.Vector3[]): { pts: THREE.Vector3[]; kind: TribKind }[] {
-  const O = c[0]
-  const e1 = c[1].clone().sub(c[0]), e3 = c[3].clone().sub(c[0])
-  const d1 = e1.length(), d3 = e3.length()
+  const d1 = c[1].distanceTo(c[0]), d3 = c[3].distanceTo(c[0])
   const longAlong1 = d1 >= d3
-  const U = (longAlong1 ? e1 : e3).clone().normalize()
-  const V = (longAlong1 ? e3 : e1).clone().normalize()
   const L = Math.max(d1, d3), S = Math.min(d1, d3)
   const lift = new THREE.Vector3(0, 0.13, 0)
-  const P = (u: number, v: number) => O.clone().addScaledVector(U, u).addScaledVector(V, v).add(lift)
+  // (u along the long edge, v along the short) → fractions (a along c0→c1,
+  // b along c0→c3) → the bilinear point of the real quad
+  const P = (u: number, v: number) => {
+    const [a, b] = longAlong1 ? [u / L, v / S] : [v / S, u / L]
+    return new THREE.Vector3()
+      .addScaledVector(c[0], (1 - a) * (1 - b)).addScaledVector(c[1], a * (1 - b))
+      .addScaledVector(c[2], a * b).addScaledVector(c[3], (1 - a) * b)
+      .add(lift)
+  }
   if (L / Math.max(S, 1e-9) >= 2) {
     const h = S / 2   // one-way: split between the two long edges
     return [
