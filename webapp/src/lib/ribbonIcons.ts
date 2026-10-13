@@ -197,6 +197,13 @@ export const ACTION_ICONS: Record<string, GroupIcon> = {
     depicts: 'report sheet with a folded corner and a download arrow',
     paths: ['M4 2H14L20 8V22H4Z', 'M14 2V8H20', 'M12 11V18M9 15L12 18L15 15'],
   },
+  exchange: {
+    // A portal frame with one arrow leaving it and one arriving: the MODEL
+    // going out to, and coming in from, another analysis program. The frame is
+    // what tells it from the PDF mark, which sends out a report sheet.
+    depicts: 'portal frame with an arrow leaving above and one arriving below',
+    paths: ['M3 21V9', 'M13 21V9', 'M3 9H13', 'M1.5 21H14.5', 'M15 4H22', 'M19.5 1.5L22 4L19.5 6.5', 'M22 12H15', 'M17.5 9.5L15 12L17.5 14.5'],
+  },
   guide: {
     // A signpost. The walkthrough is directions through a page whose whole
     // difficulty is knowing which way round it goes.

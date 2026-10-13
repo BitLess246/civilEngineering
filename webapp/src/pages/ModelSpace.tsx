@@ -130,6 +130,8 @@ import { SectionShape } from '../components/SectionShape'
 import { f0, f1, f2 } from '../lib/format'
 import { usePlanGate } from '../lib/auth/usePlan'
 import { UpgradeNotice } from '../components/UpgradeNotice'
+import { downloadText } from '../lib/downloadSvg'
+import { ExchangeMenu } from '../components/modelSpace/ExchangeMenu'
 import type { SolverKind } from '../lib/featureGate'
 import { BaseHardware3D, Footing3D, GridBubbles3D, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
 import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/modelSpace/sceneTokens'
@@ -530,6 +532,10 @@ export default function ModelSpace() {
   const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the PDF report
   const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead(''))
   const [exporting, setExporting] = useState(false)               // PDF build in flight
+  /** What the last STAAD export/import did — and, above all, what it could not
+   *  carry. An interchange that drops things silently is worse than none. */
+  const [interop, setInterop] = useState<{ title: string; lines: string[]; failed?: boolean } | null>(null)
+  const importInput = useRef<HTMLInputElement>(null)
   const [exportOpen, setExportOpen] = useState(false)             // the export dialog
   /** The sections the model had before the optimizer last ran — the
    *  appendix's "initial vs final" table needs them, and the result carries
@@ -711,6 +717,34 @@ export default function ModelSpace() {
   const save = (m: StructuralModel | null) => {
     setHist((h) => recordHistory(h, model))
     applyModel(m)
+  }
+
+  // STAAD.Pro interchange. The module loads on click: nobody who never
+  // exchanges a model pays for the parser.
+  const exportStaad = async () => {
+    if (!model) return
+    const { toStaad } = await import('../engine/interop/staad')
+    const { text, warnings } = toStaad(model)
+    const slug = (model.name || 'model').trim().replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'model'
+    downloadText(`${slug}.std`, text, 'text/plain')
+    setInterop({ title: `Exported ${slug}.std for STAAD.Pro`, lines: warnings })
+  }
+  const importStaad = async (file: File) => {
+    const { fromStaad } = await import('../engine/interop/staad')
+    let r: Awaited<ReturnType<typeof fromStaad>>
+    try { r = fromStaad(await file.text(), { name: file.name.replace(/\.[^.]+$/, '') }) }
+    catch (e) { setInterop({ title: `Could not read ${file.name}`, lines: [String((e as Error).message ?? e)], failed: true }); return }
+    const m = r.model
+    if (m.nodes.length === 0 || m.members.length + m.plates.length === 0) {
+      setInterop({ title: `${file.name} has no joints or members Zeta can read`, lines: ['Check that it is a STAAD.Pro input file (.std) with JOINT COORDINATES and MEMBER INCIDENCES.', ...r.warnings], failed: true })
+      return
+    }
+    save(m)                       // undoable like any edit: ⌘Z brings back the model it replaced
+    setSelected(null)
+    setInterop({
+      title: `Imported ${file.name}: ${m.nodes.length} joints, ${m.members.length} members${m.plates.length ? `, ${m.plates.length} panels` : ''}`,
+      lines: r.warnings,
+    })
   }
 
   // Memoised on the history and the model, because the keyboard handler below
@@ -2164,6 +2198,14 @@ export default function ModelSpace() {
                 disabled={!design || exporting || !reportsGate.allowed}
                 title={!reportsGate.allowed ? reportsGate.message
                   : design ? 'Download the calculation report as a PDF' : 'Run “Design structure” in the Design tab first'} />
+              <ExchangeMenu items={[
+                { label: 'Export to STAAD.Pro (.std)', disabled: !model, onSelect: () => void exportStaad(),
+                  hint: model ? 'Geometry, sections, supports, releases, loads by category and NSCP combinations' : 'Build a model first' },
+                { label: 'Import from STAAD.Pro (.std)', onSelect: () => importInput.current?.click(),
+                  hint: 'Replaces the current model — Undo brings it back' },
+              ]} />
+              <input ref={importInput} type="file" accept=".std,.STD,.txt" className="hidden" aria-hidden tabIndex={-1}
+                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importStaad(f) }} />
               {/* In embed the Guide is one of the two live controls, so it
                   re-enables pointer events inside the page-wide lock (see the
                   root div). */}
@@ -5429,6 +5471,23 @@ export default function ModelSpace() {
 
         </div>
       </div>
+
+      {interop && (
+        <div role={interop.failed ? 'alert' : 'status'}
+          className={`no-print fixed bottom-20 right-4 z-50 w-[min(440px,calc(100vw-32px))] rounded-lg border px-4 py-3 shadow-lg ${
+            interop.failed ? 'border-fail-line bg-fail-tint' : interop.lines.length ? 'border-warn-line bg-warn-tint' : 'border-hairline bg-sheet'}`}>
+          <div className="flex items-start gap-3">
+            <p className={`flex-1 text-[13px] font-semibold ${interop.failed ? 'text-fail' : 'text-ink'}`}>{interop.title}</p>
+            <button type="button" onClick={() => setInterop(null)} aria-label="Dismiss"
+              className="rounded px-1.5 text-[15px] leading-5 text-muted hover:bg-brand-tint hover:text-ink">×</button>
+          </div>
+          {interop.lines.length > 0 && (
+            <ul className="mt-2 max-h-56 list-disc space-y-1 overflow-y-auto pl-4 text-[12px] leading-5 text-ink">
+              {interop.lines.map((l) => <li key={l}>{l}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
 
       {tour.on && (
         /* The walkthrough is embed's other live part — the overlay re-enables

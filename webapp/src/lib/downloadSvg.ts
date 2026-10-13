@@ -6,7 +6,7 @@ import { planToDxf, planSetToDxf } from '../engine/planDxf'
  * The Plans tab's per-sheet buttons and the fullscreen plan viewer both hand
  * the browser the same bytes for the same sheet — one download helper, so a
  * fix to how a file is named or typed lands in both places at once. */
-function downloadText(name: string, text: string, type: string): void {
+export function downloadText(name: string, text: string, type: string): void {
   const url = URL.createObjectURL(new Blob([text], { type }))
   const a = document.createElement('a')
   a.href = url; a.download = name; a.click()
