@@ -10,12 +10,6 @@ function scene(a, b, build) {
 const tpl = (id) => { const t = $('#' + id); const d = document.createElement('div'); d.innerHTML = t.innerHTML.trim(); return d.firstElementChild }
 function darkGround(root) { h('div', { class: 'ground-dark' }, root); return h('div', { class: 'grid' }, root) }
 function paperGround(root) { h('div', { class: 'ground-paper' }, root); return h('div', { class: 'grid-paper' }, root) }
-const LOGO = (id) => `<svg id="${id}" viewBox="0 0 64 64" width="64" height="64">
-  <rect class="lg-rect" x="1" y="1" width="62" height="62" rx="12" fill="#0f2a4a" stroke="rgba(107,164,220,.35)" stroke-width=".5"/>
-  <g stroke="#f2f5f9" stroke-width="4" stroke-linecap="round" fill="none">
-    <line class="lg-beam" x1="14" y1="22" x2="50" y2="22"/><line class="lg-c1" x1="18" y1="22" x2="18" y2="50"/><line class="lg-c2" x1="46" y1="22" x2="46" y2="50"/></g>
-  <line class="lg-gnd" x1="10" y1="50" x2="54" y2="50" stroke="#7fb3e8" stroke-width="3" stroke-linecap="round"/>
-  <circle class="lg-node" cx="32" cy="22" r="3.5" fill="#f2b53a"/></svg>`
 function setLine(el, p, L) { el.style.strokeDasharray = `${L} ${L}`; el.style.strokeDashoffset = L * (1 - p) }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -37,11 +31,11 @@ const A = scene(0, 6, (root) => {
   const ring = h('div', { class: 'abs', style: { left: W / 2 - 300 + 'px', top: H / 2 - 300 + 'px', width: '600px', height: '600px', borderRadius: '50%', border: '1.5px solid rgba(242,181,58,.9)' } }, root)
   const ring2 = h('div', { class: 'abs', style: { left: W / 2 - 300 + 'px', top: H / 2 - 300 + 'px', width: '600px', height: '600px', borderRadius: '50%', border: '1px solid rgba(232,234,237,.6)' } }, root)
   // wordmark + codes
-  const word = h('div', { class: 'abs disp', style: { left: '0px', top: '0px', fontSize: '210px', fontWeight: 900, letterSpacing: '.04em', color: '#f2f5f9', whiteSpace: 'nowrap', overflow: 'hidden', height: '200px', lineHeight: '200px' } }, root)
-  const letters = [...'ZETA'].map((c) => h('span', { style: { display: 'inline-block' } }, word, c))
+  const WM = WORD(122); root.appendChild(WM.el)
+  const word = WM.el, letters = WM.letters
   const codes = h('div', { class: 'abs mono', style: { fontSize: '20px', color: '#9eb0c5', whiteSpace: 'pre', letterSpacing: '.22em' } }, root)
   const rule = h('div', { class: 'abs', style: { height: '1px', background: 'rgba(158,176,197,.5)' } }, root)
-  return { grid, hx, vx, ticks, coord, coord2, logoBox, lg, ring, ring2, word, letters, codes, rule }
+  return { grid, hx, vx, ticks, coord, coord2, logoBox, lg, ring, ring2, word, letters, WM, codes, rule }
 })
 A.update = (t) => {
   const s = A
@@ -61,18 +55,11 @@ A.update = (t) => {
   s.coord2.textContent = t < 2.1 ? scramble('X 0.000  Z 0.000', seg(t, 0.9, 1.6), 9) : ''
   op(s.coord, 1 - collapse); op(s.coord2, 1 - collapse)
 
-  // the logo, built stroke by stroke: beam, columns, ground, plate, node
+  // the logo, folded on: top bar, the diagonal, the bottom bar, then the shadows land
   const lb = s.lg
-  const beam = ease(t, 2.0, 2.45), c1 = spring(t - 2.4, 2.2, 0.45), c2 = spring(t - 2.52, 2.2, 0.45), gnd = ease(t, 2.95, 3.35)
-  setLine($('.lg-beam', lb), beam, 36); setLine($('.lg-c1', lb), clamp(c1, 0, 1.08), 28); setLine($('.lg-c2', lb), clamp(c2, 0, 1.08), 28)
-  setLine($('.lg-gnd', lb), gnd, 44)
-  const rp = ease(t, 3.45, 3.95, (x) => E.outBack(x, 1.4))
-  const rect = $('.lg-rect', lb); rect.style.transformOrigin = '32px 32px'; rect.style.transform = `scale(${rp})`; op(rect, rp > 0 ? 1 : 0)
-  const nodeIn = t >= 4.0
-  const node = $('.lg-node', lb); node.style.transformOrigin = '32px 22px'
-  node.style.transform = `scale(${nodeIn ? 1 + 1.6 * Math.exp(-(t - 4) * 9) : (t > 3.6 ? 0.25 : 0)})`
-  lb.style.filter = nodeIn ? '' : ''
-  node.style.filter = `drop-shadow(0 0 ${nodeIn ? 3 + 6 * Math.exp(-(t - 4) * 3) : 1}px rgba(242,181,58,${nodeIn ? 0.95 : 0.6}))`
+  markBuild(lb, { top: ease(t, 2.0, 2.4), diag: clamp(spring(t - 2.35, 2.2, 0.45), 0, 1.06), bot: ease(t, 2.85, 3.25), shade: ease(t, 3.35, 3.85) })
+  // the amber signal point: a pin-prick before the downbeat, the flare on it
+  markFlash(lb, t >= 4.0 ? 1.5 * Math.exp(-(t - 4) * 5) : (t > 3.6 ? 0.35 : 0), 1.4)
 
   // the lockup: impact at 4.0, logo steps left at 4.25, wordmark rises
   const imp = t >= 4 ? 1 + 0.18 * Math.exp(-(t - 4) * 10) * Math.cos((t - 4) * 30) : 1
@@ -88,15 +75,11 @@ A.update = (t) => {
   tf(s.ring, `scale(${0.05 + E.outExpo(r1) * 1.6})`); op(s.ring, t >= 4 ? (1 - r1) * 0.9 : 0)
   tf(s.ring2, `scale(${0.05 + E.outExpo(r2) * 2.4})`); op(s.ring2, t >= 4.08 ? (1 - r2) * 0.5 : 0)
   // wordmark
-  css(s.word, { left: cx + 150 + 'px', top: cy - 102 + 'px' })
-  s.letters.forEach((l, i) => {
-    const p = ease(t, 4.32 + i * 0.05, 4.9 + i * 0.05)
-    tf(l, `translateY(${(1 - p) * 210}px)`)
-  })
-  s.word.style.letterSpacing = lerp(0.18, 0.04, ease(t, 4.3, 5.2)) + 'em'
-  css(s.codes, { left: cx + 158 + 'px', top: cy + 128 + 'px' })
+  css(s.word, { left: cx + size / 2 + 44 + 'px', top: cy - 61 + 'px' })
+  s.WM.set([0, 1, 2, 3].map((i) => ease(t, 4.32 + i * 0.05, 4.9 + i * 0.05)), lerp(0.18, 0.04, ease(t, 4.3, 5.2)))
+  css(s.codes, { left: cx + size / 2 + 46 + 'px', top: cy + 104 + 'px' })
   s.codes.textContent = scramble('NSCP 2015  ·  ACI 318-14  ·  AISC 360-16', seg(t, 5.0, 5.9), 21)
-  css(s.rule, { left: cx + 158 + 'px', top: cy + 112 + 'px', width: 760 * ease(t, 4.85, 5.45) + 'px' })
+  css(s.rule, { left: cx + size / 2 + 46 + 'px', top: cy + 88 + 'px', width: s.WM.width() * ease(t, 4.85, 5.45) + 'px' })
   // pre-cut anticipation, then everything leaves on the downbeat
   const ant = ease(t, 5.6, 6.0, E.inCubic)
   tf(s.root.firstChild, '')

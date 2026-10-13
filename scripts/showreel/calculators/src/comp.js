@@ -10,12 +10,6 @@ function scene(a, b, build) {
 }
 function darkGround(root) { h('div', { class: 'ground-dark' }, root); return h('div', { class: 'grid' }, root) }
 function paperGround(root) { h('div', { class: 'ground-paper' }, root); return h('div', { class: 'grid-paper' }, root) }
-const LOGO = (id) => `<svg id="${id}" viewBox="0 0 64 64" width="64" height="64">
-  <rect class="lg-rect" x="1" y="1" width="62" height="62" rx="12" fill="#0f2a4a" stroke="rgba(107,164,220,.35)" stroke-width=".5"/>
-  <g stroke="#f2f5f9" stroke-width="4" stroke-linecap="round" fill="none">
-    <line class="lg-beam" x1="14" y1="22" x2="50" y2="22"/><line class="lg-c1" x1="18" y1="22" x2="18" y2="50"/><line class="lg-c2" x1="46" y1="22" x2="46" y2="50"/></g>
-  <line class="lg-gnd" x1="10" y1="50" x2="54" y2="50" stroke="#7fb3e8" stroke-width="3" stroke-linecap="round"/>
-  <circle class="lg-node" cx="32" cy="22" r="3.5" fill="#f2b53a"/></svg>`
 function setLine(el, p, L) { el.style.strokeDasharray = `${L} ${L}`; el.style.strokeDashoffset = L * (1 - p) }
 
 // ── camera: keyframes [t, x, y, s, rot?], each leg eased (hold, then snap) ─

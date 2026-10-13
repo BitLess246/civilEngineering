@@ -9,3 +9,5 @@ out/
 reel.html
 fonts/inline.css
 node_modules
+reel_*.html
+posts.html

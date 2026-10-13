@@ -6,8 +6,8 @@ data = {'calc': json.load(open(f'{R}/assets/calc.json')), 'tools': json.load(ope
 out = rd('src/head.html').replace('</body></html>', '')
 out += rd('assets/drawings.html')
 out += '<script id="data" type="application/json">' + json.dumps(data).replace('</', '<\\/') + '</script>\n'
-for js in ['core.js', 'comp.js', 's1.js', 's2.js', 's3.js', 's4.js', 's5.js', 'main.js']:
-    p = f'{R}/src/{js}'
+for js in ['core.js', '../../brandArt.js', '../../brand.js', 'comp.js', 's1.js', 's2.js', 's3.js', 's4.js', 's5.js', 'main.js']:
+    p = os.path.normpath(f'{R}/src/{js}')
     if os.path.exists(p): out += f'<script>\n{open(p).read()}\n</script>\n'
 out += '</body></html>'
 open(f'{R}/reel.html', 'w').write(out)

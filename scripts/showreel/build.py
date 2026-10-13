@@ -11,8 +11,8 @@ tpls = ''.join(f'<template id="t_{os.path.basename(p)[:-4]}">{open(p).read()}</t
 out = rd('src/head.html').replace('</body></html>', '') if '</body>' in rd('src/head.html') else rd('src/head.html')
 out += tpls
 out += '<script id="data" type="application/json">' + json.dumps(data).replace('</', '<\\/') + '</script>\n'
-for js in ['core.js', 'scenes.js', 'scenes2.js', 'scenes3.js', 'main.js']:
-    p = f'{R}/src/{js}'
+for js in ['core.js', '../brandArt.js', '../brand.js', 'scenes.js', 'scenes2.js', 'scenes3.js', 'main.js']:
+    p = os.path.normpath(f'{R}/src/{js}')
     if os.path.exists(p): out += f'<script>\n{open(p).read()}\n</script>\n'
 out += '</body></html>'
 open(f'{R}/reel.html', 'w').write(out)
