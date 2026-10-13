@@ -255,7 +255,7 @@ const Iw = scene(40, 48, (root) => {
   const pages = Array.from({ length: 7 }, (_, i) => h('div', { class: 'abs card', style: { left: '0px', top: '0px', width: '560px', height: '740px', borderRadius: '6px' } }, rep))
   const cover = pages[6]
   cover.innerHTML = `<div style="padding:46px 44px">
-    <div style="display:flex;align-items:center;gap:14px">${LOGO('lgR').replace('width="64" height="64"', 'width="44" height="44"')}<span style="font-weight:900;letter-spacing:.14em;font-size:22px;color:#0f1b2a">ZETA</span></div>
+    <div style="display:flex;align-items:center;gap:10px">${LOGO('lgR').replace('width="64" height="64"', 'width="46" height="46"')}${WORD_SVG(24, '#0f1b2a')}</div>
     <div class="mono" style="font-size:12px;color:#5c6675;margin-top:60px">STRUCTURAL DESIGN REPORT</div>
     <div style="font-size:44px;font-weight:800;color:#0f1b2a;letter-spacing:-.03em;line-height:1;margin-top:14px">3×2 Bay ·<br>5 Storeys</div>
     <div class="mono" style="font-size:12px;color:#5c6675;margin-top:26px;line-height:1.9">NSCP 2015 · ACI 318-14 · AISC 360-16<br>GEOMETRY · LOADS · ANALYSIS · DESIGN<br>SCHEDULES · WORKED SOLUTIONS · DRAWINGS</div>
@@ -443,27 +443,27 @@ Kl.update = (t) => {
 const Le = scene(56, 60.1, (root) => {
   darkGround(root)
   const glow = h('div', { class: 'abs', style: { left: 0, top: 0, width: W + 'px', height: H + 'px', background: 'radial-gradient(700px 500px at 50% 46%, rgba(107,164,220,.14), transparent 70%)' } }, root)
-  const lb = h('div', { class: 'abs', style: { left: W / 2 - 420 + 'px', top: '330px', width: '230px', height: '230px' } }, root, LOGO('lgE'))
+  const WM = WORD(122)
+  const LX = W / 2 - (230 + 44 + WM.width()) / 2
+  const lb = h('div', { class: 'abs', style: { left: LX + 'px', top: '330px', width: '230px', height: '230px' } }, root, LOGO('lgE'))
   const lg = $('#lgE', lb); lg.setAttribute('width', 230); lg.setAttribute('height', 230)
-  const word = h('div', { class: 'abs disp', style: { left: W / 2 - 160 + 'px', top: '342px', fontSize: '210px', fontWeight: 900, letterSpacing: '.04em', color: '#f2f5f9', height: '200px', lineHeight: '200px', overflow: 'hidden', whiteSpace: 'nowrap' } }, root)
-  const letters = [...'ZETA'].map((c) => h('span', { style: { display: 'inline-block' } }, word, c))
+  root.appendChild(WM.el); css(WM.el, { left: LX + 274 + 'px', top: 330 + 115 - 61 + 'px' })
+  const word = WM.el, letters = WM.letters
   const tag = h('div', { class: 'abs', style: { left: '0px', width: W + 'px', top: '640px', textAlign: 'center', fontSize: '40px', fontWeight: 500, color: '#e8eaed', letterSpacing: '-.01em' } }, root)
   const rule = h('div', { class: 'abs', style: { left: W / 2 + 'px', top: '720px', height: '1px', background: 'rgba(158,176,197,.5)' } }, root)
   const url = h('div', { class: 'abs mono', style: { left: '0px', width: W + 'px', top: '748px', textAlign: 'center', fontSize: '24px', color: '#f2b53a', letterSpacing: '.24em', fontWeight: 600 } }, root)
   const codes = h('div', { class: 'abs mono', style: { left: '0px', width: W + 'px', top: '800px', textAlign: 'center', fontSize: '14px', color: '#9eb0c5' } }, root)
-  const ring = h('div', { class: 'abs', style: { left: W / 2 - 305 - 300 + 'px', top: 330 + 115 - 76 - 300 + 'px', width: '600px', height: '600px', borderRadius: '50%', border: '1.5px solid rgba(242,181,58,.8)' } }, root)
+  const ring = h('div', { class: 'abs', style: { left: LX + 115 - 300 + 'px', top: 330 + 115 - 300 + 'px', width: '600px', height: '600px', borderRadius: '50%', border: '1.5px solid rgba(242,181,58,.8)' } }, root)
   const black = h('div', { class: 'abs', style: { inset: '0', background: '#05090f', opacity: 0 } }, root)
-  return { glow, lb, lg, word, letters, tag, rule, url, codes, ring, black }
+  return { glow, lb, lg, word, letters, WM, tag, rule, url, codes, ring, black }
 })
 Le.update = (t) => {
   const s = Le
   const imp = spring(t - 56, 2.4, 0.4)
   tf(s.lb, `scale(${0.6 + 0.4 * imp})`)
-  const node = $('.lg-node', s.lg); node.style.transformOrigin = '32px 22px'
-  node.style.transform = `scale(${1 + 1.4 * Math.exp(-(t - 56) * 7)})`
-  node.style.filter = `drop-shadow(0 0 ${3 + 3 * Math.sin((t - 56) * 3) ** 2}px rgba(242,181,58,.95))`
-  s.letters.forEach((l, i) => { const p = ease(t, 56.08 + i * 0.05, 56.6 + i * 0.05); tf(l, `translateY(${(1 - p) * 210}px)`) })
-  s.word.style.letterSpacing = lerp(0.2, 0.04, ease(t, 56.05, 56.9)) + 'em'
+  markBuild(s.lg, { top: 1, diag: 1, bot: 1, shade: 1 })
+  markFlash(s.lg, 1.4 * Math.exp(-(t - 56) * 5), 1.4)
+  s.WM.set([0, 1, 2, 3].map((i) => ease(t, 56.08 + i * 0.05, 56.6 + i * 0.05)), lerp(0.2, 0.04, ease(t, 56.05, 56.9)))
   s.tag.textContent = typed('The structural workbench for Philippine practice.', seg(t, 56.5, 57.2))
   const rp = ease(t, 57.0, 57.5); css(s.rule, { left: W / 2 - 300 * rp + 'px', width: 600 * rp + 'px' })
   s.url.textContent = scramble('ZETASTRUCT.APP', seg(t, 57.1, 57.6), 77)

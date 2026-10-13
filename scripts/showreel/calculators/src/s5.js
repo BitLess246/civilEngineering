@@ -161,33 +161,26 @@ const END = scene(56, 60.01, (root) => {
   darkGround(root)
   const logoBox = h('div', { class: 'abs', style: { left: W / 2 - 520 + 'px', top: H / 2 - 175 + 'px', width: '230px', height: '230px' } }, root, LOGO('lgE'))
   const lg = $('#lgE', logoBox); lg.setAttribute('width', 230); lg.setAttribute('height', 230)
-  const word = h('div', { class: 'abs disp', style: { left: W / 2 - 250 + 'px', top: H / 2 - 165 + 'px', fontSize: '200px', fontWeight: 900, letterSpacing: '.04em', color: '#f2f5f9', whiteSpace: 'nowrap', overflow: 'hidden', height: '200px', lineHeight: '200px' } }, root)
-  const letters = [...'ZETA'].map((c) => h('span', { style: { display: 'inline-block' } }, word, c))
+  const WM = WORD(122); root.appendChild(WM.el); css(WM.el, { left: W / 2 - 520 + 274 + 'px', top: H / 2 - 175 + 115 - 61 + 'px' })
+  const word = WM.el, letters = WM.letters
   const rule = h('div', { class: 'abs', style: { left: W / 2 - 520 + 'px', top: H / 2 + 100 + 'px', height: '1px', background: 'rgba(158,176,197,.45)' } }, root)
   const tag = h('div', { class: 'abs', style: { left: W / 2 - 520 + 'px', top: H / 2 + 128 + 'px', fontSize: '44px', fontWeight: 700, color: '#f2f5f9', letterSpacing: '-.01em', whiteSpace: 'nowrap', height: '56px', overflow: 'hidden' } }, root, '<span style="display:inline-block">Every answer shows its work.</span>')
   const url = h('div', { class: 'abs mono', style: { left: W / 2 - 520 + 'px', top: H / 2 + 210 + 'px', fontSize: '22px', color: '#6ba4dc', letterSpacing: '.24em' } }, root)
   const ring = h('div', { class: 'abs', style: { width: '600px', height: '600px', borderRadius: '50%', border: '1.5px solid rgba(242,181,58,.9)' } }, root)
   const black = h('div', { class: 'layer', style: { background: '#000' } }, root)
-  return { logoBox, lg, word, letters, rule, tag, url, ring, black }
+  return { logoBox, lg, word, letters, WM, rule, tag, url, ring, black }
 })
 END.update = (t) => {
   const s = END
   const lb = s.lg
-  setLine($('.lg-beam', lb), ease(t, 56.0, 56.25), 36)
-  setLine($('.lg-c1', lb), clamp(spring(t - 56.08, 2.6, 0.45), 0, 1.08), 28); setLine($('.lg-c2', lb), clamp(spring(t - 56.14, 2.6, 0.45), 0, 1.08), 28)
-  setLine($('.lg-gnd', lb), ease(t, 56.25, 56.5), 44)
-  const rp = ease(t, 56.3, 56.7, (x) => E.outBack(x, 1.5))
-  const rect = $('.lg-rect', lb); rect.style.transformOrigin = '32px 32px'; rect.style.transform = `scale(${rp})`
-  const node = $('.lg-node', lb); node.style.transformOrigin = '32px 22px'
-  node.style.transform = `scale(${1 + 1.6 * Math.exp(-(t - 56) * 8)})`
-  node.style.filter = `drop-shadow(0 0 ${4 + 8 * Math.exp(-(t - 56) * 2.5) + 2 * Math.sin((t - 56) * 3)}px rgba(242,181,58,.95))`
+  markFromCentre(lb, { diag: clamp(spring(t - 56.0, 2.6, 0.45), 0, 1.06), top: ease(t, 56.12, 56.4), bot: ease(t, 56.18, 56.46), shade: ease(t, 56.4, 56.75) })
+  markFlash(lb, 1.5 * Math.exp(-(t - 56) * 4.5) + 0.12 * Math.sin((t - 56) * 3) ** 2, 1.4)
   // the node sits on the impact point, then the lockup settles
   const r1 = seg(t, 56.0, 57.0)
-  const nx = W / 2 - 520 + 115, ny = H / 2 - 175 + 230 * 22 / 64
+  const nx = W / 2 - 520 + 115, ny = H / 2 - 175 + 115
   css(s.ring, { left: nx - 300 + 'px', top: ny - 300 + 'px' })
   tf(s.ring, `scale(${0.05 + E.outExpo(r1) * 2})`); op(s.ring, (1 - r1) * 0.9)
-  s.letters.forEach((l, i) => { const p = ease(t, 56.35 + i * 0.05, 56.9 + i * 0.05); tf(l, `translateY(${(1 - p) * 210}px)`) })
-  s.word.style.letterSpacing = lerp(0.2, 0.04, ease(t, 56.35, 57.2)) + 'em'
+  s.WM.set([0, 1, 2, 3].map((i) => ease(t, 56.35 + i * 0.05, 56.9 + i * 0.05)), lerp(0.2, 0.04, ease(t, 56.35, 57.2)))
   css(s.rule, { width: 1040 * ease(t, 56.8, 57.4) + 'px' })
   tf(s.tag.firstChild, `translateY(${(1 - ease(t, 57.0, 57.45)) * 60}px)`)
   s.url.textContent = scramble('ZETASTRUCT.APP', seg(t, 57.2, 57.8), 13)

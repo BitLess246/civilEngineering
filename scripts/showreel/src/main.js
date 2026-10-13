@@ -6,7 +6,8 @@ const HUD = (() => {
   const marks = [[I, I, 1, 1], [W - I, I, -1, 1], [I, H - I, 1, -1], [W - I, H - I, -1, -1]].map(([x, y, sx, sy]) =>
     h('path', { d: `M${x + sx * L},${y} L${x},${y} L${x},${y + sy * L}`, fill: 'none', 'stroke-width': 1.5, stroke: 'currentColor' }, sv))
   const tl = h('div', { class: 'abs mono', style: { left: I + 34 + 'px', top: I - 7 + 'px', fontSize: '15px', display: 'flex', gap: '14px', alignItems: 'center', whiteSpace: 'nowrap' } }, root)
-  const word = h('span', { style: { fontFamily: 'Archivo', fontWeight: 900, letterSpacing: '.14em', fontSize: '15px' } }, tl, 'ZETA')
+  const word = h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } }, tl,
+    LOGO('hud').replace('width="64" height="64"', 'width="20" height="20"') + WORD_SVG(10.5, 'currentColor'))
   const sep = h('span', { style: { opacity: .45 } }, tl, '/')
   const secN = h('span', { style: { color: 'var(--hudAccent)' } }, tl)
   const secT = h('span', {}, tl)
