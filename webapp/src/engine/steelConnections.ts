@@ -496,6 +496,11 @@ export function designSteelJoints(
         ?? design.steelColumns.find((c) => c.id === col.id)!
       const colMemAtNode = memMap.get(colAtNode) ?? colMem
       const colShp = shapeByName(colDesign.shape)
+      // Shear tabs, flange welds and the §J10 column checks below are W-shape
+      // details. A hollow (or other non-W) column needs Chapter K, which is
+      // not implemented: skip the joint rather than size it from bf/tf/tw it
+      // does not have. The pipeline reports these as not designed.
+      if (colShp && colShp.family !== 'W') continue
 
       // Column strong-axis direction from the member's RESOLVED orientation
       // (explicit axisRotation, or the vertical 90° default that puts depth d
@@ -519,6 +524,8 @@ export function designSteelJoints(
 
       for (const mid of beamMems) {
         const mem = memMap.get(mid)!
+        const bShape = secOf.get(mem.section)?.shape
+        if (bShape && shapeByName(bShape)?.family !== 'W') continue   // as the column above
         const ni = nodeMap.get(mem.i)!, nj = nodeMap.get(mem.j)!
         const sDir = spanDirOf(ni, nj)
 
@@ -682,9 +689,10 @@ export function designBeamBeamJoints(
 
     const girderSec = secOf.get(carrier[0].section)
     const girderShp = girderSec?.shape ? shapeByName(girderSec.shape) : undefined
-    if (!girderShp) continue
+    if (!girderShp || girderShp.family !== 'W') continue   // fin plate to a W web only (Chapter K not implemented)
 
-    const supported = mems.filter((m) => m.id !== carrier![0].id && m.id !== carrier![1].id)
+    const supported = mems.filter((m) => m.id !== carrier![0].id && m.id !== carrier![1].id
+      && shapeByName(secOf.get(m.section)?.shape ?? '')?.family === 'W')
     if (supported.length === 0) continue
 
     const connections: BeamConnection[] = []

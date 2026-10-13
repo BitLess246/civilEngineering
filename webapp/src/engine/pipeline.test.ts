@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections, barContinuityGroups } from './modelBuilder'
 import { camberFor, designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings, governingCombos, pedestalDrops, peakUtilisation, failingChecks } from './pipeline'
-import { nextHeavierW } from './aiscSections'
+import { nextHeavierW, shapeByName } from './aiscSections'
 import { computeSeismic } from './seismic'
 import { nscpCombos } from './beamAnalysis'
 import { validateMesh } from './meshValidation'
@@ -1824,5 +1824,69 @@ describe('camberFor — 0.8·ΔD down to 5 mm, none under 20 mm (AISC 303 §6.4.
     expect(camberFor(26)).toBe(20)      // 20.8 → 20
     expect(camberFor(40)).toBe(30)      // 32 → 30
     expect(camberFor(-5)).toBe(0)       // hogging is not cambered for
+  })
+})
+
+describe('HSS / pipe frame members — designed, not dropped (steel-family phase 1)', () => {
+  const steel = (shapeOf: (role: string) => string) => {
+    const m = makeModel()
+    const roleOfSec = new Map(m.members.map((x) => [x.section, x.role ?? '']))
+    m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const, shape: shapeOf(roleOfSec.get(s.id) ?? ''), steelFy: 345, steelFu: 448 }))
+    return m
+  }
+  const hss = () => steel((role) => role === 'column' ? 'HSS254x254x12.7' : 'HSS305x203x9.5')
+
+  it('HSS beams get §F7/§G4 rows and HSS columns a real §H1 moment term', () => {
+    const d = designStructure(hss(), soil)!
+    expect(d.unchecked).toEqual([])
+    expect(d.steelBeams).toHaveLength(4)
+    for (const b of d.steelBeams) {
+      expect(b.clause).toBe('F7')
+      expect(b.shearClause).toBe('G4')
+      expect(b.phiMn).toBeGreaterThan(0)
+      expect(b.utilM).toBeCloseTo(b.Mu / b.phiMn, 9)
+    }
+    for (const c of d.steelColumns) {
+      expect(c.flexureNote).toBeUndefined()
+      expect(c.phiMn).toBeGreaterThan(0)          // was ∞ → reported 0, moments dropped
+      expect(c.phiMny).toBeGreaterThan(0)
+      expect(c.d).toBeCloseTo(254, 0)             // footprint for the base plate
+    }
+  })
+
+  it('their connections are reported as not designed, and no W-detail joint is sized for them', () => {
+    const d = designStructure(hss(), soil)!
+    expect(d.joints.every((j) => j.connections.length === 0) || d.joints.length === 0).toBe(true)
+    expect(new Set(d.connectionsNotDesigned)).toEqual(new Set([...d.steelBeams, ...d.steelColumns].map((r) => r.id)))
+  })
+
+  it('a pipe column uses §F8 about both axes', () => {
+    const d = designStructure(steel((role) => role === 'column' ? 'PIPE 6 STD' : 'W310x79'), soil)!
+    expect(d.unchecked).toEqual([])
+    for (const c of d.steelColumns) expect(c.phiMn).toBeCloseTo(c.phiMny, 9)
+  })
+
+  it('REGRESSION: a channel column with moment is UNCHECKED, not passed on axial load alone', () => {
+    const d = designStructure(steel((role) => role === 'column' ? 'C150x12.2' : 'W310x79'), soil)!
+    const cols = d.unchecked.filter((u) => u.role === 'column')
+    expect(cols).toHaveLength(d.steelColumns.length)
+    expect(cols[0].reason).toContain('not implemented')
+    expect(designOK(d)).toBe(false)
+  })
+
+  it('a slender-wall HSS is unchecked with its clause (§F7.2(c)), not passed', () => {
+    const d = designStructure(steel((role) => role === 'column' ? 'HSS254x254x12.7' : 'HSS305x305x6.4'), soil)!
+    const bs = d.unchecked.filter((u) => u.role !== 'column')
+    expect(bs).toHaveLength(4)
+    expect(bs[0].reason).toContain('§F7.2(c)')
+  })
+
+  it('the optimiser grows an undersized HSS frame WITHIN the HSS family and converges', () => {
+    const r = optimizeStructure(steel(() => 'HSS102x102x6.4'), soil)!
+    expect(r.converged).toBe(true)
+    expect(designOK(r.design)).toBe(true)
+    const shapes = r.model.sections.map((s) => shapeByName(s.shape!)!)
+    expect(shapes.every((s) => s.family === 'HSS' && !s.D)).toBe(true)
+    expect(shapes.some((s) => s.A > shapeByName('HSS102x102x6.4')!.A)).toBe(true)
   })
 })

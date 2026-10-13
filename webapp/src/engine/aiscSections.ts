@@ -598,6 +598,22 @@ export function nextHeavierW(name: string): AiscShape | undefined {
 }
 
 /** Next lighter W-shape in the catalog — strictly less area; undefined at the bottom. */
+/** Next heavier shape of the SAME family (strictly more area), optionally
+ *  only among shapes `ok` accepts; undefined at the top. Rect HSS steps
+ *  through rect HSS and round through round — never across. */
+export function nextHeavierInFamily(name: string, ok: (s: AiscShape) => boolean = () => true): AiscShape | undefined {
+  const s = shapeByName(name)
+  if (!s) return undefined
+  const round = !!s.D
+  return shapesOf(s.family).filter((x) => !!x.D === round && x.A > s.A && ok(x)).sort((a, b) => a.A - b.A)[0]
+}
+/** Next lighter shape of the same family (and roundness), or undefined. */
+export function nextLighterInFamily(name: string, ok: (s: AiscShape) => boolean = () => true): AiscShape | undefined {
+  const s = shapeByName(name)
+  if (!s) return undefined
+  const round = !!s.D
+  return shapesOf(s.family).filter((x) => !!x.D === round && x.A < s.A && ok(x)).sort((a, b) => b.A - a.A)[0]
+}
 export function nextLighterW(name: string): AiscShape | undefined {
   const s = shapeByName(name)
   if (s?.family !== 'W') return undefined

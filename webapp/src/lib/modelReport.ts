@@ -82,21 +82,31 @@ const txt = (text: string): SolutionLine => ({ text })
 export function steelBeamRowSolution(r: SteelBeamScheduleRow): SolutionStep[] {
   return [
     { title: `Section ${r.shape}`, clause: 'AISC 360-16', lines: [
-      txt(`d = ${f0(r.d)} mm · bf = ${f0(r.bf)} mm · tf = ${f1(r.tf)} mm · tw = ${f1(r.tw)} mm`),
+      txt(r.clause === 'F7' ? `H = ${f0(r.d)} mm · B = ${f0(r.bf)} mm · t (design wall) = ${f1(r.tf)} mm`
+        : r.clause === 'F8' ? `D = ${f0(r.d)} mm · t (design wall) = ${f1(r.tf)} mm`
+        : `d = ${f0(r.d)} mm · bf = ${f0(r.bf)} mm · tf = ${f1(r.tf)} mm · tw = ${f1(r.tw)} mm`),
       txt(`Ix = ${(r.Ix / 1e6).toFixed(1)}×10⁶ mm⁴ · Sx = ${(r.Sx / 1e3).toFixed(0)}×10³ mm³ · Zx = ${(r.Zx / 1e3).toFixed(0)}×10³ mm³ · ry = ${f1(r.ry)} mm`),
       txt(`Classification (Table B4.1b): flange λ = ${f1(r.lambdaF)} vs λp = ${f1(r.lambdaPF)}, λr = ${f1(r.lambdaRF)} → ${r.flangeClass}; web λ = ${f1(r.lambdaW)} vs λp = ${f1(r.lambdaPW)}, λr = ${f1(r.lambdaRW)} → ${r.webClass}  ⇒ §${r.clause}`),
     ] },
     { title: `Flexure — §${r.clause}`, clause: `AISC 360-16 §${r.clause}`, pass: r.utilM <= 1, lines: [
-      txt(`Mp = ${f1(r.Mp)} kN·m · Lp = ${f2(r.Lp / 1000)} m · Lr = ${f2(r.Lr / 1000)} m · Lb = ${f2(r.Lb / 1000)} m → ${r.ltbZone}`),
-      // §F3 takes the LESSER of LTB and flange local buckling; a compact flange
-      // has no FLB limit state, so only the reduced case is worth printing.
-      ...(Number.isFinite(r.MnFLB) ? [txt(`Flange local buckling (§F3.2): Mn = ${f1(r.MnFLB)} kN·m — ${r.flangeClass} flange`)] : []),
+      txt(Number.isFinite(r.Lp)
+        ? `Mp = ${f1(r.Mp)} kN·m · Lp = ${f2(r.Lp / 1000)} m · Lr = ${f2(r.Lr / 1000)} m · Lb = ${f2(r.Lb / 1000)} m → ${r.ltbZone}`
+        : `Mp = ${f1(r.Mp)} kN·m · no lateral-torsional buckling (${r.clause === 'F8' ? 'round section' : 'square tube or weak axis'}) · Lb = ${f2(r.Lb / 1000)} m`),
+      // the reduced local-buckling strengths only — a compact element has no
+      // such limit state, so only a reduced case is worth printing.
+      ...(Number.isFinite(r.MnFLB) ? [txt(`${r.clause === 'F8' ? 'Local buckling (§F8.2)' : `Flange local buckling (§${r.clause === 'F7' ? 'F7.2' : 'F3.2'})`}: Mn = ${f1(r.MnFLB)} kN·m — ${r.flangeClass} ${r.clause === 'F8' ? 'wall' : 'flange'}`)] : []),
+      ...(r.MnWLB != null && Number.isFinite(r.MnWLB) ? [txt(`Web local buckling (§F7.3): Mn = ${f1(r.MnWLB)} kN·m — ${r.webClass} web`)] : []),
       txt(`Mn = ${f1(r.Mn)} kN·m (${r.governing} governs) → φMn = 0.90·Mn = ${f1(r.phiMn)} kN·m`),
       txt(`Mu = ${f1(r.Mu)} kN·m ≤ φMn = ${f1(r.phiMn)} kN·m → util ${f2(r.utilM)} ${r.utilM <= 1 ? '✓' : '✗'}`),
     ] },
-    { title: 'Shear', clause: 'AISC 360-16 §G2.1', pass: r.utilV <= 1, lines: [
-      txt(`Aw = d·tw = ${f0(r.Aw)} mm² · h/tw = ${f1(r.hwTw)} → Cv1 = ${f2(r.Cv1)} · φv = ${f2(r.phiV)}`),
-      txt(`φVn = φv·0.6·Fy·Aw·Cv1 = ${f1(r.phiVn)} kN ≥ Vu = ${f1(r.Vu)} kN → util ${f2(r.utilV)} ${r.utilV <= 1 ? '✓' : '✗'}`),
+    { title: 'Shear', clause: `AISC 360-16 §${r.shearClause ?? 'G2.1'}`, pass: r.utilV <= 1, lines: r.shearClause === 'G5' ? [
+      txt(`D/t = ${f1(r.hwTw)} · Fcr = ${f2(r.Cv1)}·0.6Fy · Aw = Ag/2 = ${f0(r.Aw)} mm² · φv = ${f2(r.phiV)}`),
+      txt(`φVn = φv·Fcr·Ag/2 = ${f1(r.phiVn)} kN ≥ Vu = ${f1(r.Vu)} kN → util ${f2(r.utilV)} ${r.utilV <= 1 ? '✓' : '✗'}`),
+    ] : [
+      txt(r.shearClause === 'G4'
+        ? `Aw = 2·h·t = ${f0(r.Aw)} mm² (h = H − 3t) · h/t = ${f1(r.hwTw)} → Cv2 = ${f2(r.Cv1)} (kv = 5) · φv = ${f2(r.phiV)}`
+        : `Aw = d·tw = ${f0(r.Aw)} mm² · h/tw = ${f1(r.hwTw)} → Cv1 = ${f2(r.Cv1)} · φv = ${f2(r.phiV)}`),
+      txt(`φVn = φv·0.6·Fy·Aw·${r.shearClause === 'G4' ? 'Cv2' : 'Cv1'} = ${f1(r.phiVn)} kN ≥ Vu = ${f1(r.Vu)} kN → util ${f2(r.utilV)} ${r.utilV <= 1 ? '✓' : '✗'}`),
     ] },
     { title: 'Deflection (SS bound)', clause: 'L/240', pass: r.deflOK, lines: [
       txt(`δ ≈ 5·Mu·L²/48EI = ${f1(r.defl)} mm ≤ L/240 = ${f1(r.deflLim)} mm ${r.deflOK ? '✓' : '✗'}`),
@@ -779,6 +789,9 @@ export function buildModelReport(
   }
   if (design.lateralCoverage?.length) {
     limitations.push(`The lateral load cases are incomplete, so the design envelope is too: ${design.lateralCoverage.map((g) => g.message).join(' ')} Add the missing directions and re-run before relying on a PASS.`)
+  }
+  if (design.connectionsNotDesigned?.length) {
+    limitations.push(`Connections are not designed at: ${design.connectionsNotDesigned.join(', ')}. These are hollow-section (HSS / pipe) or other non-W members — their member checks are complete, but joint design here covers W shapes only, and HSS connections (AISC 360-16 Chapter K) are not implemented. The PASS verdict does not cover these joints.`)
   }
   if (design.pDeltaShellsFirstOrder?.length) {
     limitations.push(`P-Delta for ${design.pDeltaShellsFirstOrder.join(', ')} includes geometric stiffness for frame members only. Shell walls and slabs enter the second-order solve with their elastic stiffness, so their own in-plane buckling and P-δ softening are not captured.`)

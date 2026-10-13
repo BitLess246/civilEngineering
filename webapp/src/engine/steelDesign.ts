@@ -59,7 +59,7 @@ export function deriveWSection(s: AiscShape): DerivedBeamProps {
 /** Width-to-thickness classification of one plate element, Table B4.1b. */
 export type PlateClass = 'compact' | 'noncompact' | 'slender'
 /** Which flexure clause the section actually falls under. */
-export type FlexureClause = 'F2' | 'F3' | 'out-of-scope'
+export type FlexureClause = 'F2' | 'F3' | 'F7' | 'F8' | 'out-of-scope'
 
 export interface FlexureScope {
   lambdaF: number; lambdaPF: number; lambdaRF: number; flangeClass: PlateClass
