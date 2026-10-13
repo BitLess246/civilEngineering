@@ -1,4 +1,4 @@
-import type { JSX } from 'react'
+import { useId, type JSX } from 'react'
 import { DimBelow, DimSide } from './dims'
 import type { ColumnPosition } from '../engine/shear'
 import { DrawingFrame } from './DrawingFrame'
@@ -66,6 +66,9 @@ export interface SchematicProps {
 
 const FREE = '#c2402a'          // a free edge, and anything that follows from one
 const CRIT = '#0f4c92'
+/** The §22.6.4.1 punching perimeter. Not CRIT: that blue is the mat's STEEL
+ *  blue, and since the plan draws the mat a blue dashed line sank into it. */
+const PUNCH = '#9b2f8a'
 
 /** Plan + section of a designed footing, drawn to scale. */
 export function FootingSchematic({
@@ -172,6 +175,8 @@ export function FootingSchematic({
   const endSec = Math.max(2, (bars ? bars.cover : 0) / 1000 * sxs - 1)
   const dotGap = 5 / sxs
   const dotCentres = bars ? sampleForDraw(shortAll, dotGap) : []
+  // per instance: a page can hold several footings, and pattern ids are document-global
+  const hatchId = `punch-${useId().replace(/:/g, '')}`
   const dotR = bars ? Math.max(1.7, (bars.db / 1000) * sV * 0.6) : 1.7
 
   const totalH = baseY + (pressure ? 96 : 26)
@@ -199,10 +204,21 @@ export function FootingSchematic({
             the αs table exists to describe. */}
         {crit && (
           <g>
+            {/* The punching zone hatched, so the perimeter reads as an AREA
+                over the bars; then the dash on a paper casing so it stays a
+                line where it crosses them. */}
+            <defs>
+              <pattern id={hatchId} width={6} height={6} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1={0} y1={0} x2={0} y2={6} stroke={PUNCH} strokeWidth={1} />
+              </pattern>
+            </defs>
+            <rect x={crit.x} y={crit.y} width={crit.w} height={crit.h} fill={FILL} opacity={0.55} />
+            <rect x={crit.x} y={crit.y} width={crit.w} height={crit.h} fill={`url(#${hatchId})`} opacity={0.45} />
+            <rect x={crit.x} y={crit.y} width={crit.w} height={crit.h} fill="none" stroke={FILL} strokeWidth={3.4} />
             <rect x={crit.x} y={crit.y} width={crit.w} height={crit.h}
-              fill="none" stroke={CRIT} strokeWidth={1} strokeDasharray="4 3" opacity={0.85} />
+              fill="none" stroke={PUNCH} strokeWidth={1.5} strokeDasharray="5 3" />
             {/* haloed: since the plan draws the mat, this label sits on the bars */}
-            <text x={crit.x - 3} y={crit.y - 3} fontSize={7.5} fill={CRIT} textAnchor="end"
+            <text x={crit.x - 3} y={crit.y - 3} fontSize={7.5} fill={PUNCH} fontWeight={700} textAnchor="end"
               paintOrder="stroke" stroke={FILL} strokeWidth={3} strokeLinejoin="round">crit. @ d/2</text>
           </g>
         )}
