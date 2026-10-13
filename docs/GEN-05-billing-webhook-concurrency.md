@@ -30,3 +30,10 @@ The earlier audit flagged a read-check-write sequence in webhook processing that
 - Concurrent events cannot leave the account in an invalid intermediate state.
 - Event processing is auditable and retry-safe.
 - Signature verification and event ordering rules are documented.
+
+## Status — fixed (October 2026)
+
+- `apply_billing_event` (migration `20261013000000_apply_billing_event.sql`) does the duplicate check, the ordering check and the write in one transaction behind `select … for update` on the user row. Concurrent deliveries for one user serialise, and the second one checks against what the first one wrote. Timestamps compare as `timestamptz`, not as text.
+- `billing-webhook` calls it and maps `applied / duplicate / stale / no-user` to its responses. Until the migration is applied by hand, the RPC returns PGRST202 and the function falls back to the old non-atomic path with a warning, so a deploy that lands first doesn't stop plans being granted.
+- Evidence: `apply_billing_event.spec.sql` (18 single-session rules: duplicate, stale redelivery, equal timestamps, precision, untimed events, id preservation, grants) and `apply_billing_event_race.spec.sh` (a cancel held open while an older purchase arrives; the purchase blocks on the lock and answers `stale`). Both were run against Postgres 16 with a stub `auth.users`.
+- Signature verification already ran before any state change; that is unchanged.

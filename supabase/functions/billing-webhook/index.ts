@@ -74,6 +74,49 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!url || !key) { console.error('service role credentials missing'); return deny(500) }
   const admin = createClient(url, key, { auth: { persistSession: false } })
 
+  // ── ATOMIC PATH (GEN-05) ──────────────────────────────────────────────
+  // Duplicate check, ordering check and write happen inside ONE transaction
+  // behind a row lock on the user (`apply_billing_event`, migration
+  // 20261013000000). Two deliveries for one user — Paddle sends
+  // subscription.created and transaction.completed seconds apart, and retries
+  // overlap new events — used to both read the same app_metadata here, both
+  // pass, and the later WRITE won whatever the later EVENT was.
+  const { data: verdict, error: rpcErr } = await admin.rpc('apply_billing_event', {
+    p_user: outcome.userId,
+    p_event_id: outcome.eventId,
+    p_plan: outcome.plan,
+    p_occurred_at: outcome.occurredAt ?? null,
+    p_customer_id: outcome.customerId ?? null,
+    p_subscription_id: outcome.subscriptionId ?? null,
+  })
+  if (!rpcErr) {
+    switch (verdict) {
+      case 'applied':
+        console.log(`plan=${outcome.plan} user=${outcome.userId} event=${outcome.eventId}`)
+        return new Response('ok', { status: 200 })
+      case 'duplicate': return new Response('already applied', { status: 200 })
+      case 'stale':
+        console.log(`stale event ${outcome.eventId} (${outcome.occurredAt}) — ignored`)
+        return new Response('stale', { status: 200 })
+      case 'no-user':
+        console.error('no such user:', outcome.userId)
+        return deny(404)
+    }
+    console.error('apply_billing_event returned', verdict)
+    return new Response('retry', { status: 500 })
+  }
+  // PGRST202: the function is not in the schema cache — the migration has not
+  // been applied yet (migrations go in by hand, functions deploy on merge).
+  // Fall through to the old read-check-write so a deploy that lands first does
+  // not stop plans being granted; anything else is a real failure, and a 5xx
+  // makes the provider retry.
+  if (rpcErr.code !== 'PGRST202') {
+    console.error('apply_billing_event failed:', rpcErr.message)
+    return new Response('retry', { status: 500 })
+  }
+  console.warn('apply_billing_event missing — apply migration 20261013000000; using the non-atomic path')
+
+  // ── LEGACY PATH (until the migration is applied) ───────────────────────
   // Idempotency: providers retry until they get a 2xx, and a retry must not
   // re-apply a change that has since been superseded by a later event. The
   // last applied event id is kept alongside the plan, and a repeat is a no-op.
