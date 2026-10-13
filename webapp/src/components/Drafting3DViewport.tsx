@@ -224,6 +224,7 @@ export function Drafting3DViewport({ project, selectedIds, onSelect, style }: Dr
               a={a}
               b={b}
               role={m.role}
+              axisRotation={m.axisRotation}
               selected={selectedIds.includes(m.id)}
               sec={sectionOf(m.section)}
               onPick={() => onSelect?.(m.id)}

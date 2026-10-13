@@ -7,6 +7,10 @@
 // and the floor filled with bubbles A…Z and beyond. So: column positions, and
 // failing any column (a truss on bearings, a slab on walls) the supports, and
 // failing those the nodes — the old behaviour, for a model with nothing else.
+//
+// THE BASES OF THE LOWEST COLUMNS, not every column end. A grid is set out
+// where columns are founded; a column leaning to its top (or every column of
+// a storey stacked on one) would otherwise draw a line through each top.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel } from '../engine/model'
 
@@ -27,9 +31,12 @@ export function planGridLines(model: Pick<StructuralModel, 'nodes' | 'members' |
     const L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
     return L > 1e-9 && Math.abs(b.y - a.y) / L > 0.999
   }
-  let pts = model.members
+  const bases = model.members
     .filter((m) => m.role === 'column' || vertical(m.i, m.j))
-    .flatMap((m) => [byId.get(m.i), byId.get(m.j)])
+    .map((m) => { const a = byId.get(m.i), b = byId.get(m.j); return a && b ? (a.y <= b.y ? a : b) : undefined })
+    .filter((p): p is NonNullable<typeof p> => !!p)
+  const yBase = bases.length ? Math.min(...bases.map((p) => p.y)) : 0
+  let pts: (typeof model.nodes[number] | undefined)[] = bases.filter((p) => p.y <= yBase + 0.05)
   if (!pts.some(Boolean)) pts = model.supports.map((s) => byId.get(s.node))
   if (!pts.some(Boolean)) pts = model.nodes
   const ok = pts.filter((p): p is NonNullable<typeof p> => !!p)

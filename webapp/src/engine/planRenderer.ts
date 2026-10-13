@@ -56,7 +56,7 @@ export function steelColumnPlan(
   const shape = sec.shape ? shapeByName(sec.shape) : undefined
   if (!shape) return null
   const dir: V3 = [b.x - a.x, b.y - a.y, b.z - a.z]
-  const [, yp, zp] = localAxes(dir, defaultAxisRotation(dir, mem.axisRotation))
+  const [, yp, zp] = localAxes(dir, defaultAxisRotation(dir, mem.axisRotation, 'column'))
   const toPlan = ([X, Y]: P2): [number, number] => [
     at.x + (X * zp[0] + Y * yp[0]) / 1000,
     at.z + (X * zp[2] + Y * yp[2]) / 1000,

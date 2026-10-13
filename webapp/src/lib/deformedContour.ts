@@ -195,7 +195,7 @@ export function deformedInputs(
     const sec = secs.get(m.section)
     if (!fr || !a || !b || !di || !dj || !p0 || !sec) continue
     const dir: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
-    const rotDeg = defaultAxisRotation(dir, m.axisRotation)
+    const rotDeg = defaultAxisRotation(dir, m.axisRotation, m.role)
     const field = memberDisplacement({
       id: m.id, a, b, rotDeg, di, dj, forces: fr,
       E: p0.E, Iz: p0.Iz, Iy: p0.Iy, G: p0.G, Asy: p0.Asy, Asz: p0.Asz, offI: p0.offI, offJ: pN?.offJ,

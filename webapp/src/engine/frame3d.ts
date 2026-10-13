@@ -272,11 +272,32 @@ export function localAxes(dir: V3, rotDeg = 0): [V3, V3, V3] {
 /** Resolve a member's local-axis rotation: an explicit value wins; otherwise
  *  vertical members default to 90° so the section depth lands on global X —
  *  the orientation the app draws (Member3D/MemberSteel3D), the joint designer
- *  assumes, and ETABS uses for columns (local 2 toward +X). */
-export function defaultAxisRotation(dir: V3, explicit?: number): number {
+ *  assumes, and ETABS uses for columns (local 2 toward +X).
+ *
+ *  AN INCLINED COLUMN KEEPS THAT ORIENTATION. Past 2.56° off plumb the member
+ *  stopped counting as vertical and fell to the beam default (0°, y′ in the
+ *  vertical plane through the member), which put the depth wherever the lean
+ *  pointed: a column leaning toward Z was analysed with its section turned 90°
+ *  from the one drawn, designed and detailed, and one leaning on the diagonal
+ *  at 45°. With `role === 'column'` the default instead turns y′ onto global X
+ *  projected off the member axis — exactly 90° in the vertical limit, and the
+ *  old answer (0°) for a lean in the X–Y plane, so nothing that was right
+ *  moves. Reduced to (−90°, 90°]: a symmetric section has no preferred sign.
+ *  Beams and braces keep the vertical-plane default. */
+export function defaultAxisRotation(dir: V3, explicit?: number, role?: string): number {
   if (explicit !== undefined && Number.isFinite(explicit)) return explicit
   const L = Math.hypot(...dir)
-  return L > 1e-9 && Math.abs(dir[1] / L) > 0.999 ? 90 : 0
+  if (!(L > 1e-9)) return 0
+  if (Math.abs(dir[1] / L) > 0.999) return 90
+  if (role !== 'column') return 0
+  const xp = norm(dir)
+  const g: V3 = [1 - xp[0] * xp[0], -xp[0] * xp[1], -xp[0] * xp[2]]   // global X less its axial part
+  if (Math.hypot(...g) < 1e-6) return 0                               // a "column" lying along X
+  const [, y0, z0] = localAxes(dir, 0)
+  let a = (Math.atan2(dot(g, z0), dot(g, y0)) * 180) / Math.PI
+  while (a <= -90) a += 180
+  while (a > 90) a -= 180
+  return Math.abs(a) < 1e-9 ? 0 : a
 }
 
 function tMatrix(R: [V3, V3, V3]): number[][] {

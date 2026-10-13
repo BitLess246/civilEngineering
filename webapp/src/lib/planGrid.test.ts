@@ -24,6 +24,11 @@ describe('plan grid — bubbles on the columns only', () => {
     expect(planGridLines(m)).toEqual({ xs: [0, 3, 6, 12], zs: [0, 2, 5] })
   })
 
+  it('a column leaning to its top sets out from its base — the top adds no line', () => {
+    const m: StructuralModel = { ...base, nodes: base.nodes.map((n) => (n.id === 'n1.1.1' ? { ...n, z: n.z + 1 } : n.id === 'n0.0.1' ? { ...n, x: n.x - 1 } : n)) }
+    expect(planGridLines(m)).toEqual({ xs: [0, 6, 12], zs: [0, 5] })
+  })
+
   it('no columns: the supports set the grid; nothing at all: the nodes', () => {
     const truss: StructuralModel = { ...base, members: base.members.filter((q) => q.role !== 'column') }
     expect(planGridLines(truss)).toEqual({ xs: [0, 6, 12], zs: [0, 5] })

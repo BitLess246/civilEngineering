@@ -319,7 +319,7 @@ export function braceEndFrameFor(model: StructuralModel, brace: Member, node: st
     const cs = shapeOf(col)
     const ci = nodes.get(col.i)!, cj = nodes.get(col.j)!
     const cdir: V3 = [cj.x - ci.x, cj.y - ci.y, cj.z - ci.z]
-    const [, yp] = localAxes(cdir, defaultAxisRotation(cdir, col.axisRotation))
+    const [, yp] = localAxes(cdir, defaultAxisRotation(cdir, col.axisRotation, col.role))
     const dh = Math.hypot(yp[0], yp[2])
     const cosA = dh > 1e-9 ? Math.abs((yp[0] * px + yp[2] * pz) / dh) : 1
     ec = cosA >= Math.SQRT1_2 ? (cs?.d ?? 300) / 2 : (cs?.tw ?? 10) / 2

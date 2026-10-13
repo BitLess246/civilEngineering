@@ -518,7 +518,7 @@ export function deflectedDiagram(model: StructuralModel, r: F3Result, o: Deflect
     const di = r.d.slice(6 * a.i, 6 * a.i + 6)
     const dj = r.d.slice(6 * b.i, 6 * b.i + 6)
     const pts = memberDeflectedCurve(a.n, b.n, di, dj, amp, 12,
-      memberRotDeg([b.n.x - a.n.x, b.n.y - a.n.y, b.n.z - a.n.z], m.axisRotation))
+      memberRotDeg([b.n.x - a.n.x, b.n.y - a.n.y, b.n.z - a.n.z], m.axisRotation, m.role))
     P.push({
       kind: 'path', stroke: DEF_INK, width: 0.7, fill: 'none', join: 'round', cap: 'round',
       cmds: pts.map((p, k) => { const [x, y] = fit.at(asPoint(p)); return { c: k === 0 ? 'M' as const : 'L' as const, x, y } }),
@@ -618,7 +618,7 @@ export function forceDiagram(
     const ys2 = ord(res)
     // The ribbon must offset along the SAME rolled local axes the solver used —
     // see `memberRotDeg`. Unrolled, a column's diagram hangs off the wrong face.
-    const rot = memberRotDeg([b.x - a.x, b.y - a.y, b.z - a.z], m.axisRotation)
+    const rot = memberRotDeg([b.x - a.x, b.y - a.y, b.z - a.z], m.axisRotation, m.role)
     const rib = memberDiagramRibbon(v3(a), v3(b), res.xs, ys2, comp, scale, rot)
     ribbons.push({ id: m.id, curve: rib.curve, base: rib.base, ord: ys2, peak: Math.max(0, ...ys2.map(Math.abs)) })
   }

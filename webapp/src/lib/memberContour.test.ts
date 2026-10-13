@@ -385,8 +385,9 @@ describe('the page actually uses it', () => {
   it("orients the section the way the BRIDGE resolved it", () => {
     // Not `m.axisRotation` raw: verticals default to 90° and the raw field is
     // usually absent, so reading it directly paints every column's tension
-    // face on the wrong side.
-    expect(page).toContain('rotDeg: defaultAxisRotation(dir, m.axisRotation)')
+    // face on the wrong side. And with the ROLE: an inclined column keeps
+    // its depth on X only when the resolver knows it is a column.
+    expect(page).toContain('rotDeg: defaultAxisRotation(dir, m.axisRotation, m.role)')
   })
 
   it('drops the prism the same way the solid member is dropped', () => {

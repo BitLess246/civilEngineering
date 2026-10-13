@@ -51,7 +51,7 @@ export function columnCapRise(model: StructuralModel): Map<string, number> {
     if (!ni || !nj) return 0
     const dir: V3 = [nj.x - ni.x, nj.y - ni.y, nj.z - ni.z]
     if (Math.hypot(...dir) <= 1e-9) return 0
-    const [, yp, zp] = localAxes(dir, defaultAxisRotation(dir, m.axisRotation))
+    const [, yp, zp] = localAxes(dir, defaultAxisRotation(dir, m.axisRotation, m.role))
     const { depth, width } = depthWidth(secById.get(m.section))
     // The section's own half-extent measured straight up — the same projection
     // the rigid zone uses, so the two cannot disagree about the geometry.

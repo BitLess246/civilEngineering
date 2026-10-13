@@ -2067,7 +2067,7 @@ function designFromRuns(
     // the solver see it), strong-axis bending turns about the plan line ⟂ to it
     const nI = model.nodes.find((n) => n.id === col.i), nJ = model.nodes.find((n) => n.id === col.j)
     const cdir: [number, number, number] = nI && nJ ? [nJ.x - nI.x, nJ.y - nI.y, nJ.z - nI.z] : [0, 1, 0]
-    const [, yp] = localAxes(cdir, defaultAxisRotation(cdir, col.axisRotation))
+    const [, yp] = localAxes(cdir, defaultAxisRotation(cdir, col.axisRotation, col.role))
     const ph = Math.hypot(yp[0], yp[2]), dx = ph > 1e-9 ? yp[0] / ph : 1, dz = ph > 1e-9 ? yp[2] / ph : 0
     const cases: BaseCase[] = runs.flatMap((run) => {
       const r = run.result.reactions.find((x) => x.node === ru.node)

@@ -296,7 +296,7 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
     // local-axis rotation: explicit wins; verticals default to 90° so the
     // analysis strong-axis orientation matches the drawn one (depth d → X)
     const ni = nm.get(m.i), nj = nm.get(m.j)
-    const rot = ni && nj ? defaultAxisRotation([nj.x - ni.x, nj.y - ni.y, nj.z - ni.z], m.axisRotation) : (m.axisRotation ?? 0)
+    const rot = ni && nj ? defaultAxisRotation([nj.x - ni.x, nj.y - ni.y, nj.z - ni.z], m.axisRotation, m.role) : (m.axisRotation ?? 0)
     const props = secById.get(m.section) ?? fallback
     // Concrete only (`material` unset means concrete). Timber does not crack:
     // it used to take the concrete factors too, which softened a timber beam to

@@ -1879,7 +1879,7 @@ export default function ModelSpace() {
       const dir: V3 = [bb.x - a.x, bb.y - a.y, bb.z - a.z]
       members.push({
         id: m.id, a: [a.x, a.y, a.z], b: [bb.x, bb.y, bb.z],
-        rotDeg: defaultAxisRotation(dir, m.axisRotation),
+        rotDeg: defaultAxisRotation(dir, m.axisRotation, m.role),
         section: ss, forces: fr,
         drop: levelDrop(m.role, sec.h / 1000, a, bb),
         // The joints it meets — what stops a beam's contour at the column face
@@ -2329,7 +2329,7 @@ export default function ModelSpace() {
                     : sec?.material === 'steel' && sec.shape
                       ? <MemberSteel3D a={aV} b={bV} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
                           style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
-                      : <Member3D a={aV} b={bV} role={m.role}
+                      : <Member3D a={aV} b={bV} role={m.role} axisRotation={m.axisRotation}
                           sec={sec} style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                   return (
                     <group key={m.id}>
@@ -2468,7 +2468,7 @@ export default function ModelSpace() {
                   return <MemberForceDiagram3D key={`fd-${m.id}`}
                     a={[a.x, a.y, a.z]} b={[bb.x, bb.y, bb.z]}
                     xs={mr.xs} ys={mr[forceDiag]} comp={forceDiag} scale={forceDiagInfo.scale}
-                    rotDeg={memberRotDeg([bb.x - a.x, bb.y - a.y, bb.z - a.z], m.axisRotation)} />
+                    rotDeg={memberRotDeg([bb.x - a.x, bb.y - a.y, bb.z - a.z], m.axisRotation, m.role)} />
                 })}
                 {modal && modeShapeIdx !== null && modal.modes[modeShapeIdx] && (
                   <ModeShapePlayer

@@ -509,7 +509,7 @@ export function designSteelJoints(
       // a beam spanning along it lands on the FLANGE face; across it, the WEB.
       const cpi = nodeMap.get(colMemAtNode.i), cpj = nodeMap.get(colMemAtNode.j)
       const colDir: V3 = cpi && cpj ? [cpj.x - cpi.x, cpj.y - cpi.y, cpj.z - cpi.z] : [0, 1, 0]
-      const [, ypCol] = localAxes(colDir, defaultAxisRotation(colDir, colMemAtNode.axisRotation))
+      const [, ypCol] = localAxes(colDir, defaultAxisRotation(colDir, colMemAtNode.axisRotation, colMemAtNode.role))
       const dh = Math.hypot(ypCol[0], ypCol[2])
       const depthDir: [number, number] = dh > 1e-9 ? [ypCol[0] / dh, ypCol[2] / dh] : [1, 0]
       const strongAxisDir: 'x' | 'z' = Math.abs(depthDir[0]) >= Math.abs(depthDir[1]) ? 'x' : 'z'
