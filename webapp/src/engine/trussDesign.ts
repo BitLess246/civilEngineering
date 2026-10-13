@@ -27,7 +27,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { MemberForce } from './truss'
 import type { EffectiveSection, AiscShape } from './aiscSections'
-import { steelCompression } from './steelCompression'
+import { steelCompression, doubleAngleCompression, type DoubleAngleE6 } from './steelCompression'
 
 export interface TrussSection {
   A: number          // gross area, mm²
@@ -40,6 +40,10 @@ export interface TrussSection {
   /** The catalogue shape, when there is one: compression then runs the full
    *  Chapter E check (§E4, §E7) instead of A·Fcr at Lc/r. */
   shape?: AiscShape
+  /** Back-to-back double angle of `shape`: the gap between the backs (mm)
+   *  and how many intermediate connectors (fillers) each member gets — the
+   *  connector spacing is then L/(n + 1) (§E6). */
+  doubleAngle?: { gap: number; connectors: number }
 }
 
 /** §E5(a) inputs: r about the geometric axis parallel to the connected leg,
@@ -68,8 +72,9 @@ export function compressionScope(sec: EffectiveSection, E: number, Fy: number): 
   const s = sec.base, rt = Math.sqrt(E / Fy)
   if (s.name === 'custom')
     return { supported: false, reason: 'custom section: local (§E7) and torsional (§E4) buckling cannot be checked from A and r alone' }
-  if (sec.double)
-    return { supported: false, reason: `${sec.label}: built-up double angle — §E6 (connector spacing, modified slenderness) is not implemented` }
+  // a back-to-back double angle: §E6 (modified slenderness, connector
+  // spacing), §E4 on the axis of symmetry and §E7 — `doubleAngleCompression`
+  if (sec.double) return { supported: true }
   if (s.family === 'L') {
     const bl = Math.max(s.leg1!, s.leg2!), bs = Math.min(s.leg1!, s.leg2!), t = s.t!
     if (bl / t > 0.71 * rt)
@@ -107,6 +112,9 @@ export interface MemberDesign {
   ok: boolean
   /** §E2 — KL/r > 200 is discouraged for compression; flagged. */
   slenderOK: boolean
+  /** §E6 values for a double angle in compression: connector spacing,
+   *  a/ri, the modified slenderness and the §E6.2 spacing check. */
+  e6?: DoubleAngleE6
 }
 
 const PHI = 0.90
@@ -121,6 +129,18 @@ export function designTrussMember(f: MemberForce, sec: TrussSection): MemberDesi
   const slenderness = sec.e5 && mode !== 'tension' ? e5Slenderness(Lmm, sec.e5) : (K * Lmm) / sec.r
 
   let phiPn: number, Fcr: number | undefined
+  if (mode !== 'tension' && sec.shape && sec.doubleAngle) {
+    // §E6 built-up: modified slenderness about the axis of symmetry, §E4 on
+    // it, §E7 on all four legs; the member does not pass without §E6.2.
+    const a = Lmm / (sec.doubleAngle.connectors + 1)
+    const c = doubleAngleCompression(sec.shape, sec.doubleAngle.gap, sec.Fy, K * Lmm, K * Lmm, a, { E: sec.E })
+    if (mode === 'compression') { Fcr = c.Fcr; phiPn = c.phiPn }
+    else phiPn = (PHI * sec.Fy * sec.A) / 1000
+    const util = mode === 'zero' || phiPn <= 0 ? 0 : Math.abs(f.N) / phiPn
+    const slenderOK = mode !== 'compression' || c.slenderness <= 200
+    return { id: f.id, N: f.N, L: f.L, kind: f.kind, mode, slenderness: c.slenderness, Fcr, phiPn, util,
+      ok: util <= 1 + 1e-9 && slenderOK && (mode !== 'compression' || c.e6.spacingOK), slenderOK, e6: c.e6 }
+  }
   if (mode !== 'tension' && sec.shape) {
     // Chapter E in full; §E5 (when given) replaces the flexural Lc/r and §E4.
     const c = steelCompression(sec.shape, sec.Fy, K * Lmm, K * Lmm, Lmm,

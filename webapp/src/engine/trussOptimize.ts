@@ -78,7 +78,7 @@ export interface TrussGroup {
 }
 
 /** Why one candidate section was rejected — the FIRST gate it failed. */
-export type RejectGate = 'scope' | 'strength' | 'slenderness'
+export type RejectGate = 'scope' | 'strength' | 'slenderness' | 'connectors'
 
 export interface GroupChoice {
   group: TrussGroup
@@ -129,6 +129,9 @@ export interface OptimizeOpts {
   /** Also consider back-to-back double angles, at this gap (mm). */
   doubleAngles?: boolean
   gap?: number
+  /** Intermediate connectors (fillers) per double-angle member, §E6 — the
+   *  spacing is L/(n + 1). Default 2 (third points). */
+  connectors?: number
   E?: number
   Fy?: number
   K?: number
@@ -202,11 +205,13 @@ const weightOf = (A: number, lengthM: number) => (A / 1e6) * lengthM * STEEL_DEN
 
 /** The member-check section for a candidate — single angles carry their §E5
  *  inputs, so the optimiser and the hand-picked path run the same check. */
-export function trussSectionOf(cand: EffectiveSection, mat: { E: number; Fy: number; K?: number }): TrussSection {
+export function trussSectionOf(cand: EffectiveSection, mat: { E: number; Fy: number; K?: number; connectors?: number }): TrussSection {
+  if (cand.double)   // §E6: the single angle + gap + connectors
+    return { A: cand.A, r: cand.rmin, E: mat.E, Fy: mat.Fy, K: mat.K, shape: cand.base,
+      doubleAngle: { gap: cand.gap ?? 0, connectors: mat.connectors ?? 2 } }
   const e5 = compressionScope(cand, mat.E, mat.Fy).e5
   // a single catalogue shape carries itself, so compression runs Chapter E in
-  // full; a double angle (§E6, refused in compression) and a custom (A, r)
-  // section do not
+  // full; a custom (A, r) section does not
   const shape = !cand.double && cand.base.name !== 'custom' ? cand.base : undefined
   return { A: cand.A, r: cand.rmin, E: mat.E, Fy: mat.Fy, K: mat.K, ...(e5 ? { e5 } : {}), ...(shape ? { shape } : {}) }
 }
@@ -220,7 +225,7 @@ export function trussSectionOf(cand: EffectiveSection, mat: { E: number; Fy: num
  */
 export function sizeGroup(
   group: TrussGroup, candidates: readonly EffectiveSection[],
-  mat: { E: number; Fy: number; K?: number },
+  mat: { E: number; Fy: number; K?: number; connectors?: number },
 ): GroupChoice {
   const lengthM = group.members.reduce((s, m) => s + m.L, 0)
   const rejected: { label: string; gate: RejectGate; reason?: string }[] = []
@@ -245,6 +250,12 @@ export function sizeGroup(
     // Gate 2 — §E2 slenderness, compression members only.
     if (designs.some((d) => d.mode === 'compression' && !d.slenderOK)) {
       rejected.push({ label: cand.label, gate: 'slenderness' })
+      continue
+    }
+    // Gate 2b — §E6.2: a double angle's connector spacing a/ri may not exceed
+    // ¾ of the member's governing slenderness. Strong enough is not enough.
+    if (designs.some((d) => d.mode === 'compression' && d.e6 && !d.e6.spacingOK)) {
+      rejected.push({ label: cand.label, gate: 'connectors' })
       continue
     }
     // Gate 3 — economy is the sort order, so the first survivor wins.
@@ -275,7 +286,7 @@ export function sizeGroup(
 export function optimizeTruss(
   forces: MemberForce[], family: SectionFamily, opts: OptimizeOpts = {},
 ): TrussOptimizeResult {
-  const mat = { E: opts.E ?? 200000, Fy: opts.Fy ?? 248, K: opts.K ?? 1.0 }
+  const mat = { E: opts.E ?? 200000, Fy: opts.Fy ?? 248, K: opts.K ?? 1.0, connectors: opts.connectors ?? 2 }
   const families = opts.families ?? [family]
   const candidates = candidateSections(families, { doubleAngles: opts.doubleAngles, gap: opts.gap })
 
@@ -311,6 +322,7 @@ export function optimizeTruss(
 /** A one-line explanation of a rejection, for a schedule note or a tooltip. */
 export function rejectionNote(label: string, gate: RejectGate, reason?: string): string {
   if (gate === 'scope') return reason ?? `${label}: compression strength of this section is not checked`
+  if (gate === 'connectors') return `${label}: intermediate connectors too far apart — a/ri > ¾·(Lc/r) (§E6.2); add connectors`
   return gate === 'strength'
     ? `${label}: a member in this group exceeds its capacity`
     : `${label}: a compression member exceeds KL/r = ${SLENDER_LIMIT_COMPRESSION} (§E2)`

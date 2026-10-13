@@ -314,11 +314,16 @@ describe('scope gate — fail closed on compression the check does not cover', (
   const strut = group([f('s', -50, 2, 'diagonal')])
   const tie = group([f('t', 50, 2, 'diagonal')])
 
-  it('never adopts a double angle for a compression group (§E6) — every 2L is rejected on scope', () => {
+  it('a double-angle strut is designed by §E6 — and one whose connectors are too far apart is rejected on the connector gate', () => {
     const only = candidateSections(['L'], { doubleAngles: true }).filter((c) => c.double)
     const x = sizeGroup(strut, only, MAT)
-    expect(x.section).toBeNull()
-    expect(x.rejected.every((q) => q.gate === 'scope' && q.reason!.includes('§E6'))).toBe(true)
+    expect(x.ok).toBe(true)
+    expect(x.section!.double).toBe(true)
+    expect(x.rejected.some((q) => q.gate === 'scope')).toBe(false)
+    // with no intermediate connectors a/ri = L/rz is far past ¾·(Lc/r): every 2L that is strong enough is refused on §E6.2
+    const bare = sizeGroup(strut, only, { ...MAT, connectors: 0 })
+    expect(bare.rejected.some((q) => q.gate === 'connectors')).toBe(true)
+    expect(rejectionNote('2L', 'connectors')).toContain('§E6.2')
   })
 
   it('a tee or channel strut is now DESIGNED by Chapter E (§E4 flexural-torsional), at a utilisation it actually meets', () => {
@@ -340,8 +345,10 @@ describe('scope gate — fail closed on compression the check does not cover', (
   })
 
   it('a ZERO-force member counts as compression for the gate', () => {
-    const only2L = candidateSections(['L'], { doubleAngles: true }).filter((c) => c.double)
-    const r = sizeGroup(group([f('z', 0, 2, 'vertical')]), only2L, MAT)
+    // unequal angles with a leg ratio ≥ 1.7 are outside §E5 (and E4-4) — out of scope in compression
+    const outside = candidateSections(['L']).filter((c) => Math.max(c.base.leg1!, c.base.leg2!) / Math.min(c.base.leg1!, c.base.leg2!) >= 1.7)
+    expect(outside.length).toBeGreaterThan(0)
+    const r = sizeGroup(group([f('z', 0, 2, 'vertical')]), outside, MAT)
     expect(r.section).toBeNull()
   })
 

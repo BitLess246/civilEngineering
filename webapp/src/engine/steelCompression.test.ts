@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { steelCompression, torsionProps, torsionalFe } from './steelCompression'
+import { steelCompression, torsionProps, torsionalFe, doubleAngleCompression } from './steelCompression'
 import { shapeByName } from './aiscSections'
 
 const sh = (n: string) => shapeByName(n)!
@@ -102,5 +102,42 @@ describe('scope', () => {
     expect(r.applicable).toBe(true)
     expect(r.clause).toBe('E5')
     expect(r.FeFlexural).toBeCloseTo(Math.PI ** 2 * 200_000 / 153.75 ** 2, 9)
+  })
+})
+
+describe('§E6 built-up double angle — hand calcs (2L 64×64×6.4, gap 10 mm, Lc 2 m, Fy 248)', () => {
+  const L = sh('L64x64x6.4'), Fy2 = 248
+  // ry(2L) = √(19.4² + (18.1 + 5)²) = 30.17; rz = 12.2; J = 2·(2·63.5 − 6.35)·6.35³/3 = 20 594.8
+  // ȳ = 18.2145 from the outstanding legs' face → yo 15.0395; r̄o² 1 512.52; H 0.85046; Fez 684.358
+  it('fillers at the third points (a = 666.7, a/ri 54.6 > 40): E6-2 lifts KL/r about y from 66.30 to 71.71', () => {
+    const r = doubleAngleCompression(L, 10, Fy2, 2000, 2000, 2000 / 3)
+    expect(r.e6.aRi).toBeCloseTo(54.645, 2)
+    expect(r.e6.slendernessYo).toBeCloseTo(66.300, 2)
+    expect(r.e6.slendernessYm).toBeCloseTo(71.710, 2)                // √(66.30² + (0.5·54.645)²)
+    expect(r.FeTorsional).toBeCloseTo(335.578, 2)                     // E4-3 with Fey(m) 383.862
+    expect(r.slendernessX).toBeCloseTo(103.093, 2)                    // x governs: Fex 185.73
+    expect(r.mode).toBe('flexural')
+    expect(r.Fcr).toBeCloseTo(141.817, 2)
+    expect(r.phiPn).toBeCloseTo(196.048, 2)
+    expect(r.e6.spacingOK).toBe(true)                                 // 54.6 ≤ 0.75·103.1
+    expect(r.clause).toBe('E6')
+  })
+  it('no intermediate connectors (a = L, a/ri 163.9): FLEXURAL-TORSIONAL governs, and §E6.2 fails', () => {
+    const r = doubleAngleCompression(L, 10, Fy2, 2000, 2000, 2000)
+    expect(r.e6.slendernessYm).toBeCloseTo(105.425, 2)
+    expect(r.FeTorsional).toBeCloseTo(169.281, 2)                     // < Fex 185.73, < Fey(m) 177.60
+    expect(r.mode).toBe('flexural-torsional')
+    expect(r.Fcr).toBeCloseTo(134.323, 2)
+    expect(r.phiPn).toBeCloseTo(185.688, 2)
+    expect(r.e6.spacingOK).toBe(false)                                // 163.9 > 0.75·105.4
+    expect(r.clause).toBe('E6 + E4')
+  })
+  it('a/ri ≤ 40 leaves the slenderness unmodified (E6-1)', () => {
+    const r = doubleAngleCompression(L, 10, Fy2, 2000, 2000, 400)     // a/ri 32.8
+    expect(r.e6.slendernessYm).toBeCloseTo(r.e6.slendernessYo, 12)
+  })
+  it('more connectors never weaken the member', () => {
+    const p = [2000, 1000, 666.7, 500, 400].map((a) => doubleAngleCompression(L, 10, Fy2, 2000, 2000, a).phiPn)
+    for (let k = 1; k < p.length; k++) expect(p[k]).toBeGreaterThanOrEqual(p[k - 1] - 1e-9)
   })
 })
