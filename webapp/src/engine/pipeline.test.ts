@@ -3,6 +3,7 @@ import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarc
 import { camberFor, designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings, governingCombos, pedestalDrops, peakUtilisation, failingChecks } from './pipeline'
 import { nextHeavierW, shapeByName } from './aiscSections'
 import { steelCompression } from './steelCompression'
+import { channelFlexure, channelWeakFlexure, teeFlexure } from './openFlexure'
 import { computeSeismic } from './seismic'
 import { nscpCombos } from './beamAnalysis'
 import { validateMesh } from './meshValidation'
@@ -269,20 +270,26 @@ describe('steel design pipeline (AISC routing + base plates)', () => {
     }
   })
 
-  it('a tee beam goes UNCHECKED instead of collecting the compact §F2 strength', () => {
+  it('a tee beam is designed by §F9 in BOTH senses — never by the compact-I §F2 strength', () => {
     const m = steelModel()
     m.sections = m.sections.map((s) => ({ ...s, shape: 'WT155x19.4' }))
     const d = designStructure(m, soil)!
-    // no beam row invented for a shape §F2/§F3 does not cover…
-    expect(d.steelBeams).toHaveLength(0)
-    // …and the members are named, with the clause that would be needed
-    const beams = d.unchecked.filter((u) => u.role === 'beam' || u.role === 'girder')
-    expect(beams).toHaveLength(4)
-    for (const u of beams) {
-      expect(u.shape).toBe('WT155x19.4')
-      expect(u.reason).toMatch(/§F9/)
+    expect(d.steelBeams).toHaveLength(4)
+    for (const b of d.steelBeams) {
+      expect(b.clause).toBe('F9')
+      expect(b.shearClause).toBe('G3')
+      const t = b.tee!
+      // sagging against stem-in-tension, hogging against stem-in-compression
+      const ft = teeFlexure(shapeByName('WT155x19.4')!, 345, b.Lb, 'tension')
+      const fc = teeFlexure(shapeByName('WT155x19.4')!, 345, b.Lb, 'compression')
+      expect(t.phiMnPos).toBeCloseTo(ft.phiMn, 9)
+      expect(t.phiMnNeg).toBeCloseTo(fc.phiMn, 9)
+      expect(b.utilM).toBeCloseTo(Math.max(t.Mpos / t.phiMnPos, t.Mneg / t.phiMnNeg), 9)
     }
-    // and nothing green: an unchecked member fails the overall gate
+    // tee COLUMNS stay unchecked: no §F clause for their stem-axis bending
+    const cols = d.unchecked.filter((u) => u.role === 'column')
+    expect(cols.length).toBeGreaterThan(0)
+    expect(cols[0].reason).toContain('weak-axis')
     expect(designOK(d)).toBe(false)
   })
 })
@@ -809,18 +816,31 @@ describe('unchecked members — unsupported steel beam families must not read as
     const beamSecs = new Set(m.members.filter((x) => x.role === 'beam' || x.role === 'girder').map((x) => x.section))
     m.sections = m.sections.map((s) =>
       beamSecs.has(s.id)
-        ? { ...s, material: 'steel' as const, shape: 'C75x8.9', steelFy: 345, steelFu: 448 }
+        ? { ...s, material: 'steel' as const, shape: 'L76x76x6.4', steelFy: 345, steelFu: 448 }
         : { ...s, material: 'steel' as const, shape: 'W310x97', steelFy: 345, steelFu: 448 })
     return m
   }
 
-  it('C-shape beams land in design.unchecked and fail designOK', () => {
+  it('angle beams (no §F10) land in design.unchecked and fail designOK', () => {
     const d = designStructure(channelBeamModel(), soil)!
-    // previously: no steelBeams row at all and designOK could read true
     expect(d.steelBeams).toHaveLength(0)
     expect(d.unchecked).toHaveLength(4)                    // 2 beams + 2 girders
-    expect(d.unchecked.every((u) => u.shape === 'C75x8.9')).toBe(true)
+    expect(d.unchecked.every((u) => u.shape === 'L76x76x6.4')).toBe(true)
     expect(designOK(d)).toBe(false)
+  })
+
+  it('channel beams are designed by §F2 (compact) + §G2.1 at φv 0.90', () => {
+    const m = makeModel()
+    const beamSecs = new Set(m.members.filter((x) => x.role === 'beam' || x.role === 'girder').map((x) => x.section))
+    m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const, shape: beamSecs.has(s.id) ? 'C250x22.8' : 'W310x97', steelFy: 345, steelFu: 448 }))
+    const d = designStructure(m, soil)!
+    expect(d.unchecked).toEqual([])
+    expect(d.steelBeams).toHaveLength(4)
+    for (const b of d.steelBeams) {
+      expect(b.clause).toBe('F2')
+      expect(b.phiV).toBe(0.9)
+      expect(b.phiMn).toBeCloseTo(channelFlexure(shapeByName('C250x22.8')!, 345, b.Lb).phiMn, 9)
+    }
   })
 
   it('the optimizer reports converged=false instead of "fixing" what it never checked', () => {
@@ -1867,12 +1887,22 @@ describe('HSS / pipe frame members — designed, not dropped (steel-family phase
     for (const c of d.steelColumns) expect(c.phiMn).toBeCloseTo(c.phiMny, 9)
   })
 
-  it('REGRESSION: a channel column with moment is UNCHECKED, not passed on axial load alone', () => {
-    const d = designStructure(steel((role) => role === 'column' ? 'C150x12.2' : 'W310x79'), soil)!
+  it('REGRESSION: an angle column with moment is UNCHECKED, not passed on axial load alone', () => {
+    const d = designStructure(steel((role) => role === 'column' ? 'L76x76x6.4' : 'W310x79'), soil)!
     const cols = d.unchecked.filter((u) => u.role === 'column')
     expect(cols).toHaveLength(d.steelColumns.length)
     expect(cols[0].reason).toContain('not implemented')
     expect(designOK(d)).toBe(false)
+  })
+
+  it('a channel column now has a real §H1 moment term: §F2 strong axis, §F6 weak axis', () => {
+    const d = designStructure(steel((role) => role === 'column' ? 'C250x22.8' : 'W310x79'), soil)!
+    expect(d.unchecked.filter((u) => u.role === 'column')).toEqual([])
+    for (const c of d.steelColumns) {
+      expect(c.flexureNote).toBeUndefined()
+      expect(c.phiMny).toBeCloseTo(channelWeakFlexure(shapeByName('C250x22.8')!, 345).phiMn, 9)
+      expect(c.phiMn).toBeCloseTo(channelFlexure(shapeByName('C250x22.8')!, 345, c.L * 1000).phiMn, 9)
+    }
   })
 
   it('a slender-wall HSS is unchecked with its clause (§F7.2(c)), not passed', () => {
