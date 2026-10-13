@@ -20,6 +20,13 @@ import type { F3Analysis } from '../engine/frame3d'
 import type { StructureDesign } from '../engine/pipeline'
 import type { SeismicResult, DriftRow } from '../engine/seismic'
 import type { ReportSection, ScheduleReport } from './scheduleReport'
+import type { ModalResult } from '../engine/modal'
+import type { ResponseSpectrumResult } from '../engine/responseSpectrum'
+import type { PushoverModelResult } from '../engine/pushoverModel'
+import type { BiaxialPushoverResult } from '../engine/biaxialFrameModel'
+import type { TimeHistoryModelResult } from '../engine/timeHistoryModel'
+import type { NonlinearModelResult } from '../engine/nonlinearModel'
+import type { NonlinearFrameModelResult } from '../engine/nonlinearFrameModel'
 
 export type Cell = string | number
 export type { ReportSection }
@@ -241,6 +248,120 @@ export function seismicSections(seis: { x: SeismicResult; z: SeismicResult } | n
   return out
 }
 
+// ── dynamics, pushover, nonlinear ────────────────────────────────────────
+
+const XYZ = ['X', 'Y', 'Z'] as const
+
+export function modalSections(modal: ModalResult): ReportSection[] {
+  const cum = [0, 0, 0]
+  return [
+    {
+      title: 'Modal periods',
+      columns: ['Mode', 'T (s)', 'f (Hz)', 'ω (rad/s)',
+        ...XYZ.map((d) => `Meff ${d} (t)`), ...XYZ.map((d) => `Meff/M ${d}`), ...XYZ.map((d) => `ΣMeff/M ${d}`)],
+      rows: modal.modes.map((m, k) => {
+        m.effMassRatio.forEach((r, q) => { cum[q] += r })
+        return [k + 1, num(m.period), num(m.freq), num(m.omega), ...m.effMass.map(num), ...m.effMassRatio.map(num), ...cum.map(num)]
+      }),
+    },
+    {
+      title: 'Mode shapes',
+      columns: ['Mode', 'Node', 'ux', 'uy', 'uz'],
+      rows: modal.modes.flatMap((m, k) => Object.entries(m.shape).map(([node, u]) => [k + 1, node, ...u.map(num)])),
+    },
+  ]
+}
+
+export function spectrumSections(rsa: ResponseSpectrumResult): ReportSection[] {
+  return [{
+    title: 'Response spectrum',
+    columns: ['Mode', 'T (s)', 'Sa (m/s²)', 'Sa/g', ...XYZ.map((d) => `V ${d} (kN)`)],
+    rows: [
+      ...rsa.modalForces.map((f) => [f.modeIdx + 1, num(f.period), num(f.Sa), num(f.SaG), ...f.baseShear.map(num)] as Cell[]),
+      ['SRSS', '', '', '', ...rsa.srss.map(num)],
+      ['CQC', '', '', '', ...rsa.cqc.map(num)],
+      ['CQC / static', '', '', '', ...rsa.cqcRatio.map((r) => (r == null ? '—' : num(r)))],
+    ],
+  }]
+}
+
+export function timeHistorySections(th: TimeHistoryModelResult): ReportSection[] {
+  const r = th.result, hist = r.nodeHistory
+  return [
+    {
+      title: 'Time history',
+      columns: ['t (s)', `Base shear ${XYZ[r.dir]} (kN)`, ...(hist ? XYZ.map((d) => `${hist.node} u${d.toLowerCase()} (mm)`) : [])],
+      rows: r.t.map((t, k) => [num(t), num(r.baseShear[k]), ...(hist?.u[k] ? hist.u[k].map((v) => num(v * 1000)) : [])]),
+    },
+    {
+      title: 'Time history modes',
+      columns: ['Mode', 'T (s)', 'Γ', 'peak |D| (mm)', 'peak ω²D (m/s²)'],
+      rows: r.modal.map((m, k) => [k + 1, num(m.period), num(m.gamma), num(m.peakD * 1000), num(m.peakA)]),
+    },
+    {
+      title: 'Time history peaks',
+      columns: ['Node', ...XYZ.map((d) => `peak |u${d.toLowerCase()}| (mm)`)],
+      rows: Object.entries(r.peakDisp).map(([node, u]) => [node, ...u.map((v) => num(v * 1000))]),
+    },
+  ]
+}
+
+export function pushoverSections(po: PushoverModelResult): ReportSection[] {
+  return [
+    {
+      title: 'Pushover curve',
+      columns: ['Event', 'λ', 'Base shear (kN)', `Roof disp ${po.controlNode} (mm)`, 'Hinge formed', 'Hinges'],
+      rows: po.result.curve.map((c) => [c.event, num(c.lambda), num(c.baseShear), num(c.roofDisp * 1000),
+        c.newHinge ? `${c.newHinge.member}/${c.newHinge.end} ${c.newHinge.type}${c.newHinge.axis ? ` ${c.newHinge.axis}` : ''}` : '', c.numHinges]),
+    },
+    ...flattenRows('Pushover hinges', po.result.hinges, 'member'),
+  ]
+}
+
+export function biaxialSections(bx: BiaxialPushoverResult): ReportSection[] {
+  return [{
+    title: 'Biaxial pushover',
+    columns: [`Disp ${bx.controlNode} ${bx.controlDir} (mm)`, 'Base shear (kN)', 'Hinges yielded'],
+    rows: bx.curve.map((c) => [num(c.disp * 1000), num(c.shear), c.hinges]),
+  }]
+}
+
+/** The shear-building nonlinear time history (storey springs). */
+export function nonlinearStoreySections(nl: { inelastic: NonlinearModelResult | null; elastic: NonlinearModelResult | null }): ReportSection[] {
+  const out: ReportSection[] = []
+  for (const [tag, r] of [['inelastic', nl.inelastic], ['elastic', nl.elastic]] as const) {
+    if (!r) continue
+    const T = tag === 'inelastic' ? 'NLTH' : 'NLTH elastic'
+    out.push(...flattenRows(`${T} storeys`, r.storeys, 'storey').map((x) => ({
+      ...x,
+      rows: x.rows.map((row, k) => [...row, ...(tag === 'inelastic' ? [num(r.response.ductility[k] ?? NaN), num(r.response.dissipated[k] ?? NaN)] : [])]),
+      columns: [...x.columns, ...(tag === 'inelastic' ? ['Ductility demand', 'Dissipated (kN·m)'] : [])],
+    })))
+    out.push({
+      title: `${T} history`,
+      columns: ['Step', 'Base force (kN)', ...r.storeys.map((s) => `Storey ${s.storey} u (mm)`)],
+      rows: r.response.u.map((u, k) => [k, num(r.response.baseForce[k] ?? NaN), ...u.slice(0, r.storeys.length).map((v) => num(v * 1000))]),
+    })
+  }
+  return out
+}
+
+/** The hinge-frame nonlinear time history. */
+export function nonlinearFrameSections(nl: { inelastic: NonlinearFrameModelResult | null; elastic: NonlinearFrameModelResult | null }): ReportSection[] {
+  const out: ReportSection[] = []
+  for (const [tag, r] of [['inelastic', nl.inelastic], ['elastic', nl.elastic]] as const) {
+    if (!r) continue
+    const T = tag === 'inelastic' ? 'NL frame' : 'NL frame elastic'
+    out.push({
+      title: `${T} history`,
+      columns: ['t (s)', 'Control disp (mm)', 'Base shear (kN)'],
+      rows: r.response.t.map((t, k) => [num(t), num(r.response.disp[k] * 1000), num(r.response.baseShear[k])]),
+    })
+    if (tag === 'inelastic') out.push(...flattenRows(`${T} hinges`, r.response.hinges, 'member'))
+  }
+  return out
+}
+
 // ── design schedules ─────────────────────────────────────────────────────
 
 const SCHEDULE_TITLES: Partial<Record<keyof StructureDesign, string>> = {
@@ -272,6 +393,13 @@ export interface ModelTablesInput {
   design?: StructureDesign | null
   seismic?: { x: SeismicResult; z: SeismicResult } | null
   drift?: readonly DriftRow[] | null
+  modal?: ModalResult | null
+  rsa?: ResponseSpectrumResult | null
+  timeHistory?: TimeHistoryModelResult | null
+  pushover?: PushoverModelResult | null
+  biaxial?: BiaxialPushoverResult | null
+  nonlinear?: { inelastic: NonlinearModelResult | null; elastic: NonlinearModelResult | null } | null
+  nonlinearFrame?: { inelastic: NonlinearFrameModelResult | null; elastic: NonlinearFrameModelResult | null } | null
 }
 
 /**
@@ -288,6 +416,14 @@ export function modelResultTables(i: ModelTablesInput): ScheduleReport {
   }
   const seis = seismicSections(i.seismic, i.drift)
   if (seis.length) { sections.push(...seis); included.push('Seismic') }
+  const add = (label: string, part: ReportSection[]) => { if (part.length) { sections.push(...part); included.push(label) } }
+  if (i.modal) add('Modal', modalSections(i.modal))
+  if (i.rsa) add('Response spectrum', spectrumSections(i.rsa))
+  if (i.timeHistory) add('Time history', timeHistorySections(i.timeHistory))
+  if (i.pushover) add('Pushover', pushoverSections(i.pushover))
+  if (i.biaxial) add('Biaxial pushover', biaxialSections(i.biaxial))
+  if (i.nonlinear) add('Nonlinear time history', nonlinearStoreySections(i.nonlinear))
+  if (i.nonlinearFrame) add('Nonlinear frame time history', nonlinearFrameSections(i.nonlinearFrame))
   if (i.design) { sections.push(...designSections(i.design)); included.push('Design schedules') }
   const meta: [string, string][] = [
     ['Model', i.model.name || 'Untitled'],
@@ -296,6 +432,7 @@ export function modelResultTables(i: ModelTablesInput): ScheduleReport {
     ['Units', 'geometry m · displacement mm · rotation rad · sections mm · force kN · moment kN·m · pressure kPa'],
     ['Sign convention', 'Member end forces are local forces ON the member (x′ along i→j, y′ section depth, z′ width)'],
   ]
+  if (i.modal) meta.push(['Mass model', i.modal.massModel], ['Total mass X/Y/Z (t)', i.modal.totalMass.map((v) => String(num(v))).join(' / ')])
   if (i.design) {
     meta.push(['Governing combination', i.design.govName])
     const t = i.design.totals

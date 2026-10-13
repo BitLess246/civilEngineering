@@ -117,3 +117,61 @@ describe('the .xlsx itself', () => {
     expect(lc.rows.at(-1)).toContain('skipped')
   })
 })
+
+describe('modelResultTables — dynamics, pushover and nonlinear', async () => {
+  const { modalAnalysis } = await import('../engine/modal')
+  const { computeResponseSpectrum } = await import('../engine/responseSpectrum')
+  const { runTimeHistoryModel, makeGroundMotion } = await import('../engine/timeHistoryModel')
+  const { runPushoverModel } = await import('../engine/pushoverModel')
+  const { runBiaxialPushover } = await import('../engine/biaxialFrameModel')
+  const { runNonlinearModel } = await import('../engine/nonlinearModel')
+  const { runNonlinearFrameModel } = await import('../engine/nonlinearFrameModel')
+
+  const modal = modalAnalysis(model, 6)!
+  const rsa = computeResponseSpectrum(modal, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5 } as never)
+  const gm = makeGroundMotion({ kind: 'rampedSine', dt: 0.02, duration: 2, pga: 3, freq: 1.5, dir: 0 })
+  const timeHistory = runTimeHistoryModel(model, { spec: { kind: 'rampedSine', dt: 0.02, duration: 2, pga: 3, freq: 1.5, dir: 0 }, nModes: 6 })!
+  const pushover = runPushoverModel(model)!
+  const biaxial = runBiaxialPushover(model, { steps: 6 })!
+  const nonlinear = { inelastic: runNonlinearModel(model, gm), elastic: runNonlinearModel(model, gm, { elastic: true }) }
+  const nonlinearFrame = { inelastic: runNonlinearFrameModel(model, gm), elastic: runNonlinearFrameModel(model, gm, { elastic: true }) }
+  const r = modelResultTables({ model, modal, rsa, timeHistory, pushover, biaxial, nonlinear, nonlinearFrame })
+  const sh = (t: string) => r.sections.find((s) => s.title === t)!
+
+  it('modal: one row per mode with periods, mass ratios and their running sum; every mode shape', () => {
+    const t = sh('Modal periods')
+    expect(t.rows).toHaveLength(modal.modes.length)
+    expect(t.rows[0][1]).toBeCloseTo(modal.modes[0].period, 4)
+    const cumX = t.columns.indexOf('ΣMeff/M X')
+    expect(t.rows.at(-1)![cumX]).toBeCloseTo(modal.modes.reduce((s, m) => s + m.effMassRatio[0], 0), 4)
+    expect(sh('Mode shapes').rows).toHaveLength(modal.modes.reduce((s, m) => s + Object.keys(m.shape).length, 0))
+  })
+  it('response spectrum: per mode, then SRSS and CQC', () => {
+    const t = sh('Response spectrum')
+    expect(t.rows).toHaveLength(rsa.modalForces.length + 3)
+    expect(t.rows.at(-2)![0]).toBe('CQC')
+  })
+  it('time history: the whole record, the modal peaks and every node\'s peak (mm)', () => {
+    expect(sh('Time history').rows).toHaveLength(timeHistory.result.t.length)
+    expect(sh('Time history').rows[5][1]).toBeCloseTo(timeHistory.result.baseShear[5], 3)
+    const node = Object.keys(timeHistory.result.peakDisp)[0]
+    const row = sh('Time history peaks').rows.find((x) => x[0] === node)!
+    expect(row[1]).toBeCloseTo(timeHistory.result.peakDisp[node][0] * 1000, 3)
+  })
+  it('pushover: the capacity curve event by event, and the hinges', () => {
+    expect(sh('Pushover curve').rows).toHaveLength(pushover.result.curve.length)
+    expect(sh('Pushover hinges').rows).toHaveLength(pushover.result.hinges.length)
+    expect(sh('Biaxial pushover').rows).toHaveLength(biaxial.curve.length)
+  })
+  it('nonlinear: storey springs with ductility, the step history, and the hinge frame', () => {
+    expect(sh('NLTH storeys').columns).toContain('Ductility demand')
+    expect(sh('NLTH history').rows).toHaveLength(nonlinear.inelastic!.response.u.length)
+    expect(sh('NL frame history').rows).toHaveLength(nonlinearFrame.inelastic!.response.t.length)
+    expect(sh('NL frame hinges').rows).toHaveLength(nonlinearFrame.inelastic!.response.hinges.length)
+    expect(sh('NL frame elastic history')).toBeDefined()
+  })
+  it('lists each in the summary', () => {
+    expect(r.meta.find(([k]) => k === 'Included')![1])
+      .toBe('Model, Modal, Response spectrum, Time history, Pushover, Biaxial pushover, Nonlinear time history, Nonlinear frame time history')
+  })
+})
