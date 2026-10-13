@@ -214,9 +214,12 @@ export default function TrussSpace() {
       </p>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
-        {/* 3D viewport */}
-        <div className="no-print lg:sticky lg:top-4">
-          <div className="relative h-[70vh] min-h-[420px] overflow-hidden rounded-xl border border-hairline bg-sheet shadow-sm">
+        {/* 3D viewport. The section and results sit under it in the same
+            column (the left column used to end at the viewport and leave a
+            tall empty gap beside the inputs); three grid items, so a phone
+            still reads viewport → inputs → results. */}
+        <div className="min-w-0 lg:col-start-1 lg:row-start-1">
+          <div className="no-print relative h-[60vh] min-h-[420px] overflow-hidden rounded-xl border border-hairline bg-sheet shadow-sm">
             <Canvas camera={{ position: [cx - span * 0.35, cyc + height + span * 0.22, Math.max(span, 6) * 1.0], fov: 45 }} onPointerMissed={() => setSelected(null)}>
               <color attach="background" args={['#f8fafc']} />
               <ambientLight intensity={0.9} />
@@ -257,8 +260,8 @@ export default function TrussSpace() {
           </div>
         </div>
 
-        {/* controls + results */}
-        <div className="space-y-4">
+        {/* controls */}
+        <div className="space-y-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           {custom ? (
             <TrussEditor model={custom} onChange={setCustom} onReset={() => { setCustom(null); setSelected(null) }} />
           ) : (
@@ -349,16 +352,25 @@ export default function TrussSpace() {
             <Num label="Fy" unit="MPa" value={Fy} onChange={setFy} step="5" />
             <Num label="E" unit="MPa" value={E} onChange={setE} step="1000" />
             <Num label="Effective length K" value={K} onChange={setK} step="0.05" />
-            <div className="col-span-full flex items-center gap-3 border-t border-hairline-2 pt-2">
-              {!customSec && <SectionShape sec={eff} />}
-              <div className="text-[11px] text-muted">
-                <div className="font-semibold text-brand">{eff.label}</div>
-                <div>A = {Math.round(eff.A)} mm²</div>
-                <div>rx {eff.rx.toFixed(1)} · ry {eff.ry.toFixed(1)} mm</div>
-                <div>r_min = {eff.rmin.toFixed(1)} mm (governs buckling)</div>
-              </div>
-            </div>
           </Card>
+        </div>
+        {/* section + results */}
+        <div className="min-w-0 space-y-4 lg:col-start-1 lg:row-start-2">
+          <ResultCard title={`Section — ${eff.label}`}>
+            <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+              {!customSec && <div className="w-[200px] max-w-full shrink-0"><SectionShape sec={eff} /></div>}
+              <dl className="grid grid-cols-[auto_auto] gap-x-6 gap-y-1 text-[12.5px] tabular-nums">
+                <dt className="text-muted">Area A</dt><dd className="font-semibold text-ink">{Math.round(eff.A)} mm²</dd>
+                <dt className="text-muted">r<sub>x</sub> · r<sub>y</sub></dt><dd className="font-semibold text-ink">{eff.rx.toFixed(1)} · {eff.ry.toFixed(1)} mm</dd>
+                <dt className="text-muted">r<sub>min</sub></dt><dd className="font-semibold text-ink">{eff.rmin.toFixed(1)} mm <span className="font-normal text-muted">(governs buckling)</span></dd>
+                <dt className="text-muted">Mass</dt><dd className="font-semibold text-ink">{(eff.A * 7850 / 1e6).toFixed(2)} kg/m</dd>
+                <dt className="text-muted">Compression check</dt>
+                <dd className={scope.supported ? 'font-semibold text-ink' : 'font-semibold text-fail'}>
+                  {scope.supported ? (scope.e5 ? '§E5 single angle' : '§E3 flexural buckling') : 'not covered'}
+                </dd>
+              </dl>
+            </div>
+          </ResultCard>
 
           {result && (
             <ResultCard title={`Analysis — ${result.determinacy.status}`}>
