@@ -125,11 +125,22 @@ describe('compressionScope — AISC 360-16 Table B4.1a λr and §E4/§E5 applica
   const E = 200_000, Fy = 248, rt = Math.sqrt(E / Fy)   // √(E/Fy) = 28.40
   const sc = (name: string, double = false) => compressionScope(effectiveSection(shapeByName(name)!, double), E, Fy)
 
-  it('tees and channels are in scope (§E4 implemented); double angles are not (§E6)', () => {
+  it('tees, channels (§E4) and back-to-back double angles (§E6) are in scope', () => {
     expect(sc('WT75x9').supported).toBe(true)
     expect(sc('C150x12.2').supported).toBe(true)
-    expect(sc('L51x51x6.4', true).supported).toBe(false)
-    expect(sc('L51x51x6.4', true).reason).toContain('§E6')
+    expect(sc('L51x51x6.4', true).supported).toBe(true)
+  })
+
+  it('a 2L member is checked by §E6 at L/(n+1) connector spacing, and fails without §E6.2', () => {
+    const sec = { A: 2 * 768, r: 19.4, E, Fy, K: 1, shape: shapeByName('L64x64x6.4')!, doubleAngle: { gap: 10, connectors: 2 } }
+    const d = designTrussMember({ id: 'c', N: -100, L: 2, kind: 'diagonal', i: 'a', j: 'b' }, sec)
+    expect(d.e6!.a).toBeCloseTo(2000 / 3, 6)
+    expect(d.phiPn).toBeCloseTo(196.048, 2)                     // the steelCompression hand calc
+    expect(d.ok).toBe(true)
+    const none = designTrussMember({ id: 'c', N: -100, L: 2, kind: 'diagonal', i: 'a', j: 'b' }, { ...sec, doubleAngle: { gap: 10, connectors: 0 } })
+    expect(none.e6!.spacingOK).toBe(false)
+    expect(none.util).toBeLessThan(1)                           // strong enough…
+    expect(none.ok).toBe(false)                                 // …but not detailed to §E6.2
   })
 
   it('angle legs: slender ones (> 0.45√(E/Fy) = 12.78) are taken by §E7 up to 0.71√(E/Fy) = 20.16; past it, Eq. E4-4', () => {

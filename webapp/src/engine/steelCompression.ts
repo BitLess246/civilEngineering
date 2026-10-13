@@ -170,3 +170,94 @@ export function steelCompression(
     Pn, phiPn: PHI_C * Pn, slenderOK: slenderness <= 200, clause,
   }
 }
+
+// ── §E6 built-up members: back-to-back double angles ─────────────────────
+//
+// Two angles, long legs back to back across a gap (gusset / filler plate
+// thickness), connected by intermediate fillers at spacing a — the 2L the
+// catalogue builds (`doubleAngle`): y is the vertical axis of symmetry
+// through the gap, x the horizontal axis through the centroid; the
+// outstanding (short) legs lie at the bottom.
+//
+//   §E6.1 buckling about y slides the two angles past each other, so the
+//         connectors carry shear and the member is softer than a solid one:
+//           a/ri ≤ 40:  (Lc/r)m = (Lc/r)o                         (E6-1)
+//           a/ri > 40:  (Lc/r)m = √[(Lc/r)o² + (Ki·a/ri)²],  Ki = 0.50 for
+//                       angles back-to-back                       (E6-2)
+//         ri = the least r of ONE angle (rz). Buckling about x moves both
+//         angles together — no connector shear, plain §E3.
+//   §E4   a 2L is singly symmetric (about y): flexural-torsional buckling by
+//         E4-3 with Fey from the MODIFIED slenderness (as the AISC Manual's
+//         double-angle tables do). Shear centre at the outstanding legs'
+//         mid-plane on the symmetry axis, J = 2·Σb·t³/3, Cw ≈ 0 (small for
+//         angles; neglecting it is conservative).
+//   §E7   slender legs, all four, at the governing Fcr.
+//   §E6.2 dimensional: a/ri ≤ ¾ of the governing slenderness of the
+//         built-up member — reported as `e6.spacingOK`, and the member does
+//         not pass without it. End connections are assumed welded or
+//         pretensioned-bolted (also §E6.2), which is what a gusset 2L is.
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface DoubleAngleE6 {
+  /** Connector spacing, its ratio to the single angle's rz, and Ki. */
+  a: number; ri: number; aRi: number; Ki: number
+  /** Built-up slenderness about y before and after §E6.1. */
+  slendernessYo: number; slendernessYm: number
+  /** §E6.2: a/ri ≤ 0.75·(Lc/r) governing. */
+  spacingOK: boolean
+}
+
+/**
+ * Compressive strength of a back-to-back double angle.
+ * `angle`: one angle; `gap`: separation between backs, mm; Lcx/Lcy mm (with
+ * Cw ≈ 0 the torsional term has no length in it, so there is no Lcz);
+ * `a`: intermediate connector spacing, mm (the member length when there are
+ * none — then a/ri is large and E6-2 penalises it accordingly).
+ */
+export function doubleAngleCompression(
+  angle: AiscShape, gap: number, Fy: number, Lcx: number, Lcy: number, a: number,
+  opts: { E?: number } = {},
+): SteelCompression & { e6: DoubleAngleE6 } {
+  const E = opts.E ?? E_STEEL
+  const t = angle.t!, legV = Math.max(angle.leg1!, angle.leg2!), legH = Math.min(angle.leg1!, angle.leg2!)
+  const A = 2 * angle.A
+  // built-up radii (as `doubleAngle`): rx unchanged, ry by parallel axis across the gap
+  const xbar = angle.xbar ?? 0
+  const rx = angle.rx, ry = Math.sqrt(angle.ry ** 2 + (xbar + gap / 2) ** 2)
+  const ri = angle.rz ?? Math.min(angle.rx, angle.ry)
+  const aRi = a / ri, Ki = 0.5
+  const slendernessX = Lcx / rx
+  const slendernessYo = Lcy / ry
+  const slendernessYm = aRi <= 40 ? slendernessYo : Math.sqrt(slendernessYo ** 2 + (Ki * aRi) ** 2)   // E6-1 / E6-2
+  const slenderness = Math.max(slendernessX, slendernessYm)
+
+  // §E4-3 about the symmetry axis y, with Fey from (Lc/r)m
+  const Ix = A * rx ** 2, Iy = A * ry ** 2
+  const Ah = legH * t, Av = (legV - t) * t
+  const ybar = (Ah * t / 2 + Av * (t + (legV - t) / 2)) / (Ah + Av)   // from the outstanding legs' outer face
+  const yo = ybar - t / 2                                              // to the shear centre (outstanding-leg mid-plane)
+  const J = 2 * ((legV + legH - t) * t ** 3) / 3
+  const ro2 = yo ** 2 + (Ix + Iy) / A                                  // E4-11
+  const H = 1 - yo ** 2 / ro2                                          // E4-10
+  const Fez = (G_STEEL * J) / (A * ro2)                                // E4-9 with Cw ≈ 0
+  const Fey = (Math.PI ** 2 * E) / slendernessYm ** 2
+  const sum = Fey + Fez
+  const FeFT = (sum / (2 * H)) * (1 - Math.sqrt(1 - (4 * Fey * Fez * H) / sum ** 2))   // E4-3
+  const Fex = (Math.PI ** 2 * E) / slendernessX ** 2
+
+  const FeFlex = Math.min(Fex, Fey)
+  const Fe = Math.min(FeFlex, FeFT)
+  const mode: CompressionMode = FeFT < FeFlex ? 'flexural-torsional' : 'flexural'
+  const Fcr = Fy / Fe <= 2.25 ? 0.658 ** (Fy / Fe) * Fy : 0.877 * Fe  // E3-2 / E3-3
+  const elements = braceElements(angle, Fy)
+  const Ae = 2 * braceEffectiveArea(angle, Fy, Fcr, elements)          // §E7, both angles
+  const Pn = (Fcr * Ae) / 1000
+  const spacingOK = aRi <= 0.75 * slenderness + 1e-9                  // §E6.2
+  const clause = ['E6', ...(mode === 'flexural-torsional' ? ['E4'] : []), ...(Ae < A - 1e-9 ? ['E7'] : [])].join(' + ')
+  return {
+    applicable: true, slendernessX, slendernessY: slendernessYm, slenderness,
+    FeFlexural: FeFlex, FeTorsional: FeFT, Fe, mode, Fcr, elements, Ae,
+    Pn, phiPn: PHI_C * Pn, slenderOK: slenderness <= 200, clause,
+    e6: { a, ri, aRi, Ki, slendernessYo, slendernessYm, spacingOK },
+  }
+}

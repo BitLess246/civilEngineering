@@ -82,7 +82,8 @@ export default function TrussSpace() {
   const [E, setE] = useState(200000); const [Fy, setFy] = useState(248); const [K, setK] = useState(1.0)
   const [family, setFamily] = useState<SectionFamily>('L')
   const [shapeName, setShapeName] = useState('L102x102x9.5')
-  const [double, setDouble] = useState(false)       // double angle (2L) when family = L — off by default: §E4/§E6 for built-up angles are not implemented, so a 2L cannot pass in compression
+  const [double, setDouble] = useState(false)       // double angle (2L, back-to-back) when family = L — §E6 built-up
+  const [connectors, setConnectors] = useState(2)   // intermediate fillers per 2L member (§E6: spacing L/(n + 1))
   const [gap, setGap] = useState(0)                 // separator/gusset plate thickness, mm (0 = touching)
   const [selected, setSelected] = useState<string | null>(null)
   const [steelUnitPrice, setSteelUnitPrice] = useState(80)       // ₱ per kg
@@ -122,7 +123,7 @@ export default function TrussSpace() {
     const shp = shapeByName(shapeName) ?? shapesOf(family)[0]
     return effectiveSection(shp, double && shp.family === 'L', gap)
   }, [customSec, csA, csRx, csRy, shapeName, family, double, gap])
-  const section: TrussSection = useMemo(() => trussSectionOf(eff, { E, Fy, K }), [eff, E, Fy, K])
+  const section: TrussSection = useMemo(() => trussSectionOf(eff, { E, Fy, K, connectors }), [eff, E, Fy, K, connectors])
   // Fail closed: a hand-picked section whose compression strength the member
   // check does not cover cannot pass a truss that has compression members.
   const scope = useMemo(() => compressionScope(eff, E, Fy), [eff, E, Fy])
@@ -143,9 +144,9 @@ export default function TrussSpace() {
     return optimizeTruss(result.forces, family, {
       grouping,
       families: searchAllFamilies ? ['L', 'C', 'W', 'HSS', 'PIPE', 'WT'] : [family],
-      doubleAngles: double, gap, E, Fy, K,
+      doubleAngles: double, gap, E, Fy, K, connectors,
     })
-  }, [optimize, result, family, grouping, searchAllFamilies, double, gap, E, Fy, K])
+  }, [optimize, result, family, grouping, searchAllFamilies, double, gap, E, Fy, K, connectors])
 
   /** Section adopted for a member — per group when optimising, else the one
    *  picked by hand. Everything downstream (table, 3D colour, take-off) reads
@@ -347,6 +348,16 @@ export default function TrussSpace() {
                   </label>
                 )}
                 {family === 'L' && double && <Num label="Separator plate thickness" unit="mm" value={gap} onChange={setGap} step="1" />}
+                {family === 'L' && double && (
+                  <Num label="Intermediate connectors per member" value={connectors}
+                    onChange={(v) => setConnectors(Math.max(0, Math.round(v)))} step="1" />
+                )}
+                {family === 'L' && double && (
+                  <p className="col-span-full text-[11px] text-muted">
+                    §E6: fillers at L/(n + 1). Past a/ri = 40 the slenderness about the axis of symmetry grows by E6-2,
+                    and a/ri may not exceed ¾ of the member's governing slenderness (§E6.2).
+                  </p>
+                )}
               </>
             )}
             <Num label="Fy" unit="MPa" value={Fy} onChange={setFy} step="5" />
@@ -366,7 +377,7 @@ export default function TrussSpace() {
                 <dt className="text-muted">Mass</dt><dd className="font-semibold text-ink">{(eff.A * 7850 / 1e6).toFixed(2)} kg/m</dd>
                 <dt className="text-muted">Compression check</dt>
                 <dd className={scope.supported ? 'font-semibold text-ink' : 'font-semibold text-fail'}>
-                  {scope.supported ? (scope.e5 ? '§E5 single angle (+ §E7)' : 'Chapter E — §E3/§E4/§E7') : 'not covered'}
+                  {scope.supported ? (scope.e5 ? '§E5 single angle (+ §E7)' : eff.double ? '§E6 built-up (+ §E4/§E7)' : 'Chapter E — §E3/§E4/§E7') : 'not covered'}
                 </dd>
               </dl>
             </div>
@@ -387,6 +398,12 @@ export default function TrussSpace() {
                 <p className="mt-2 text-[11px] text-fail">
                   ✗ {scope.reason}. The compression members are not checked, so this design cannot pass —
                   pick another section, or turn on auto-sizing.
+                </p>
+              )}
+              {design && design.members.some((m) => m.mode === 'compression' && m.e6 && !m.e6.spacingOK) && (
+                <p className="mt-2 text-[11px] text-fail">
+                  ✗ Double-angle connectors too far apart (§E6.2): a/ri must not exceed ¾ of the member's governing
+                  slenderness. Add intermediate connectors — the strength is not the problem.
                 </p>
               )}
               {notAssessed.length > 0 && (
@@ -489,8 +506,8 @@ export default function TrussSpace() {
             </table>
             <p className="mt-1 text-[11px] text-muted">
               Pin-jointed planar truss (axial only). Tension yielding φPn = 0.9·Fy·Ag; compression per AISC Chapter E — §E3 flexural,
-              §E4 torsional / flexural-torsional for tees and channels, §E5 for single angles, §E7 effective area of slender
-              elements (φ = 0.90). KL/r &gt; 200 flagged (⚠). Reactions: pin at the left support, roller at the right.
+              §E4 torsional / flexural-torsional for tees and channels, §E5 for single angles, §E6 for back-to-back double angles
+              (connector spacing), §E7 effective area of slender elements (φ = 0.90). KL/r &gt; 200 flagged (⚠). Reactions: pin at the left support, roller at the right.
             </p>
           </div>
         </div>
