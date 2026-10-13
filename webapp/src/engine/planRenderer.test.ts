@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from './modelBuilder'
-import { buildPlan, planToSvg, extensionLines, type PlanPrimitive } from './planRenderer'
+import { buildPlan, planToSvg, extensionLines, RAKE_DASH, type PlanPrimitive } from './planRenderer'
 import { measureBounds } from './detailSheet'
 import type { RectSection } from './model'
 import { shapeByName } from './aiscSections'
@@ -310,5 +310,36 @@ describe('planRenderer — steel columns are drawn as their true section, not a 
   it('a concrete column is still the b×h rectangle', () => {
     const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
     expect(buildPlan(m)!.primitives.filter((p) => p.kind === 'rect' && p.fill === '#1e293b')).toHaveLength(4)
+  })
+})
+
+describe('rectangular RC columns in plan — the analysed orientation', () => {
+  const deep: RectSection = { ...section, b: 300, h: 600 }
+  const one = () => generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: deep, slabThickness: 150 })
+  const cols = (m: ReturnType<typeof one>) =>
+    buildPlan(m)!.primitives.filter((p) => (p.kind === 'rect' || p.kind === 'path') && (p as { fill?: string }).fill === '#1e293b')
+
+  it('h lies along X, as the solver (default 90°), the 3D view and the cage have it — it was drawn along Z', () => {
+    for (const r of cols(one()) as Extract<PlanPrimitive, { kind: 'rect' }>[]) {
+      expect(r.w).toBeCloseTo(0.6, 9)
+      expect(r.h).toBeCloseTo(0.3, 9)
+    }
+  })
+  it('an explicit axisRotation 0 turns the section: h along Z', () => {
+    const m = one()
+    m.members = m.members.map((q) => (q.role === 'column' ? { ...q, axisRotation: 0 } : q))
+    for (const r of cols(m) as Extract<PlanPrimitive, { kind: 'rect' }>[]) expect(r.w).toBeCloseTo(0.3, 9)
+  })
+  it('a skewed axisRotation draws the rotated outline', () => {
+    const m = one()
+    m.members = m.members.map((q) => (q.role === 'column' ? { ...q, axisRotation: 60 } : q))
+    const p = cols(m)
+    expect(p.every((x) => x.kind === 'path')).toBe(true)
+  })
+  it('a raking column carries a dashed centreline to where its other end lands', () => {
+    const m = one()
+    m.nodes = m.nodes.map((n) => (n.id === 'n1.1.1' ? { ...n, z: n.z + 1 } : n))
+    const rake = buildPlan(m)!.primitives.filter((p) => p.kind === 'line' && (p as { dash?: number[] }).dash === RAKE_DASH)
+    expect(rake).toHaveLength(1)
   })
 })

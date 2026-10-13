@@ -562,3 +562,48 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
 
   return { member: i.mark, runs, ...(notes.length ? { notes } : {}) }
 }
+
+/**
+ * Lay a column cage built PLUMB onto an inclined member axis.
+ *
+ * `buildColumnCage` works in a vertical frame — y up the column, h across x,
+ * b across z — and everything it places (lo zones, joint bands, laps, the
+ * crank) is measured in that y. An inclined column is the same cage on a
+ * tilted axis, so this maps it rigidly rather than re-deriving any of it:
+ *
+ *   height above the base node, t  →  t·L/H along the axis   (bars get their TRUE length)
+ *   plan offset along x (across h) →  along `depth`          (the solver's y′)
+ *   plan offset along z (across b) →  along depth × axis     (z′, right-handed)
+ *
+ * Ties keep their plane perpendicular to the axis, which is how an inclined
+ * column is tied; the joint bands and lap stretch by L/H with the axis, which
+ * is the length a level beam actually cuts along an inclined column. Bars that
+ * project below the base node (a pedestal down to the footing) continue on the
+ * same line — the model has no kink there to follow.
+ *
+ * `base` and `top` are the column's end nodes in model space (m); `centre` is
+ * the plan point the cage was built about (the base node's x, z).
+ */
+export function inclineCage(cage: RebarCage, base: Vec3, top: Vec3, depth: Vec3): RebarCage {
+  const d: Vec3 = [top[0] - base[0], top[1] - base[1], top[2] - base[2]]
+  const L = Math.hypot(...d), H = d[1]
+  if (!(L > 1e-9) || !(H > 1e-9)) return cage
+  const u: Vec3 = [d[0] / L, d[1] / L, d[2] / L]
+  // e1 = depth made exactly ⟂ u; e2 = e1 × u (for plumb: X × Y = Z, the identity)
+  const pd = depth[0] * u[0] + depth[1] * u[1] + depth[2] * u[2]
+  const g: Vec3 = [depth[0] - pd * u[0], depth[1] - pd * u[1], depth[2] - pd * u[2]]
+  const gl = Math.hypot(...g)
+  if (!(gl > 1e-9)) return cage
+  const e1: Vec3 = [g[0] / gl, g[1] / gl, g[2] / gl]
+  const e2: Vec3 = [e1[1] * u[2] - e1[2] * u[1], e1[2] * u[0] - e1[0] * u[2], e1[0] * u[1] - e1[1] * u[0]]
+  const k = L / H
+  const map = (p: Vec3): Vec3 => {
+    const s = (p[1] - base[1]) * k, a = p[0] - base[0], b = p[2] - base[2]
+    return [
+      base[0] + s * u[0] + a * e1[0] + b * e2[0],
+      base[1] + s * u[1] + a * e1[1] + b * e2[1],
+      base[2] + s * u[2] + a * e1[2] + b * e2[2],
+    ]
+  }
+  return { ...cage, runs: cage.runs.map((r) => ({ ...r, path: r.path.map(map) })) }
+}

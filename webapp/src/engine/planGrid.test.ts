@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { planGridLines, uniqueCoords } from './planGrid'
-import { generateGridModel } from '../engine/modelBuilder'
-import type { RectSection, StructuralModel } from '../engine/model'
+import { generateGridModel } from './modelBuilder'
+import type { RectSection, StructuralModel } from './model'
 
 const S: RectSection = { id: 's', name: 's', b: 300, h: 300, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 

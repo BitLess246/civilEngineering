@@ -15,6 +15,7 @@
 import type { StructuralModel, RectSection, Member } from './model'
 import { shapeByName, effectiveSection } from './aiscSections'
 import { steelProfile, type P2 } from './steelProfile'
+import { planGridLines } from './planGrid'
 import { localAxes, defaultAxisRotation, type V3 } from './frame3d'
 
 export type PathCmd =
@@ -69,6 +70,39 @@ export function steelColumnPlan(
       out.push({ kind: 'path', cmds: ring(h), closed: true, stroke: COL, fill: outline ? 'none' : '#ffffff', width: 0.8, dash: outline ? [0.2, 0.15] : undefined, join: 'miter' })
   }
   return out
+}
+
+/** Dash-dot: a centreline, in drafting — here a raking column's, in plan. */
+export const RAKE_DASH = [0.35, 0.1, 0.05, 0.1]
+
+/**
+ * A rectangular (concrete or timber) column in plan, in the member's OWN frame:
+ * the depth h along local y′, the width b along z′, as the solver, the 3D view
+ * and the cage have it. It was an axis-aligned rect with b along X — transposed
+ * against all three for every column that is not square, since the default
+ * 90° puts h on X — and blind to an explicit axisRotation. `cw`, `ch` are b, h
+ * in m; `at` is the plan point the section is cut at.
+ */
+export function rectColumnPlan(
+  mem: Pick<Member, 'axisRotation'>, a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number },
+  cw: number, ch: number, at: { x: number; z: number }, outline = false,
+): PlanPrimitive {
+  const dir: V3 = [b.x - a.x, b.y - a.y, b.z - a.z]
+  const [, yp, zp] = localAxes(dir, defaultAxisRotation(dir, mem.axisRotation, 'column'))
+  const fill = outline ? 'none' : COL, dash = outline ? [0.2, 0.15] : undefined
+  // Square to the grid (every plumb column, at any multiple of 90°): a plain
+  // rect, h on whichever plan axis y′ lies along.
+  const yx = Math.abs(yp[0]) / (Math.hypot(yp[0], yp[2]) || 1)
+  if (yx > 1 - 1e-9 || yx < 1e-9) {
+    const [w, h] = yx > 0.5 ? [ch, cw] : [cw, ch]
+    return { kind: 'rect', x: at.x - w / 2, y: at.z - h / 2, w, h, stroke: COL, fill, width: 1.2, dash }
+  }
+  const corner = (sy: number, sz: number): PathCmd => ({
+    c: 'L', x: at.x + (sy * ch * yp[0] + sz * cw * zp[0]) / 2, y: at.z + (sy * ch * yp[2] + sz * cw * zp[2]) / 2,
+  } as PathCmd)
+  const cmds = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)]
+  cmds[0] = { ...cmds[0], c: 'M' } as PathCmd
+  return { kind: 'path', cmds, closed: true, stroke: COL, fill, width: 1.2, dash, join: 'miter' }
 }
 
 export interface BeamScheduleRow { mark: string; size: string; notes?: string }
@@ -208,11 +242,16 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     const mem = model.members.find((x) => x.id === memberId)
     return mem ? model.sections.find((s) => s.id === mem.section) : undefined
   }
-  const xs = uniq(model.nodes.map((n) => n.x))
-  const zs = uniq(model.nodes.map((n) => n.z))
+  // Grid lines are set out on the columns (`planGridLines` — the bases of the
+  // lowest columns), the same lines the 3D view bubbles: a raking column's
+  // top, a split beam or a mesh node is not a grid line. The sheet's EXTENT
+  // still takes every node, so nothing off the grid falls outside it.
+  const { xs, zs } = planGridLines(model)
   const ys = uniq(model.nodes.map((n) => n.y))
   if (xs.length < 1 || zs.length < 1) return null
-  const x0 = xs[0], x1 = xs[xs.length - 1], z0 = zs[0], z1 = zs[zs.length - 1]
+  const nx = model.nodes.map((n) => n.x), nz = model.nodes.map((n) => n.z)
+  const x0 = Math.min(xs[0], ...nx), x1 = Math.max(xs[xs.length - 1], ...nx)
+  const z0 = Math.min(zs[0], ...nz), z1 = Math.max(zs[zs.length - 1], ...nz)
 
   // level to draw: default the first framed level above the base (or the base for foundation)
   const foundation = opts.kind === 'foundation'
@@ -426,7 +465,12 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     const outline = foundation && !opts.footings?.length
     const steel = sec?.material === 'steel' ? steelColumnPlan(mem, a, b, sec, node, outline) : null
     if (steel) P.push(...steel)
-    else P.push({ kind: 'rect', x: node.x - cw / 2, y: node.z - ch / 2, w: cw, h: ch, stroke: COL, fill: outline ? 'none' : COL, width: 1.2, dash: outline ? [0.2, 0.15] : undefined })
+    else P.push(rectColumnPlan(mem, a, b, cw, ch, node, outline))
+    // A RAKING column: its centreline in plan, dashed from this level's node
+    // to where the other end lands, so the drawing says which way it leans.
+    const far = node === a ? b : a
+    if (Math.hypot(far.x - node.x, far.z - node.z) > 1e-3)
+      P.push({ kind: 'line', x1: node.x, y1: node.z, x2: far.x, y2: far.z, stroke: COL, width: 0.6, dash: RAKE_DASH })
   }
 
   // ── slab panels at the level: outline + a span-direction symbol (double

@@ -51,6 +51,13 @@ export interface ElevationMember {
   d: number
   /** What to call it out as — bars, spacing. One short line. */
   note?: string
+  /**
+   * A RAKING column: its faces move along u by `slope` per metre of height,
+   * u0/u1 being the faces at world level `yRef`. Absent ⇒ plumb, the faces
+   * at u0/u1 the whole way up. Drawn as the quadrilateral it is, so the cage
+   * projected from model space (which leans with the column) stays inside it.
+   */
+  lean?: { yRef: number; slope: number }
 }
 
 export interface FrameElevationInput {
@@ -439,6 +446,18 @@ export function buildFrameElevation(
   for (const m of i.members) {
     const y0 = Math.max(Y(m.yTop), lo), y1 = Math.min(Y(m.yBot), hi)
     if (y1 <= y0 + 1e-9) continue
+    if (m.lean && Math.abs(m.lean.slope) > 1e-9) {
+      const { yRef, slope } = m.lean
+      const at = (sy: number, u: number) => u + slope * (-sy - yRef)   // sheet y → world −y
+      P.push({
+        kind: 'path', closed: true, fill: CONCRETE, stroke: SHEET_INK, width: 0.9, join: 'miter',
+        cmds: [
+          { c: 'M', x: at(y1, m.u0), y: y1 }, { c: 'L', x: at(y1, m.u1), y: y1 },
+          { c: 'L', x: at(y0, m.u1), y: y0 }, { c: 'L', x: at(y0, m.u0), y: y0 },
+        ],
+      })
+      continue
+    }
     P.push({
       kind: 'rect', x: m.u0, y: y0, w: m.u1 - m.u0, h: y1 - y0,
       fill: CONCRETE, stroke: SHEET_INK, width: m.role === 'beam' ? 1.1 : 0.9,

@@ -14,6 +14,7 @@ import { pedestalBearing } from '../engine/pedestal'
 import type { WallDetailInput } from '../engine/wallDetail'
 import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 import type { FrameElevationInput, ElevationMember } from '../engine/frameElevation'
+import { planGridLines } from '../engine/planGrid'
 import type { ColumnStackDetailInput, ColumnStackSegment } from '../engine/columnStackDetail'
 import { elevationPlane, projectPoint, type RebarCage, type Vec3, type ViewPlane } from '../engine/rebarModel'
 import { stationZones } from '../engine/beamSection'
@@ -469,19 +470,24 @@ export function gridLines(model: StructuralModel): GridLine[] {
   for (const c of cols) for (const id of [c.i, c.j]) feet.add(id)
   const pts = [...feet].map((id) => nodeById.get(id)!).filter(Boolean)
 
-  const uniq = (vs: number[]) => [...new Set(vs.map((v) => Math.round(v * 1e6) / 1e6))].sort((a, b) => a - b)
-  const xs = uniq(pts.map((p) => p.x))
-  const zs = uniq(pts.map((p) => p.z))
+  // The lines themselves are the plan's (`planGridLines`: the bases of the
+  // lowest columns), so a sheet called "B" is the line the plan calls B. Taken
+  // from every column END, a raking column's top made a line of its own and
+  // shifted every letter after it.
+  const { xs, zs } = planGridLines(model)
   const out: GridLine[] = []
-  // A line in x is labelled by letter and identified by its z; a line in z by
-  // number and its x — the same convention the framing plan's bubbles use.
+  // The PLAN's labels: lines at constant x (running along z) are lettered by
+  // their x, rows at constant z (running along x) numbered by their z —
+  // `buildPlan`'s bubbles. This used to be the other way round, so the sheet
+  // titled "GRID A" was the line the plan calls 1, and its bubbles 1, 2, 3 were
+  // the plan's A, B, C.
   zs.forEach((z, k) => {
     if (pts.filter((p) => Math.abs(p.z - z) < 1e-6).length < 2) return
-    out.push({ label: String.fromCharCode(65 + k), at: z, axis: 'x' })
+    out.push({ label: String(k + 1), at: z, axis: 'x' })
   })
   xs.forEach((x, k) => {
     if (pts.filter((p) => Math.abs(p.x - x) < 1e-6).length < 2) return
-    out.push({ label: String(k + 1), at: x, axis: 'z' })
+    out.push({ label: String.fromCharCode(65 + k), at: x, axis: 'z' })
   })
   return out
 }
@@ -560,6 +566,7 @@ export function frameElevationBundles(
   const levels = [...new Set(model.nodes.map((n) => Math.round(n.y * 1e6) / 1e6))].sort((a, b) => a - b)
   const out: FrameElevationBundle[] = []
 
+  const { xs: planXs, zs: planZs } = planGridLines(model)
   for (const g of gridLines(model)) {
     const onLine = (id: string) => {
       const n = pos(id)
@@ -571,7 +578,10 @@ export function frameElevationBundles(
       return g.axis === 'x' ? n.x : n.z
     }
     const members = model.members.filter((m) => onLine(m.i) && onLine(m.j) && isRcSection(sec(m)))
-    const cols = members.filter((m) => m.role === 'column')
+    // A column belongs to this line if EITHER end is on it: one raking out of
+    // the plane (toward the viewer) has the other end off the line, and is
+    // still the column this frame stands on.
+    const cols = model.members.filter((m) => m.role === 'column' && (onLine(m.i) || onLine(m.j)) && isRcSection(sec(m)))
 
     for (const y of levels) {
       const beams = members.filter((m) => isBeam(m.role)
@@ -620,8 +630,12 @@ export function frameElevationBundles(
       for (const c of touching) {
         const s = sec(c)
         if (!s) continue
-        const cu = coord(c.i)
         const lo = Math.min(pos(c.i)!.y, pos(c.j)!.y), hi = Math.max(pos(c.i)!.y, pos(c.j)!.y)
+        // The centreline where it crosses THIS level, and how it rakes in the
+        // plane of the sheet (du per metre up). Plumb columns: slope 0.
+        const [bot, top] = pos(c.i)!.y <= pos(c.j)!.y ? [c.i, c.j] : [c.j, c.i]
+        const slope = hi - lo > 1e-9 ? (coord(top) - coord(bot)) / (hi - lo) : 0
+        const cu = coord(bot) + slope * (y - lo)
         // WHICH SECTION DIMENSION IS IN VIEW.
         //
         // `columnCage` lays its bars out as [along h, across b] and puts the
@@ -636,14 +650,26 @@ export function frameElevationBundles(
           u0: cu - face / 2000, u1: cu + face / 2000,
           yBot: Math.max(lo, yLo), yTop: Math.min(hi, yHi),
           bw: s.b, d: s.h ?? s.b, note: bars(c.id),
+          ...(Math.abs(slope) > 1e-9 ? { lean: { yRef: y, slope } } : {}),
         })
       }
       if (!elMembers.length) continue
 
       const ids = new Set([...beams, ...touching].map((m) => m.id))
-      const grids = [...new Set(touching.map((c) => Math.round(coord(c.i) * 1e6) / 1e6))]
+      // Bubbles at the plan's grid lines crossing this one, labelled by their
+      // index on the PLAN — not by their order among this sheet's columns,
+      // which renumbered a line that has columns on only some of the grids.
+      const crossing = g.axis === 'x' ? planXs : planZs
+      const grids = [...new Set(touching.map((c) => {
+        const [bot] = pos(c.i)!.y <= pos(c.j)!.y ? [c.i] : [c.j]
+        return Math.round(coord(bot) * 1e6) / 1e6
+      }))]
         .sort((a, b) => a - b)
-        .map((u, k) => ({ u, label: g.axis === 'x' ? String(k + 1) : String.fromCharCode(65 + k) }))
+        .map((u) => {
+          const k = crossing.findIndex((v) => Math.abs(v - u) < 0.05)
+          const label = k < 0 ? '' : g.axis === 'x' ? String.fromCharCode(65 + k) : String(k + 1)
+          return { u, label }
+        })
 
       out.push({
         // The key is also the SVG download stem, so it is slugged here rather
