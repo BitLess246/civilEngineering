@@ -719,6 +719,28 @@ export default function ModelSpace() {
     applyModel(m)
   }
 
+  // Every table the page holds, as an Excel workbook (`lib/modelTables`). The
+  // displacement vector is indexed in the bridge's node order, which always
+  // starts with the model's own nodes in model order — so that prefix is the
+  // node order for every node the user can name.
+  const exportExcel = async () => {
+    if (!model) return
+    const [{ modelResultTables }, { exportScheduleExcel }] = await Promise.all([
+      import('../lib/modelTables'), import('../lib/scheduleExcel'),
+    ])
+    const report = modelResultTables({
+      model, analysis, nodeOrder: model.nodes.map((n) => n.id), design, seismic: seisXZ, drift,
+    })
+    const slug = (model.name || 'model').trim().replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'model'
+    await exportScheduleExcel(report, `${slug}-results.xlsx`)
+    const inc = report.meta.find(([k]) => k === 'Included')?.[1] ?? ''
+    setInterop({
+      title: `Exported ${slug}-results.xlsx — ${report.sections.length} sheets`,
+      lines: [`Included: ${inc}.`, ...(!analysis ? ['Run the analysis to include displacements, reactions and member forces.'] : []),
+        ...(!design ? ['Run “Design structure” to include the design schedules.'] : [])],
+    })
+  }
+
   // STAAD.Pro interchange. The module loads on click: nobody who never
   // exchanges a model pays for the parser.
   const exportStaad = async () => {
@@ -2203,6 +2225,8 @@ export default function ModelSpace() {
                   hint: model ? 'Geometry, sections, supports, releases, loads by category and NSCP combinations' : 'Build a model first' },
                 { label: 'Import from STAAD.Pro (.std)', onSelect: () => importInput.current?.click(),
                   hint: 'Replaces the current model — Undo brings it back' },
+                { label: 'Export tables to Excel (.xlsx)', disabled: !model, onSelect: () => void exportExcel(),
+                  hint: model ? 'Model, analysis results, seismic and design schedules — one sheet per table' : 'Build a model first' },
               ]} />
               <input ref={importInput} type="file" accept=".std,.STD,.txt" className="hidden" aria-hidden tabIndex={-1}
                 onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importStaad(f) }} />
