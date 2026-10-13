@@ -3,7 +3,7 @@ import {
   optimizeTruss, groupMembers, sizeGroup, candidateSections, rejectionNote,
   SLENDER_LIMIT_COMPRESSION, SLENDER_PREFERENCE_TENSION, type TrussGroup,
 } from './trussOptimize'
-import { designTrussMember } from './trussDesign'
+import { designTrussMember, compressionScope } from './trussDesign'
 import { generateTruss, solveTrussEnvelope, type MemberForce } from './truss'
 import { shapeByName, effectiveSection } from './aiscSections'
 
@@ -160,10 +160,14 @@ describe('sizeGroup — the gates, in order', () => {
     // under a kilonewton — and everything above them fails on slenderness.
     // Once a candidate is big enough to carry the force, slenderness is the
     // only gate left, so the tail of the list is all slenderness.
-    expect(r.rejected[r.rejected.length - 1].gate).toBe('slenderness')
-    const firstSlender = r.rejected.findIndex((x) => x.gate === 'slenderness')
+    // Angles outside the compression check (slender legs, leg ratio ≥ 1.7)
+    // are rejected on SCOPE wherever they fall in the list, so read the
+    // strength/slenderness order among the rest.
+    const checked = r.rejected.filter((x) => x.gate !== 'scope')
+    expect(checked[checked.length - 1].gate).toBe('slenderness')
+    const firstSlender = checked.findIndex((x) => x.gate === 'slenderness')
     expect(firstSlender).toBeGreaterThanOrEqual(0)
-    expect(r.rejected.slice(firstSlender).every((x) => x.gate === 'slenderness')).toBe(true)
+    expect(checked.slice(firstSlender).every((x) => x.gate === 'slenderness')).toBe(true)
     // The same member IS buildable in a family with a larger radius.
     expect(sizeGroup(group([f('a', -1, 9, 'vertical')]), candidateSections(['HSS']), MAT).ok)
       .toBe(true)
@@ -258,6 +262,11 @@ describe('a known section, checked by hand', () => {
     expect(d.phiPn).toBeCloseTo((0.9 * 248 * sec.A) / 1000, 6)
   })
 
+  it('rejectionNote passes a scope reason through', () => {
+    expect(rejectionNote('WT75x9', 'scope', 'WT75x9: tee — §E4')).toContain('§E4')
+    expect(rejectionNote('WT75x9', 'scope')).toContain('not checked')
+  })
+
   it('rejectionNote names the section and the gate', () => {
     expect(rejectionNote('L50x50x5', 'strength')).toContain('L50x50x5')
     expect(rejectionNote('L50x50x5', 'slenderness')).toContain('200')
@@ -296,5 +305,59 @@ describe('§D1 tension slenderness is REPORTED, never enforced', () => {
     )
     expect(r.maxTensionSlenderness).toBe(0)
     expect(r.tensionSlendernessOK).toBe(true)
+  })
+})
+
+describe('scope gate — fail closed on compression the check does not cover', () => {
+  const group = (members: MemberForce[]): TrussGroup =>
+    ({ id: 'g', label: 'g', compression: members.some((m) => m.N <= 0), members })
+  const strut = group([f('s', -50, 2, 'diagonal')])
+  const tie = group([f('t', 50, 2, 'diagonal')])
+
+  it('never adopts a tee, channel or double angle for a compression group', () => {
+    const r = sizeGroup(strut, candidateSections(['WT', 'C', 'L'], { doubleAngles: true }), MAT)
+    expect(r.ok).toBe(true)
+    expect(r.section!.family).toBe('L')
+    expect(r.section!.double).toBe(false)
+    // each excluded kind on its own: everything rejected on scope, with the clause
+    for (const [fams, dbl, word] of [[['C'], false, 'channel'], [['WT'], false, 'tee'], [['L'], true, '§E6']] as const) {
+      const only = candidateSections([...fams], { doubleAngles: dbl }).filter((c) => !dbl || c.double)
+      const x = sizeGroup(strut, only, MAT)
+      expect(x.section, word).toBeNull()
+      expect(x.rejected.every((q) => q.gate === 'scope' && q.reason!.includes(word)), word).toBe(true)
+    }
+    // slender angle legs are rejected on scope too (§E7), not on strength
+    expect(r.rejected.some((x) => x.gate === 'scope' && x.reason!.includes('§E7'))).toBe(true)
+  })
+
+  it('a group with only tees in compression has no section — not a light unchecked one', () => {
+    const r = sizeGroup(strut, candidateSections(['WT']), MAT)
+    expect(r.ok).toBe(false)
+    expect(r.section).toBeNull()
+    expect(r.rejected.every((x) => x.gate === 'scope')).toBe(true)
+  })
+
+  it('tension groups may use any family — §D2(a) yielding holds for all of them', () => {
+    const r = sizeGroup(tie, candidateSections(['WT']), MAT)
+    expect(r.ok).toBe(true)
+    expect(r.section!.family).toBe('WT')
+  })
+
+  it('a ZERO-force member counts as compression for the gate', () => {
+    const r = sizeGroup(group([f('z', 0, 2, 'vertical')]), candidateSections(['WT']), MAT)
+    expect(r.section).toBeNull()
+  })
+
+  it('the adopted section in every compression group is inside the check (all families)', () => {
+    const model = generateTruss({ type: 'pratt', span: 12, height: 2, panels: 6, panelLoad: 20 })
+    const nodes = [...new Set(model.loads.map((l) => l.node))]
+    const env = solveTrussEnvelope(model, nodes.map((n) => ({ node: n, fx: 0, fy: -8 })), nodes.map((n) => ({ node: n, fx: 0, fy: -20 })))!
+    const r = optimizeTruss(env.forces, 'L', { families: ['L', 'C', 'W', 'HSS', 'PIPE', 'WT'], doubleAngles: true })
+    expect(r.ok).toBe(true)
+    for (const g of r.groups.filter((x) => x.group.compression))
+      expect(compressionScope(g.section!, MAT.E, MAT.Fy).supported, g.section!.label).toBe(true)
+    // and what it does not check is said, not implied
+    expect(r.notAssessed.some((n) => n.includes('§D2(b)'))).toBe(true)
+    expect(r.notAssessed.some((n) => n.includes('connections'))).toBe(true)
   })
 })

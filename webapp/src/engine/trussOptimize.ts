@@ -40,7 +40,13 @@
 // rescued for being lighter, and the reason a section was rejected is the
 // FIRST gate it failed.
 //
-//   1. STRENGTH      every member in the group has util ≤ 1  (AISC D2 / E3)
+//   0. SCOPE         a group carrying compression only takes a section whose
+//                    compression strength the member check actually covers
+//                    (`compressionScope`: no slender elements §E7, no tee /
+//                    channel / double angle §E4). Fail closed — a section
+//                    nothing checks is never adopted for being light.
+//   1. STRENGTH      every member in the group has util ≤ 1  (AISC D2 / E3,
+//                    single angles through §E5)
 //   2. SLENDERNESS   KL/r ≤ 200 for compression (§E2)
 //   3. ECONOMY       least gross area — which is least weight and least cost
 //
@@ -48,7 +54,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import type { MemberForce } from './truss'
-import { designTrussMember, type MemberDesign, type TrussSection } from './trussDesign'
+import { designTrussMember, compressionScope, trussNotAssessed, type MemberDesign, type TrussSection } from './trussDesign'
 import {
   effectiveSection, doubleAngle, shapesOf,
   type EffectiveSection, type SectionFamily,
@@ -72,7 +78,7 @@ export interface TrussGroup {
 }
 
 /** Why one candidate section was rejected — the FIRST gate it failed. */
-export type RejectGate = 'strength' | 'slenderness'
+export type RejectGate = 'scope' | 'strength' | 'slenderness'
 
 export interface GroupChoice {
   group: TrussGroup
@@ -98,8 +104,9 @@ export interface GroupChoice {
   /** Total length of the group, m, and the steel it costs, kg. */
   lengthM: number
   weightKg: number
-  /** Rejected candidates, lightest first, with the gate each one failed. */
-  rejected: { label: string; gate: RejectGate }[]
+  /** Rejected candidates, lightest first, with the gate each one failed
+   *  (and, for 'scope', the clause that is not implemented). */
+  rejected: { label: string; gate: RejectGate; reason?: string }[]
 }
 
 export interface TrussOptimizeResult {
@@ -111,6 +118,8 @@ export interface TrussOptimizeResult {
   uniformWeightKg: number | null
   /** Fraction saved against the uniform section; 0 when there is nothing to compare. */
   savedFraction: number
+  /** Checks this workflow does not run — part of what a PASS means. */
+  notAssessed: string[]
 }
 
 export interface OptimizeOpts {
@@ -191,6 +200,13 @@ export function groupMembers(forces: MemberForce[], mode: GroupingMode = 'role')
 
 const weightOf = (A: number, lengthM: number) => (A / 1e6) * lengthM * STEEL_DENSITY
 
+/** The member-check section for a candidate — single angles carry their §E5
+ *  inputs, so the optimiser and the hand-picked path run the same check. */
+export function trussSectionOf(cand: EffectiveSection, mat: { E: number; Fy: number; K?: number }): TrussSection {
+  const e5 = compressionScope(cand, mat.E, mat.Fy).e5
+  return { A: cand.A, r: cand.rmin, E: mat.E, Fy: mat.Fy, K: mat.K, ...(e5 ? { e5 } : {}) }
+}
+
 /**
  * The lightest candidate that carries every member of the group.
  *
@@ -203,10 +219,17 @@ export function sizeGroup(
   mat: { E: number; Fy: number; K?: number },
 ): GroupChoice {
   const lengthM = group.members.reduce((s, m) => s + m.L, 0)
-  const rejected: { label: string; gate: RejectGate }[] = []
+  const rejected: { label: string; gate: RejectGate; reason?: string }[] = []
 
   for (const cand of candidates) {
-    const sec: TrussSection = { A: cand.A, r: cand.rmin, E: mat.E, Fy: mat.Fy, K: mat.K }
+    // Gate 0 — scope. Only compression is family-limited (§D2(a) yielding
+    // holds for every shape), so a pure tension group may use anything.
+    const scope = compressionScope(cand, mat.E, mat.Fy)
+    if (group.compression && !scope.supported) {
+      rejected.push({ label: cand.label, gate: 'scope', reason: scope.reason })
+      continue
+    }
+    const sec = trussSectionOf(cand, mat)
     const designs = group.members.map((m) => designTrussMember(m, sec))
 
     // Gate 1 — strength. Reported first even when slenderness also fails, so
@@ -257,7 +280,7 @@ export function optimizeTruss(
   const members: (MemberDesign & { group: string })[] = []
   for (const gc of groups) {
     if (!gc.section) continue
-    const sec: TrussSection = { A: gc.section.A, r: gc.section.rmin, E: mat.E, Fy: mat.Fy, K: mat.K }
+    const sec = trussSectionOf(gc.section, mat)
     for (const m of gc.group.members) members.push({ ...designTrussMember(m, sec), group: gc.group.id })
   }
 
@@ -277,11 +300,13 @@ export function optimizeTruss(
     savedFraction: uniformWeightKg && uniformWeightKg > 0
       ? Math.max(0, 1 - totalWeightKg / uniformWeightKg)
       : 0,
+    notAssessed: trussNotAssessed(forces),
   }
 }
 
 /** A one-line explanation of a rejection, for a schedule note or a tooltip. */
-export function rejectionNote(label: string, gate: RejectGate): string {
+export function rejectionNote(label: string, gate: RejectGate, reason?: string): string {
+  if (gate === 'scope') return reason ?? `${label}: compression strength of this section is not checked`
   return gate === 'strength'
     ? `${label}: a member in this group exceeds its capacity`
     : `${label}: a compression member exceeds KL/r = ${SLENDER_LIMIT_COMPRESSION} (§E2)`

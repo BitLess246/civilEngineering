@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { designTrussMember, designTruss } from './trussDesign'
+import { designTrussMember, designTruss, compressionScope, e5Slenderness, trussNotAssessed } from './trussDesign'
+import { effectiveSection, shapeByName, shapesOf } from './aiscSections'
 import type { TrussSection } from './trussDesign'
 import type { MemberForce } from './truss'
 
@@ -116,5 +117,83 @@ describe('designTruss — truss-level roll-up', () => {
   it('allOK = false when any member fails', () => {
     const r = designTruss([...forces, mf('d', 999, 1, 'top')], baseSection)
     expect(r.allOK).toBe(false)
+  })
+})
+
+// ── Scope + §E5 (fail closed on compression the check does not cover) ──────
+describe('compressionScope — AISC 360-16 Table B4.1a λr and §E4/§E5 applicability', () => {
+  const E = 200_000, Fy = 248, rt = Math.sqrt(E / Fy)   // √(E/Fy) = 28.40
+  const sc = (name: string, double = false) => compressionScope(effectiveSection(shapeByName(name)!, double), E, Fy)
+
+  it('tees, channels and double angles are out of scope (§E4 / §E6)', () => {
+    expect(sc('WT75x9').supported).toBe(false)
+    expect(sc('WT75x9').reason).toContain('§E4')
+    expect(sc('C150x12.2').supported).toBe(false)
+    expect(sc('L51x51x6.4', true).supported).toBe(false)
+    expect(sc('L51x51x6.4', true).reason).toContain('§E6')
+  })
+
+  it('angle legs: b/t ≤ 0.45√(E/Fy) = 12.78 (case 3)', () => {
+    expect(0.45 * rt).toBeCloseTo(12.78, 2)
+    expect(sc('L51x51x6.4').supported).toBe(true)        // 50.8/6.35 = 8.0
+    const thin = shapesOf('L').find((s) => Math.max(s.leg1!, s.leg2!) / s.t! > 0.45 * rt)!
+    const r = compressionScope(effectiveSection(thin), E, Fy)
+    expect(r.supported).toBe(false)
+    expect(r.reason).toContain('§E7')
+  })
+
+  it('HSS wall: (B − 3t)/t ≤ 1.40√(E/Fy) = 39.76 (case 6, §B4.1b(d))', () => {
+    expect(sc('HSS50x50x4.8').supported).toBe(true)      // (50.8 − 13.26)/4.42 = 8.5
+    const thin = shapesOf('HSS').find((s) => s.b && (Math.max(s.b, s.h!) - 3 * s.t!) / s.t! > 1.40 * rt)
+    if (thin) expect(compressionScope(effectiveSection(thin), E, Fy).supported).toBe(false)
+  })
+
+  it('PIPE: D/t ≤ 0.11E/Fy = 88.7 (case 9)', () => {
+    expect(0.11 * E / Fy).toBeCloseTo(88.71, 2)
+    expect(sc('PIPE 4 STD').supported).toBe(true)        // 114.3/5.61 = 20.4
+  })
+
+  it('a custom (A, r) section cannot be scoped', () => {
+    const custom = { label: 'custom', family: 'HSS' as const, A: 1000, rx: 20, ry: 20, rmin: 20, double: false,
+      base: { name: 'custom', family: 'HSS' as const, A: 1000, rx: 20, ry: 20, b: 30, h: 30, t: 15 } }
+    expect(compressionScope(custom, E, Fy).supported).toBe(false)
+  })
+})
+
+describe('§E5(a) single-angle effective slenderness — hand calcs', () => {
+  const eq = { r: 15.4, legTerm: 0, rz: 9.83 }               // L51x51x6.4
+  it('L/rx ≤ 80: Lc/r = 72 + 0.75·L/rx (E5-1)', () => {
+    // L = 1000 mm → L/rx = 64.94 → 72 + 48.70 = 120.70
+    expect(e5Slenderness(1000, eq)).toBeCloseTo(72 + 0.75 * (1000 / 15.4), 9)
+    expect(e5Slenderness(1000, eq)).toBeCloseTo(120.70, 2)
+  })
+  it('L/rx > 80: Lc/r = 32 + 1.25·L/rx (E5-2)', () => {
+    // L = 1500 mm → L/rx = 97.40 → 32 + 121.75 = 153.75
+    expect(e5Slenderness(1500, eq)).toBeCloseTo(153.75, 2)
+  })
+  it('continuous at L/rx = 80', () => {
+    expect(72 + 0.75 * 80).toBeCloseTo(32 + 1.25 * 80, 12)
+  })
+  it('unequal legs: + 4[(bl/bs)² − 1], floored at 0.95·L/rz', () => {
+    const un = { r: 20, legTerm: 4 * ((76.2 / 50.8) ** 2 - 1), rz: 10.9 }
+    const base = 72 + 0.75 * (1000 / 20)
+    expect(e5Slenderness(1000, un)).toBeCloseTo(Math.max(base + un.legTerm, 0.95 * 1000 / 10.9), 9)
+  })
+  it('designTrussMember uses §E5 for a single angle in compression, L/r in tension', () => {
+    const scope = compressionScope(effectiveSection(shapeByName('L51x51x6.4')!), 200_000, 248)
+    const sec = { A: 609, r: 9.83, E: 200_000, Fy: 248, K: 1.0, e5: scope.e5 }
+    const c = designTrussMember({ id: 'c', N: -10, L: 1.5, kind: 'diagonal', i: 'a', j: 'b' }, sec)
+    expect(c.slenderness).toBeCloseTo(e5Slenderness(1500, scope.e5!), 9)
+    const t = designTrussMember({ id: 't', N: 10, L: 1.5, kind: 'diagonal', i: 'a', j: 'b' }, sec)
+    expect(t.slenderness).toBeCloseTo(1500 / 9.83, 9)
+  })
+})
+
+describe('trussNotAssessed', () => {
+  it('names §D2(b) only when there is tension, and always the connections', () => {
+    const comp = [{ id: 'c', N: -1, L: 1, kind: 'top' as const, i: 'a', j: 'b' }]
+    expect(trussNotAssessed(comp).some((n) => n.includes('§D2(b)'))).toBe(false)
+    expect(trussNotAssessed([...comp, { ...comp[0], id: 't', N: 1 }]).some((n) => n.includes('§D2(b)'))).toBe(true)
+    expect(trussNotAssessed(comp).some((n) => n.includes('connections'))).toBe(true)
   })
 })
