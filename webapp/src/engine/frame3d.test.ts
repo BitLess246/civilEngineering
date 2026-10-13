@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { solveFrame3D, analyzeFrame3D, rectJ, localAxes, precomputeFrame, solveWithGeometry, serializePrecomp, deserializePrecomp, appliedResultant, PDELTA_DENSE_DOF_MAX, type F3Node, type F3Member, type F3Support, type F3Load, type F3DiaphragmGroup } from './frame3d'
+import { solveFrame3D, analyzeFrame3D, rectJ, localAxes, precomputeFrame, solveWithGeometry, serializePrecomp, deserializePrecomp, geometricLocal, appliedResultant, PDELTA_DENSE_DOF_MAX, type F3Node, type F3Member, type F3Support, type F3Load, type F3DiaphragmGroup } from './frame3d'
 import { solveFrame2D } from './frame2d'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
@@ -1010,5 +1010,53 @@ describe('P-Δ past the dense-tangent ceiling', () => {
     // and what comes back is the first-order field, not a half-iterated one
     for (let i = 0; i < first.d.length; i++) expect(second.d[i]).toBeCloseTo(first.d[i], 12)
     expect(first.pDelta).toBeUndefined()
+  })
+})
+
+describe('frame3d — P-Δ on members with end releases (condensed Kg)', () => {
+  const L = 4
+  const pin = [false, false, false, false, true, true]   // θy′, θz′ released, torsion kept
+  const H = 10
+
+  it('a bar pinned at both ends carries only the string stiffness N/L', () => {
+    const nodes = [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: 0, y: 0, z: 3 }] as F3Node[]
+    const mem = [{ id: 'm', i: 'a', j: 'b', ...sec, relI: pin, relJ: pin }] as F3Member[]
+    const g = precomputeFrame(nodes, mem, [{ node: 'a', fixity: 'fixed' }]).geoms[0]
+    const N = -50, kg = geometricLocal(g, N), s = N / 3
+    for (const [t, o] of [[1, 7], [2, 8]]) {
+      expect(kg[t][t]).toBeCloseTo(s, 10); expect(kg[o][o]).toBeCloseTo(s, 10)
+      expect(kg[t][o]).toBeCloseTo(-s, 10)
+    }
+    // nothing on the released rotations, nothing coupling a rotation to a translation
+    for (const r of [4, 5, 10, 11]) for (let c = 0; c < 12; c++) expect(kg[r][c]).toBeCloseTo(0, 10)
+  })
+
+  it('an unreleased member keeps the full consistent kgLocal', () => {
+    const nodes = [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: 0, y: L, z: 0 }] as F3Node[]
+    const g = precomputeFrame(nodes, [{ id: 'm', i: 'a', j: 'b', ...sec }] as F3Member[], [{ node: 'a', fixity: 'fixed' }]).geoms[0]
+    const kg = geometricLocal(g, -10)
+    expect(kg[1][1]).toBeCloseTo((6 * -10) / (5 * L), 10)
+    expect(kg[5][5]).toBeCloseTo((2 * -10 * L) / 15, 10)
+  })
+
+  it('a leaning column destabilises the cantilever by Q/L′ exactly — Δ = cH/(1 − cQ/L′)', () => {
+    // A: fixed-base cantilever to T. B: inclined, pinned in bending at both
+    // ends, from a support at (0,0,1) up to T — it lies in the y–z plane, so
+    // the lateral push in x is transverse to both members.
+    const nodes = [{ id: 'base', x: 0, y: 0, z: 0 }, { id: 'T', x: 0, y: L, z: 0 }, { id: 'p', x: 0, y: 0, z: 1 }] as F3Node[]
+    const A = { id: 'A', i: 'base', j: 'T', ...sec }
+    // torsion freed at one end too: B's axis has a z-component, so a torsionally
+    // stiff B would also restrain A's top rotation and muddy the closed form
+    const B = { id: 'B', i: 'p', j: 'T', ...sec, relI: pin, relJ: [false, false, false, true, true, true] }
+    const sup = [{ node: 'base', fixity: 'fixed' }, { node: 'p', fixity: 'fixed' }] as F3Support[]
+    const lat: F3Load[] = [{ kind: 'node', node: 'T', Fx: H, cat: 'D' }]
+    const Pa = 400, Q = 300, Lb = Math.hypot(L, 1)
+    const aOnly = solveFrame3D(nodes.slice(0, 2), [A] as F3Member[], sup.slice(0, 1), lat, { pDelta: true, fixedAxial: [-Pa] })!
+    const c = aOnly.d[6] / H
+    const r = solveFrame3D(nodes, [A, B] as F3Member[], sup, lat, { pDelta: true, fixedAxial: [-Pa, -Q] })!
+    expect(r.d[6] / ((c * H) / (1 - (c * Q) / Lb))).toBeCloseTo(1, 6)
+    // the hinges stay hinges under axial load
+    const mb = r.members.find((m) => m.id === 'B')!
+    expect(Math.abs(mb.My[0]) + Math.abs(mb.Mz[0])).toBeLessThan(1e-6)
   })
 })

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { bucklingFromFrame } from './buckling'
-import { rectJ, type F3Node, type F3Member, type F3Support } from './frame3d'
+import { rectJ, solveFrame3D, type F3Node, type F3Member, type F3Support } from './frame3d'
 
 // ── shared section ────────────────────────────────────────────────────────────
 // 300×300 mm concrete column  (E = 25 000 MPa)
@@ -163,5 +163,31 @@ describe('bucklingFromFrame — sign and edge cases', () => {
       [-P],
     )!
     expect(r1[0].lambda / r2[0].lambda).toBeCloseTo(4, 1)
+  })
+})
+
+// ── leaning column — released member carries the condensed Kg ───────────────
+
+describe('bucklingFromFrame — cantilever propped by a leaning column', () => {
+  // A: fixed-base cantilever to T. B: pinned in bending at both ends (torsion
+  // freed at T), inclined in the y–z plane from (0,0,1) to T. At the critical
+  // λ the sway stiffness of A under λ·Pa exactly cancels B's string term
+  // λ·Q/L′ — the leaning-column condition, with A's own geometric softening.
+  const H = 3, Pa = 1, Q = 2, Lb = Math.hypot(H, 1)
+  const pin: F3Member['relI'] = [false, false, false, false, true, true]
+  const nodes: F3Node[] = [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'T', x: 0, y: H, z: 0 }, { id: 'p', x: 0, y: 0, z: 1 }]
+  const mA: F3Member = { id: 'A', i: 'a', j: 'T', ...sec }
+  const mB: F3Member = { id: 'B', i: 'p', j: 'T', ...sec, relI: pin, relJ: [false, false, false, true, true, true] }
+  const sup: F3Support[] = [{ node: 'a', fixity: 'fixed' }, { node: 'p', fixity: 'fixed' }]
+
+  it('λ satisfies 1/c(λ) = λQ/L′ and drops below the cantilever alone', () => {
+    const res = bucklingFromFrame(nodes, [mA, mB], sup, [-Pa, -Q])!
+    const sway = res.find((m) => Math.abs(m.shape['T'][0]) > 0.5)!
+    const lam = sway.lambda
+    const alone = bucklingFromFrame(nodes.slice(0, 2), [mA], sup.slice(0, 1), [-Pa])![0].lambda
+    expect(lam).toBeLessThan(alone)
+    const r = solveFrame3D(nodes.slice(0, 2), [mA], sup.slice(0, 1), [{ kind: 'node', node: 'T', Fx: 1, cat: 'D' }],
+      { pDelta: true, fixedAxial: [-lam * Pa] })!
+    expect(r.d[6] * (lam * Q) / Lb).toBeCloseTo(1, 4)
   })
 })

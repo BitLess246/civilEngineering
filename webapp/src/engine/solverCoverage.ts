@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 572
+export const SOLVER_TEST_COUNT = 576
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -691,6 +691,18 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "P-Δ past the dense-tangent ceiling",
         "name": "skips the iteration and returns the FIRST-ORDER answer, labelled"
+      },
+      {
+        "suite": "frame3d — P-Δ on members with end releases (condensed Kg)",
+        "name": "a bar pinned at both ends carries only the string stiffness N/L"
+      },
+      {
+        "suite": "frame3d — P-Δ on members with end releases (condensed Kg)",
+        "name": "an unreleased member keeps the full consistent kgLocal"
+      },
+      {
+        "suite": "frame3d — P-Δ on members with end releases (condensed Kg)",
+        "name": "a leaning column destabilises the cantilever by Q/L′ exactly — Δ = cH/(1 − cQ/L′)"
       }
     ]
   },
@@ -1479,6 +1491,10 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "bucklingFromFrame — sign and edge cases",
         "name": "cantilever: λ scales as 1/H² (Pcr ∝ 1/H²)"
+      },
+      {
+        "suite": "bucklingFromFrame — cantilever propped by a leaning column",
+        "name": "λ satisfies 1/c(λ) = λQ/L′ and drops below the cantilever alone"
       }
     ]
   },

@@ -379,6 +379,16 @@ export interface MemberGeom {
   retIdx?: number[]     // which are retained (complement of relIdx)
   kff_inv?: number[][]  // inverse of k_ff sub-matrix (nf × nf)
   kfr?: number[][]      // k_fr sub-matrix (nf × nr), used in force recovery
+  kgRel?: number[][]    // geometric stiffness per unit N, condensed onto the retained DOFs
+}
+
+/** Local geometric stiffness of a member for axial force N (tension +), on
+ *  the same DOFs as its elastic stiffness. A member with end releases has had
+ *  those DOFs condensed out of k, so its Kg must be condensed the same way —
+ *  adding the uncondensed kgLocal would put N·L/15-order rotational stiffness
+ *  back on a pinned end and make the hinge carry moment under axial load. */
+export function geometricLocal(g: MemberGeom, N: number): number[][] {
+  return g.kgRel ? g.kgRel.map((r) => r.map((v) => v * N)) : kgLocal(N, g.L)
 }
 
 // ── Shell element geometry (load-independent) ──────────────────────────────
@@ -547,6 +557,24 @@ function condenseLocal(kl: number[][], relIdx: number[]): {
   return { klEff, retIdx, kff_inv, kfr: k_fr }
 }
 
+/** Kg condensed through the element's own released shape: with the released
+ *  DOFs slaved to the retained ones by d_f = −k_ff⁻¹·k_fr·d_r (the same map the
+ *  force recovery uses), Kg_c = Pᵀ·Kg·P with P = [I; −k_ff⁻¹·k_fr]. Linear in
+ *  N, so it is built once per unit force. A bar pinned in bending at both ends
+ *  condenses to the string stiffness N/L on the transverse DOFs and nothing on
+ *  the rotations — the classical leaning-column element. */
+function condensedKgUnit(L: number, relIdx: number[], retIdx: number[], kff_inv: number[][], kfr: number[][]): number[][] {
+  const kg = kgLocal(1, L)
+  const P = Array.from({ length: 12 }, () => new Array(12).fill(0))
+  for (const r of retIdx) P[r][r] = 1
+  relIdx.forEach((f, a) => retIdx.forEach((r, j) => {
+    let s = 0
+    for (let k = 0; k < relIdx.length; k++) s += kff_inv[a][k] * kfr[k][j]
+    P[f][r] = -s
+  }))
+  return mul(mul(transpose(P), kg), P)
+}
+
 function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, number>): MemberGeom {
   const ni = nm.get(m.i)!, nj = nm.get(m.j)!
   // Member ends shift by the rigid offsets; the flexible element spans end→end.
@@ -573,11 +601,14 @@ function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, n
   m.relJ?.forEach((r, k) => { if (r) relIdx.push(6 + k) })
 
   let klEff = kl
-  let releaseData: Pick<MemberGeom, 'relIdx' | 'retIdx' | 'kff_inv' | 'kfr'> | undefined
+  let releaseData: Pick<MemberGeom, 'relIdx' | 'retIdx' | 'kff_inv' | 'kfr' | 'kgRel'> | undefined
   if (relIdx.length > 0) {
     const cond = condenseLocal(kl, relIdx)
     klEff = cond.klEff
-    releaseData = { relIdx, retIdx: cond.retIdx, kff_inv: cond.kff_inv, kfr: cond.kfr }
+    releaseData = {
+      relIdx, retIdx: cond.retIdx, kff_inv: cond.kff_inv, kfr: cond.kfr,
+      kgRel: condensedKgUnit(L, relIdx, cond.retIdx, cond.kff_inv, cond.kfr),
+    }
   }
 
   // Effective transform node→local: rotation T composed with the rigid-link H when offsets
@@ -1033,7 +1064,7 @@ export function solveWithGeometry(
       const Ktff = sparseClone(Kff_raw)
       for (let mi = 0; mi < geoms.length; mi++) {
         const g = geoms[mi]
-        const kgg = mul(mul(transpose(g.T), kgLocal(axialOf(mi), g.L)), g.T)
+        const kgg = mul(mul(transpose(g.T), geometricLocal(g, axialOf(mi))), g.T)
         for (let a = 0; a < 12; a++) {
           const ia = freeIdx.get(g.dofs[a])
           if (ia === undefined) continue
@@ -1147,7 +1178,7 @@ export function solveWithGeometry(
     const gde = matVec(g.kg, de)
     for (let a = 0; a < 12; a++) Kd[g.dofs[a]] += gde[a]
     if (geoAxial) {
-      const kgg = mul(mul(transpose(g.T), kgLocal(geoAxial(mi), g.L)), g.T)
+      const kgg = mul(mul(transpose(g.T), geometricLocal(g, geoAxial(mi))), g.T)
       const gge = matVec(kgg, de)
       for (let a = 0; a < 12; a++) Kd[g.dofs[a]] += gge[a]
     }
