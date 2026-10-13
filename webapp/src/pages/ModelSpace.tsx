@@ -1144,7 +1144,13 @@ export default function ModelSpace() {
       save(res.model)
       setDesign(res.design)
       writeSessionDesign(res.design)   // the calculators' window onto this run
-      requestAnimationFrame(captureModel)   // refresh the printable 3D snapshot
+      // RE-SOLVE ON THE DESIGNED MODEL, as Optimize does. `save()` clears the
+      // stored analysis (the model may have new sections), which left the
+      // page — the PDF report and the Excel export both — holding a design
+      // with no displacements, reactions or member forces behind it until the
+      // user thought to press Analyze again. Passed explicitly because
+      // `save()` has not reached this closure yet.
+      void analyzeModel(res.model).then(() => requestAnimationFrame(captureModel))
     }).catch((e) => console.error('design failed', e))
   }
 
