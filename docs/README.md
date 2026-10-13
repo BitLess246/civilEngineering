@@ -2,14 +2,14 @@
 
 Two audits live in this folder: the general repository audit (GEN-01…08) and the performance audit (PERF-01…06). The solver audit is in [`solver-audit/`](solver-audit/README.md).
 
-# Zeta — Previous General Repository Audit
+## Zeta — Previous General Repository Audit
 
 **Project:** Zeta structural engineering web application  
 **Repository:** https://github.com/BitLess246/civilEngineering  
 **Audit type:** General security, reliability, engineering-report, and validation review  
 **Scope note:** These documents capture the findings from the earlier general audit, before the separate 3D frame/FEM solver audit. They are investigation and remediation notes, not a penetration-test report or proof that an issue has been exploited.
 
-## Findings index
+### Findings index
 
 | ID | Priority | Finding | Main area |
 |---|---|---|---|
@@ -22,7 +22,7 @@ Two audits live in this folder: the general repository audit (GEN-01…08) and t
 | GEN-07 | High | Independent engineering validation is incomplete across modules and pipelines | Structural calculations |
 | GEN-08 | Medium–High | Soil-investigation persistence needs robust save-failure behavior | `soils/store.ts`, `useInvestigation.ts` |
 
-## Recommended remediation order
+### Recommended remediation order
 
 1. Review repository visibility, commit history, secrets, deployment integrations, and collaborator access.
 2. Make quota enforcement resilient to errors and apply rate limits at multiple layers.
@@ -32,7 +32,7 @@ Two audits live in this folder: the general repository audit (GEN-01…08) and t
 6. Build independent verification and regression coverage for engineering calculations.
 7. Ensure soil-investigation edits survive failed saves and the user receives clear feedback.
 
-## Important limitation
+### Important limitation
 
 This is a record of the earlier source-level audit. Findings should be confirmed against the current branch and deployment configuration before treating them as current defects. No claim is made here that secrets were leaked, an endpoint was abused, a webhook race was exploited, or engineering outputs are necessarily incorrect.
 
