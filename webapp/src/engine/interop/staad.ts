@@ -255,7 +255,7 @@ export function toStaad(model: StructuralModel): StaadExport {
     for (const m of members) {
       if (m.axisRotation === undefined) continue
       const d = dirOf(nodeById.get(m.i)!, nodeById.get(m.j)!)
-      const beta = m.axisRotation - defaultAxisRotation(d)
+      const beta = m.axisRotation - defaultAxisRotation(d, undefined, m.role)
       if (Math.abs(beta) > 1e-9) push(betas, fmt(beta), mn.get(m.id)!)
     }
     for (const [b, ids] of betas) L.push(...wrap(['BETA', b, 'MEMB', ...listTokens(ids)]))
@@ -968,7 +968,7 @@ export function fromStaad(text: string, opts?: { name?: string }): StaadImport {
     const role: Member['role'] = vertical(m) ? 'column' : Lm > 0 && Math.abs(d[1]) / Lm < 0.02 ? 'beam' : 'brace'
     const mem: Member = { id, i: a.id, j: b.id, role, section: id }
     const bt = beta.get(m)
-    if (bt) mem.axisRotation = defaultAxisRotation(d) + bt
+    if (bt) mem.axisRotation = defaultAxisRotation(d, undefined, role) + bt
     const rr = releases.get(m)
     if (rr) mem.releases = rr
     const of = offsets.get(m)

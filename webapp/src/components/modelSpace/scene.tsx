@@ -20,6 +20,7 @@ import type { StructuralModel, WoodDeck, ModelLoad } from '../../engine/model'
 import { type V3 } from '../../engine/frame3d'
 import { dashSpans } from '../../engine/dashPattern'
 import { planGridLines } from '../../lib/planGrid'
+import { memberFrame, frameBasis } from '../../lib/memberFrame'
 import { memberDiagramRibbon, type DiagramComp } from '../../engine/memberDiagram3d'
 import { footingPrism } from '../../engine/footingLayout'
 import { shapeByName, effectiveSection } from '../../engine/aiscSections'
@@ -149,8 +150,11 @@ export function Nodes3D({ nodePos, size = 0.07 }: {
   )
 }
 
-export function Member3D({ a, b, role, selected, sec, style = 'solid', onPick }: {
+export function Member3D({ a, b, role, selected, sec, axisRotation, style = 'solid', onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
+  /** Explicit local-axis rotation (°). Absent ⇒ the role default — the one the
+   *  solver used (`defaultAxisRotation`). */
+  axisRotation?: number
   /** the member's own section, drawn to scale (mm → m). */
   sec?: { b: number; h: number; material?: string }
   /** Solid concrete, ghosted (a cage is being read through it) or wireframe —
@@ -159,11 +163,10 @@ export function Member3D({ a, b, role, selected, sec, style = 'solid', onPick }:
   onPick: () => void
 }) {
   const { mid, quat, len } = useMemo(() => {
-    const dir = new THREE.Vector3().subVectors(b, a)
-    const len = dir.length()
-    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.clone().normalize())
+    const len = a.distanceTo(b)
+    const quat = frameQuaternion(a, b, role, axisRotation, 'box')
     return { mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len }
-  }, [a, b])
+  }, [a, b, role, axisRotation])
   const ty = sec ? sec.h / 1000 : role === 'column' ? 0.3 : 0.22
   const tz = sec ? sec.b / 1000 : role === 'column' ? 0.3 : 0.22
   // the node is the top of a beam, not its centroid — see levelDrop
@@ -238,6 +241,13 @@ export function SlackMember3D({ a, b }: { a: THREE.Vector3; b: THREE.Vector3 }) 
  *  extrude (+Z) runs along the member and its strong axis (depth d) stays
  *  vertical for beams/girders. Falls back to the box Member3D if the shape is
  *  unknown. */
+/** The rotation that lays a drawing's axes onto the member's solver frame. */
+function frameQuaternion(a: THREE.Vector3, b: THREE.Vector3, role: string, axisRotation: number | undefined, kind: 'box' | 'extrusion') {
+  const [ex, ey, ez] = frameBasis(memberFrame([a.x, a.y, a.z], [b.x, b.y, b.z], role, axisRotation), kind)
+  const m = new THREE.Matrix4().makeBasis(new THREE.Vector3(...ex), new THREE.Vector3(...ey), new THREE.Vector3(...ez))
+  return new THREE.Quaternion().setFromRotationMatrix(m)
+}
+
 export function MemberSteel3D({ a, b, role, shapeName, selected, axisRotation, style = 'solid', onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; shapeName: string
   selected: boolean
@@ -253,20 +263,8 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, axisRotation, s
     const dir = new THREE.Vector3().subVectors(b, a)
     const len = dir.length()
     const shapes = shape ? buildSectionShapes(effectiveSection(shape, false)) : []
-    // orient local +Z (extrude dir) onto the member axis; group placed at node i
-    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize())
-    // For columns (primarily vertical), pre-rotate the section 90° around local Z
-    // so the depth d aligns with global X and the flanges face ±X — the 90°
-    // axisRotation default the analysis now shares.
-    if (role === 'column') {
-      const rPre = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2)
-      quat.multiply(rPre)
-    }
-    // explicit axisRotation: rotate by the difference from the role default
-    // (engine +θ turns depth y′ toward z′ = −rotation about the extrude axis here)
-    const d0 = role === 'column' ? 90 : 0
-    const extra = (axisRotation ?? d0) - d0
-    if (extra) quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), (-extra * Math.PI) / 180))
+    // the profile's Y (depth) onto the solver's y′, its extrusion onto x′
+    const quat = frameQuaternion(a, b, role, axisRotation, 'extrusion')
     // a beam's node line is its TOP, so the section hangs below it — see levelDrop
     const d = shape ? (effectiveSection(shape, false).base.d ?? 0) / 1000 : 0
     const pos = a.clone()
@@ -280,7 +278,7 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, axisRotation, s
   }, [selected])
 
   if (shapes.length === 0) {
-    return <Member3D a={a} b={b} role={role} selected={selected} style={style} onPick={onPick} />
+    return <Member3D a={a} b={b} role={role} axisRotation={axisRotation} selected={selected} style={style} onPick={onPick} />
   }
   return (
     <group position={pos} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>

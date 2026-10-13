@@ -79,7 +79,7 @@ export function columnShares(
     if (!sec) continue
     const p = sectionProps(sec)
     const dirV: [number, number, number] = [b.x - a.x, b.y - a.y, b.z - a.z]
-    const [, yp, zp] = localAxes(dirV, defaultAxisRotation(dirV, m.axisRotation))
+    const [, yp, zp] = localAxes(dirV, defaultAxisRotation(dirV, m.axisRotation, m.role))
     const cy = g[0] * yp[0] + g[1] * yp[1] + g[2] * yp[2]
     const cz = g[0] * zp[0] + g[1] * zp[1] + g[2] * zp[2]
     const EI = p.E * (p.Iz * cy * cy + p.Iy * cz * cz)

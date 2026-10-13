@@ -63,7 +63,7 @@ export function autoRigidOffsets(
     // axisRotation, or the vertical 90° default that puts depth on global X —
     // the drawn orientation), so the panel-zone projection always matches the
     // analysis AND the rendered section.
-    const [xp, yp, zp] = localAxes(dir, defaultAxisRotation(dir, m.axisRotation))
+    const [xp, yp, zp] = localAxes(dir, defaultAxisRotation(dir, m.axisRotation, m.role))
     const { depth, width } = depthWidth(secById.get(m.section))
     mgs.push({ id: m.id, i: m.i, j: m.j, e: xp, L, yp, zp, depth, width, factor: m.rigidZoneFactor ?? factor })
   }

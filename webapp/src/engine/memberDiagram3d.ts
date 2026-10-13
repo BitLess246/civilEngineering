@@ -38,8 +38,8 @@ export interface DiagramRibbon {
  * Vy/Mz act about the rotated y′/z′, and drawing them on the unrotated plane
  * hangs the diagram off the wrong face, 90° around the member axis.
  */
-export function memberRotDeg(dir: V3, axisRotation?: number): number {
-  return defaultAxisRotation(dir, axisRotation)
+export function memberRotDeg(dir: V3, axisRotation?: number, role?: string): number {
+  return defaultAxisRotation(dir, axisRotation, role)
 }
 
 /**
