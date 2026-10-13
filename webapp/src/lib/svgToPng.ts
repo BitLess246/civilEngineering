@@ -33,6 +33,31 @@
 const SCALE = 3
 const MAX_PX = 1800
 
+export interface Box { x: number; y: number; width: number; height: number }
+
+/**
+ * The viewBox to rasterise: the drawn content plus a margin, never past the
+ * canvas the page shows.
+ *
+ * A schematic's canvas is sized for the SCREEN column, not for its ink — the
+ * retaining wall leaves a quarter of its width empty beside the pressure
+ * diagram, the footing a band above the plan — and the PDF figure fitted that
+ * whole canvas into its frame, so the empty part took the frame's width and
+ * the drawing came out small and off to one side. Cropped to the ink, the same
+ * frame holds the drawing centred and as large as the frame allows.
+ *
+ * Clipped to `vb` because content past the viewBox is hidden on screen, and the
+ * sheet should not print what the page does not show. `pad` is in user units
+ * and covers what `getBBox` leaves out (stroke half-widths, glyph overhang).
+ * Falls back to `vb` when the box is empty or degenerate.
+ */
+export function contentCrop(vb: Box, ink: Box | null, pad: number): Box {
+  if (!ink || !(ink.width > 0) || !(ink.height > 0)) return vb
+  const x0 = Math.max(vb.x, ink.x - pad), y0 = Math.max(vb.y, ink.y - pad)
+  const x1 = Math.min(vb.x + vb.width, ink.x + ink.width + pad), y1 = Math.min(vb.y + vb.height, ink.y + ink.height + pad)
+  return x1 - x0 > 0 && y1 - y0 > 0 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : vb
+}
+
 /**
  * Serialise an on-screen `<svg>` to a PNG data URL.
  *
@@ -47,17 +72,26 @@ export async function svgToPng(svg: SVGSVGElement | null, background = '#ffffff'
     // not been laid out (display:none, off-screen print block).
     const rect = svg.getBoundingClientRect()
     const vb = svg.viewBox?.baseVal
-    const w = Math.round(rect.width || vb?.width || 0)
-    const h = Math.round(rect.height || vb?.height || 0)
+    const w0 = rect.width || vb?.width || 0
+    const h0 = rect.height || vb?.height || 0
+    if (!w0 || !h0) return null
+    const full: Box = vb && vb.width > 0 && vb.height > 0 ? { x: vb.x, y: vb.y, width: vb.width, height: vb.height } : { x: 0, y: 0, width: w0, height: h0 }
+    let ink: Box | null = null
+    try { ink = svg.getBBox() } catch { /* not rendered — keep the full canvas */ }
+    // the 'meet' scale the page draws at, so the raster keeps its on-screen size
+    const k = Math.min(w0 / full.width, h0 / full.height)
+    const crop = contentCrop(full, ink, 6 / k)
+    const w = Math.round(crop.width * k)
+    const h = Math.round(crop.height * k)
     if (!w || !h) return null
 
     const clone = svg.cloneNode(true) as SVGSVGElement
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
     clone.setAttribute('width', String(w))
     clone.setAttribute('height', String(h))
-    if (!clone.getAttribute('viewBox') && vb) {
-      clone.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.width} ${vb.height}`)
-    }
+    clone.setAttribute('viewBox', `${crop.x} ${crop.y} ${crop.width} ${crop.height}`)
+    // the crop changes the box's aspect; the content keeps its own
+    clone.setAttribute('preserveAspectRatio', 'xMidYMid meet')
 
     const markup = new XMLSerializer().serializeToString(clone)
     const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`

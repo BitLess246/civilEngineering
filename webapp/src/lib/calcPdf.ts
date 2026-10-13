@@ -21,7 +21,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { LetterheadState, VerdictStat } from '../components/calc'
 import type { SolutionStep } from './solution'
-import { createSheet, autoTable, MUTED, NOT_CHECKED } from './pdfKit'
+import { createSheet, autoTable, MUTED, NOT_CHECKED, RULE_H } from './pdfKit'
 import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
 
 /**
@@ -176,9 +176,19 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
     s.solutionSteps(steps, `${idx}.`)
   }
 
+  // A heading travels with the figure under it. `figure` breaks the page for
+  // itself, which on its own left "4 · DRAWING" alone at the foot of one page
+  // and the drawing at the head of the next.
+  // A tall drawing (the retaining wall) is height-bound: at 150 mm it printed
+  // 133 mm wide in a 182 mm frame. Cropped to its ink it can take 180 and still
+  // land on one page with its heading.
+  const DRAWING_MAX_H = 180
+  const keepWith = async (png: string, maxH: number) => { const fh = await s.figureHeight(png, maxH); if (fh) s.ensure(RULE_H + fh) }
+
   if (drawing) {
+    await keepWith(drawing, DRAWING_MAX_H)
     section('Drawing')
-    await s.figure(drawing, `FIG 1 · ${(drawingTitle ?? docTitle).toUpperCase()}`, 150)
+    await s.figure(drawing, `FIG 1 · ${(drawingTitle ?? docTitle).toUpperCase()}`, DRAWING_MAX_H)
   }
 
   // The design's own diagrams, in the order the page lays them out. They sit
@@ -186,6 +196,7 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
   // each is captioned with the title the page labels it on screen, so the PDF
   // reads the same either way.
   if (figures.length > 0) {
+    await keepWith(figures[0].png, 120)
     section('Design Diagrams')
     for (let f = 0; f < figures.length; f++) {
       await s.figure(figures[f].png, `FIG ${drawing ? f + 2 : f + 1} · ${figures[f].title}`, 120)
