@@ -12,7 +12,7 @@
 // where columns are founded; a column leaning to its top (or every column of
 // a storey stacked on one) would otherwise draw a line through each top.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel } from '../engine/model'
+import type { StructuralModel } from './model'
 
 /** Distinct values, sorted, merged within `tol` (m). */
 export function uniqueCoords(vals: number[], tol = 0.05): number[] {

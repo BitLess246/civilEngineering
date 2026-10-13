@@ -92,10 +92,11 @@ describe('runInk — one accent hue', () => {
 
 describe('gridLines', () => {
   it('reads the lines off where the columns actually stand', () => {
-    // 3 × 2 columns: two lettered lines running in x, three numbered in z.
+    // 3 × 2 columns, labelled as the PLAN labels them: two numbered rows
+    // running in x, three lettered lines running in z.
     const g = gridLines(model)
-    expect(g.filter((x) => x.axis === 'x').map((x) => x.label)).toEqual(['A', 'B'])
-    expect(g.filter((x) => x.axis === 'z').map((x) => x.label)).toEqual(['1', '2', '3'])
+    expect(g.filter((x) => x.axis === 'x').map((x) => x.label)).toEqual(['1', '2'])
+    expect(g.filter((x) => x.axis === 'z').map((x) => x.label)).toEqual(['A', 'B', 'C'])
   })
 })
 
@@ -108,7 +109,7 @@ describe('frameElevationBundles', () => {
   })
 
   it('bands the sheet half a storey each side of the beams', () => {
-    const b = bundles.find((x) => x.key === 'frame-a-3-20')!
+    const b = bundles.find((x) => x.key === 'frame-1-3-20')!
     expect(b.input.yLo).toBeCloseTo(3.2 - 1.6, 9)
     expect(b.input.yHi).toBeCloseTo(3.2 + 1.6, 9)
   })
@@ -116,12 +117,12 @@ describe('frameElevationBundles', () => {
   it('bands a ROOF level off the storey below, so the sheet keeps its shape', () => {
     // Nothing above the roof to take half of. Taking zero would collapse the
     // sheet onto the beam and lose the joint it exists to show.
-    const b = bundles.find((x) => x.key === 'frame-a-6-40')!
+    const b = bundles.find((x) => x.key === 'frame-1-6-40')!
     expect(b.input.yHi - b.input.y).toBeCloseTo(1.6, 9)
   })
 
   it('hangs each beam BELOW its level — the node is the top of the beam', () => {
-    const b = bundles.find((x) => x.key === 'frame-a-3-20')!
+    const b = bundles.find((x) => x.key === 'frame-1-3-20')!
     for (const m of b.input.members.filter((x) => x.role === 'beam')) {
       expect(m.yTop).toBeCloseTo(3.2, 9)
       expect(m.yBot).toBeCloseTo(3.2 - 0.5, 9)
@@ -129,7 +130,7 @@ describe('frameElevationBundles', () => {
   })
 
   it('carries the columns from BOTH storeys, cut to the band', () => {
-    const b = bundles.find((x) => x.key === 'frame-a-3-20')!
+    const b = bundles.find((x) => x.key === 'frame-1-3-20')!
     const cols = b.input.members.filter((x) => x.role === 'column')
     expect(cols.filter((c) => c.yTop <= 3.2 + 1e-6)).toHaveLength(3)   // below
     expect(cols.filter((c) => c.yBot >= 3.2 - 1e-6)).toHaveLength(3)   // above
@@ -144,7 +145,7 @@ describe('frameElevationBundles', () => {
     // lettered line (running in x) sees h and a numbered one sees b. Drawn as b
     // either way, a 300×500 column on grid A came out 300 wide with its bars
     // spread 410 — the steel outside its own concrete.
-    for (const [key, want] of [['frame-a-3-20', 500], ['frame-1-3-20', 300]] as const) {
+    for (const [key, want] of [['frame-1-3-20', 500], ['frame-a-3-20', 300]] as const) {
       const b = bundles.find((x) => x.key === key)!.input
       const col = b.members.find((m) => m.role === 'column')!
       expect(Math.round((col.u1 - col.u0) * 1000)).toBe(want)
@@ -158,7 +159,7 @@ describe('frameElevationBundles', () => {
   })
 
   it('carries the CAGES of everything it draws, and nothing it does not', () => {
-    const b = bundles.find((x) => x.key === 'frame-a-3-20')!
+    const b = bundles.find((x) => x.key === 'frame-1-3-20')!
     const drawn = new Set(b.input.members.map((m) => m.mark))
     expect(b.input.cages.length).toBeGreaterThan(0)
     for (const c of b.input.cages) expect(drawn.has(c.member)).toBe(true)
@@ -169,10 +170,10 @@ describe('frameElevationBundles', () => {
 })
 
 describe('buildFrameElevation', () => {
-  const d = buildFrameElevation(bundles.find((x) => x.key === 'frame-a-3-20')!.input, { sheetRef: 'S-04' })
+  const d = buildFrameElevation(bundles.find((x) => x.key === 'frame-1-3-20')!.input, { sheetRef: 'S-04' })
 
   it('titles itself by grid line and level', () => {
-    expect(d.title).toBe('FRAME ELEVATION — GRID A @ EL 3.20')
+    expect(d.title).toBe('FRAME ELEVATION — GRID 1 @ EL 3.20')
     expect(textsOf(d)).toContain('EL 3.20')
   })
 
@@ -204,7 +205,7 @@ describe('buildFrameElevation', () => {
     // A dimension between two grids belongs beside the grids it is measured
     // to, and the space under the beam is the sections'. So the order down the
     // sheet is bubbles, then span dimensions, then the frame.
-    const beams = bundles.find((x) => x.key === 'frame-a-3-20')!.input.members
+    const beams = bundles.find((x) => x.key === 'frame-1-3-20')!.input.members
     const top = Math.min(...beams.map((m) => -m.yTop))     // page-Y of the highest concrete
     const circles = d.primitives.filter((p) => p.kind === 'circle') as { cy: number; r: number }[]
     // the bubbles are the big circles above the concrete; the small ones below
@@ -278,7 +279,7 @@ describe('buildFrameElevation', () => {
   it('places every callout AGAINST its beam, not out at the band edge', () => {
     // The band is half a storey either side; a label parked out there makes the
     // reader hunt for which member it names.
-    const beam = bundles.find((x) => x.key === 'frame-a-3-20')!.input
+    const beam = bundles.find((x) => x.key === 'frame-1-3-20')!.input
       .members.find((m) => m.role === 'beam')!
     const yTop = -beam.yTop, yBot = -beam.yBot        // page-Y
     const labels = d.primitives.filter((p) => p.kind === 'text'
@@ -296,7 +297,7 @@ describe('buildFrameElevation', () => {
   it('gives each FACE its own leader, pointing at its own bars', () => {
     // One callout that pointed at the top steel and then recited both faces
     // told the reader about a bar the arrow was nowhere near.
-    const beam = bundles.find((x) => x.key === 'frame-a-3-20')!.input
+    const beam = bundles.find((x) => x.key === 'frame-1-3-20')!.input
       .members.filter((m) => m.role === 'beam').sort((a, b) => a.u0 - b.u0)[0]
     const yTop = -beam.yTop, yBot = -beam.yBot, depth = yBot - yTop
     // the arrowhead is the only FILLED path on the sheet — one per leader
@@ -339,7 +340,7 @@ describe('buildFrameElevation', () => {
   it('keeps every callout in its OWN bay, clear of the columns', () => {
     // Bounded to the sheet rather than the beam, a label slides across the
     // column and names a member a bay away as far as the eye can tell.
-    const beams = bundles.find((x) => x.key === 'frame-a-3-20')!.input
+    const beams = bundles.find((x) => x.key === 'frame-1-3-20')!.input
       .members.filter((m) => m.role === 'beam').sort((a, b) => a.u0 - b.u0)
     for (const p of d.primitives) {
       if (p.kind !== 'text' || !/STIRRUPS|THRU|^bx/.test(p.text)) continue
@@ -560,7 +561,7 @@ describe('buildFrameElevation — annotation above the drawing', () => {
     // A roof has no column above, so the band's top half-storey is empty. The
     // bubbles used to sit above THAT — half a storey plus their own offset
     // over the beams, with nothing between. They stack off the beams now.
-    const roof = bundles.find((x) => x.key === 'frame-a-6-40')!.input
+    const roof = bundles.find((x) => x.key === 'frame-1-6-40')!.input
     const d = buildFrameElevation(roof)
     const u = unitOf(roof)
     const beamTop = -roof.y
@@ -575,7 +576,7 @@ describe('buildFrameElevation — annotation above the drawing', () => {
   })
 
   it('still clears the columns above on a floor sheet', () => {
-    const floor = bundles.find((x) => x.key === 'frame-a-3-20')!.input
+    const floor = bundles.find((x) => x.key === 'frame-1-3-20')!.input
     const d = buildFrameElevation(floor)
     const bandTop = -floor.yHi
     for (const b of bubblesOf(d, -floor.y)) expect(b.cy + b.r).toBeLessThan(bandTop)
@@ -591,7 +592,7 @@ describe('buildFrameElevation — annotation above the drawing', () => {
   })
 
   it('puts the zone label under the soffit, clear of the callouts over the beam', () => {
-    const floor = bundles.find((x) => x.key === 'frame-a-3-20')!.input
+    const floor = bundles.find((x) => x.key === 'frame-1-3-20')!.input
     const beam = floor.members.find((m) => m.role === 'beam')!
     const d = buildFrameElevation({ ...floor, highlight: [{ u0: beam.u0, u1: beam.u0 + 2, label: 'End i' }] })
     const label = (d.primitives.filter((p) => p.kind === 'text') as { text: string; y: number }[])
@@ -612,5 +613,30 @@ describe('wrapPitch', () => {
   })
   it('leaves a short one alone', () => {
     expect(wrapPitch('7@100, 12@220, 7@100')).toEqual(['7@100, 12@220, 7@100'])
+  })
+})
+
+describe('buildFrameElevation — a raking column', () => {
+  const member = (o: Partial<ElevationMember> & { mark: string; role: 'beam' | 'column' }): ElevationMember =>
+    ({ u0: 0, u1: 1, yBot: 0, yTop: 1, bw: 300, d: 500, ...o })
+  // C1 leans 0.6 m over the 3 m below the level: faces at the level 0.35…0.85
+  const i: FrameElevationInput = {
+    line: 'A', y: 3, yLo: 1.5, yHi: 4.5,
+    plane: elevationPlane([1, 0, 0], [0, 0, 0]),
+    members: [
+      member({ mark: 'B1', role: 'beam', u0: 0.85, u1: 5.75, yBot: 2.5, yTop: 3 }),
+      member({ mark: 'C1', role: 'column', u0: 0.35, u1: 0.85, yBot: 1.5, yTop: 3, lean: { yRef: 3, slope: 0.2 } }),
+    ],
+    grids: [{ u: 0, label: '1' }],
+    cages: [] as RebarCage[],
+    subject: new Set(['B1']),
+  }
+  const d = buildFrameElevation(i)
+  it('is drawn as the quadrilateral it is, its faces moving 0.2 m per metre of height', () => {
+    const p = d.primitives.find((x) => x.kind === 'path' && x.closed && x.cmds.length === 4) as Extract<PlanPrimitive, { kind: 'path' }>
+    expect(p).toBeDefined()
+    const xs = p.cmds.map((c) => +c.x.toFixed(6)).sort((a, b) => a - b)
+    // at the level (y 3): 0.35, 0.85; at the band bottom (y 1.5): 0.05, 0.55
+    expect(xs).toEqual([0.05, 0.35, 0.55, 0.85])
   })
 })

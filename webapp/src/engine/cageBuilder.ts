@@ -23,7 +23,8 @@
 import type { StructuralModel, RectSection } from './model'
 import type { StructureDesign } from './pipeline'
 import { buildBeamCage, effectiveDepth, jointBarRoom, HOOP_ZONE_DEPTHS } from './beamCage'
-import { buildColumnCage, perimeterBars } from './columnCage'
+import { buildColumnCage, perimeterBars, inclineCage } from './columnCage'
+import { localAxes, defaultAxisRotation, type V3 } from './frame3d'
 import { calcDevLength } from './devLength'
 import { buildFootingCage } from './footingCage'
 import { buildSlabCage, type SlabCageDir } from './slabCage'
@@ -515,7 +516,18 @@ export function buildStructureCages(
           topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
         }).lsc
       : 0
-    add('column', spliceCage(buildColumnCage({
+    // Built plumb about the BASE node, then laid on the member's own axis and
+    // the solver's y′ (`inclineCage`) — so an inclined column's cage leans with
+    // it, its bars carry their true length, and an explicit axisRotation turns
+    // the cage as it turns the stiffness. A plumb column at the default 90° is
+    // the identity and skips the map, so every existing cage is unchanged.
+    const bn = ni.y >= nj.y ? nj : ni, tn = ni.y >= nj.y ? ni : nj
+    const dirIJ: V3 = [nj.x - ni.x, nj.y - ni.y, nj.z - ni.z]
+    const rot = defaultAxisRotation(dirIJ, mem.axisRotation, 'column')
+    const plumb = Math.abs(tn.x - bn.x) < 1e-9 && Math.abs(tn.z - bn.z) < 1e-9
+    const lean = (cg: RebarCage): RebarCage => (plumb && rot === 90 ? cg
+      : inclineCage(cg, [bn.x, bn.y, bn.z], [tn.x, tn.y, tn.z], localAxes(dirIJ, rot)[1]))
+    add('column', spliceCage(lean(buildColumnCage({
       mark: c.id, b: sec.b, h: sec.h, cover: sec.cover, spliceLap: lap,
       spliceRise: lap > 0 ? spliceRiseAbove(c.id, topNode, lap / 1000) : 0,
       spliceStagger: lap > 0 ? spliceStaggerAbove(c.id, topNode, lap / 1000) : 0,
@@ -523,7 +535,7 @@ export function buildStructureCages(
       sConfined: c.tieSpacingFinal > 0 ? c.tieSpacingFinal : c.tieSpacing,
       sOutside: c.seismicSOut ?? c.tieSpacing,
       lo: c.seismicLoZone ?? 0,
-      centre: [ni.x, ni.z],
+      centre: [bn.x, bn.z],
       yBottom: yLo, yTop: yHi,
       // The joint band at EACH end that has one, which the joint's own hoops
       // own (§418.8.3). Only the top used to be cleared, so at every floor the
@@ -558,7 +570,7 @@ export function buildStructureCages(
       // A vertical is already lapped at the floor; a stock splice only appears
       // in a storey tall enough to need one, and belongs low, clear of the
       // hinge zone at the top.
-    }), spliceOf(sec, sec.barDia, [0.35])))
+    })), spliceOf(sec, sec.barDia, [0.35])))
   }
 
   // ── RC pedestals under steel and timber columns ─────────────────────────

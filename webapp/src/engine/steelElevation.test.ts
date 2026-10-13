@@ -65,8 +65,8 @@ describe('steelElevationBundles + buildSteelFrameElevation — the sheet', () =>
   const marks = connectionMarks(d)
 
   it('one elevation per grid line that carries steel, every storey on it', () => {
-    expect(bundles.map((b) => b.line).sort()).toEqual(['1', '2', '3', 'A', 'B'])
-    const a = bundles.find((b) => b.line === 'A')!.input
+    expect(bundles.map((b) => b.line).sort()).toEqual(['1', '2', 'A', 'B', 'C'])
+    const a = bundles.find((b) => b.line === '1')!.input
     expect(a.levels).toEqual([3.5, 6.5, 9.5])
     expect(a.beams).toHaveLength(6)
     expect(a.columns).toHaveLength(9)
@@ -88,14 +88,14 @@ describe('steelElevationBundles + buildSteelFrameElevation — the sheet', () =>
       expect([s.d, s.bf]).toContain(c.face)
     }
     // the two directions of the same column disagree — one sees d, the other bf
-    const onA = bundles.find((b) => b.line === 'A')!.input.columns[0]!
-    const across = bundles.find((b) => b.line === '1')!.input.columns.find((c) => c.id === onA.id)!
+    const onA = bundles.find((b) => b.line === '1')!.input.columns[0]!
+    const across = bundles.find((b) => b.line === 'A')!.input.columns.find((c) => c.id === onA.id)!
     expect(onA.face).not.toBe(across.face)
   })
 
   it('splices every stack where its shape changes, 1.2 m above the floor; base plates at the feet', () => {
-    const a = bundles.find((b) => b.line === 'A')!.input
-    expect(a.splices).toHaveLength(3)                        // three column positions on A
+    const a = bundles.find((b) => b.line === '1')!.input
+    expect(a.splices).toHaveLength(3)                        // three column positions on row 1
     for (const s of a.splices) { expect(s.y).toBeCloseTo(3.5 + SPLICE_ABOVE_FLOOR_M, 9); expect(s.reason).toBe('shape change') }
     expect(a.columns.filter((c) => c.basePlate)).toHaveLength(3)
     const t = texts(buildSteelFrameElevation(a).primitives)
