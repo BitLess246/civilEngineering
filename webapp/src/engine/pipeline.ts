@@ -36,7 +36,9 @@ import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { momentRatioLimits } from './beamMomentRatios'
 import { checkAnchorGroup, type AnchorGroupResult } from './anchorDesign'
 import { designPostBase, type PostBaseResult } from './postBase'
-import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
+import { shapeByName, nextHeavierW, nextLighterW, nextHeavierInFamily, nextLighterInFamily, effectiveSection, type AiscShape } from './aiscSections'
+import { hssKind, hssProps, hssFlexure, hssShear, hssDesignable } from './hssDesign'
+import { compressionScope } from './trussDesign'
 import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, columnAxial, combinedLoading, weakAxisFlexure } from './steelDesign'
 import type { PlateClass, FlexureClause } from './steelDesign'
 import { columnKFactors, type ColumnK } from './effectiveLength'
@@ -391,7 +393,13 @@ export interface SteelBeamScheduleRow {
   flangeClass: PlateClass; webClass: PlateClass; clause: FlexureClause
   /** §F3.2 flange-local-buckling strength (Infinity when the flange is
    *  compact) and which limit state actually governed. */
-  MnFLB: number; governing: 'yielding' | 'LTB' | 'FLB'
+  MnFLB: number; governing: 'yielding' | 'LTB' | 'FLB' | 'WLB' | 'local buckling'
+  /** §F7.3 web-local-buckling strength of a rect HSS, kN·m (absent for W). */
+  MnWLB?: number
+  /** Which shear clause produced φVn: §G2.1 (W web, d·tw), §G4 (rect HSS,
+   *  2ht, Cv2) or §G5 (round, Fcr·Ag/2). `Cv1` carries that clause's
+   *  coefficient and `hwTw` its slenderness. */
+  shearClause?: 'G2.1' | 'G4' | 'G5'
   Aw: number; Cv1: number; phiV: number; hwTw: number
 }
 export interface SteelColumnScheduleRow {
@@ -557,6 +565,11 @@ export interface StructureDesign {
   /** Cases whose P-Δ ran with shell elements present: the frame carries its
    *  geometric stiffness, the shells do not (informational, not a failure). */
   pDeltaShellsFirstOrder?: string[]
+  /** Steel members (designed as members) whose CONNECTIONS are not designed:
+   *  the joint details are W-shape details, and HSS / pipe connections are
+   *  AISC Chapter K, which is not implemented. Reported as a limitation, not a
+   *  failed check — the member checks are complete; the joints are not covered. */
+  connectionsNotDesigned?: string[]
   /** Gaps in the directional E/W case set the envelope was built from — a case
    *  with no opposite-sense twin (§208.5.1.1, §207B) or a 3D structure loaded
    *  along one plan axis only (§208.5.1.1/§208.8.1). The envelope is then
@@ -650,6 +663,7 @@ function designSteelBeamRow(
   mr: F3MemberResult, role: string, sec: RectSection, lbOverride?: number,
 ): SteelBeamScheduleRow | null {
   const shape = sec.shape ? shapeByName(sec.shape) : undefined
+  if (shape && hssKind(shape)) return designHssBeamRow(mr, role, shape, sec.steelFy ?? 248, lbOverride)
   if (!shape || (shape.family !== 'W' && shape.family !== 'WT')) return null
   const Fy = sec.steelFy ?? 248
   const p = deriveWSection(shape)
@@ -691,6 +705,45 @@ function designSteelBeamRow(
   }
 }
 
+/** A hollow-section beam/girder: §F7 (rect) or §F8 (round) strong-axis
+ *  flexure, §G4/§G5 shear, the same L/240 bound as the W row. Null when the
+ *  wall is outside the implemented flexure (slender) — the caller records it
+ *  unchecked with `steelBeamScopeReason`. */
+function designHssBeamRow(
+  mr: F3MemberResult, role: string, shape: AiscShape, Fy: number, lbOverride?: number,
+): SteelBeamScheduleRow | null {
+  const Lb = (lbOverride && lbOverride > 0 ? lbOverride : mr.L) * 1000
+  const flex = hssFlexure(shape, Fy, 'x', Lb, 1.0)
+  if (!flex.applicable) return null
+  const p = hssProps(shape)
+  const shear = hssShear(shape, Fy, 'x', mr.L * 1000)
+  const Mu = mr.Mmax, Vu = mr.Vmax
+  const utilM = flex.phiMn > 1e-9 ? Mu / flex.phiMn : Infinity
+  const utilV = shear.phiVn > 1e-9 ? Vu / shear.phiVn : Infinity
+  const L_mm = mr.L * 1000
+  const defl = (5 * Mu * 1e6 * L_mm ** 2) / (48 * 200000 * p.Ix)
+  const deflLim = L_mm / 240, deflOK = defl <= deflLim + 1e-9
+  const ltbZone = !Number.isFinite(flex.Lp) || Lb <= flex.Lp ? 'plastic' : Lb <= flex.Lr ? 'inelastic' : 'elastic'
+  return {
+    id: mr.id, role, L: mr.L, shape: shape.name, Mu, Vu,
+    phiMn: flex.phiMn, phiVn: shear.phiVn, ltbZone,
+    utilM, utilV, defl, deflLim, deflOK,
+    Ri: Math.abs(mr.Vy[0] ?? 0), Rj: Math.abs(mr.Vy[mr.Vy.length - 1] ?? 0), camber: 0,
+    ok: utilM <= 1 + 1e-9 && utilV <= 1 + 1e-9 && deflOK,
+    d: p.H, bf: p.B, tf: p.t, tw: p.t,
+    Ix: p.Ix, Sx: p.Sx, Zx: p.Zx, Iy: p.Iy, ry: shape.ry,
+    Mp: flex.Mp, Lp: flex.Lp, Lr: flex.Lr, Lb, Mn: flex.Mn,
+    compact: flex.flangeClass === 'compact' && flex.webClass === 'compact',
+    compactFlange: flex.flangeClass === 'compact', compactWeb: flex.webClass === 'compact',
+    lambdaF: flex.lambdaF, lambdaPF: flex.lambdaPF, lambdaW: flex.lambdaW, lambdaPW: flex.lambdaPW,
+    lambdaRF: flex.lambdaRF, lambdaRW: flex.lambdaRW,
+    flangeClass: flex.flangeClass, webClass: flex.webClass, clause: flex.clause,
+    MnFLB: flex.MnFLB, MnWLB: flex.MnWLB, governing: flex.governing,
+    shearClause: p.kind === 'round' ? 'G5' : 'G4',
+    Aw: shear.Aw, Cv1: shear.Cv, phiV: shear.phiV, hwTw: shear.slenderness,
+  }
+}
+
 /**
  * The dead-load deflection a steel beam is cambered against, and the camber.
  *
@@ -722,8 +775,10 @@ function steelCamber(row: SteelBeamScheduleRow, dRes: F3Result | null): { deltaD
 function steelBeamScopeReason(sec: RectSection): string {
   const shape = sec.shape ? shapeByName(sec.shape) : undefined
   if (!shape) return `${sec.shape ?? '(no shape)'} not found in the AISC library — steel beam flexure check skipped`
+  if (hssKind(shape)) return hssFlexure(shape, sec.steelFy ?? 248, 'x', 1).reason
+    ?? 'no analysis result for this member in any load combination'
   if (shape.family !== 'W' && shape.family !== 'WT')
-    return `${shape.name} is family ${shape.family} — §F2/§F3 flexure covers doubly-symmetric I-shapes only`
+    return `${shape.name} is family ${shape.family} — member flexure is implemented for W (§F2/§F3) and HSS/pipe (§F7/§F8) only`
   return beamFlexureScope(shape, deriveWSection(shape), sec.steelFy ?? 248).reason
     ?? 'no analysis result for this member in any load combination'
 }
@@ -778,9 +833,9 @@ function designSteelColumnRow(
   const Ky = pick(k?.Kx)   // weak axis   ← sway about global X
 
   const axial = columnAxial(shape, Fy, mr.L, Kx, Ky)
-  const props = deriveWSection(shape)
   let phiMnx = Infinity, phiMny = Infinity, flexureNote: string | undefined
   if (shape.family === 'W' || shape.family === 'WT') {
+    const props = deriveWSection(shape)
     const flex = beamFlexure(shape, props, Fy, mr.L * 1000, 1.0)
     // A section outside §F2/§F3 has no φMnx to put in §H1-1. Leaving the term
     // out would drop the moment silently, so the row is marked instead and the
@@ -788,11 +843,29 @@ function designSteelColumnRow(
     if (flex.applicable) phiMnx = flex.phiMn
     else flexureNote = flex.reason
     phiMny = weakAxisFlexure(shape, props, Fy).phiMny   // §F6
+  } else if (hssKind(shape)) {
+    const fx = hssFlexure(shape, Fy, 'x', mr.L * 1000, 1.0), fy = hssFlexure(shape, Fy, 'y', mr.L * 1000, 1.0)
+    if (fx.applicable && fy.applicable) { phiMnx = fx.phiMn; phiMny = fy.phiMn }
+    else flexureNote = fx.reason ?? fy.reason
+  } else {
+    // C, L: no member flexure is implemented. This used to leave φMn = ∞, so
+    // §H1-1 silently dropped the moments and the column could PASS on axial
+    // load alone (audit, steel-family support). It is unchecked instead.
+    flexureNote = `${shape.name} is family ${shape.family} — member flexure is not implemented for this family`
   }
+  // §E7 / §E4: the §E3 φPn is the whole compression strength only for a
+  // section with nonslender elements and no torsional mode — the same gate
+  // the truss check uses. Single angles pass it for TRUSS members (§E5), not
+  // for a frame column, which is caught by the flexure note above.
+  const comp = compressionScope(effectiveSection(shape), 200000, Fy)
+  if (!comp.supported && !flexureNote) flexureNote = comp.reason
   const comb = combinedLoading(Pu, axial.phiPn, Mux, phiMnx, Muy, phiMny)
   const E_STEEL = 200000
   const Fe = axial.slenderness > 0 ? (Math.PI ** 2 * E_STEEL) / axial.slenderness ** 2 : Infinity
-  const { d = 0, bf = 0, tf = 0, tw = 0, A, rx, ry } = shape
+  // a hollow section reports its outside depth/width and wall in the W slots,
+  // so base plates, pedestals and drawings get a real footprint
+  const hp = hssKind(shape) ? hssProps(shape) : null
+  const { d = hp?.H ?? 0, bf = hp?.B ?? 0, tf = hp?.t ?? 0, tw = hp?.t ?? 0, A, rx, ry } = shape
   return {
     id: mr.id, L: mr.L, shape: shape.name, Pu, Mu: Mux, Muy,
     phiPn: axial.phiPn, phiMn: Number.isFinite(phiMnx) ? phiMnx : 0,
@@ -1630,11 +1703,12 @@ function designFromRuns(
         }
         if (best) {
           steelColumns.push({ ...best, Tu, gov })
-          // §E3 axial still ran, but §H1-1 has no moment term without a §F
-          // strength — that is not a completed check.
+          // Either §H1-1 has no moment term (no §F strength for the family)
+          // or §E3 is not the whole compression strength (§E7/§E4) — in both
+          // the row is not a completed check.
           if (best.flexureNote) unchecked.push({
             id: m.id, role, shape: sec.shape ?? '(no shape)',
-            reason: `${best.flexureNote} — §H1-1 moment term omitted`,
+            reason: `${best.flexureNote} — column not checked`,
           })
         }
         // designSteelColumnRow bails only on an unresolvable shape name
@@ -2190,6 +2264,8 @@ function designFromRuns(
       && !r.result.pDelta.skipped).map((r) => r.name),
     pDeltaSkipped: runs.filter((r) => r.result.pDelta?.skipped).map((r) => r.name),
     pDeltaShellsFirstOrder: runs.filter((r) => r.result.pDelta?.shellsFirstOrder).map((r) => r.name),
+    connectionsNotDesigned: [...steelColumns.filter((c) => !c.flexureNote), ...steelBeams]
+      .filter((r) => shapeByName(r.shape)?.family !== 'W').map((r) => r.id),
     // fail-loud: a one-sided / one-axis lateral set is an incomplete envelope (CODE-02)
     lateralCoverage: lateralCaseCoverage(model, opts.lateral?.length ? opts.lateral : defaultLateralCases(model)),
   }
@@ -3143,6 +3219,11 @@ function stockTimber(m: StructuralModel, secRole: Map<string, string>): Structur
   }
 }
 
+/** A shape the frame design can actually check (HSS / pipe: walls inside the
+ *  implemented §F7/§F8 flexure and nonslender for §E7) — the optimiser only
+ *  steps onto these, so it never grows a member into an unchecked section. */
+const frameDesignable = (Fy: number) => (s: AiscShape): boolean => !hssKind(s) || hssDesignable(s, Fy)
+
 /**
  * One step lighter for the optimizer's trim, or null at the floor: the next
  * lighter W for a rolled shape, the next stocked sawn size (or one lam less of
@@ -3150,7 +3231,8 @@ function stockTimber(m: StructuralModel, secRole: Map<string, string>): Structur
  */
 function lighterSection(s0: RectSection, role: string): RectSection | null {
   if (s0.material === 'steel' && s0.shape) {
-    const lighter = nextLighterW(s0.shape)
+    const fam = shapeByName(s0.shape)?.family
+    const lighter = fam === 'W' ? nextLighterW(s0.shape) : nextLighterInFamily(s0.shape, frameDesignable(s0.steelFy ?? 248))
     return lighter ? applyShape(s0, lighter) : null
   }
   if (s0.material === 'wood') return lighterTimberSize(s0, role)
@@ -3165,7 +3247,8 @@ function jumpSection(s: RectSection, util: number, role: string): RectSection {
     const n = Math.max(1, Math.min(8, Math.ceil(Math.sqrt(util) - 0.5)))
     let cur = s
     for (let i = 0; i < n; i++) {
-      const next = nextHeavierW(cur.shape!)
+      const fam = shapeByName(cur.shape!)?.family
+      const next = fam === 'W' ? nextHeavierW(cur.shape!) : nextHeavierInFamily(cur.shape!, frameDesignable(cur.steelFy ?? 248))
       if (!next) break
       cur = applyShape(cur, next)
     }

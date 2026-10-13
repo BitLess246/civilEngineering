@@ -23,16 +23,20 @@ Use this as a living checklist. Do not mark a step complete until code, tests, a
 
 ## Phase 2 — HSS and PIPE
 
-- [ ] Implement validated HSS property derivation or authoritative property lookup.
-- [ ] Implement validated PIPE/round-section properties.
-- [ ] Implement applicable tension checks.
-- [ ] Implement applicable compression and stability checks.
-- [ ] Implement family-specific flexure and shear checks.
-- [ ] Implement applicable combined-force checks.
-- [ ] Implement local wall slenderness/classification and relevant limits.
-- [ ] Confirm torsion treatment and analysis assumptions.
-- [ ] Add independent benchmark cases for both families.
-- [ ] Enable only the validated check combinations in the UI.
+Shipped in the frame pipeline (`hssDesign.ts`); slender-element strengths
+(§F7.2(c), §F7.3(c), §E7 effective area) are fail-closed, not implemented.
+
+- [x] Implement validated HSS property derivation or authoritative property lookup. (I = A·r² tabulated; Z scaled from geometry by I_tab/I_geom — HSS8×8×½ and 6×6×¼ within 2 % of the Manual, on the low side)
+- [x] Implement validated PIPE/round-section properties. (Pipe 4 Std Z = 4.05 in³)
+- [ ] Implement applicable tension checks. (frame members carry no §D tension check yet — same as W)
+- [x] Implement applicable compression and stability checks. (§E3; §E7 slender walls → unchecked)
+- [x] Implement family-specific flexure and shear checks. (§F7, §F8, §G4, §G5)
+- [x] Implement applicable combined-force checks. (§H1 with both axes)
+- [x] Implement local wall slenderness/classification and relevant limits.
+- [ ] Confirm torsion treatment and analysis assumptions. (member torsion not checked — as for W)
+- [x] Add independent benchmark cases for both families. (`hssDesign.test.ts`)
+- [x] Enable only the validated check combinations in the UI. (family picker labels C/L/WT "analysis only"; slender shapes labelled)
+- [ ] HSS connections (Chapter K) — reported as not designed, never sized with W details.
 
 ## Phase 3 — C and L
 
