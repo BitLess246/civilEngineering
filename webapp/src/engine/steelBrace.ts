@@ -103,7 +103,8 @@ export function braceEffectiveArea(s: AiscShape, Fy: number, Fcr: number, elemen
     const [n, t] = countOf(e)
     lost += n * (1 - beOverB) * e.lambda * t * t            // b = λ·t
   }
-  return Math.max(0.2 * s.A, s.A - lost)
+  // no floor: §E7 has none, and one here would be the unconservative side
+  return Math.max(0, s.A - lost)
 }
 
 /** Design one brace for its envelope axial forces: `Pu` compression and

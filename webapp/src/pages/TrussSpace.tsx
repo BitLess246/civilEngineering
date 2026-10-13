@@ -366,7 +366,7 @@ export default function TrussSpace() {
                 <dt className="text-muted">Mass</dt><dd className="font-semibold text-ink">{(eff.A * 7850 / 1e6).toFixed(2)} kg/m</dd>
                 <dt className="text-muted">Compression check</dt>
                 <dd className={scope.supported ? 'font-semibold text-ink' : 'font-semibold text-fail'}>
-                  {scope.supported ? (scope.e5 ? '§E5 single angle' : '§E3 flexural buckling') : 'not covered'}
+                  {scope.supported ? (scope.e5 ? '§E5 single angle (+ §E7)' : 'Chapter E — §E3/§E4/§E7') : 'not covered'}
                 </dd>
               </dl>
             </div>
@@ -488,8 +488,9 @@ export default function TrussSpace() {
               </tbody>
             </table>
             <p className="mt-1 text-[11px] text-muted">
-              Pin-jointed planar truss (axial only). Tension yielding φPn = 0.9·Fy·Ag; compression flexural buckling per AISC §E3
-              (Fcr from KL/r, φ = 0.90). KL/r &gt; 200 flagged (⚠). Reactions: pin at the left support, roller at the right.
+              Pin-jointed planar truss (axial only). Tension yielding φPn = 0.9·Fy·Ag; compression per AISC Chapter E — §E3 flexural,
+              §E4 torsional / flexural-torsional for tees and channels, §E5 for single angles, §E7 effective area of slender
+              elements (φ = 0.90). KL/r &gt; 200 flagged (⚠). Reactions: pin at the left support, roller at the right.
             </p>
           </div>
         </div>

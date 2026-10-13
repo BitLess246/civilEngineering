@@ -204,7 +204,11 @@ const weightOf = (A: number, lengthM: number) => (A / 1e6) * lengthM * STEEL_DEN
  *  inputs, so the optimiser and the hand-picked path run the same check. */
 export function trussSectionOf(cand: EffectiveSection, mat: { E: number; Fy: number; K?: number }): TrussSection {
   const e5 = compressionScope(cand, mat.E, mat.Fy).e5
-  return { A: cand.A, r: cand.rmin, E: mat.E, Fy: mat.Fy, K: mat.K, ...(e5 ? { e5 } : {}) }
+  // a single catalogue shape carries itself, so compression runs Chapter E in
+  // full; a double angle (§E6, refused in compression) and a custom (A, r)
+  // section do not
+  const shape = !cand.double && cand.base.name !== 'custom' ? cand.base : undefined
+  return { A: cand.A, r: cand.rmin, E: mat.E, Fy: mat.Fy, K: mat.K, ...(e5 ? { e5 } : {}), ...(shape ? { shape } : {}) }
 }
 
 /**

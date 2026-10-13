@@ -117,12 +117,15 @@ export function steelBeamRowSolution(r: SteelBeamScheduleRow): SolutionStep[] {
 export function steelColumnRowSolution(r: SteelColumnScheduleRow): SolutionStep[] {
   return [
     { title: `Section ${r.shape}`, clause: 'AISC 360-16', lines: [
-      txt(`A = ${f0(r.A)} mm² · rx = ${f1(r.rx)} mm · ry = ${f1(r.ry)} mm · L = ${f2(r.L)} m (K = 1.0)`),
+      txt(`A = ${f0(r.A)} mm² · rx = ${f1(r.rx)} mm · ry = ${f1(r.ry)} mm · L = ${f2(r.L)} m · Kx = ${f2(r.Kx)}, Ky = ${f2(r.Ky)} (${r.braced ? 'braced' : 'sway'}), Lz = L`),
     ] },
-    { title: 'Axial — flexural buckling', clause: 'AISC 360-16 §E3', pass: r.Pu <= r.phiPn, lines: [
+    { title: `Axial — ${r.compMode ?? 'flexural'} buckling`, clause: `AISC 360-16 §${r.compClause ?? 'E3'}`, pass: r.Pu <= r.phiPn, lines: [
       txt(`KL/r: x = ${f1(r.slendernessX)} · y = ${f1(r.slendernessY)} → governing ${f1(r.slenderness)}`),
-      txt(`Fe = π²E/(KL/r)² = ${f1(r.Fe)} MPa → Fcr = ${f1(r.Fcr)} MPa`),
-      txt(`φPn = 0.90·Fcr·A = ${f1(r.phiPn)} kN ≥ Pu = ${f1(r.Pu)} kN ${r.Pu <= r.phiPn ? '✓' : '✗'}`),
+      txt(r.compMode && r.compMode !== 'flexural'
+        ? `§E4 ${r.compMode} buckling governs: Fe = ${f1(r.Fe)} MPa (below the flexural π²E/(KL/r)²) → Fcr = ${f1(r.Fcr)} MPa`
+        : `Fe = π²E/(KL/r)² = ${f1(r.Fe)} MPa → Fcr = ${f1(r.Fcr)} MPa`),
+      ...(r.Ae != null && r.Ae < r.A - 1e-6 ? [txt(`§E7 slender element(s): effective area Ae = ${f0(r.Ae)} mm² of Ag = ${f0(r.A)} mm²`)] : []),
+      txt(`φPn = 0.90·Fcr·${r.Ae != null && r.Ae < r.A - 1e-6 ? 'Ae' : 'Ag'} = ${f1(r.phiPn)} kN ≥ Pu = ${f1(r.Pu)} kN ${r.Pu <= r.phiPn ? '✓' : '✗'}`),
     ] },
     { title: 'Combined axial + flexure', clause: 'AISC 360-16 §H1-1', pass: r.ok, lines: [
       txt(`Mu = ${f1(r.Mu)} kN·m · φMn = ${f1(r.phiMn)} kN·m · equation ${r.equation}`),

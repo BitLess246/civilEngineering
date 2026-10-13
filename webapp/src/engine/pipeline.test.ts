@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections, barContinuityGroups } from './modelBuilder'
 import { camberFor, designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings, governingCombos, pedestalDrops, peakUtilisation, failingChecks } from './pipeline'
 import { nextHeavierW, shapeByName } from './aiscSections'
+import { steelCompression } from './steelCompression'
 import { computeSeismic } from './seismic'
 import { nscpCombos } from './beamAnalysis'
 import { validateMesh } from './meshValidation'
@@ -1888,5 +1889,31 @@ describe('HSS / pipe frame members — designed, not dropped (steel-family phase
     const shapes = r.model.sections.map((s) => shapeByName(s.shape!)!)
     expect(shapes.every((s) => s.family === 'HSS' && !s.D)).toBe(true)
     expect(shapes.some((s) => s.A > shapeByName('HSS102x102x6.4')!.A)).toBe(true)
+  })
+})
+
+describe('Chapter E in the frame column check (§E4 / §E7)', () => {
+  it('a slender-web W column (W310x52, h/tw 38.3 > 35.9) is DESIGNED through §E7, not refused', () => {
+    const m = makeModel()
+    const roleOfSec = new Map(m.members.map((x) => [x.section, x.role ?? '']))
+    m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const,
+      shape: roleOfSec.get(s.id) === 'column' ? 'W310x52' : 'W310x79', steelFy: 345, steelFu: 448 }))
+    const d = designStructure(m, soil)!
+    expect(d.unchecked.filter((u) => u.role === 'column')).toEqual([])
+    for (const c of d.steelColumns) {
+      expect(c.flexureNote).toBeUndefined()
+      expect(c.compClause).toBeDefined()
+      expect(c.Ae!).toBeLessThanOrEqual(c.A)
+      expect(c.phiPn).toBeCloseTo(0.9 * c.Fcr * c.Ae! / 1000, 6)
+    }
+  })
+  it('the row φPn is the Chapter E one at the row\'s own K and L', () => {
+    const m = makeModel()
+    m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const, shape: 'W310x79', steelFy: 345, steelFu: 448 }))
+    const d = designStructure(m, soil)!
+    const c = d.steelColumns[0]
+    const ref = steelCompression(shapeByName('W310x79')!, 345, c.Kx * c.L * 1000, c.Ky * c.L * 1000, c.L * 1000)
+    expect(c.phiPn).toBeCloseTo(ref.phiPn, 9)
+    expect(c.compMode).toBe(ref.mode)
   })
 })

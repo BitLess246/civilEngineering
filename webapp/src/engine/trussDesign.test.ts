@@ -125,27 +125,30 @@ describe('compressionScope — AISC 360-16 Table B4.1a λr and §E4/§E5 applica
   const E = 200_000, Fy = 248, rt = Math.sqrt(E / Fy)   // √(E/Fy) = 28.40
   const sc = (name: string, double = false) => compressionScope(effectiveSection(shapeByName(name)!, double), E, Fy)
 
-  it('tees, channels and double angles are out of scope (§E4 / §E6)', () => {
-    expect(sc('WT75x9').supported).toBe(false)
-    expect(sc('WT75x9').reason).toContain('§E4')
-    expect(sc('C150x12.2').supported).toBe(false)
+  it('tees and channels are in scope (§E4 implemented); double angles are not (§E6)', () => {
+    expect(sc('WT75x9').supported).toBe(true)
+    expect(sc('C150x12.2').supported).toBe(true)
     expect(sc('L51x51x6.4', true).supported).toBe(false)
     expect(sc('L51x51x6.4', true).reason).toContain('§E6')
   })
 
-  it('angle legs: b/t ≤ 0.45√(E/Fy) = 12.78 (case 3)', () => {
+  it('angle legs: slender ones (> 0.45√(E/Fy) = 12.78) are taken by §E7 up to 0.71√(E/Fy) = 20.16; past it, Eq. E4-4', () => {
     expect(0.45 * rt).toBeCloseTo(12.78, 2)
+    expect(0.71 * rt).toBeCloseTo(20.16, 2)
     expect(sc('L51x51x6.4').supported).toBe(true)        // 50.8/6.35 = 8.0
-    const thin = shapesOf('L').find((s) => Math.max(s.leg1!, s.leg2!) / s.t! > 0.45 * rt)!
-    const r = compressionScope(effectiveSection(thin), E, Fy)
-    expect(r.supported).toBe(false)
-    expect(r.reason).toContain('§E7')
+    const slender = shapesOf('L').find((s) => { const bt = Math.max(s.leg1!, s.leg2!) / s.t!; return bt > 0.45 * rt && bt <= 0.71 * rt })!
+    expect(compressionScope(effectiveSection(slender), E, Fy).supported).toBe(true)
+    const thin = shapesOf('L').find((s) => Math.max(s.leg1!, s.leg2!) / s.t! > 0.71 * rt)
+    if (thin) {
+      const r = compressionScope(effectiveSection(thin), E, Fy)
+      expect(r.supported).toBe(false)
+      expect(r.reason).toContain('E4-4')
+    }
   })
 
-  it('HSS wall: (B − 3t)/t ≤ 1.40√(E/Fy) = 39.76 (case 6, §B4.1b(d))', () => {
-    expect(sc('HSS50x50x4.8').supported).toBe(true)      // (50.8 − 13.26)/4.42 = 8.5
-    const thin = shapesOf('HSS').find((s) => s.b && (Math.max(s.b, s.h!) - 3 * s.t!) / s.t! > 1.40 * rt)
-    if (thin) expect(compressionScope(effectiveSection(thin), E, Fy).supported).toBe(false)
+  it('HSS with slender walls is in scope — §E7 effective area', () => {
+    expect(sc('HSS50x50x4.8').supported).toBe(true)
+    expect(sc('HSS305x305x6.4').supported).toBe(true)     // (b−3t)/t = 48.5 > 39.76
   })
 
   it('PIPE: D/t ≤ 0.11E/Fy = 88.7 (case 9)', () => {
