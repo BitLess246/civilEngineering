@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { memberColor, ROLE_COLOR, SEL, wallPrismCorners, WALL_TOP_LIFT_M } from './sceneTokens'
+import { memberColor, ROLE_COLOR, SEL, wallPrismCorners, WALL_TOP_LIFT_M, slabTributaryPolys } from './sceneTokens'
 
 describe('memberColor — the solid and the skeleton have to agree', () => {
   // This is shared rather than repeated because the wireframe draws the same
@@ -99,5 +99,28 @@ describe('wallPrismCorners — the solid wall sits where the ghost plane was', (
     // guard floors half-thickness at 0.1 mm
     const c = wallPrismCorners(t(0, 3, 0), t(4, 3, 0), t(0, 0, 0), t(4, 0, 0), 0, 0)
     expect(c[0].distanceTo(c[4])).toBeGreaterThanOrEqual(1.9e-4)
+  })
+})
+
+describe('slabTributaryPolys — the footprint sits on the panel\'s real corners', () => {
+  const V = (x: number, z: number) => new THREE.Vector3(x, 3.5, z)
+  const corners = (polys: ReturnType<typeof slabTributaryPolys>) => polys.flatMap((p) => p.pts)
+  const has = (pts: THREE.Vector3[], c: THREE.Vector3) => pts.some((p) => Math.hypot(p.x - c.x, p.y - 0.13 - c.y, p.z - c.z) < 1e-9)
+
+  it('a skewed panel (one corner node 1 m out): every corner of the quad is a footprint vertex', () => {
+    const c = [V(-1, 0), V(6, 0), V(6, 5), V(0, 5)]
+    const pts = corners(slabTributaryPolys(c))
+    for (const k of c) expect(has(pts, k)).toBe(true)
+  })
+  it('a rectangle draws exactly as before: the 45° ridge at (S/2, S/2) from each short edge', () => {
+    const polys = slabTributaryPolys([V(0, 0), V(6, 0), V(6, 5), V(0, 5)])
+    const ridge = polys.find((p) => p.kind === 'triangle')!.pts[2]
+    expect([ridge.x, ridge.z]).toEqual([2.5, 2.5])
+  })
+  it('the footprint pieces tile the skewed panel: their areas sum to the quad\'s', () => {
+    const c = [V(-1, 0), V(6, 0), V(6, 5), V(0, 5)]
+    const area = (pts: THREE.Vector3[]) => Math.abs(pts.reduce((s, p, k) => { const q = pts[(k + 1) % pts.length]; return s + p.x * q.z - q.x * p.z }, 0)) / 2
+    const total = slabTributaryPolys(c).reduce((s, p) => s + area(p.pts), 0)
+    expect(total).toBeCloseTo(32.5, 9)
   })
 })
