@@ -407,6 +407,19 @@ export default function SoilInvestigation() {
         )}
       </div>
 
+      {api.save && !api.save.ok && (
+        <div role="alert" className="mt-3 flex flex-wrap items-center gap-3 rounded-md border border-fail-line bg-fail-tint px-3 py-2 text-[12px] text-fail">
+          <span className="min-w-0 flex-1">{api.save.error}</span>
+          <button type="button" onClick={api.retrySave}
+            className="rounded border border-fail-line px-2 py-0.5 font-semibold hover:underline">Retry save</button>
+        </div>
+      )}
+      {!api.persistent && (
+        <p role="status" className="mt-3 rounded-md border border-warn-line bg-warn-tint px-3 py-2 text-[12px] text-warn">
+          This browser is blocking site storage, so nothing here survives closing the tab. Export the investigation to a file to keep it.
+        </p>
+      )}
+
       {importError && (
         <p className="mt-3 rounded-md border border-fail-line bg-fail-tint px-3 py-2 text-[12px] text-fail">
           {importError}

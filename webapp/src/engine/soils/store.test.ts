@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  createStore, memoryBackend, exportJSON, importJSON, SOILS_SCHEMA_VERSION,
+  createStore, memoryBackend, exportJSON, importJSON, SOILS_SCHEMA_VERSION, trySave, defaultBackend,
+  type StorageBackend,
 } from './store'
 import { sampleInvestigation } from './sample'
 import { emptyInvestigation } from './model'
@@ -95,5 +96,44 @@ describe('import / export', () => {
     const inv = sampleInvestigation()
     inv.boreholes[0].layers[1].depthBottom = 4.0   // a gap — advisory only
     expect(() => importJSON(exportJSON(inv))).not.toThrow()
+  })
+})
+
+describe('save failures are reported, never thrown (GEN-08)', () => {
+  const quotaFull = (): StorageBackend => {
+    const b = memoryBackend()
+    return { ...b, setItem: () => { throw Object.assign(new Error('quota'), { name: 'QuotaExceededError' }) } }
+  }
+
+  it('a full quota comes back as a failed outcome with a recovery hint', () => {
+    const out = trySave(createStore(quotaFull()), 'si_1', sampleInvestigation())
+    expect(out.ok).toBe(false)
+    if (!out.ok) expect(out.error).toMatch(/storage is full.*Export/)
+  })
+
+  it('any other storage error is reported with its message', () => {
+    const b = { ...memoryBackend(), setItem: () => { throw new Error('disk on fire') } }
+    const out = trySave(createStore(b), 'si_1', sampleInvestigation())
+    expect(out).toEqual({ ok: false, error: expect.stringContaining('disk on fire') })
+  })
+
+  it('a successful save reports when it landed, and the copy is readable', () => {
+    const store = createStore(memoryBackend())
+    const inv = sampleInvestigation()
+    const out = trySave(store, 'si_1', inv)
+    expect(out.ok).toBe(true)
+    expect(store.load('si_1')).toEqual(inv)
+  })
+
+  it('blocked site storage falls back to memory and says it is not persistent', () => {
+    const g = globalThis as { localStorage?: unknown }
+    const had = Object.getOwnPropertyDescriptor(g, 'localStorage')
+    Object.defineProperty(g, 'localStorage', { configurable: true, get: () => { throw new Error('SecurityError') } })
+    try {
+      expect(defaultBackend().persistent).toBe(false)
+    } finally {
+      if (had) Object.defineProperty(g, 'localStorage', had)
+      else delete g.localStorage
+    }
   })
 })

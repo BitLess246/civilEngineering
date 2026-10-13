@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Investigation } from '../engine/soils/model'
 import { emptyInvestigation } from '../engine/soils/model'
 import {
-  createStore, defaultBackend, exportJSON as serialise, importJSON as parse,
-  type InvestigationSummary,
+  createStore, defaultBackend, exportJSON as serialise, importJSON as parse, trySave,
+  type InvestigationSummary, type SaveOutcome,
 } from '../engine/soils/store'
 import { sampleInvestigation } from '../engine/soils/sample'
 
@@ -33,6 +33,14 @@ export interface InvestigationApi {
   remove(id: string): void
   importJSON(json: string): void
   exportJSON(): string
+  /** Outcome of the last write; null before the first. A failed save keeps the
+   *  edit on screen and in memory — it is the PERSISTED copy that is behind. */
+  save: SaveOutcome | null
+  /** False when this browser gives the page no storage (blocked site data):
+   *  edits live only until the tab closes. */
+  persistent: boolean
+  /** Re-attempt the write of the current investigation. */
+  retrySave(): void
 }
 
 export function useInvestigation(): InvestigationApi {
@@ -49,8 +57,12 @@ export function useInvestigation(): InvestigationApi {
   const refreshList = useCallback(() => setInvestigations(store.list()), [store])
 
   useEffect(() => {
-    if (activeId) backend.setItem(ACTIVE_KEY, activeId)
-    else backend.removeItem(ACTIVE_KEY)
+    // Best effort: remembering which investigation was open is a convenience,
+    // and a full quota must not throw out of an effect.
+    try {
+      if (activeId) backend.setItem(ACTIVE_KEY, activeId)
+      else backend.removeItem(ACTIVE_KEY)
+    } catch { /* the save banner already reports a storage failure */ }
   }, [activeId, backend])
 
   /**
@@ -73,9 +85,14 @@ export function useInvestigation(): InvestigationApi {
     setInvestigation(next)
   }, [])
 
+  const [save, setSave] = useState<SaveOutcome | null>(null)
+
+  // The edit is applied to state FIRST, then written. The old order wrote
+  // first, so a throwing setItem (full quota, blocked storage) aborted before
+  // the state update and the edit vanished from the screen with no message.
   const persist = useCallback((id: string, next: Investigation) => {
-    store.save(id, next)
     setLive(next)
+    setSave(trySave(store, id, next))
     refreshList()
   }, [store, refreshList, setLive])
 
@@ -124,8 +141,13 @@ export function useInvestigation(): InvestigationApi {
 
   const exportJSON = useCallback(() => (investigation ? serialise(investigation) : ''), [investigation])
 
+  const retrySave = useCallback(() => {
+    if (activeId && live.current) persist(activeId, live.current)
+  }, [activeId, persist])
+
   return {
     investigation, activeId, investigations,
     update, replace, loadSample, newInvestigation, open, remove, importJSON, exportJSON,
+    save, persistent: backend.persistent !== false, retrySave,
   }
 }
