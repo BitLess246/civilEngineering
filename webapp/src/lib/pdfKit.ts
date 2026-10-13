@@ -52,6 +52,8 @@ export const NOT_CHECKED = 'NOT CHECKED'
 export const PAGE_W = 210, PAGE_H = 297, M = 14      // mm
 export const CONTENT_W = PAGE_W - 2 * M
 export const FOOT_Y = PAGE_H - 12                     // keep-clear line for the footer
+/** What `rule` advances the cursor by: 6 + 1.6 + 4 mm. */
+export const RULE_H = 11.6
 
 export interface StatCard { label: string; value: string; unit?: string }
 
@@ -160,6 +162,9 @@ export interface Sheet {
   statCards(stats: readonly StatCard[]): void
   /** Framed image with a small caption. Silently skipped if it will not load. */
   figure(dataUrl: string, caption: string, maxH?: number): Promise<void>
+  /** Height in mm `figure` will take for this image — 0 if it will not load.
+   *  For keeping a section heading on the same page as the figure under it. */
+  figureHeight(dataUrl: string, maxH?: number): Promise<number>
   /** Numbered worked-solution steps with equation boxes and a margin column. */
   solutionSteps(steps: readonly SolutionStep[], indexPrefix?: string): void
   signatures(preparedBy: string): void
@@ -379,6 +384,10 @@ export function createSheet(): Sheet {
         }
         if (i % 3 === 2 || i === stats.length - 1) s.y += ch + 2.5
       })
+    },
+
+    async figureHeight(dataUrl, maxH = 120) {
+      try { const { w, h } = await imageSize(dataUrl); return fitFigure(w, h, maxH).drawH + 11 } catch { return 0 }
     },
 
     async figure(dataUrl, caption, maxH = 120) {

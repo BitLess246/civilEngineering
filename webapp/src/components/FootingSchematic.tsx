@@ -201,7 +201,9 @@ export function FootingSchematic({
           <g>
             <rect x={crit.x} y={crit.y} width={crit.w} height={crit.h}
               fill="none" stroke={CRIT} strokeWidth={1} strokeDasharray="4 3" opacity={0.85} />
-            <text x={crit.x - 3} y={crit.y - 3} fontSize={7.5} fill={CRIT} textAnchor="end">crit. @ d/2</text>
+            {/* haloed: since the plan draws the mat, this label sits on the bars */}
+            <text x={crit.x - 3} y={crit.y - 3} fontSize={7.5} fill={CRIT} textAnchor="end"
+              paintOrder="stroke" stroke={FILL} strokeWidth={3} strokeLinejoin="round">crit. @ d/2</text>
           </g>
         )}
         {/* Free edges of the pad, where the column face is flush. */}

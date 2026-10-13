@@ -23,6 +23,19 @@ function stepHead(root, n, label, line, dark) {
     op(box, t >= a ? 1 : 0)
   } }
 }
+/** A captured drawing cropped to its ink and fitted, centred, into a w × hMax
+ *  slot. The capture's viewBox is the screen canvas, sized for the app's
+ *  column rather than the drawing, so fitting it whole left the ink small and
+ *  off to one side of whatever held it. */
+function fitDrawing(parent, id, x, y, w, hMax, order = 'xy', pad = 10) {
+  const probe = drawing(parent, id, 0, 0, w, order)
+  const vb = probe.vb, bb = probe.svg.getBBox(); probe.box.remove()
+  const x0 = Math.max(vb.x, bb.x - pad), y0 = Math.max(vb.y, bb.y - pad)
+  const x1 = Math.min(vb.x + vb.width, bb.x + bb.width + pad), y1 = Math.min(vb.y + vb.height, bb.y + bb.height + pad)
+  const crop = bb.width > 0 && bb.height > 0 ? [x0, y0, x1 - x0, y1 - y0] : [vb.x, vb.y, vb.width, vb.height]
+  const dw = Math.min(w, hMax * crop[2] / crop[3])
+  return drawing(parent, id, x + (w - dw) / 2, y, dw, order, crop)
+}
 /** Plates hold, then snap out on the last eighth of their final bar. */
 function snapOut(root, t, b) {
   const k = ease(t, b - 0.22, b, E.inExpo)
@@ -276,10 +289,11 @@ const S6 = scene(20.0, 24.0, (root) => {
     <div style="margin-top:10px;border:1px solid #e3e1da;border-radius:6px;font-size:12px">
       ${CFG.fields.slice(0, 6).map((i) => K.fields[i]).map((f, j) => `<div style="display:flex;justify-content:space-between;padding:7px 10px;${j ? 'border-top:1px solid #eeece5' : ''}"><span style="color:#5c6675">${f.label}</span><span style="font-family:'IBM Plex Mono';font-weight:500;color:${INK}">${f.value} ${f.unit}</span></div>`).join('')}
     </div>
-    <div style="font-size:17px;font-weight:700;color:${INK};margin-top:22px">2. Drawing</div></div>`
-  const thumb = drawing(pages[2], K.draw[0].id, 34, 600, pw - 68, 'xy')
-  thumb.box.style.top = 600 + 'px'
-  const scl = Math.min(1, 190 / thumb.h); tf(thumb.box, `scale(${scl})`); thumb.box.style.transformOrigin = '0 0'
+    <div data-h="draw" style="font-size:17px;font-weight:700;color:${INK};margin-top:22px">2. Drawing</div></div>`
+  // the drawing fills the page under its heading: measured, not a fixed slot
+  const dh = pages[2].querySelector('[data-h=draw]')
+  const top = dh.offsetTop + dh.offsetHeight + 14
+  fitDrawing(pages[2], K.draw[0].id, 34, top, pw - 68, ph - top - 34)
   // pages behind: the worked solution and the checks
   pages[1].innerHTML = `<div style="padding:34px"><div style="font-size:17px;font-weight:700;color:${INK}">${K.solTitle}</div>${K.steps.slice(0, 7).map((s) => `<div style="margin-top:16px;font-size:12px;font-weight:600;color:${INK}"><span class="mono" style="color:${BRANDC};margin-right:8px">${String(s.n).padStart(2, '0')}</span>${s.title}</div><div style="height:30px;margin-top:6px;border-radius:5px;background:#f6f5f1"></div>`).join('')}</div>`
   pages[0].innerHTML = `<div style="padding:34px"><div style="font-size:17px;font-weight:700;color:${INK}">3. Results summary</div>${K.cards.slice(0, 4).map((c) => `<div style="display:flex;justify-content:space-between;margin-top:16px;font-size:13px;color:${INK}"><span>${c.title}</span><b style="font-family:'IBM Plex Mono'">${c.value} ${c.unit || ''}</b></div>`).join('')}</div>`

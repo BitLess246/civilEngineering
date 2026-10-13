@@ -215,7 +215,8 @@ describe('the screen-only drawing invert cannot reach the export', () => {
 // Driven through the real `createSheet`, because the defect is in how two
 // reservations interact and no reading of either one alone reveals it.
 // ─────────────────────────────────────────────────────────────────────────
-import { createSheet, FOOT_Y, M } from './pdfKit'
+import { createSheet, FOOT_Y, M, RULE_H } from './pdfKit'
+import { contentCrop } from './svgToPng'
 
 const DISCLAIMER =
   'Computed client-side by the CivEngg Toolkit engine · verify before construction use. '
@@ -268,5 +269,34 @@ describe('signatures + disclaimer', () => {
     for (const y of [M + 10, FOOT_Y - 60, FOOT_Y - 41, FOOT_Y - 39, FOOT_Y - 1]) {
       expect(closeOutAt(y).y, `cursor at ${y.toFixed(0)}mm`).toBeLessThanOrEqual(FOOT_Y)
     }
+  })
+})
+
+describe('a section heading travels with its figure', () => {
+  it('RULE_H is what rule() actually advances', () => {
+    // calcPdf reserves RULE_H + figure height before printing "4 · DRAWING";
+    // if the constant drifts from the rule, the heading can strand again.
+    const s = createSheet(); s.y = M + 20
+    const y0 = s.y; s.rule(4, 'Drawing')
+    expect(s.y - y0).toBeCloseTo(RULE_H, 6)
+  })
+})
+
+describe('contentCrop — the figure is the drawing, not its screen canvas', () => {
+  const vb = { x: 0, y: 0, width: 800, height: 900 }
+  it('crops to the ink plus the margin', () => {
+    expect(contentCrop(vb, { x: 100, y: 50, width: 400, height: 600 }, 6)).toEqual({ x: 94, y: 44, width: 412, height: 612 })
+  })
+  it('never reaches past the canvas the page shows', () => {
+    expect(contentCrop(vb, { x: -40, y: 2, width: 900, height: 950 }, 6)).toEqual(vb)
+  })
+  it('keeps a non-zero viewBox origin', () => {
+    const o = { x: -50, y: -20, width: 300, height: 200 }
+    expect(contentCrop(o, { x: -45, y: -10, width: 100, height: 50 }, 2)).toEqual({ x: -47, y: -12, width: 104, height: 54 })
+  })
+  it('falls back to the canvas when there is nothing to measure', () => {
+    expect(contentCrop(vb, null, 6)).toBe(vb)
+    expect(contentCrop(vb, { x: 10, y: 10, width: 0, height: 0 }, 6)).toBe(vb)
+    expect(contentCrop(vb, { x: 2000, y: 2000, width: 10, height: 10 }, 6)).toBe(vb)
   })
 })
