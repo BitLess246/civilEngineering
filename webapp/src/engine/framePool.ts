@@ -3,6 +3,23 @@
 // a FIFO queue so all N workers stay busy during a batch of load cases.
 import type { FramePrecompSerial, F3Load, F3Result, PDeltaOpts } from './frame3d'
 
+/** Keep one logical CPU available for the browser/UI and cap memory-heavy solver copies. */
+export const MAX_FRAME_WORKERS = 8
+
+/**
+ * Choose a worker count for a known batch. Each worker deserializes and retains
+ * its own factorization, so starting more workers than useful tasks wastes both
+ * startup time and substantial memory on large shell meshes.
+ */
+export function frameWorkerCount(
+  taskCount: number,
+  hardwareConcurrency = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency ?? 4 : 4,
+): number {
+  const tasks = Number.isFinite(taskCount) ? Math.max(1, Math.floor(taskCount)) : 1
+  const cores = Number.isFinite(hardwareConcurrency) ? Math.max(1, Math.floor(hardwareConcurrency)) : 4
+  return Math.max(1, Math.min(MAX_FRAME_WORKERS, Math.max(1, cores - 1), tasks))
+}
+
 interface PendingTask {
   id: number
   loads: F3Load[]
@@ -18,7 +35,10 @@ export class FramePool {
   private pending = new Map<number, (r: F3Result | null) => void>()
   private seq = 0
 
-  constructor(size = Math.min(navigator.hardwareConcurrency ?? 4, 8)) {
+  constructor(size = frameWorkerCount(MAX_FRAME_WORKERS)) {
+    if (!Number.isInteger(size) || size < 1 || size > MAX_FRAME_WORKERS) {
+      throw new RangeError(`FramePool size must be an integer from 1 to ${MAX_FRAME_WORKERS}`)
+    }
     this.ws = Array.from({ length: size }, (_, i) => {
       const w = new Worker(new URL('./frameWorker.ts', import.meta.url), { type: 'module' })
       w.onmessage = ({ data }) => this.recv(i, data)

@@ -13,7 +13,7 @@ import { modelToFrame3D } from './modelBridge'
 import { precomputeFrame, solveWithGeometry, applyF3Combo, serializePrecomp, localAxes, defaultAxisRotation, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
 import { stitchResult } from './memberSplit'
 import type { BridgeResult } from './modelBridge'
-import { FramePool } from './framePool'
+import { FramePool, frameWorkerCount } from './framePool'
 import { nscpCombos, type Combo } from './beamAnalysis'
 import type { ProgressFn } from './progress'
 import { designBeam, type BeamDesignResult } from './beamDesign'
@@ -2400,13 +2400,24 @@ async function designStructureWithPool(
     stitch(serviceRaw), stitch(dRaw), stitch(lRaw), onProgress)
 }
 
+/**
+ * Size the pool to the work actually available, not just the machine's core
+ * count. Each design also schedules service/D/L solves, in addition to the
+ * factored load combinations. The helper is shared by the one-shot design and
+ * optimizer so their worker-memory footprint follows the same rule.
+ */
+function framePoolSizeFor(model: StructuralModel, opts: AnalyzeOptions): number {
+  const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
+  return frameWorkerCount(buildComboTasks(lateral, opts).length + 3)
+}
+
 /** Async (Worker-pool) version of designStructure. Spawns N frame-solve workers
  *  and fans the 20–30 load-case solves across them for near-linear speed-up. */
 export async function designStructureAsync(
   model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
   onProgress?: ProgressFn,
 ): Promise<StructureDesign | null> {
-  const pool = new FramePool()
+  const pool = new FramePool(framePoolSizeFor(model, opts))
   try {
     const first = await designStructureWithPool(model, soil, plan, opts, pool, onProgress)
     if (!first) return null
@@ -2415,7 +2426,7 @@ export async function designStructureAsync(
     // pads it sits on have been sized.
     const lowered = lowerBasesToFootings(model, first)
     if (!lowered) return first
-    const pool2 = new FramePool()
+    const pool2 = new FramePool(framePoolSizeFor(lowered, opts))
     try {
       return (await designStructureWithPool(lowered, soil, plan, opts, pool2, onProgress)) ?? first
     } finally {
@@ -2433,7 +2444,7 @@ export async function optimizeStructureAsync(
   opts: AnalyzeOptions = {}, tryBars = false, onProgress?: ProgressFn,
 ): Promise<OptimizeResult | null> {
   if (model.members.length === 0) return null
-  const pool = new FramePool()
+  const pool = new FramePool(framePoolSizeFor(model, opts))
   try {
     const memSecId = new Map(model.members.map((m) => [m.id, m.section]))
     const secRole = new Map<string, string>(model.members.map((m) => [m.section, m.role]))
