@@ -5529,6 +5529,11 @@ export default function ModelSpace() {
               </ul>
             </div>
           )}
+          {(design.pDeltaShellsFirstOrder?.length ?? 0) > 0 && (
+            <p className="rounded-xl border border-hairline p-3 text-sm text-ink-2">
+              P-Δ includes the frame members' geometric stiffness; shell walls and slabs enter with their elastic stiffness, so their own in-plane buckling is not captured.
+            </p>
+          )}
           {design.unchecked.length > 0 && (
             <div className="rounded-xl border border-fail-line bg-fail-tint p-3 text-sm text-fail">
               <p className="font-bold">⚠ {design.unchecked.length} member(s) could NOT be design-checked — the result is not a passing design.</p>
