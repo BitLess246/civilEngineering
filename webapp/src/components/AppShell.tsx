@@ -14,7 +14,8 @@ import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { isEmbedLocation } from '../lib/embed'
 import { SiteFooter } from './SiteFooter'
 import { AccountMenu } from './AccountMenu'
-import { BRAND_NAME, BRAND_MARK, BRAND_TAIL, BRAND_MONOGRAM } from '../lib/brand'
+import { BRAND_NAME, BRAND_TAIL } from '../lib/brand'
+import { ZetaLogo, ZetaMark } from './BrandMark'
 import { TrialGate } from './TrialGate'
 import { ErrorBoundary } from './ErrorBoundary'
 import { watchScrollableRegions } from '../lib/scrollableRegions'
@@ -323,8 +324,8 @@ function Sidebar({ onOpenPalette, onNavigate, className, trailing, railable = fa
         className="no-print sticky top-0 hidden h-screen flex-none flex-col items-center overflow-y-auto overflow-x-visible bg-rail text-rail-ink lg:flex">
         <div className="flex w-full flex-col items-center gap-1 border-b border-white/10 py-3">
           <Link to="/" onClick={onNavigate} aria-label="Home"
-            className="flex h-9 w-9 items-center justify-center rounded-md text-[13px] font-extrabold tracking-[.02em] text-rail-ink hover:bg-sheet/10">
-            {BRAND_MONOGRAM}
+            className="flex h-9 w-9 items-center justify-center rounded-md hover:bg-sheet/10">
+            <ZetaMark size={24} />
           </Link>
           <button type="button" onClick={onOpenPalette} aria-label="Find a tool (⌘K)" title="Find a tool  ⌘K"
             className="flex h-9 w-9 items-center justify-center rounded-md text-rail-muted hover:bg-sheet/10 hover:text-rail-ink">
@@ -351,8 +352,8 @@ function Sidebar({ onOpenPalette, onNavigate, className, trailing, railable = fa
     <aside className={className ?? 'no-print sticky top-0 hidden h-screen w-[230px] flex-none flex-col overflow-y-auto bg-rail text-rail-ink lg:flex'}>
       <div className="border-b border-white/10 p-4 pb-3.5">
         <div className="flex items-center justify-between gap-2">
-          <Link to="/" onClick={onNavigate} className="flex items-baseline gap-2 py-1">
-            <span className="text-[15px] font-extrabold tracking-[.14em] text-rail-ink">{BRAND_MARK}</span>
+          <Link to="/" onClick={onNavigate} className="flex items-center gap-2 py-1 text-rail-ink">
+            <ZetaLogo height={26} />
             {BRAND_TAIL && <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-rail-muted">{BRAND_TAIL}</span>}
           </Link>
           {railable && <RailToggle collapsed={false} onToggle={toggleRail} />}
@@ -578,8 +579,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="-ml-1.5 flex h-11 w-11 flex-none items-center justify-center rounded-md text-muted hover:bg-brand-tint hover:text-brand lg:hidden">
               <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></svg>
             </button>
-            <Link to="/" className="hidden min-h-[24px] items-baseline gap-1.5 sm:flex lg:hidden">
-              <span className="text-[13px] font-extrabold tracking-[.14em] text-ink">{BRAND_MARK}</span>
+            <Link to="/" className="hidden min-h-[24px] items-center gap-1.5 text-ink sm:flex lg:hidden">
+              <ZetaLogo height={22} />
             </Link>
             {/* `min-w-0 flex-1` is what lets the breadcrumb TRUNCATE. It had
                 `min-w-0` but no `flex-1`, so it never shrank and the search pill

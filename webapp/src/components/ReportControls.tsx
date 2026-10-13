@@ -3,7 +3,8 @@ import type { CalcPdfInput } from '../lib/calcPdf'
 import { ExportPdfButton } from './ExportPdfButton'
 import { LetterheadCard, type LetterheadState } from './calc'
 import { useReportLetterhead } from '../lib/reportLetterhead'
-import { BRAND_MARK, BRAND_TAIL, docLabel } from '../lib/brand'
+import { BRAND_TAIL, docLabel } from '../lib/brand'
+import { ZetaLogo } from './BrandMark'
 
 /**
  * A page's report payload, minus the parts this component already owns.
@@ -51,8 +52,8 @@ export function PrintLetterhead({ title, badges, lh, today }: {
         <span>{docLabel(title)}</span>
         <span>{lh.sheet || '—'} · {today}</span>
       </div>
-      <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-[14px] font-extrabold tracking-[.14em]">{BRAND_MARK}</span>
+      <div className="mt-3 flex items-center gap-2">
+        <ZetaLogo height={22} />
         {BRAND_TAIL && <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>}
       </div>
       <h1 className="mt-2 text-[24px] font-extrabold tracking-tight text-ink">{title}</h1>
