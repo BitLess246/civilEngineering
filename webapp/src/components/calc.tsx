@@ -430,14 +430,8 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
 export function ReportBar({ title, lh, onChange }: {
   title: string; lh: LetterheadState; onChange: (p: Partial<LetterheadState>) => void
 }) {
-  const print = () => {
-    const prev = document.title
-    document.title = title + (lh.project ? ` — ${lh.project}` : '')
-    window.print()
-    window.setTimeout(() => { document.title = prev }, 500)
-  }
   const field = (label: string, key: keyof LetterheadState, ph: string, mono = false) => (
-    <label className="flex min-w-36 flex-1 flex-col text-sm">
+    <label className={`flex min-w-36 flex-1 flex-col text-sm`}>
       <span className="mb-1 text-[11.5px] font-semibold text-muted">{label}</span>
       <input value={lh[key]} onChange={(e) => onChange({ [key]: e.target.value })} placeholder={ph}
         className={`text-[13px] ${mono ? 'font-mono' : ''}`} />
@@ -448,10 +442,14 @@ export function ReportBar({ title, lh, onChange }: {
       {field('Project / job', 'project', 'Lot 12 Residence')}
       {field('Sheet', 'sheet', 'S-01 · Rev A', true)}
       {field('Prepared by', 'preparedBy', 'Engineer, CE')}
-      <button type="button" onClick={print}
-        className="ml-auto inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover">
-        ⎙ Export report
-      </button>
+      <ExportPdfButton
+        docTitle={title} docCode="CALC-01" badges={['Code basis not specified']}
+        ok={false} verdictLabel="NOT ASSESSED" verdictTone="neutral"
+        governing="No page-specific structured result summary was supplied. Review captured data; this is not a verified design verdict."
+        assumptions={['This legacy page has not supplied a complete structured report payload. Captured inputs, tables, diagrams, and rendered text may not include hidden calculation assumptions or internal defaults; manual review is required.']}
+        lh={lh}
+        className="ml-auto inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover"
+      />
     </div>
   )
 }
