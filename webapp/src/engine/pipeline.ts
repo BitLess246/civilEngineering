@@ -39,6 +39,7 @@ import { designPostBase, type PostBaseResult } from './postBase'
 import { shapeByName, nextHeavierW, nextLighterW, nextHeavierInFamily, nextLighterInFamily, type AiscShape } from './aiscSections'
 import { hssKind, hssProps, hssFlexure, hssShear, hssDesignable } from './hssDesign'
 import { steelCompression } from './steelCompression'
+import { channelFlexure, channelWeakFlexure, channelShear, teeFlexure, teeShear, type OpenFlexure } from './openFlexure'
 import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, combinedLoading, weakAxisFlexure } from './steelDesign'
 import type { PlateClass, FlexureClause } from './steelDesign'
 import { columnKFactors, type ColumnK } from './effectiveLength'
@@ -399,7 +400,14 @@ export interface SteelBeamScheduleRow {
   /** Which shear clause produced φVn: §G2.1 (W web, d·tw), §G4 (rect HSS,
    *  2ht, Cv2) or §G5 (round, Fcr·Ag/2). `Cv1` carries that clause's
    *  coefficient and `hwTw` its slenderness. */
-  shearClause?: 'G2.1' | 'G4' | 'G5'
+  shearClause?: 'G2.1' | 'G3' | 'G4' | 'G5'
+  /** §F9.4 stem local-buckling strength of a tee with the stem in
+   *  compression, kN·m (absent otherwise). */
+  MnLB?: number
+  /** A tee is checked in BOTH senses: sagging puts the stem in tension,
+   *  hogging in compression, and the two strengths differ by 2× or more. The
+   *  row's Mu / φMn are the pair that governs; this keeps both. */
+  tee?: { Mpos: number; Mneg: number; phiMnPos: number; phiMnNeg: number; governs: 'stem-tension' | 'stem-compression' }
   Aw: number; Cv1: number; phiV: number; hwTw: number
 }
 export interface SteelColumnScheduleRow {
@@ -667,6 +675,7 @@ function designSteelBeamRow(
 ): SteelBeamScheduleRow | null {
   const shape = sec.shape ? shapeByName(sec.shape) : undefined
   if (shape && hssKind(shape)) return designHssBeamRow(mr, role, shape, sec.steelFy ?? 248, lbOverride)
+  if (shape && (shape.family === 'C' || shape.family === 'WT')) return designOpenBeamRow(mr, role, shape, sec.steelFy ?? 248, lbOverride)
   if (!shape || (shape.family !== 'W' && shape.family !== 'WT')) return null
   const Fy = sec.steelFy ?? 248
   const p = deriveWSection(shape)
@@ -747,6 +756,58 @@ function designHssBeamRow(
   }
 }
 
+/** A channel (§F2 + §G2.1) or tee (§F9 + §G3) beam/girder. A tee, flange up,
+ *  is checked in both senses — the sagging peak against the stem-in-tension
+ *  strength, the hogging peak against the stem-in-compression one — and the
+ *  row carries whichever governs. Null when §F2 refuses the channel. */
+function designOpenBeamRow(
+  mr: F3MemberResult, role: string, shape: AiscShape, Fy: number, lbOverride?: number,
+): SteelBeamScheduleRow | null {
+  const Lb = (lbOverride && lbOverride > 0 ? lbOverride : mr.L) * 1000
+  let flex: OpenFlexure, Mu: number, tee: SteelBeamScheduleRow['tee']
+  if (shape.family === 'C') {
+    flex = channelFlexure(shape, Fy, Lb, 1.0)
+    if (!flex.applicable) return null
+    Mu = mr.Mmax
+  } else {
+    const ft = teeFlexure(shape, Fy, Lb, 'tension'), fc = teeFlexure(shape, Fy, Lb, 'compression')
+    const Mpos = Math.max(0, ...mr.Mz), Mneg = Math.max(0, ...mr.Mz.map((m) => -m))
+    const uT = ft.phiMn > 1e-9 ? Mpos / ft.phiMn : Infinity, uC = fc.phiMn > 1e-9 ? Mneg / fc.phiMn : Infinity
+    const governs = uC > uT ? 'stem-compression' : 'stem-tension'
+    flex = governs === 'stem-compression' ? fc : ft
+    Mu = governs === 'stem-compression' ? Mneg : Mpos
+    tee = { Mpos, Mneg, phiMnPos: ft.phiMn, phiMnNeg: fc.phiMn, governs }
+  }
+  const shear = shape.family === 'C' ? channelShear(shape, Fy) : teeShear(shape, Fy)
+  const Vu = mr.Vmax
+  const utilM = flex.phiMn > 1e-9 ? Mu / flex.phiMn : Infinity
+  const utilV = shear.phiVn > 1e-9 ? Vu / shear.phiVn : Infinity
+  const L_mm = mr.L * 1000
+  const defl = (5 * mr.Mmax * 1e6 * L_mm ** 2) / (48 * 200000 * flex.Ix)
+  const deflLim = L_mm / 240, deflOK = defl <= deflLim + 1e-9
+  const { d = 0, bf = 0, tf = 0, tw = 0, ry } = shape
+  return {
+    id: mr.id, role, L: mr.L, shape: shape.name, Mu, Vu,
+    phiMn: flex.phiMn, phiVn: shear.phiVn, ltbZone: flex.ltbZone,
+    utilM, utilV, defl, deflLim, deflOK,
+    Ri: Math.abs(mr.Vy[0] ?? 0), Rj: Math.abs(mr.Vy[mr.Vy.length - 1] ?? 0), camber: 0,
+    ok: utilM <= 1 + 1e-9 && utilV <= 1 + 1e-9 && deflOK,
+    d, bf, tf, tw,
+    Ix: flex.Ix, Sx: flex.Sx, Zx: flex.Zx, Iy: shape.A * shape.ry ** 2, ry,
+    Mp: flex.Mp, Lp: flex.Lp, Lr: flex.Lr, Lb, Mn: flex.Mn,
+    compact: flex.flangeClass === 'compact' && flex.webClass === 'compact',
+    compactFlange: flex.flangeClass === 'compact', compactWeb: flex.webClass === 'compact',
+    lambdaF: flex.lambdaF, lambdaPF: flex.lambdaPF, lambdaW: flex.lambdaW, lambdaPW: flex.lambdaPW,
+    lambdaRF: flex.lambdaRF, lambdaRW: flex.lambdaRW,
+    flangeClass: flex.flangeClass, webClass: flex.webClass, clause: flex.clause === 'F9' ? 'F9' : 'F2',
+    MnFLB: flex.MnFLB, governing: flex.governing,
+    ...(Number.isFinite(flex.MnLB) ? { MnLB: flex.MnLB } : {}),
+    ...(tee ? { tee } : {}),
+    shearClause: shear.clause,
+    Aw: shear.Aw, Cv1: shear.Cv, phiV: shear.phiV, hwTw: shear.slenderness,
+  }
+}
+
 /**
  * The dead-load deflection a steel beam is cambered against, and the camber.
  *
@@ -780,8 +841,10 @@ function steelBeamScopeReason(sec: RectSection): string {
   if (!shape) return `${sec.shape ?? '(no shape)'} not found in the AISC library — steel beam flexure check skipped`
   if (hssKind(shape)) return hssFlexure(shape, sec.steelFy ?? 248, 'x', 1).reason
     ?? 'no analysis result for this member in any load combination'
+  if (shape.family === 'C') return channelFlexure(shape, sec.steelFy ?? 248, 1).reason
+    ?? 'no analysis result for this member in any load combination'
   if (shape.family !== 'W' && shape.family !== 'WT')
-    return `${shape.name} is family ${shape.family} — member flexure is implemented for W (§F2/§F3) and HSS/pipe (§F7/§F8) only`
+    return `${shape.name} is family ${shape.family} — member flexure is implemented for W (§F2/§F3), channels (§F2), tees (§F9) and HSS/pipe (§F7/§F8)`
   return beamFlexureScope(shape, deriveWSection(shape), sec.steelFy ?? 248).reason
     ?? 'no analysis result for this member in any load combination'
 }
@@ -840,7 +903,15 @@ function designSteelColumnRow(
   // §E7 effective area of slender elements at the governing Fcr.
   const axial = steelCompression(shape, Fy, Kx * mr.L * 1000, Ky * mr.L * 1000, mr.L * 1000)
   let phiMnx = Infinity, phiMny = Infinity, flexureNote: string | undefined
-  if (shape.family === 'W' || shape.family === 'WT') {
+  if (shape.family === 'C') {
+    const fx = channelFlexure(shape, Fy, mr.L * 1000, 1.0)
+    if (fx.applicable) { phiMnx = fx.phiMn; phiMny = channelWeakFlexure(shape, Fy).phiMn }   // §F2 / §F6
+    else flexureNote = fx.reason
+  } else if (shape.family === 'WT') {
+    // §F9 is strong-axis only, and no §F clause is written for bending of a
+    // tee about its stem axis — §H1-1 cannot be formed, so it is not checked.
+    flexureNote = `${shape.name} is a tee — its weak-axis (stem-axis) flexure has no AISC 360-16 §F clause, so a tee column's §H1-1 cannot be formed (tee BEAMS are designed by §F9)`
+  } else if (shape.family === 'W') {
     const props = deriveWSection(shape)
     const flex = beamFlexure(shape, props, Fy, mr.L * 1000, 1.0)
     // A section outside §F2/§F3 has no φMnx to put in §H1-1. Leaving the term
@@ -854,9 +925,9 @@ function designSteelColumnRow(
     if (fx.applicable && fy.applicable) { phiMnx = fx.phiMn; phiMny = fy.phiMn }
     else flexureNote = fx.reason ?? fy.reason
   } else {
-    // C, L: no member flexure is implemented. This used to leave φMn = ∞, so
-    // §H1-1 silently dropped the moments and the column could PASS on axial
-    // load alone (audit, steel-family support). It is unchecked instead.
+    // L: no member flexure is implemented (§F10). This used to leave φMn = ∞,
+    // so §H1-1 silently dropped the moments and the column could PASS on
+    // axial load alone (audit, steel-family support). It is unchecked instead.
     flexureNote = `${shape.name} is family ${shape.family} — member flexure is not implemented for this family`
   }
   // a compression case Chapter E does not cover (a single angle outside
@@ -3226,7 +3297,8 @@ function stockTimber(m: StructuralModel, secRole: Map<string, string>): Structur
 /** A shape the frame design can actually check (HSS / pipe: walls inside the
  *  implemented §F7/§F8 flexure and nonslender for §E7) — the optimiser only
  *  steps onto these, so it never grows a member into an unchecked section. */
-const frameDesignable = (Fy: number) => (s: AiscShape): boolean => !hssKind(s) || hssDesignable(s, Fy)
+const frameDesignable = (Fy: number) => (s: AiscShape): boolean =>
+  hssKind(s) ? hssDesignable(s, Fy) : s.family === 'C' ? channelFlexure(s, Fy, 1).applicable : true
 
 /**
  * One step lighter for the optimizer's trim, or null at the floor: the next

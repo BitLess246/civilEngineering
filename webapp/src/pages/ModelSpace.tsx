@@ -288,7 +288,7 @@ export default function ModelSpace() {
   // Families the frame design checks (W §F2/F3, HSS §F7, pipe §F8); the rest
   // analyse with their true section but go into the schedule as unchecked.
   const familyOptions: [SectionFamily, string][] = FAMILIES.map((f) =>
-    [f.id, f.id === 'W' || f.id === 'HSS' || f.id === 'PIPE' ? f.label : `${f.label} — analysis only, not designed`])
+    [f.id, f.id === 'L' ? `${f.label} — analysis only, not designed` : f.id === 'WT' ? `${f.label} — beams only (tee columns not designed)` : f.label])
   const shapeLabel = (sh: AiscShape): string =>
     hssKind(sh) && !hssDesignable(sh, steelFy) ? `${sh.name} — slender wall, not designed at Fy ${steelFy}` : sh.name
   const [qD, setQD] = useState(n('qD', 4.8)); const [qL, setQL] = useState(n('qL', 2.4))
@@ -3150,7 +3150,7 @@ export default function ModelSpace() {
                 <p className="col-span-full -mt-1 text-[11px] text-muted">
                   {!isOfferedFrameMaterial(material) && 'Steel and timber frames are being reworked and are not offered for new models; this model keeps its material. '}
                   {material === 'steel'
-                    ? 'Members become AISC shapes designed to AISC 360-16 LRFD — W (§F2/F3), HSS (§F7) and pipe (§F8) flexure, §G shear, §E/§H1 columns; base plates per §J8. Slabs/footings stay reinforced concrete.'
+                    ? 'Members become AISC shapes designed to AISC 360-16 LRFD — W and channel (§F2/F3), tee (§F9), HSS (§F7) and pipe (§F8) flexure, §G shear, §E/§H1 columns; base plates per §J8. Slabs/footings stay reinforced concrete.'
                     : material === 'wood'
                       ? 'Members become solid-rectangular timber designed to NDS §3 / NSCP §6 (LRFD via Appendix N). Floor slabs become timber deck-on-joist floors (wood slab); footings stay reinforced concrete.'
                       : 'Members are reinforced concrete designed to NSCP 2015 / ACI 318-14.'}
@@ -3174,9 +3174,10 @@ export default function ModelSpace() {
                   <Num label="Steel Fu" unit="MPa" value={steelFu} onChange={setSteelFu} step="5" />
                   <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
                   <p className="col-span-full text-[11px] text-muted">
-                    Every family is analysed and drawn with its true section. Design &amp; optimise cover W, HSS and pipe;
-                    channel, angle and tee members are listed as unchecked, never passed. Connections are designed for
-                    W members only — HSS/pipe joints (AISC Chapter K) are reported as not designed. Concrete f′c is
+                    Every family is analysed and drawn with its true section. Design &amp; optimise cover W, HSS, pipe and
+                    channel members and tee beams (§F9, sagging and hogging both checked); angle members and tee columns are
+                    listed as unchecked, never passed. Connections are designed for W members only — the others are
+                    reported as not designed. Concrete f′c is
                     still used for base-plate bearing.
                   </p>
                 </Sec>
@@ -5547,8 +5548,8 @@ export default function ModelSpace() {
           )}
           {(design.connectionsNotDesigned?.length ?? 0) > 0 && (
             <p className="rounded-xl border border-warn-line bg-warn-tint p-3 text-sm text-warn">
-              ⚠ Connections are not designed for {design.connectionsNotDesigned!.length} HSS / pipe member(s). The member checks are complete;
-              joint design covers W shapes only (HSS connections, AISC Chapter K, are not implemented yet), so detail these joints separately.
+              ⚠ Connections are not designed for {design.connectionsNotDesigned!.length} HSS, pipe, channel or tee member(s). The member checks are
+              complete; joint design covers W shapes only (HSS connections, AISC Chapter K, are not implemented yet), so detail these joints separately.
             </p>
           )}
           {(design.pDeltaShellsFirstOrder?.length ?? 0) > 0 && (
@@ -6300,7 +6301,9 @@ export default function ModelSpace() {
                                     ['Flange (B4.1b)', `${b.flangeClass}  λf=${b.lambdaF.toFixed(1)} · λpf=${b.lambdaPF.toFixed(1)} · λrf=${b.lambdaRF.toFixed(1)}`],
                                     ['Web (B4.1b)', `${b.webClass}  λw=${b.lambdaW.toFixed(1)} · λpw=${b.lambdaPW.toFixed(1)} · λrw=${b.lambdaRW.toFixed(1)}`],
                                     ['Clause', `§${b.clause} — ${b.governing} governs`],
-                                    ...(Number.isFinite(b.MnFLB) ? [[`Mn (${b.clause === 'F8' ? 'LB, §F8.2' : b.clause === 'F7' ? 'FLB, §F7.2' : 'FLB, §F3.2'})`, `${f1(b.MnFLB)} kN·m`]] : []),
+                                    ...(Number.isFinite(b.MnFLB) ? [[`Mn (${b.clause === 'F8' ? 'LB, §F8.2' : b.clause === 'F7' ? 'FLB, §F7.2' : b.clause === 'F9' ? 'FLB, §F9.3' : 'FLB, §F3.2'})`, `${f1(b.MnFLB)} kN·m`]] : []),
+                                    ...(b.MnLB != null ? [['Mn (stem LB, §F9.4)', `${f1(b.MnLB)} kN·m`]] : []),
+                                    ...(b.tee ? [['Sagging / φMn+', `${f1(b.tee.Mpos)} / ${f1(b.tee.phiMnPos)} kN·m`], ['Hogging / φMn−', `${f1(b.tee.Mneg)} / ${f1(b.tee.phiMnNeg)} kN·m`]] : []),
                                     ...(b.MnWLB != null && Number.isFinite(b.MnWLB) ? [['Mn (WLB, §F7.3)', `${f1(b.MnWLB)} kN·m`]] : []),
                                   ].map(([lbl, val]) => (
                                     <tr key={lbl}><td className="pr-3 text-muted">{lbl}</td><td className="font-mono">{val}</td></tr>
@@ -6315,8 +6318,8 @@ export default function ModelSpace() {
                                 <tbody>
                                   {[
                                     [b.shearClause === 'G5' ? 'Aw = Ag/2' : b.shearClause === 'G4' ? 'Aw = 2ht' : 'Aw = d·tw', `${(b.Aw).toFixed(0)} mm²`],
-                                    [b.shearClause === 'G5' ? 'D/t' : b.shearClause === 'G4' ? 'h/t' : 'h/tw', `${b.hwTw.toFixed(1)}`],
-                                    [b.shearClause === 'G5' ? 'Fcr/0.6Fy' : b.shearClause === 'G4' ? 'Cv2' : 'Cv1', `${b.Cv1.toFixed(3)}`],
+                                    [b.shearClause === 'G5' ? 'D/t' : b.shearClause === 'G4' ? 'h/t' : b.shearClause === 'G3' ? 'd/tw' : 'h/tw', `${b.hwTw.toFixed(1)}`],
+                                    [b.shearClause === 'G5' ? 'Fcr/0.6Fy' : b.shearClause === 'G4' || b.shearClause === 'G3' ? 'Cv2' : 'Cv1', `${b.Cv1.toFixed(3)}`],
                                     [`φV (φ=${b.phiV.toFixed(2)})`, b.phiV.toFixed(2)],
                                     ['φVn', `${f1(b.phiVn)} kN`],
                                     ['Vu', `${f1(b.Vu)} kN`],
