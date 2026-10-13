@@ -730,6 +730,7 @@ export default function ModelSpace() {
     ])
     const report = modelResultTables({
       model, analysis, nodeOrder: model.nodes.map((n) => n.id), design, seismic: seisXZ, drift,
+      modal, rsa, timeHistory: th, pushover: po, biaxial: bx, nonlinear: nl, nonlinearFrame: nlHinge,
     })
     const slug = (model.name || 'model').trim().replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'model'
     await exportScheduleExcel(report, `${slug}-results.xlsx`)
@@ -2226,7 +2227,7 @@ export default function ModelSpace() {
                 { label: 'Import from STAAD.Pro (.std)', onSelect: () => importInput.current?.click(),
                   hint: 'Replaces the current model — Undo brings it back' },
                 { label: 'Export tables to Excel (.xlsx)', disabled: !model, onSelect: () => void exportExcel(),
-                  hint: model ? 'Model, analysis results, seismic and design schedules — one sheet per table' : 'Build a model first' },
+                  hint: model ? 'Model, analysis, modal, spectrum, time history, pushover, nonlinear and design — every table run' : 'Build a model first' },
               ]} />
               <input ref={importInput} type="file" accept=".std,.STD,.txt" className="hidden" aria-hidden tabIndex={-1}
                 onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void importStaad(f) }} />

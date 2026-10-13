@@ -77,6 +77,13 @@ The deploy job is gone (Sept 2026). Deleting it stops future publishes; it does
 **not** unpublish what is already served. That is *Settings → Pages → Source:
 None*, and it has to be done by hand in the repository settings.
 
+## Inclined columns, skewed slabs, Excel export (Oct 2026, PRs #959–#963)
+
+- **#959 — an inclined column keeps its section orientation.** Past 2.56° off plumb a column fell to the beam local-axis default, so one leaning toward Z was analysed with its section turned 90° (a 300×600 cantilever 4× too soft about X). `defaultAxisRotation(dir, explicit, role)`: a column keeps its depth on global X projected off its axis; every caller passes the role. The 3D view orients members by the solver frame (`lib/memberFrame`).
+- **#960 — raking columns in the cage, plans and elevations.** `inclineCage` lays the plumb-built cage on the member axis (true bar lengths → BOQ, ties ⟂ axis, honours axisRotation). Plans draw rectangular columns in their own frame — they were TRANSPOSED (b on X; the solver has h on X) — plus a dash-dot rake line. Elevations draw raking columns as quadrilaterals. One grid rule everywhere (`engine/planGrid.ts`, lowest column bases), and the elevation sheets now use the PLAN's labels (they were swapped: "GRID A" was the plan's row 1).
+- **#962 — a slab panel meets its corner nodes.** `Slab3D` is a prism through the four nodes (`lib/slabPrism`) instead of an axis-aligned 96 % box. The tributary bridge stretches each edge pattern onto its real edge and scales the panel to q × true area (a skewed bay took 339.5 kN of a 325 kN load); rectangles unchanged to the bit. Slab DESIGN (DDM) still idealises lx × lz.
+- **#961, #963 — Excel export.** Exchange → Export tables to Excel: `lib/modelTables` (pure) → the existing ExcelJS writer. Model, linear FEM per combination, envelope, governing diagrams, seismic, drift, modal, response spectrum, time history, pushover (+ biaxial), both nonlinear time histories, and every design schedule (flattened generically; object arrays → child sheets). Note: "Design structure" clears the stored analysis (it saves the returned model) — run Analyze after Design to get both.
+
 ## Model exchange with other analysis programs — phase 1, STAAD.Pro (Oct 2026)
 
 **Model Space → File → Exchange** exports the model as a STAAD.Pro `.std` input deck and imports one back. Engine: `webapp/src/engine/interop/staad.ts` (`toStaad`, `fromStaad`), pure text ⇄ `StructuralModel`; UI: `components/modelSpace/ExchangeMenu.tsx` (portalled menu, one ribbon button so later formats don't push the File block further off-screen). Both directions report what they could not carry, in a notice on the page.
