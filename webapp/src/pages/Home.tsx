@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { AccountMenu } from '../components/AccountMenu'
 import { Link } from 'react-router-dom'
-import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
+import { BRAND_TAIL } from '../lib/brand'
+import { ZetaLogo } from '../components/BrandMark'
 import { SIDEBAR_GROUPS, ALL_TOOLS, PALETTE_EXAMPLES, isGatedRoute } from '../lib/tools'
 import { CommandPalette } from '../components/CommandPalette'
 import { SkipLink } from '../components/AppShell'
@@ -90,8 +91,8 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       {/* Top bar */}
       <nav className="no-print sticky top-0 z-50 border-b border-white/10 bg-rail">
         <div className="mx-auto flex h-[52px] max-w-[1200px] items-center gap-5 px-6">
-          <Link to="/" className="flex min-h-[24px] items-baseline gap-2 py-1">
-            <span className="text-[15px] font-extrabold tracking-[.14em] text-rail-ink">{BRAND_MARK}</span>
+          <Link to="/" className="flex min-h-[24px] items-center gap-2 py-1 text-rail-ink">
+            <ZetaLogo height={26} />
             {BRAND_TAIL && <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-rail-muted">{BRAND_TAIL}</span>}
           </Link>
           {/* SEARCH IS THE NAV. Wordmark-left + four inline links + a control

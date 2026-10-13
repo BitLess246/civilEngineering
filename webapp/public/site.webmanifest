@@ -1,0 +1,32 @@
+{
+  "name": "Zeta",
+  "short_name": "Zeta",
+  "description": "Structural and geotechnical calculation software to NSCP 2015, ACI 318-14 and AISC 360-16.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1b2a",
+  "theme_color": "#0f1b2a",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

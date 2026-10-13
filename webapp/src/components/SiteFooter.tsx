@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { SITE, businessName, missingSiteFields } from '../lib/siteConfig'
-import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
+import { BRAND_TAIL } from '../lib/brand'
+import { ZetaLogo } from './BrandMark'
 
 /**
  * Public footer.
@@ -24,7 +25,7 @@ export function SiteFooter() {
           is what a payment provider reviewing the site is looking for. */}
       <div className="mx-auto max-w-[1200px] px-6 py-8">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-[13px] font-extrabold tracking-[.14em] text-ink">{BRAND_MARK}</span>
+          <span className="self-center text-ink"><ZetaLogo height={22} /></span>
           {BRAND_TAIL && <span className="text-[8.5px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>}
           <span className="text-[12px] leading-5 text-muted">
             Structural and geotechnical calculation software to NSCP 2015, ACI 318-14 and AISC 360-16.

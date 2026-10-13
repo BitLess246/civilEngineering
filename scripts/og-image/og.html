@@ -2,7 +2,7 @@
 <html><head><meta charset="utf-8">
 <link rel="stylesheet" href="../showreel/fonts/fonts.css">
 <style>
-  /* The link-preview card: 1200×630, the drafting theme, the logo's amber node the only glow. */
+  /* The link-preview card: 1200×630, the drafting theme, the brand lockup from branding/. */
   :root { --ink:#0f1b2a; --deep:#0a131e; --paper:#f2f5f9; --muted:#9eb0c5; --accent:#6ba4dc; --amber:#f2b53a }
   * { margin:0; padding:0; box-sizing:border-box }
   html, body { width:1200px; height:630px; overflow:hidden; background:var(--ink) }
@@ -15,7 +15,7 @@
   .frame { position:absolute; right:-40px; top:58px; width:560px; opacity:.5 }
   .mono { font-family:'IBM Plex Mono', ui-monospace, monospace; font-weight:500; letter-spacing:.18em; text-transform:uppercase }
   .codes { position:absolute; left:84px; top:84px; font-size:17px; color:var(--accent) }
-  .lock { position:absolute; left:84px; top:150px; display:flex; align-items:center; gap:30px }
+  .lock { position:absolute; left:80px; top:150px; display:flex; align-items:center }
   .word { font-size:150px; font-weight:900; letter-spacing:.03em; line-height:1 }
   .tag { position:absolute; left:84px; top:358px; width:760px; font-size:52px; font-weight:800; letter-spacing:-.025em; line-height:1.04 }
   .tag em { font-style:normal; color:var(--accent) }
@@ -41,13 +41,7 @@
   </svg>
   <div class="codes mono">NSCP 2015 · ACI 318-14 · AISC 360-16</div>
   <div class="lock">
-    <svg viewBox="0 0 64 64" width="168" height="168" aria-hidden="true">
-      <rect x="1" y="1" width="62" height="62" rx="12" fill="#0f2a4a" stroke="rgba(107,164,220,.35)" stroke-width=".5"/>
-      <g stroke="#f2f5f9" stroke-width="4" stroke-linecap="round" fill="none"><line x1="14" y1="22" x2="50" y2="22"/><line x1="18" y1="22" x2="18" y2="50"/><line x1="46" y1="22" x2="46" y2="50"/></g>
-      <line x1="10" y1="50" x2="54" y2="50" stroke="#7fb3e8" stroke-width="3" stroke-linecap="round"/>
-      <circle cx="32" cy="22" r="3.5" fill="#f2b53a" style="filter:drop-shadow(0 0 2.5px rgba(242,181,58,.95)) drop-shadow(0 0 7px rgba(242,181,58,.5))"/>
-    </svg>
-    <div class="word">ZETA</div>
+    <img src="../../branding/zeta-logo-paper.svg" height="150" alt="Zeta">
   </div>
   <div class="tag">The structural workbench for <em>Philippine practice.</em></div>
   <div class="sub">Every answer shows its work — every result traced to its clause.</div>

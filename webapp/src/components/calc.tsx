@@ -3,7 +3,8 @@ import type { ReactNode } from 'react'
 import { ExportPdfButton } from './ExportPdfButton'
 import type { SolutionStep } from '../lib/solution'
 import { Math as KTex } from '../lib/math'
-import { BRAND_MARK, BRAND_TAIL, COMPUTED_BY, docLabel } from '../lib/brand'
+import { BRAND_TAIL, COMPUTED_BY, docLabel } from '../lib/brand'
+import { ZetaLogo } from './BrandMark'
 
 // Calculator-template building blocks (docs/design/uiux-2026-07, Foundation /
 // Beam mockups): numbered input sections on the left, a sticky verdict panel
@@ -286,8 +287,8 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
       </div>
       <div className="mt-3 flex items-start justify-between gap-4">
         <div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-[14px] font-extrabold tracking-[.14em]">{BRAND_MARK}</span>
+          <div className="flex items-center gap-2">
+            <ZetaLogo height={22} />
             {BRAND_TAIL && <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-faint">{BRAND_TAIL}</span>}
           </div>
           <h1 className="mt-2 text-[24px] font-extrabold tracking-tight">{docTitle} — Design Calculation</h1>
