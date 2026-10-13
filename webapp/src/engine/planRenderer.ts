@@ -12,7 +12,10 @@
 // serializer maps world → pixels (Y increases downward, drafting convention).
 // Units: coordinates m; section sizes mm.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel, RectSection } from './model'
+import type { StructuralModel, RectSection, Member } from './model'
+import { shapeByName, effectiveSection } from './aiscSections'
+import { steelProfile, type P2 } from './steelProfile'
+import { localAxes, defaultAxisRotation, type V3 } from './frame3d'
 
 export type PathCmd =
   | { c: 'M' | 'L'; x: number; y: number }
@@ -29,6 +32,44 @@ export type PlanPrimitive =
   | { kind: 'dim'; x1: number; y1: number; x2: number; y2: number; text: string; off: number; size: number; ext?: number }
   // world-space path (coords in m, arc radii in m) — used for outlined rebar tubes
   | { kind: 'path'; cmds: PathCmd[]; stroke?: string; fill?: string; width?: number; dash?: number[]; closed?: boolean; fillRule?: 'evenodd' | 'nonzero'; opacity?: number; join?: 'round' | 'miter' | 'bevel'; cap?: 'round' | 'butt' | 'square' }
+
+/**
+ * A steel column cut at the plan level: its TRUE rolled outline (`steelProfile`,
+ * the same geometry as the section sheet and the 3D extrusion), not the b×h box
+ * every column used to be drawn as — a W read as a solid square, an HSS as a
+ * solid block, a pipe as a square.
+ *
+ * Oriented by the member's own local axes (`localAxes` with the resolved
+ * `axisRotation`, the frame the solver, the joint designer and the 3D view all
+ * use): the profile's depth (y) runs along local y′, its width (x) along z′,
+ * both projected onto the plan (global x → sheet x, global z → sheet y). With
+ * the default 90° a column's depth lands on global X.
+ *
+ * Null when the shape is not in the catalogue, so the caller falls back to the
+ * rectangle. Profile mm → plan m. Holes are drawn as separate white outlines so
+ * every renderer (SVG, PDF, DXF) treats them the same way.
+ */
+export function steelColumnPlan(
+  mem: Pick<Member, 'axisRotation'>, a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number },
+  sec: RectSection, at: { x: number; z: number }, outline = false,
+): PlanPrimitive[] | null {
+  const shape = sec.shape ? shapeByName(sec.shape) : undefined
+  if (!shape) return null
+  const dir: V3 = [b.x - a.x, b.y - a.y, b.z - a.z]
+  const [, yp, zp] = localAxes(dir, defaultAxisRotation(dir, mem.axisRotation))
+  const toPlan = ([X, Y]: P2): [number, number] => [
+    at.x + (X * zp[0] + Y * yp[0]) / 1000,
+    at.z + (X * zp[2] + Y * yp[2]) / 1000,
+  ]
+  const ring = (q: P2[]): PathCmd[] => q.map((p, k) => { const [x, y] = toPlan(p); return { c: k === 0 ? 'M' : 'L', x, y } as PathCmd })
+  const out: PlanPrimitive[] = []
+  for (const pr of steelProfile(effectiveSection(shape))) {
+    out.push({ kind: 'path', cmds: ring(pr.outer), closed: true, stroke: COL, fill: outline ? 'none' : COL, width: 1.0, dash: outline ? [0.2, 0.15] : undefined, join: 'miter' })
+    for (const h of pr.holes)
+      out.push({ kind: 'path', cmds: ring(h), closed: true, stroke: COL, fill: outline ? 'none' : '#ffffff', width: 0.8, dash: outline ? [0.2, 0.15] : undefined, join: 'miter' })
+  }
+  return out
+}
 
 export interface BeamScheduleRow { mark: string; size: string; notes?: string }
 
@@ -383,7 +424,9 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     if (sec) colMarkFor(sec)   // collect the column schedule (shown on the foundation plan)
     // framing: solid black column section; foundation without a footing: dashed outline
     const outline = foundation && !opts.footings?.length
-    P.push({ kind: 'rect', x: node.x - cw / 2, y: node.z - ch / 2, w: cw, h: ch, stroke: COL, fill: outline ? 'none' : COL, width: 1.2, dash: outline ? [0.2, 0.15] : undefined })
+    const steel = sec?.material === 'steel' ? steelColumnPlan(mem, a, b, sec, node, outline) : null
+    if (steel) P.push(...steel)
+    else P.push({ kind: 'rect', x: node.x - cw / 2, y: node.z - ch / 2, w: cw, h: ch, stroke: COL, fill: outline ? 'none' : COL, width: 1.2, dash: outline ? [0.2, 0.15] : undefined })
   }
 
   // ── slab panels at the level: outline + a span-direction symbol (double

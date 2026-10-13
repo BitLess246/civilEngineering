@@ -3,6 +3,7 @@ import { generateGridModel } from './modelBuilder'
 import { buildPlan, planToSvg, extensionLines, type PlanPrimitive } from './planRenderer'
 import { measureBounds } from './detailSheet'
 import type { RectSection } from './model'
+import { shapeByName } from './aiscSections'
 
 const section: RectSection = { id: 'S1', name: '400×400', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 const texts = (p: PlanPrimitive[]) => p.filter((x) => x.kind === 'text').map((x) => (x as { text: string }).text)
@@ -250,5 +251,64 @@ describe('dimension extension lines', () => {
     const far = measureBounds([dim({ ext: -30 })])
     expect(far.minY).toBeLessThan(near.minY)
     expect(far.minY).toBeLessThanOrEqual(-30 + 0.45)
+  })
+})
+
+describe('planRenderer — steel columns are drawn as their true section, not a b×h box', () => {
+  const W = shapeByName('W310x79')!
+  const steelModel = (shape: string, rot?: number) => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
+    m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const, shape }))
+    if (rot !== undefined) m.members = m.members.map((x) => x.role === 'column' ? { ...x, axisRotation: rot } : x)
+    return m
+  }
+  const colPaths = (m: ReturnType<typeof steelModel>) =>
+    buildPlan(m)!.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'path' }> => p.kind === 'path' && p.fill === '#1e293b')
+  const bbox = (p: Extract<PlanPrimitive, { kind: 'path' }>) => {
+    const xs = p.cmds.map((c) => c.x), ys = p.cmds.map((c) => c.y)
+    return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }
+  }
+
+  it('a W column: an I outline (12 vertices), depth d on global X, flanges bf on Z (default 90° rotation)', () => {
+    const paths = colPaths(steelModel('W310x79'))
+    expect(paths).toHaveLength(4)                                   // 2×2 columns, no solid box
+    expect(buildPlan(steelModel('W310x79'))!.primitives.some((p) => p.kind === 'rect' && p.fill === '#1e293b')).toBe(false)
+    for (const p of paths) {
+      expect(p.cmds).toHaveLength(12)
+      const { w, h } = bbox(p)
+      expect(w).toBeCloseTo(W.d! / 1000, 6)                         // depth d along X
+      expect(h).toBeCloseTo(W.bf! / 1000, 6)                        // flange bf along Z
+    }
+  })
+
+  it('an explicit 0° rotation turns the strong axis onto Z', () => {
+    const { w, h } = bbox(colPaths(steelModel('W310x79', 0))[0])
+    expect(w).toBeCloseTo(W.bf! / 1000, 6)
+    expect(h).toBeCloseTo(W.d! / 1000, 6)
+  })
+
+  it('a rectangular HSS draws its wall: the outer outline plus a white hole', () => {
+    const prims = buildPlan(steelModel('HSS203x102x6.4'))!.primitives
+    const holes = prims.filter((p) => p.kind === 'path' && p.fill === '#ffffff')
+    expect(colPaths(steelModel('HSS203x102x6.4'))).toHaveLength(4)
+    expect(holes).toHaveLength(4)
+    const outer = bbox(colPaths(steelModel('HSS203x102x6.4'))[0])
+    expect(Math.max(outer.w, outer.h)).toBeCloseTo(0.2032, 4)
+    expect(Math.min(outer.w, outer.h)).toBeCloseTo(0.1016, 4)
+  })
+
+  it('a pipe is round, centred on the grid node', () => {
+    const m = steelModel('PIPE 6 STD')
+    const p = colPaths(m)[0]
+    const { w, h } = bbox(p)
+    expect(w).toBeCloseTo(h, 3)
+    expect(w).toBeCloseTo(0.1683, 3)
+    const cx = p.cmds.reduce((s, c) => s + c.x, 0) / p.cmds.length
+    expect(m.nodes.some((n) => Math.abs(n.x - cx) < 1e-6)).toBe(true)
+  })
+
+  it('a concrete column is still the b×h rectangle', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
+    expect(buildPlan(m)!.primitives.filter((p) => p.kind === 'rect' && p.fill === '#1e293b')).toHaveLength(4)
   })
 })
