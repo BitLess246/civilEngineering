@@ -1,0 +1,366 @@
+[
+ {
+  "id": "hook",
+  "text": "Design a whole concrete frame in 3D, and see every step."
+ },
+ {
+  "id": "title",
+  "text": "Meet Zeta Model Space, for NSCP 2015 and ACI 318."
+ },
+ {
+  "id": "c01",
+  "n": "01",
+  "title": "Set the grid",
+  "sub": "Bays · storey heights · one click",
+  "beats": [
+   {
+    "at": "Geometry",
+    "text": "Start on Geometry. Type the bays, and the storey heights."
+   },
+   {
+    "at": "Regenerate grid model",
+    "text": "Regenerate, and the whole frame is built: beams, columns, slabs and footings."
+   }
+  ]
+ },
+ {
+  "id": "c02",
+  "n": "02",
+  "title": "Orbit the model",
+  "sub": "Drag to rotate · any view",
+  "beats": [
+   {
+    "at": "Drag to orbit",
+    "text": "Drag to orbit the model, from any side."
+   }
+  ]
+ },
+ {
+  "id": "c03",
+  "n": "03",
+  "title": "Earthquake loads",
+  "sub": "NSCP 208 · torsion · 100% + 30%",
+  "beats": [
+   {
+    "at": "Loading",
+    "text": "On Loading, scroll down to the earthquake section."
+   },
+   {
+    "at": "Ca · Cv",
+    "text": "C a and C v come from the soil profile and the seismic zone."
+   },
+   {
+    "at": "R · I",
+    "text": "R is the system factor, eight point five for a special moment frame. I is the importance factor."
+   },
+   {
+    "at": "Directions",
+    "text": "Every ticked direction becomes its own load case."
+   },
+   {
+    "at": "Method-B period",
+    "text": "Method B takes the period from the modal analysis, capped by the code."
+   },
+   {
+    "at": "Accidental torsion",
+    "text": "Accidental torsion shifts each storey force by five percent of the plan."
+   },
+   {
+    "at": "Orthogonal effects",
+    "text": "Tick orthogonal effects, so every case also carries thirty percent of the other direction."
+   },
+   {
+    "at": "Vertical Ev",
+    "text": "And the vertical component is folded into the combinations."
+   },
+   {
+    "at": "Generate E cases",
+    "text": "Generate. Sixteen earthquake cases, with the storey forces listed level by level."
+   }
+  ]
+ },
+ {
+  "id": "c04",
+  "n": "04",
+  "title": "Wind loads",
+  "sub": "NSCP 207B · exposure · directions",
+  "beats": [
+   {
+    "at": "Basic wind speed V",
+    "text": "Then wind. Set the basic wind speed, from the N S C P map."
+   },
+   {
+    "at": "Exposure",
+    "text": "Pick the exposure: suburban, open, or coastal."
+   },
+   {
+    "at": "Generate W cases",
+    "text": "Generate the wind cases, with the base shear in each direction."
+   }
+  ]
+ },
+ {
+  "id": "c05",
+  "n": "05",
+  "title": "Analysis options",
+  "sub": "Cracked · shear · P-Δ · diaphragm",
+  "beats": [
+   {
+    "at": "Analysis",
+    "text": "On Analysis, choose how the frame is modelled."
+   },
+   {
+    "at": "Cracked sections",
+    "text": "Cracked sections reduce the stiffness of the concrete, as A C I requires."
+   },
+   {
+    "at": "Shear deformation",
+    "text": "Shear deformation adds Timoshenko shear flexibility."
+   },
+   {
+    "at": "P-Δ second order",
+    "text": "P Delta adds the second order effect of gravity on the swayed frame."
+   },
+   {
+    "at": "Rigid floor diaphragm",
+    "text": "A rigid diaphragm makes each floor move as one plate."
+   },
+   {
+    "at": "Analyze (3D FEM)",
+    "text": "Now analyse the frame in 3D."
+   }
+  ]
+ },
+ {
+  "id": "c06",
+  "n": "06",
+  "title": "Read the results",
+  "sub": "Forces · reactions · displacements",
+  "beats": [
+   {
+    "at": "Member forces",
+    "text": "Every member: axial force, shears, torsion and moments, for every combination."
+   },
+   {
+    "at": "Statics check",
+    "text": "The support reactions, with a statics check. The applied loads and the reactions balance."
+   },
+   {
+    "at": "Displacements",
+    "text": "And the displacement of every node."
+   },
+   {
+    "at": "Display",
+    "text": "On Display, colour the members by stress."
+   }
+  ]
+ },
+ {
+  "id": "c07",
+  "n": "07",
+  "title": "Modes & periods",
+  "sub": "Mass participation · 3D mode shape",
+  "beats": [
+   {
+    "at": "Modal",
+    "text": "Run the modal analysis."
+   },
+   {
+    "at": "Periods & mass",
+    "text": "Each mode, with its period, frequency, and mass participation."
+   },
+   {
+    "at": "Animate mode 1 in 3D",
+    "text": "Click 3 D, and watch the first mode move."
+   }
+  ]
+ },
+ {
+  "id": "c08",
+  "n": "08",
+  "title": "Pushover",
+  "sub": "Capacity curve · hinge sequence",
+  "beats": [
+   {
+    "at": "Pushover",
+    "text": "Pushover pushes the frame sideways, until it forms a mechanism."
+   },
+   {
+    "at": "Run pushover",
+    "text": "Push in X, with an inverted triangle load."
+   },
+   {
+    "at": "Capacity curve",
+    "text": "The capacity curve plots base shear against roof displacement. Straight while elastic, it bends as plastic hinges form."
+   },
+   {
+    "at": "Hinge events",
+    "text": "Every hinge is listed, in the order it forms."
+   }
+  ]
+ },
+ {
+  "id": "c09",
+  "n": "09",
+  "title": "Instant pass / fail",
+  "sub": "Every member · every combination",
+  "beats": [
+   {
+    "at": "Design",
+    "text": "Now design."
+   },
+   {
+    "at": "Design structure",
+    "text": "Design structure checks every member, against every combination."
+   },
+   {
+    "at": "failures",
+    "text": "Sixteen columns fail, and each one shows its ratio."
+   }
+  ]
+ },
+ {
+  "id": "c10",
+  "n": "10",
+  "title": "Optimise, then open a row",
+  "sub": "Worked solution · drawings",
+  "beats": [
+   {
+    "at": "Optimize design",
+    "text": "Click optimise. Sizes and bars are re-chosen, and the frame is analysed again."
+   },
+   {
+    "at": "all passed",
+    "text": "Every member passes."
+   },
+   {
+    "at": "Open column c0.0.0",
+    "text": "Open any row for its worked solution."
+   },
+   {
+    "at": "Bar layout",
+    "text": "The bar layout, with the section drawn."
+   },
+   {
+    "at": "Capacity along the strong-axis",
+    "text": "The capacity, by strain compatibility, step by step."
+   },
+   {
+    "at": "Required longitudinal steel",
+    "text": "The required steel, from the code equations,"
+   },
+   {
+    "at": "Bar selection & limits",
+    "text": "and the bar selection, checked against the code limits."
+   }
+  ]
+ },
+ {
+  "id": "c13",
+  "n": "11",
+  "title": "See every bar",
+  "sub": "Loads off · cages on",
+  "beats": [
+   {
+    "at": "Display",
+    "text": "Back on Display, turn the contour off,"
+   },
+   {
+    "at": "Hide the loads",
+    "text": "hide the loads,"
+   },
+   {
+    "at": "Show reinforcement cages",
+    "text": "and show the reinforcement cages."
+   },
+   {
+    "at": "Slabs off",
+    "text": "Pick which cages to see. Here: beams, columns and footings."
+   },
+   {
+    "at": "Drag to orbit",
+    "text": "Every bar, exactly where it goes."
+   }
+  ]
+ },
+ {
+  "id": "c14",
+  "n": "12",
+  "title": "Plans, sheet by sheet",
+  "sub": "Framing · elevations · details",
+  "beats": [
+   {
+    "at": "Plans",
+    "text": "The plans are drawn for you."
+   },
+   {
+    "at": "Open a sheet",
+    "text": "Open a sheet,"
+   },
+   {
+    "at": "Next sheet",
+    "text": "and step through the set: framing plans, elevations, column and footing details."
+   }
+  ]
+ },
+ {
+  "id": "c15",
+  "n": "13",
+  "title": "The report",
+  "sub": "Choose the sections · one PDF",
+  "beats": [
+   {
+    "at": "PDF report",
+    "text": "Click P D F, and choose what goes in the report."
+   },
+   {
+    "at": "Design status",
+    "text": "The design status,"
+   },
+   {
+    "at": "Traceability",
+    "text": "the traceability, from load to bar,"
+   },
+   {
+    "at": "Worked solutions",
+    "text": "worked solutions for every member,"
+   },
+   {
+    "at": "Drawings",
+    "text": "and the drawings."
+   },
+   {
+    "at": "Appendix D · Modal",
+    "text": "The appendix adds the modal,"
+   },
+   {
+    "at": "Appendix F · Pushover",
+    "text": "and pushover results, because they were run."
+   },
+   {
+    "at": "Combined PDF",
+    "text": "Bind it as one P D F,"
+   },
+   {
+    "at": "Generate",
+    "text": "and generate. Five hundred and eighty-one pages, every check shown."
+   }
+  ]
+ },
+ {
+  "id": "c16",
+  "n": "14",
+  "title": "Opens in ETABS & STAAD",
+  "sub": "ETABS · STAAD.Pro · Excel",
+  "beats": [
+   {
+    "at": "Exchange",
+    "text": "And Exchange sends the model to E tabs and STAAD, and every table to Excel."
+   }
+  ]
+ },
+ {
+  "id": "end",
+  "text": "Start free, at Zeta struct dot app."
+ }
+]

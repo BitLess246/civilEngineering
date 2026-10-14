@@ -9,7 +9,11 @@ FF = subprocess.check_output([sys.executable, '-c', 'import imageio_ffmpeg;print
 SCRIPT, AUD = os.environ.get('SCRIPT', 'script.json'), os.environ.get('AUD', 'audio')
 os.makedirs(f'{R}/{AUD}', exist_ok=True)
 out = {}
-for s in json.load(open(f'{R}/{SCRIPT}')):
+def lines(script):          # a v3 chapter speaks in beats, one clip each
+    for s in script:
+        if 'beats' in s: yield from ({'id': f"{s['id']}_{k}", 'text': b['text']} for k, b in enumerate(s['beats']))
+        elif 'text' in s: yield s
+for s in lines(json.load(open(f'{R}/{SCRIPT}'))):
     raw, clip = f'{R}/{AUD}/vo_{s["id"]}.raw.wav', f'{R}/{AUD}/vo_{s["id"]}.f32'
     subprocess.run([sys.executable, '-m', 'piper', '-m', f'{VOICES}/en_US-{voice}-high.onnx', '--length-scale', '1.0', '--sentence-silence', '0.2', '-f', raw], input=s['text'], text=True, check=True, capture_output=True)
     subprocess.run([FF, '-y', '-loglevel', 'error', '-i', raw, '-ar', '48000', '-ac', '1', '-af',
