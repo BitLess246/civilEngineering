@@ -11,7 +11,8 @@
 // shots: rebuilds state for a resumed run) or STATE (only what later chapters
 // depend on). The cage chapter renders slowly at 2×, so it is captured on its
 // own pass at 1×:
-//   SKIP=c13 node tour/tape3.mjs              (everything else, 2×)
+//   SKIP=c07b,c13 node tour/tape3.mjs         (everything else, 2×)
+//   ONLY=c07b node tour/tape3.mjs             (the mode animation, appended)
 //   ONLY=c13 DPR=1 node tour/tape3.mjs        (cages, appended)
 import { open, clean } from '../lib.mjs'
 import { mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs'
@@ -179,10 +180,13 @@ CH.c07 = async () => {                                       // modal
   await click(btn(/Run modal analysis/), 'Run modal analysis', { long: true })
   await panelScroll(p.getByRole('heading', { name: /Modal Analysis — natural periods/ }), 160, 8)
   await hold('Periods & mass', p.getByRole('heading', { name: /Modal Analysis — natural periods/ }), { w: 640, dur: 3.4, grow: { b: 470, l: 20 } })
+}
+// The mode animation keeps the viewport rendering every frame from then on (and
+// the fake clock it needs stays installed), so every later screenshot crawls in
+// software WebGL. It gets its own pass, and is never replayed silently.
+CH.c07b = async () => {
   await click(btn(/◎ 3D/), 'Animate mode 1 in 3D', { wait: 1500 })
   await anim(72, 2, 'Mode 1')
-  // the mode shape animates for as long as its panel is open — close it, or every later frame renders it in software
-  await click(p.locator('button', { hasText: /Close/ }).first(), 'Close the mode view', { wait: 1200 })
 }
 CH.c08 = async () => {                                       // pushover
   await click(tab('Pushover'), 'Pushover')
@@ -261,6 +265,7 @@ await p.evaluate(() => scrollTo(0, 0))
 for (const [id, fn] of Object.entries(CH)) {
   chapter = id
   mode = ONLY ? (id === ONLY ? 'rec' : 'silent') : SKIP.includes(id) ? 'state' : 'rec'
+  if (id === 'c07b' && mode !== 'rec') continue
   if (ONLY && id > ONLY) break
   log('──', id, mode)
   await fn()
