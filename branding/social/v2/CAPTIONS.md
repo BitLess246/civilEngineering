@@ -1,6 +1,6 @@
 # Zeta — social set 2: Facebook cover and posts
 
-A new Facebook cover, `00-cover.png` (1640×624), plus eight 1080×1350 feed posts (4:5, for Facebook, Instagram and LinkedIn). `07-quiz` and `08-answer` are a two-slide carousel.
+A new Facebook cover, `00-cover.png` (1640×924), plus eight 1080×1350 feed posts (4:5, for Facebook, Instagram and LinkedIn). `07-quiz` and `08-answer` are a two-slide carousel.
 
 Everything on the cover and posts is real app output:
 - **From one Model Space session** (3×2 bays, 8 storeys, `scripts/showreel/capx.mjs`): the 3D viewport, the STAAD `.std` deck and the Excel workbook.
@@ -27,11 +27,19 @@ Shared tag block (add to any post):
 
 ---
 
-## 00 — cover.png (Facebook cover, 1640×624)
+## 00 — cover.png (Facebook cover, 1640×924 — 16:9)
+**Why 16:9:**
+- The Facebook mobile app shows the cover whole at about 16:9.
+- On mobile, the page's profile picture is a large circle over the lower-left third, roughly r ≈ 370 px centred at (404, 742) in cover pixels. That was measured off a screenshot of the actual page.
+- Desktop shows only the middle band, y ≈ 158–766.
 
 **Layout:**
-- The headline, URL and lockup sit between x ≈ 230 and 930. That keeps them inside the middle area mobile keeps when it crops the sides.
-- The lower-left corner, where the page's profile picture overlaps the cover, is left empty.
+- Everything sits inside that desktop band.
+- The lockup and the one-line headline sit above the circle.
+- The feature list and the URL sit to the right of the circle.
+- The artifacts are on the right.
+
+Upload it as-is: no dragging needed. The 1640×624 version from the first pass is replaced.
 
 **Cover description** (the text under the cover when it's clicked): Model it. Check it. Sign it. Zeta takes a structure from a 3D model to a drawing to a calc sheet you can sign, with every step shown and every clause cited. NSCP 2015 · ACI 318-14 · AISC 360-16. The calculators are free → zetastruct.app
 

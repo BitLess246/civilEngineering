@@ -1,4 +1,4 @@
-// ── Zeta social set 2: a Facebook cover (1640×624) and 4:5 feed posts ──────
+// ── Zeta social set 2: a Facebook cover (1640×924) and 4:5 feed posts ──────
 // Every artifact on these is real app output: the 3D viewport and the .std and
 // .xlsx come from one Model Space session (capx.mjs → cap/x), the PDF pages are
 // the calculators' own exports, rasterised, and the drawing/equations/cards are
@@ -6,7 +6,7 @@
 const X = D.x, K = C.foundation
 const M = 80
 const INK = '#0f1b2a', BRANDC = '#0f4c92', ACC = '#6ba4dc', AMBER = '#f2b53a', MUTED = '#5c6675', FOG = '#9eb0c5', WHITE = '#f2f5f9'
-const SIZES = { cover: [1640, 624] }
+const SIZES = { cover: [1640, 924] }
 
 function corners(root, w, hh, color, I = 40, L = 24) {
   const sv = h('svg', { width: w, height: hh, class: 'abs', style: { left: 0, top: 0, color } }, root)
@@ -60,35 +60,41 @@ function step(root, s, x, y, w, fs = 22, dark = true) {
 function dot(color) { return `<span style="flex:none;width:9px;height:9px;border-radius:50%;background:${color}"></span>` }
 
 const POSTS = {
-  // ── the Facebook cover ──────────────────────────────────────────────────
-  // Desktop shows it whole; mobile crops the sides to the middle ~75%. The
-  // headline sits inside that, and the lower-left corner — where the page's
-  // profile picture overlaps the cover — carries nothing.
+  // ── the Facebook cover, 1640×924 (16:9) ─────────────────────────────────
+  // Measured off the page itself, not FB's spec sheet: the phone shows the
+  // cover whole at 16:9, and the profile picture is a circle of r ≈ 370 cover
+  // px centred at (404, 742) — it eats the lower-left third. Desktop shows
+  // the middle band, y ≈ 158–766. So everything sits in that band, and below
+  // y ≈ 370 nothing goes left of the circle's edge (avoid()).
   cover(root) {
-    const w = 1640, hh = 624
+    const w = 1640, hh = 924
     darkGround(root); corners(root, w, hh, '#e8eaed', 28, 20)
+    const PIC = { x: 404, y: 742, r: 370 }
     // the artifacts, right: viewport → drawing → report, fanned like a desk
-    const fan = h('div', { class: 'abs', style: { left: '900px', top: 0, width: '760px', height: hh + 'px' } }, root)
-    viewport(fan, 0, 64, 330, undefined, { transform: 'rotate(-4deg)', boxShadow: '0 40px 90px -30px rgba(3,8,16,.8)' })
-    const sh = sheet(fan, 'foundation', 0, 230, 96, 300, 'DRAWING SHEET')
+    const fan = h('div', { class: 'abs', style: { left: '1010px', top: '170px', width: '600px', height: '600px' } }, root)
+    viewport(fan, 0, 30, 300, undefined, { transform: 'rotate(-4deg)', boxShadow: '0 40px 90px -30px rgba(3,8,16,.8)' })
+    const sh = sheet(fan, 'foundation', 0, 170, 150, 270, 'DRAWING SHEET')
     sh.cd.style.transform = 'rotate(2deg)'; sh.cd.style.zIndex = 2
-    page(fan, '../cap/x/pdf/foundation_p1.png', 470, 40, 290, -3, 3)
+    page(fan, '../cap/x/pdf/foundation_p1.png', 345, 0, 255, -3, 3)
     // the thread through them, an amber dimension line with its three stops
-    const ln = h('svg', { class: 'abs', width: 760, height: 60, style: { left: '880px', top: '548px', zIndex: 5 } }, root)
-    h('line', { x1: 40, y1: 20, x2: 700, y2: 20, stroke: AMBER, 'stroke-width': 1.6 }, ln)
-    ;[[40, 'MODEL'], [380, 'DRAWING'], [700, 'REPORT']].forEach(([x, t]) => {
+    const ln = h('svg', { class: 'abs', width: 600, height: 60, style: { left: '1010px', top: '690px', zIndex: 5 } }, root)
+    h('line', { x1: 10, y1: 20, x2: 590, y2: 20, stroke: AMBER, 'stroke-width': 1.6 }, ln)
+    ;[[10, 'MODEL'], [300, 'DRAWING'], [590, 'REPORT']].forEach(([x, t]) => {
       h('line', { x1: x - 7, y1: 27, x2: x + 7, y2: 13, stroke: AMBER, 'stroke-width': 2 }, ln)
-      h('text', { x, y: 48, fill: AMBER, 'font-family': 'IBM Plex Mono', 'font-size': 13, 'font-weight': 600, 'letter-spacing': '2.4', 'text-anchor': x === 40 ? 'start' : x === 700 ? 'end' : 'middle' }, ln, t)
+      h('text', { x, y: 48, fill: AMBER, 'font-family': 'IBM Plex Mono', 'font-size': 13, 'font-weight': 600, 'letter-spacing': '2.4', 'text-anchor': x === 10 ? 'start' : x === 590 ? 'end' : 'middle' }, ln, t)
     })
-    // the words, left — inside the mobile-safe middle
+    // the words: upper-left above the circle, then a column right of it
     const L = 230
-    const lk = h('div', { class: 'abs', style: { left: L + 'px', top: '92px', display: 'flex', alignItems: 'center', gap: '16px', color: '#e8eaed' } }, root,
-      LOGO('cv').replace('width="64" height="64"', 'width="52" height="52"') + WORD_SVG(30, 'currentColor'))
-    kicker(root, 'NSCP 2015 · ACI 318-14 · AISC 360-16', true, 176, L)
-    headline(root, `Model it. Check it.<br><span style="color:${ACC}">Sign it.</span>`, true, 214, 66, L, 660)
-    sub(root, 'Free code-checked calculators, 3D frame analysis and calc sheets that show every step &mdash; built for Philippine practice.', true, 372, L, 600, 21)
-    chip(root, 'zetastruct.app', L, 470, 'amber').style.fontSize = '18px'
-    lk.style.zIndex = 4
+    h('div', { class: 'abs', style: { left: L + 'px', top: '172px', display: 'flex', alignItems: 'center', gap: '16px', color: '#e8eaed' } }, root,
+      LOGO('cv').replace('width="64" height="64"', 'width="46" height="46"') + WORD_SVG(26, 'currentColor'))
+    kicker(root, 'NSCP 2015 · ACI 318-14 · AISC 360-16', true, 240, L)
+    headline(root, `Model it. Check it. <span style="color:${ACC}">Sign it.</span>`, true, 278, 60, L, 780)
+    const C2 = 800
+    const list = h('div', { class: 'abs', style: { left: C2 + 'px', top: '410px', width: '190px', display: 'flex', flexDirection: 'column', gap: '16px' } }, root)
+    ;['Free calculators', '3D frame analysis', 'Calc sheets to sign'].forEach((t) =>
+      h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', fontSize: '20px', fontWeight: 600, color: '#e8eaed', whiteSpace: 'nowrap' } }, list, dot(ACC) + t))
+    chip(root, 'zetastruct.app', C2, 590, 'amber').style.fontSize = '17px'
+    window.__pic = PIC
   },
 
   // 1 · the report, fanned — the thing an engineer actually hands over
