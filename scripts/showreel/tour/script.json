@@ -1,0 +1,16 @@
+[
+  {"id": "hook",  "text": "Design a whole concrete frame in 3D, in minutes."},
+  {"id": "title", "text": "Meet Zeta Model Space, for NSCP 2015 and ACI 318."},
+  {"id": "c01",   "n": "01", "title": "Set the grid",          "sub": "Bays · storey heights · one click", "text": "Type the bays and storey heights. One click builds the frame, beams, columns and slabs."},
+  {"id": "c02",   "n": "02", "title": "Orbit the model",       "sub": "Rotate · zoom · any view",          "text": "Orbit, zoom, or jump to any view."},
+  {"id": "c03",   "n": "03", "title": "Loads on the model",    "sub": "Gravity · NSCP 208 earthquake",      "text": "Gravity loads, and N S C P earthquake forces, storey by storey."},
+  {"id": "c04",   "n": "04", "title": "Analyse in seconds",    "sub": "3D frame FEM · member stress",       "text": "Run the 3D analysis, and see the stress in every member."},
+  {"id": "c05",   "n": "05", "title": "Modes & periods",       "sub": "Mass participation · NSCP 208.5",    "text": "Modal analysis gives the periods and the mass participation."},
+  {"id": "c06",   "n": "06", "title": "Instant pass / fail",   "sub": "Every member · every section",       "text": "Design the structure. Members that fail are flagged, and it shows you why."},
+  {"id": "c07",   "n": "07", "title": "Optimise in one click", "sub": "Sizes and bars re-chosen",           "text": "One click to optimise, and the schedule passes."},
+  {"id": "c08",   "n": "08", "title": "See every bar",         "sub": "Beam · column · footing cages",      "text": "See every bar. Cages for the beams, columns and footings."},
+  {"id": "c09",   "n": "09", "title": "Plans, drawn for you",  "sub": "Framing plans · schedules · DXF",    "text": "Framing plans and schedules, drawn for you."},
+  {"id": "c10",   "n": "10", "title": "One-click report",      "sub": "Step-by-step calcs · PDF",           "text": "One click, the full calculation report, ready to sign."},
+  {"id": "c11",   "n": "11", "title": "Opens in ETABS & STAAD","sub": "ETABS · STAAD.Pro · Excel",          "text": "And it exports to E tabs, STAAD and Excel."},
+  {"id": "end",   "text": "Start free, at Zeta struct dot app."}
+]
