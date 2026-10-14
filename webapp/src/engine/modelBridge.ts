@@ -9,6 +9,7 @@ import type { F3Node, F3Member, F3Support, F3Load, F3DiaphragmGroup, F3Shell } f
 import { rectJ, defaultAxisRotation } from './frame3d'
 import { buildDiaphragmGroups } from './diaphragm'
 import { autoRigidOffsets } from './rigidEndZones'
+import { rebaseLoadsOnRigidZones } from './rigidZoneLoads'
 import { beamAxisOffsets, addOffsets } from './beamAxisOffsets'
 import { distributePanel, type AreaLoad } from './tributary'
 import type { BeamLoad } from './beamAnalysis'
@@ -485,7 +486,9 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
 
   return {
     nodes, members: split.members, supports,
-    loads: splitLoads(loads, split.map),
+    // Member loads are written node-to-node; frame3d spans the FLEXIBLE length
+    // between offset ends — rebase them, rigid-zone parts to the joint.
+    loads: rebaseLoadsOnRigidZones(splitLoads(loads, split.map), split.members, nodes),
     shells, orphanEdges, diaphragmGroups,
     meshNodeCount: mesh.nodes.length,
     edgeSplits: mesh.edgeSplits,
