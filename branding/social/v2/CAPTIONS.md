@@ -28,18 +28,17 @@ Shared tag block (add to any post):
 ---
 
 ## 00 — cover.png (Facebook cover, 1640×924 — 16:9)
-**Why 16:9:**
-- The Facebook mobile app shows the cover whole at about 16:9.
-- On mobile, the page's profile picture is a large circle over the lower-left third, roughly r ≈ 370 px centred at (404, 742) in cover pixels. That was measured off a screenshot of the actual page.
-- Desktop shows only the middle band, y ≈ 158–766.
+**How the phone shows it** (measured from screenshots of the real page's cover editor):
+- With this 16:9 upload, the phone shows the strip y ≈ 142–732.
+- In that view, the profile picture is a circle of r ≈ 218 at (255, 716), sitting in the strip's lower-left corner.
 
 **Layout:**
-- Everything sits inside that desktop band.
-- The lockup and the one-line headline sit above the circle.
-- The feature list and the URL sit to the right of the circle.
-- The artifacts are on the right.
+- The lockup, headline, tagline and feature tags fill the left of the strip, down to the circle.
+- The URL sits just right of the circle.
+- The artifacts and the MODEL → DRAWING → REPORT line are on the right.
+- Everything is inside the strip.
 
-Upload it as-is: no dragging needed. The 1640×624 version from the first pass is replaced.
+Upload it and save without dragging.
 
 **Cover description** (the text under the cover when it's clicked): Model it. Check it. Sign it. Zeta takes a structure from a 3D model to a drawing to a calc sheet you can sign, with every step shown and every clause cited. NSCP 2015 · ACI 318-14 · AISC 360-16. The calculators are free → zetastruct.app
 
