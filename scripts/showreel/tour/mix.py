@@ -54,6 +54,7 @@ mus *= fade[:, None]
 # narration on its segments
 vo = np.zeros(n)
 for s in tl:
+    if s.get('silent'): continue
     clip = np.fromfile(f'{R}/{AUD}/vo_{s["id"]}.f32', dtype=np.float32)
     i = int((s['t0'] + s['vo']) * SR); vo[i:i + len(clip)] += clip[: max(0, n - i)]
 vo *= 0.9 / max(1e-6, np.abs(vo).max())
