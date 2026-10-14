@@ -12,3 +12,8 @@ node_modules
 reel_*.html
 posts.html
 posts2.html
+tour/tour.html
+tour/audio/
+tour/frames/
+tour/out/
+tour/node_modules
