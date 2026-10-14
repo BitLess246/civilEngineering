@@ -143,7 +143,7 @@ export function TrussMode() {
               <Num label="Depth h" unit="m" value={height} onChange={setHeight} min={1} max={span} step="0.25" />
             </Card>
 
-            <Card title="Member" hint="or click one in the drawing">
+            <Card title="Member" hint={<span className="no-print">or click one in the drawing</span>}>
               <label className="flex flex-col text-sm sm:col-span-2 lg:col-span-3">
                 <span className="mb-1 text-[11.5px] font-semibold text-muted">Influence line to plot</span>
                 <select value={sel.id} onChange={(e) => setSelId(e.target.value)} className="text-[13px]">

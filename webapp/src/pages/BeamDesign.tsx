@@ -439,7 +439,7 @@ export default function BeamDesign() {
           })}
         </tbody>
       </table>
-      <p className="mt-1 text-[11px] text-muted">Click a row to view its drawing, results and worked solution. Red rows have errors.</p>
+      <p className="mt-1 text-[11px] text-muted"><span className="no-print">Click a row to view its drawing, results and worked solution. </span>Red rows have errors.</p>
     </div>
   )
   const { docTitle: _dt, badges: _bg, lh: _lh, onLhChange: _ol, ...pdf } = reportData ?? ({} as NonNullable<typeof reportData>)

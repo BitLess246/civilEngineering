@@ -209,8 +209,8 @@ export default function WoodSlab() {
             </table>
           </div>
           <p className="mt-2 text-[11px] text-muted">
-            Board feet = m³ × 423.776, priced with the same <code>costTimberRows</code> (₱/board-foot) as the
-            wood-frame model bill of materials.
+            Board feet = m³ × 423.776, priced per board foot (₱/bd·ft) at the same timber rates as the
+            wood-frame model&apos;s bill of materials.
           </p>
         </div>,
       }] : []}

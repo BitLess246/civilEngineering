@@ -12,7 +12,7 @@
 //   · a flex row          → one line, items separated by " · "
 //   · any other block     → its own line
 // SVG is skipped (charts are captured as figures), as are form controls and
-// anything hidden or marked `data-pdf-skip`.
+// anything hidden, marked `data-pdf-skip`, or screen-only (`no-print`).
 //
 // Layout facts come from `styleOf`, so the walk is testable without a browser.
 // ─────────────────────────────────────────────────────────────────────────
@@ -32,7 +32,10 @@ const SKIP_TAGS = new Set(['svg', 'script', 'style', 'input', 'select', 'textare
 const collapse = (s: string) => s.replace(/\s+/g, ' ').trim()
 
 function hidden(el: Element, styleOf: StyleOf): boolean {
+  // `no-print` is screen-only help ("click a row…", "drag to orbit…"): the
+  // print stylesheet hides it, so the PDF does too
   return styleOf(el).display === 'none' || el.getAttribute('aria-hidden') === 'true' || el.hasAttribute('data-pdf-skip')
+    || (el.getAttribute('class') ?? '').split(/\s+/).includes('no-print')
 }
 
 /** All visible text of a node on one line (cells, card fields, flex items). */
