@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractBlocks, tableOf, type BoxStyle, type StyleOf } from './pdfCapture'
+import { extractBlocks, tableOf, inlineText, type BoxStyle, type StyleOf } from './pdfCapture'
 
 // A minimal element tree — enough DOM for the walk, with the layout supplied
 // through `style` the way `domStyleOf` would read it from the browser.
@@ -84,6 +84,11 @@ describe('pdfCapture — what the PDF keeps of the rendered page', () => {
     const out = blocks(h('div', {}, h('p', {}, '★ governing (largest |M|).', h('span', { class: 'no-print' }, ' Click a row to view its reactions.')),
       h('div', { class: 'no-print pointer-events-none' }, 'drag to orbit · scroll to zoom')))
     expect(out).toEqual([{ kind: 'text', text: '★ governing (largest |M|).' }])
+  })
+
+  it('reads a label without the options of the select it wraps', () => {
+    const lab = h('label', {}, h('span', {}, 'Category'), h('select', {}, h('option', {}, 'D — dead'), h('option', {}, 'L — live')))
+    expect(inlineText(lab as unknown as Node, styleOf)).toBe('Category')
   })
 
   it('keeps text and tables in page order', () => {

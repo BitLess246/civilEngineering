@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { CalcPdfInput, CalcPdfDetail } from '../lib/calcPdf'
 import { svgToPng } from '../lib/svgToPng'
-import { extractBlocks, tableOf, domStyleOf } from '../lib/pdfCapture'
+import { extractBlocks, tableOf, domStyleOf, inlineText } from '../lib/pdfCapture'
 
 export interface ExportPdfButtonProps extends Omit<CalcPdfInput, 'drawing' | 'figures'> {
   /**
@@ -80,7 +80,10 @@ export function ExportPdfButton({
         if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement)) continue
         if (el instanceof HTMLInputElement && (el.type === 'hidden' || el.type === 'button' || el.type === 'submit')) continue
         if (el.closest('[data-ai-ignore]')) continue
-        const label = el.labels?.[0]?.innerText?.trim().replace(/\s+/g, ' ')
+        // the label's own words only — innerText of a label wrapping a <select>
+        // also read out every option ("Category D — dead L — live Lr — …")
+        const lab = el.labels?.[0]
+        const label = (lab ? inlineText(lab, domStyleOf) : '')
           || el.getAttribute('aria-label') || el.name || el.id
         if (!label) continue
         let value = ''
