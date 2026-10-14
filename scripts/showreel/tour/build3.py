@@ -14,6 +14,8 @@ script = json.load(open(f'{R}/script3.json'))
 vo = json.load(open(f'{R}/audio3/vo.json'))
 # the animation and cage passes append their chapters at the end — put them back in order
 tape = sorted(json.load(open(f'{CAP}/tape.json')), key=lambda s: s['chapter'])
+for s in tape:                                   # the mode animation is chapter 07's, captured apart
+    if s['chapter'] == 'c07b': s['chapter'] = 'c07'
 W, H = 1600, 900
 FULL = (0.0, 0.0, 1600.0)
 GAP = 0.35                                       # air between two beats
@@ -47,6 +49,11 @@ def beat_for(s):
     global t, free
     q = pending.get(s['chapter'], [])
     if q and (q[0][0] == s.get('label') or q[0][0] == s['kind']):
+        if t < free:
+            # the narrator is still on the previous step: keep its zoom and its
+            # callout up until this one starts, rather than pumping out to full
+            if focus and focus[-1][1] >= t - 0.4: focus[-1] = (focus[-1][0], free + 0.25, *focus[-1][2:])
+            if calls and calls[-1][1] is not None and calls[-1][1] >= t - 0.8: calls[-1][1] = free
         t = max(t, free)
         bid = q.pop(0)[1]
         clips.append({'id': bid, 't0': round(t + 0.1, 3), 'vo': 0})

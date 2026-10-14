@@ -92,7 +92,7 @@ const hook = (() => {
     const u = seg(t, s.t0, s.t1), q = D.hookSeq, fq = u * (q.length - 1), i0 = Math.floor(fq), f = fq - i0
     await img.set(q[clamp(i0, 0, q.length - 1)]); await img2.set(q[clamp(i0 + 1, 0, q.length - 1)])
     img2.el.style.opacity = f
-    const w = 860 - 90 * E.inOutSine(u); place(img.el, 320 + 40 * u, 228, w); place(img2.el, 320 + 40 * u, 228, w)
+    const w = 1000 - 80 * E.inOutSine(u); place(img.el, 230 + 40 * u, 170, w); place(img2.el, 230 + 40 * u, 170, w)   // wide: the cage frames are 1×
     ;[l1, l2, l3].forEach((el, i) => { const k = E.outExpo(seg(t, 0.15 + i * 0.22, 0.75 + i * 0.22)); el.style.clipPath = `inset(0 ${(1 - k) * 100}% 0 0)` })
   } }
 })()
@@ -163,7 +163,7 @@ const end = (() => {
   const btn = h('div', { style: { display: 'inline-flex', marginTop: '36px', background: AMBER, color: NAVY, font: "800 40px 'Archivo'", padding: '16px 34px', borderRadius: '999px', gap: '16px', alignItems: 'center' } }, box, 'zetastruct.app <span style="font-size:36px">→</span>')
   h('div', { style: { fontSize: '24px', color: '#9eb0c5', marginTop: '28px' } }, box, 'Free calculators · 3D Model Space on the Pro plan')
   const wrap = h('div', { class: 'abs', style: { left: '1200px', top: '330px', width: '620px', height: '349px', overflow: 'hidden', borderRadius: '12px', boxShadow: '0 50px 120px -30px rgba(0,0,0,.7)' } }, root)
-  const shot = h('img', { class: 'abs', src: D.endShot || D.hero, style: { width: '1240px', left: '-232px', top: '-24px' } }, wrap)
+  const shot = h('img', { class: 'abs', src: D.endShot || D.hero, style: { width: '1240px', left: '-232px', top: '-140px' } }, wrap)
   return { root, a: s.t0, b: s.t1, async update(t) {
     const k = E.outExpo(seg(t, s.t0 + 0.1, s.t0 + 1.0))
     box.style.opacity = k; box.style.transform = `translateY(${(1 - k) * 30}px)`
