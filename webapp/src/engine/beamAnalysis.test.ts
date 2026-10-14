@@ -209,3 +209,42 @@ describe('multiple spans with their own E and I', () => {
     expect(mid.tmt).toBeNull()
   })
 })
+
+describe('regressions found by the hand derivation (Oct 2026)', () => {
+  it('an applied couple (counter-clockwise +) closes the moment diagram: M(L) = 0', () => {
+    const L = 6, C = 10
+    const r = solveFEM([{ type: 'pin', x: 0 }, { type: 'roller', x: L }], [{ type: 'moment', x: 3, M: C, cat: 'D' }], L, E, I)!
+    // ↺ about A: 6·R_B + C = 0 → R_B = −C/6, R_A = +C/6
+    expect(r.reactions[1].Rv).toBeCloseTo(-C / L, 6)
+    expect(r.M[r.M.length - 1]).toBeCloseTo(0, 6)
+    // just left of the couple M = R_A·3 = +5, just right 5 − 10 = −5
+    const k = r.xs.findIndex((x) => x > 3)
+    expect(r.M[k]).toBeCloseTo(-C / 2, 2)
+  })
+
+  it('an INTERIOR spring pushes up: R = (5wL⁴/384EI)/(L³/48EI + 1/k)', () => {
+    const L = 10, w = 12, k = 4000, EI = E * I * 1e-9
+    const r = solveFEM([{ type: 'pin', x: 0 }, { type: 'spring', x: 5, k }, { type: 'roller', x: L }], [{ type: 'udl', x1: 0, x2: L, w, cat: 'D' }], L, E, I)!
+    const R = ((5 * w * L ** 4) / (384 * EI)) / (L ** 3 / (48 * EI) + 1 / k)
+    expect(r.reactions[1].Rv).toBeCloseTo(R, 2)
+    expect(r.reactions[0].Rv).toBeCloseTo((w * L - R) / 2, 2)
+  })
+
+  it('Vmax is read at the support face, not 0.02 m off it', () => {
+    const L = 5, w = 12
+    const r = solveFEM([{ type: 'pin', x: 0 }, { type: 'roller', x: L }], [{ type: 'udl', x1: 0, x2: L, w, cat: 'D' }], L, E, I)!
+    expect(r.Vmax).toBeCloseTo((w * L) / 2, 2)
+  })
+
+  it('three-moment check: overhang loads and a point load ON an interior support', () => {
+    const sup: Support[] = [{ type: 'pin', x: 1 }, { type: 'roller', x: 5 }, { type: 'roller', x: 9 }]
+    for (const lds of [
+      [{ type: 'udl', x1: 0, x2: 10, w: 10, cat: 'D' }],
+      [{ type: 'udl', x1: 1, x2: 9, w: 10, cat: 'D' }, { type: 'point', x: 5, P: 50, cat: 'D' }],
+    ] as BeamLoad[][]) {
+      const res = analyzeBeam(sup, lds, 10, E, I)!
+      const gov = res.perCombo[res.govIdx].result!
+      res.tmt!.reactions.forEach((R, i) => expect(R).toBeCloseTo(gov.reactions[i].Rv, 1))
+    }
+  })
+})

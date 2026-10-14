@@ -111,6 +111,15 @@ function replaceCommand(s: string, cmd: string, nArgs: number, render: (args: st
 /** Convert a LaTeX (KaTeX-dialect) formula to plain unicode text. */
 export function texToPlain(tex: string): string {
   let s = tex
+  // an aligned block was wrapped for a narrow screen column; the PDF line is
+  // wide, so its rows run back onto one line. A row opening `&\quad` or `&=`
+  // continues the one above; any other row is a new statement, kept apart by "; "
+  s = s.replace(/\\begin\{aligned\}([\s\S]*?)\\end\{aligned\}/g, (_, body: string) =>
+    body.split('\\\\').map((row) => row.trim()).filter(Boolean).map((row, i) => {
+      const cont = /^&\s*(\\quad|=)/.test(row)
+      const text = row.replace(/&/g, '').replace(/^\s*\\quad\s*/, '').trim()
+      return i === 0 ? text : `${cont ? ' ' : '; '}${text}`
+    }).join(''))
   // structure commands (brace-aware, recursive through texToPlain on args)
   for (const f of ['\\dfrac', '\\tfrac', '\\frac'])
     s = replaceCommand(s, f, 2, ([a, b]) => `${wrap(a)}/${wrap(b)}`)

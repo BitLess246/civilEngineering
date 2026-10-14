@@ -15,6 +15,7 @@ export type SupportType = 'pin' | 'roller' | 'fixed' | 'spring'
 export interface Support { type: SupportType; x: number; k?: number /* kN/m, spring */ }
 
 export type LoadCategory = 'D' | 'L' | 'Lr' | 'S' | 'R' | 'W' | 'E' | 'T'
+/** Applied couples `M` are counter-clockwise + (kN·m). */
 export type BeamLoad =
   | { type: 'point'; x: number; P: number; cat: LoadCategory }
   | { type: 'udl'; x1: number; x2: number; w: number; cat: LoadCategory }
@@ -247,7 +248,8 @@ export function solveFEM(
     const sx = roundX(clamp(s.x, 0, L))
     const i = nm.get(sx)
     if (i === undefined) continue
-    if (s.type === 'spring') react.push({ ...s, x: sx, Rv: Math.max(s.k ?? 1000, 1e-3) * d[2 * i], Rm: 0 })
+    // R upward +: the spring pushes back against the (upward +) displacement d — R = −k·d
+    if (s.type === 'spring') react.push({ ...s, x: sx, Rv: -Math.max(s.k ?? 1000, 1e-3) * d[2 * i], Rm: 0 })
     else react.push({ ...s, x: sx, Rv: Rfull[2 * i], Rm: s.type === 'fixed' ? -Rfull[2 * i + 1] : 0 })
   }
 
@@ -279,6 +281,8 @@ export function solveFEM(
   for (const s of supports) {
     const sx = roundX(clamp(s.x, 0, L))
     xsSet.add(Math.max(0, sx - eps)); xsSet.add(sx); xsSet.add(Math.min(L, sx + eps))
+    // the support faces themselves, so the peak shear read off V is the true one
+    xsSet.add(Math.max(0, sx - 1e-4)); xsSet.add(Math.min(L, sx + 1e-4))
   }
   for (const ld of loads) {
     if (ld.type === 'point' || ld.type === 'moment') {
@@ -318,7 +322,11 @@ export function solveFEM(
           v -= W; m -= W * (x - xc)
         }
       } else if (ld.type === 'moment') {
-        if (ld.x <= x) m += ld.M
+        // applied couples are counter-clockwise + (the stiffness DOF and the
+        // elevation glyph); one acting left of the cut HOGS the section. This
+        // read `+=` until Oct 2026 — the clockwise sense — so a beam with a
+        // couple drew a moment diagram that did not close (M(L) = 2M ≠ 0).
+        if (ld.x <= x) m -= ld.M
       }
     }
     V[k] = v; M[k] = m
@@ -349,6 +357,60 @@ export function solveFEM(
   }
 }
 
+/** A distributed load cut to [a, b] (m), or null when it misses the stretch. */
+export function clipDist(ld: BeamLoad & { type: 'udl' | 'vdl' }, a: number, b: number): BeamLoad | null {
+  const lo = Math.max(ld.x1, a), hi = Math.min(ld.x2, b)
+  if (hi <= lo + 1e-9) return null
+  if (ld.type === 'udl') return { ...ld, x1: lo, x2: hi }
+  const span = Math.max(ld.x2 - ld.x1, 1e-9)
+  const wAt = (xq: number) => ld.w1 + ((ld.w2 - ld.w1) * (xq - ld.x1)) / span
+  return { ...ld, x1: lo, x2: hi, w1: wAt(lo), w2: wAt(hi) }
+}
+
+/**
+ * The loads of the span [xL, xR], in span coordinates (0 at xL). A point or
+ * couple ON an interior support belongs to the span on its right only — the
+ * neighbouring span must not see it again (it went into both until Oct 2026,
+ * so a point load on an interior support was counted twice in the reaction).
+ */
+export function spanLoads(loads: readonly BeamLoad[], xL: number, xR: number, last: boolean): BeamLoad[] {
+  const out: BeamLoad[] = []
+  for (const ld of loads) {
+    if (ld.type === 'point' || ld.type === 'moment') {
+      if (ld.x >= xL - 1e-6 && (ld.x < xR - 1e-6 || (last && ld.x <= xR + 1e-6))) out.push({ ...ld, x: Math.min(Math.max(ld.x - xL, 0), xR - xL) })
+    } else {
+      const c = clipDist(ld, xL, xR)
+      if (c && c.type !== 'point' && c.type !== 'moment') out.push({ ...c, x1: c.x1 - xL, x2: c.x2 - xL })
+    }
+  }
+  return out
+}
+
+/**
+ * Statics of an overhang beyond an outer support at xs: the moment it puts on
+ * the support (sagging +) and its total load W, couples C counter-clockwise +.
+ * Left overhang (free body left of xs): M = −ΣC − ΣW(xs − x̄). Right (free
+ * body right of xs): M = −ΣW(x̄ − xs) + ΣC.
+ * A load exactly at xs is the support's, not the overhang's.
+ */
+export function overhangMoment(loads: readonly BeamLoad[], xs: number, side: 'left' | 'right'): { M: number; W: number } {
+  let M = 0, W = 0
+  for (const ld of loads) {
+    if (ld.type === 'point' || ld.type === 'moment') {
+      const out = side === 'left' ? ld.x < xs - 1e-6 : ld.x > xs + 1e-6
+      if (!out) continue
+      if (ld.type === 'moment') M += side === 'left' ? -ld.M : ld.M
+      else { W += ld.P; M -= ld.P * Math.abs(xs - ld.x) }
+    } else {
+      const c = side === 'left' ? clipDist(ld, -Infinity, xs) : clipDist(ld, xs, Infinity)
+      if (!c) continue
+      const { W: w, xc } = loadResultant(c)
+      W += w; M -= w * Math.abs(xs - xc)
+    }
+  }
+  return { M, W }
+}
+
 // ── Three-moment theorem (Clapeyron) cross-check ─────────────────────────
 function reactionsSS(L: number, loads: BeamLoad[]): { Ra: number; Rb: number } {
   let sumW = 0, sumMx = 0, sumMc = 0
@@ -377,7 +439,7 @@ function shearMomentAtSS(x: number, Ra: number, loads: BeamLoad[]): { V: number;
         }
         v -= W; m -= W * (x - xc)
       }
-    } else if (ld.type === 'moment') { if (ld.x <= x) m += ld.M }
+    } else if (ld.type === 'moment') { if (ld.x <= x) m -= ld.M }   // counter-clockwise +
   }
   return { V: v, M: m }
 }
@@ -396,13 +458,19 @@ export interface ThreeMomentResult { supportMoments: number[]; reactions: number
  *   Mᵢ₋₁·Lᵢ/EIᵢ + 2Mᵢ(Lᵢ/EIᵢ + Lᵢ₊₁/EIᵢ₊₁) + Mᵢ₊₁·Lᵢ₊₁/EIᵢ₊₁
  *     = −6(A·x̄/L)ᵢ/EIᵢ − 6(A·x̄′/L)ᵢ₊₁/EIᵢ₊₁
  * `ei` per span is optional; equal values cancel back to the classic form.
+ * `endMoments` are the known moments at the two outer supports — non-zero
+ * when an overhang carries load (M = −ΣW·arm of the overhang, statics).
  */
-export function threeMoment(spans: number[], loadsPerSpan: BeamLoad[][], ei?: readonly number[]): ThreeMomentResult | null {
+export function threeMoment(
+  spans: number[], loadsPerSpan: BeamLoad[][], ei?: readonly number[],
+  endMoments: readonly [number, number] = [0, 0],
+): ThreeMomentResult | null {
   const ei_ = (i: number) => (ei ? ei[i] : 1)
   const n = spans.length
+  const [M0, Mn] = endMoments
   if (n === 1) {
     const { Ra, Rb } = reactionsSS(spans[0], loadsPerSpan[0])
-    return { supportMoments: [0, 0], reactions: [Ra, Rb] }
+    return { supportMoments: [M0, Mn], reactions: [Ra + (Mn - M0) / spans[0], Rb + (M0 - Mn) / spans[0]] }
   }
   const sixQm = (L: number, lds: BeamLoad[], fromRight: boolean): number => {
     const { Ra } = reactionsSS(L, lds)
@@ -424,9 +492,12 @@ export function threeMoment(spans: number[], loadsPerSpan: BeamLoad[][], ei?: re
     if (k < size - 1) A[k][k + 1] = spans[k + 1] / ei_(k + 1)
     b[k] = -(sixL[k] / ei_(k) + sixR[k + 1] / ei_(k + 1))
   }
+  // known end moments (overhangs) move to the right-hand side
+  b[0] -= (M0 * spans[0]) / ei_(0)
+  b[size - 1] -= (Mn * spans[n - 1]) / ei_(n - 1)
   const Mint = solveLinear(A, b)
   if (!Mint) return null
-  const supportMoments = [0, ...Mint, 0]
+  const supportMoments = [M0, ...Mint, Mn]
   const reactions = new Array(n + 1).fill(0)
   for (let i = 0; i < n; i++) {
     const L = spans[i]
@@ -477,26 +548,15 @@ export function analyzeBeam(
     const spans: number[] = []
     const loadsPer: BeamLoad[][] = []
     for (let i = 0; i < distinct.length - 1; i++) {
-      const xL = distinct[i], xR = distinct[i + 1]
-      spans.push(xR - xL)
-      const spanLoads: BeamLoad[] = []
-      for (const ld of gov.factored) {
-        if (ld.type === 'point' || ld.type === 'moment') {
-          if (ld.x >= xL - 1e-6 && ld.x <= xR + 1e-6) spanLoads.push({ ...ld, x: ld.x - xL })
-        } else {
-          const a = Math.max(ld.x1, xL), b = Math.min(ld.x2, xR)
-          if (b > a + 1e-9) {
-            if (ld.type === 'udl') spanLoads.push({ ...ld, x1: a - xL, x2: b - xL })
-            else {
-              const span = Math.max(ld.x2 - ld.x1, 1e-9)
-              const wAt = (xq: number) => ld.w1 + ((ld.w2 - ld.w1) * (xq - ld.x1)) / span
-              spanLoads.push({ ...ld, w1: wAt(a), w2: wAt(b), x1: a - xL, x2: b - xL })
-            }
-          }
-        }
-      }
-      loadsPer.push(spanLoads)
+      spans.push(distinct[i + 1] - distinct[i])
+      loadsPer.push(spanLoads(gov.factored, distinct[i], distinct[i + 1], i === distinct.length - 2))
     }
+    const x0 = distinct[0], xn = distinct[distinct.length - 1]
+    const { M: M0, W: W0 } = overhangMoment(gov.factored, x0, 'left')
+    const { M: Mn, W: Wn } = overhangMoment(gov.factored, xn, 'right')
+    // a couple applied AT an interior support makes the support moment jump —
+    // outside the continuous-moment form of the equation, so no check
+    const coupleAtSupport = gov.factored.some((ld) => ld.type === 'moment' && distinct.slice(1, -1).some((x) => Math.abs(ld.x - x) < 1e-6))
     // each span between supports needs ONE EI for the equation to hold —
     // a section change inside a span leaves the check out rather than wrong
     const eiOf = (xa: number, xb: number): number | null => {
@@ -505,8 +565,13 @@ export function analyzeBeam(
       return inside ? null : here
     }
     const eis = spans.map((_, i) => eiOf(distinct[i], distinct[i + 1]))
-    const res = eis.every((v) => v !== null) ? threeMoment(spans, loadsPer, eis as number[]) : null
-    if (res) tmt = { positions: distinct, supportMoments: res.supportMoments, reactions: res.reactions }
+    const res = !coupleAtSupport && eis.every((v) => v !== null) ? threeMoment(spans, loadsPer, eis as number[], [M0, Mn]) : null
+    if (res) {
+      // overhang loads hang straight off the outer supports
+      res.reactions[0] += W0
+      res.reactions[res.reactions.length - 1] += Wn
+      tmt = { positions: distinct, supportMoments: res.supportMoments, reactions: res.reactions }
+    }
   }
 
   return { perCombo, govIdx, tmt }
