@@ -10,6 +10,7 @@
 import { useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ALL_TOOLS } from '../../lib/tools'
+import { AssistantMarkdown } from './AssistantMarkdown'
 import {
   chatWithAssistant, assistantToken, assistantFailureMessage,
   type AssistantChatMessage, type AssistantAction,
@@ -161,10 +162,16 @@ export function AiAssistantWidget() {
             )}
             {messages.map((m, i) => (
               <div key={i} className={`mb-2 max-w-full ${m.role === 'user' ? 'ml-8 text-right' : 'mr-4'}`}>
-                <p className={`inline-block whitespace-pre-wrap rounded-lg px-2.5 py-1.5 text-[13px] leading-relaxed ${
-                  m.role === 'user' ? 'bg-brand text-on-solid' : 'bg-sheet-2 text-ink-2'}`}>
-                  {m.content}
-                </p>
+                {m.role === 'user' ? (
+                  <p className="inline-block whitespace-pre-wrap rounded-lg bg-brand px-2.5 py-1.5 text-[13px] leading-relaxed text-on-solid">
+                    {m.content}
+                  </p>
+                ) : (
+                  // replies are markdown + LaTeX; rendered, not printed raw
+                  <div className="inline-block max-w-full rounded-lg bg-sheet-2 px-2.5 py-1.5 text-left text-[13px] leading-relaxed text-ink-2">
+                    <AssistantMarkdown text={m.content} />
+                  </div>
+                )}
                 {m.actions?.map((a) => (
                   <ActionCard key={a.route} action={a} onOpen={openAction} />
                 ))}

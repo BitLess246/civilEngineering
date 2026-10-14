@@ -206,6 +206,14 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = (() => {
 export const ALL_TOOLS: (ToolDef & { groupLabel: string })[] =
   SIDEBAR_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, groupLabel: g.label })))
 
+/** The Reference group (docs, validation, pricing) is pages, not tools. */
+export const isReferenceGroup = (label: string): boolean => label === 'Reference'
+
+/** How many TOOLS the app has — every catalogue entry except the Reference
+ *  pages. Every "Search N tools" / "N tools" label reads this one number, so
+ *  the three pages that are not calculators never inflate it again. */
+export const TOOL_COUNT = ALL_TOOLS.filter((t) => !isReferenceGroup(t.groupLabel)).length
+
 /**
  * Routes that need an account/plan — advertised with a lock badge + "Sign in"
  * suffix pre-click, never with equal weight then a post-click wall.

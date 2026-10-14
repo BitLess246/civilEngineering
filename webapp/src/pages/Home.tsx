@@ -3,7 +3,7 @@ import { AccountMenu } from '../components/AccountMenu'
 import { Link } from 'react-router-dom'
 import { BRAND_TAIL } from '../lib/brand'
 import { ZetaLogo } from '../components/BrandMark'
-import { SIDEBAR_GROUPS, ALL_TOOLS, PALETTE_EXAMPLES, isGatedRoute } from '../lib/tools'
+import { SIDEBAR_GROUPS, PALETTE_EXAMPLES, TOOL_COUNT, isGatedRoute, isReferenceGroup } from '../lib/tools'
 import { CommandPalette } from '../components/CommandPalette'
 import { SkipLink } from '../components/AppShell'
 import { SiteFooter } from '../components/SiteFooter'
@@ -57,13 +57,13 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
     tools: g.tools,
   })), [prefs])
   // The catalogue carries three Reference pages (docs, validation, pricing)
-  // that are not calculators. The hero claims "N code-checked calculators",
-  // so the number it prints must EXCLUDE them — otherwise the claim inflates
-  // by exactly the tools that are not calculations.
-  const calcCount = ALL_TOOLS.filter((t) => t.groupLabel !== 'Reference').length
-  const toolCount = ALL_TOOLS.length
-  const shownCount = useMemo(() => groups.reduce((n, g) => n + g.tools.length, 0), [groups])
-  const trimmed = shownCount < toolCount
+  // that are not calculators, so every count printed here — the hero claim,
+  // the search box, the directory tally — is TOOL_COUNT or excludes them too.
+  // (The search box said "Search 111 tools" while the app has 108.)
+  const calcCount = TOOL_COUNT
+  const toolGroups = useMemo(() => groups.filter((g) => !isReferenceGroup(g.heading)), [groups])
+  const shownCount = useMemo(() => toolGroups.reduce((n, g) => n + g.tools.length, 0), [toolGroups])
+  const trimmed = shownCount < TOOL_COUNT
 
   const searchBox = (big: boolean) => (
     <button type="button" onClick={() => setPalette(true)}
@@ -76,8 +76,8 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       <span className={`min-w-0 flex-1 truncate text-rail-muted ${big ? 'text-sm' : 'text-xs'}`}>
         {big ? (
           <>
-            <span className="sm:hidden">Search {toolCount} tools…</span>
-            <span className="hidden sm:inline">Search {toolCount} tools — {PALETTE_EXAMPLES}</span>
+            <span className="sm:hidden">Search {TOOL_COUNT} tools…</span>
+            <span className="hidden sm:inline">Search {TOOL_COUNT} tools — {PALETTE_EXAMPLES}</span>
           </>
         ) : 'Find a tool…'}
       </span>
@@ -290,7 +290,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       <section id="tools" className="mx-auto max-w-[1200px] px-6 pb-16 pt-9">
         <div className="mb-4 flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
           <h2 className="text-[19px] font-extrabold tracking-tight">Tool directory</h2>
-          <span className="font-mono text-[11px] text-faint">{shownCount} tools · {groups.length} disciplines</span>
+          <span className="font-mono text-[11px] text-faint">{shownCount} tools · {toolGroups.length} disciplines</span>
           {/* SAY SO WHEN THE LIST IS TRIMMED. A directory quietly missing the
               geotechnical tools is indistinguishable from an app that never had
               them, and "where did they go?" is a support mail rather than a
@@ -299,7 +299,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
               wrong without saying what. */}
           {trimmed && (
             <span className="font-mono text-[11px] text-faint">
-              · {toolCount - shownCount} hidden by your preferences —{' '}
+              · {TOOL_COUNT - shownCount} hidden by your preferences —{' '}
               <Link to="/profile" className="text-brand underline">change</Link>
             </span>
           )}
