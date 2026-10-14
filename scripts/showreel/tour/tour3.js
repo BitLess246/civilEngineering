@@ -151,14 +151,14 @@ const rec = (() => {
     pdf.set(t - D.T0 - D.pdfAt)
   } }
 })()
-// ── END — the free CTA ──
+// ── END — the CTA: calculators free, Model Space on Pro ──
 const end = (() => {
   const s = SEG.end, root = layer()
   h('div', { class: 'abs', style: { inset: 0, background: `radial-gradient(1400px 900px at 30% 40%, #17304f 0%, ${NAVY} 60%, #08121f 100%)` } }, root)
   h('div', { class: 'grid', style: { opacity: 0.6 } }, root)
   const box = h('div', { class: 'abs', style: { left: '140px', top: '250px' } }, root)
   h('div', { style: { display: 'flex', alignItems: 'center', gap: '22px', color: WHITE } }, box, LOGO('ec').replace('width="64" height="64"', 'width="110" height="110"') + WORD_SVG(64, WHITE))
-  h('div', { class: 'mono', style: { color: AMBER, fontSize: '24px', marginTop: '44px', letterSpacing: '.2em' } }, box, 'START FREE')
+  h('div', { class: 'mono', style: { color: AMBER, fontSize: '24px', marginTop: '44px', letterSpacing: '.2em' } }, box, 'GET STARTED')
   h('div', { style: { font: "800 60px/1.02 'Archivo'", color: WHITE, marginTop: '14px', letterSpacing: '-.02em', width: '960px' } }, box, 'Structural engineering,<br>made clearer.')
   const btn = h('div', { style: { display: 'inline-flex', marginTop: '36px', background: AMBER, color: NAVY, font: "800 40px 'Archivo'", padding: '16px 34px', borderRadius: '999px', gap: '16px', alignItems: 'center' } }, box, 'zetastruct.app <span style="font-size:36px">→</span>')
   h('div', { style: { fontSize: '24px', color: '#9eb0c5', marginTop: '28px' } }, box, 'Free calculators · 3D Model Space on the Pro plan')
