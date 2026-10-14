@@ -69,7 +69,6 @@ const POSTS = {
   cover(root) {
     const w = 1640, hh = 924
     darkGround(root); corners(root, w, hh, '#e8eaed', 28, 20)
-    const PIC = { x: 404, y: 742, r: 370 }
     // the artifacts, right: viewport → drawing → report, fanned like a desk
     const fan = h('div', { class: 'abs', style: { left: '1010px', top: '170px', width: '600px', height: '600px' } }, root)
     viewport(fan, 0, 30, 300, undefined, { transform: 'rotate(-4deg)', boxShadow: '0 40px 90px -30px rgba(3,8,16,.8)' })
@@ -77,23 +76,26 @@ const POSTS = {
     sh.cd.style.transform = 'rotate(2deg)'; sh.cd.style.zIndex = 2
     page(fan, '../cap/x/pdf/foundation_p1.png', 345, 0, 255, -3, 3)
     // the thread through them, an amber dimension line with its three stops
-    const ln = h('svg', { class: 'abs', width: 600, height: 60, style: { left: '1010px', top: '690px', zIndex: 5 } }, root)
+    const ln = h('svg', { class: 'abs', width: 600, height: 60, style: { left: '1010px', top: '664px', zIndex: 5 } }, root)
     h('line', { x1: 10, y1: 20, x2: 590, y2: 20, stroke: AMBER, 'stroke-width': 1.6 }, ln)
     ;[[10, 'MODEL'], [300, 'DRAWING'], [590, 'REPORT']].forEach(([x, t]) => {
       h('line', { x1: x - 7, y1: 27, x2: x + 7, y2: 13, stroke: AMBER, 'stroke-width': 2 }, ln)
       h('text', { x, y: 48, fill: AMBER, 'font-family': 'IBM Plex Mono', 'font-size': 13, 'font-weight': 600, 'letter-spacing': '2.4', 'text-anchor': x === 10 ? 'start' : x === 590 ? 'end' : 'middle' }, ln, t)
     })
-    // the words: upper-left above the circle, then a column right of it
+    // the words, left, filling the strip down to the circle. What the phone
+    // shows of this 16:9 upload is the band y ≈ 142–732, with the profile
+    // picture a circle of r ≈ 218 at (255, 716) in its lower-left corner.
     const L = 230
-    h('div', { class: 'abs', style: { left: L + 'px', top: '172px', display: 'flex', alignItems: 'center', gap: '16px', color: '#e8eaed' } }, root,
+    h('div', { class: 'abs', style: { left: L + 'px', top: '176px', display: 'flex', alignItems: 'center', gap: '16px', color: '#e8eaed' } }, root,
       LOGO('cv').replace('width="64" height="64"', 'width="46" height="46"') + WORD_SVG(26, 'currentColor'))
-    kicker(root, 'NSCP 2015 · ACI 318-14 · AISC 360-16', true, 240, L)
-    headline(root, `Model it. Check it. <span style="color:${ACC}">Sign it.</span>`, true, 278, 60, L, 780)
-    const C2 = 800
-    const list = h('div', { class: 'abs', style: { left: C2 + 'px', top: '410px', width: '190px', display: 'flex', flexDirection: 'column', gap: '16px' } }, root)
+    kicker(root, 'NSCP 2015 · ACI 318-14 · AISC 360-16', true, 246, L)
+    headline(root, `Model it. Check it. <span style="color:${ACC}">Sign it.</span>`, true, 282, 62, L, 780)
+    sub(root, 'Code-checked calculators, 3D frame analysis and calc sheets that show every step &mdash; built for Philippine practice.', true, 370, L, 720, 22)
+    const row = h('div', { class: 'abs', style: { left: L + 'px', top: '462px', display: 'flex', gap: '12px' } }, root)
     ;['Free calculators', '3D frame analysis', 'Calc sheets to sign'].forEach((t) =>
-      h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', fontSize: '20px', fontWeight: 600, color: '#e8eaed', whiteSpace: 'nowrap' } }, list, dot(ACC) + t))
-    chip(root, 'zetastruct.app', C2, 590, 'amber').style.fontSize = '17px'
+      h('span', { class: 'chip', style: { fontSize: '16px', padding: '7px 15px', background: 'rgba(107,164,220,.12)', border: '1.5px solid rgba(107,164,220,.6)', color: ACC } }, row, t))
+    chip(root, 'zetastruct.app', 520, 560, 'amber').style.cssText += ';font-size:22px;padding:9px 20px'
+    const PIC = { x: 255, y: 716, r: 218 }
     window.__pic = PIC
   },
 
