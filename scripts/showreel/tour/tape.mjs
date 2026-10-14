@@ -76,7 +76,7 @@ async function scrollTo(loc, top = 120, steps = 8) {
 /** Orbit the 3D view: a press-drag with the cursor on the canvas. */
 async function orbit(frames, dx, label) {
   const c = await p.evaluate(() => { const el = [...document.querySelectorAll('canvas')].sort((a, b) => b.width * b.height - a.width * a.height)[0]; const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height } })
-  const x0 = c.x + c.w * 0.62, y0 = c.y + c.h * 0.55
+  const x0 = c.x + c.w * 0.9, y0 = c.y + c.h * 0.3       // empty canvas: a press on a member selects it
   const step = { chapter, kind: 'drag', label, box: { x: x0 - 1, y: y0 - 1, w: 2, h: 2 }, frames: [] }
   tape.push(step)
   await p.mouse.move(x0, y0); await p.mouse.down()
@@ -141,9 +141,11 @@ await scroll(-(await p.evaluate(() => scrollY)), 10)
 chapter = 'c08'
 await click(tab('Display'), 'Display')
 await click(p.locator('input[name="contour"][value="none"]').locator('xpath=ancestor::label[1]'), 'None', { wait: 2500 })
-await click(p.getByLabel(/Show reinforcement cages/).locator('xpath=ancestor::label[1]'), 'Show reinforcement cages', { wait: 12000 })
-await orbit(20, 11, 'Drag to orbit')
-await click(p.getByLabel(/Show reinforcement cages/).locator('xpath=ancestor::label[1]'), 'Show reinforcement cages', { wait: 3000 })
+if (rec()) {                                      // replayed silently, the cages would end off anyway
+  await click(p.getByLabel(/Show reinforcement cages/).locator('xpath=ancestor::label[1]'), 'Show reinforcement cages', { wait: 12000 })
+  await orbit(20, 11, 'Drag to orbit')
+  await click(p.getByLabel(/Show reinforcement cages/).locator('xpath=ancestor::label[1]'), 'Show reinforcement cages', { wait: 3000 })
+}
 if (UNTIL === 'c08') { await b.close(); log('done', n, 'frames'); process.exit(0) }
 // 09 — plans
 chapter = 'c09'
