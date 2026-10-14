@@ -19,6 +19,7 @@
 //
 // Loaded lazily (with its embedded font subsets) via dynamic import.
 // ─────────────────────────────────────────────────────────────────────────
+import type { DetailBlock } from './pdfCapture'
 import type { LetterheadState, VerdictStat } from '../components/calc'
 import type { SolutionStep } from './solution'
 import { createSheet, autoTable, MUTED, NOT_CHECKED, RULE_H } from './pdfKit'
@@ -43,7 +44,9 @@ export interface CalcPdfResultRow {
   status: 'pass' | 'fail' | 'warn' | 'info'
 }
 export interface CalcPdfReference { topic: string; basis: string; source: string }
-export interface CalcPdfDetail { title: string; text: string }
+/** A schedule or detail block from the page. `blocks` keeps its tables as
+ *  tables and its lines as lines (lib/pdfCapture); `text` is plain prose. */
+export interface CalcPdfDetail { title: string; text?: string; blocks?: readonly DetailBlock[] }
 
 export interface CalcPdfInput {
   /** Element name — 'Rectangular RC Beam'. Heads the sheet and the file name. */
@@ -230,15 +233,33 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
 
   if (details.length > 0) {
     section('Additional Schedules & Calculator Data')
+    const prose = (text: string) => {
+      s.setF('sans', 'normal', 6.6, MUTED)
+      for (const para of text.split('\n')) {
+        for (const line of doc.splitTextToSize(para, 182) as string[]) { s.ensure(3.4); doc.text(line, 14, s.y); s.y += 3.2 }
+      }
+      s.y += 1.5
+    }
     for (const item of details) {
-      s.ensure(10)
+      s.ensure(14)                                  // the title travels with its first lines
       s.setF('sans', 'bold', 7.2, MUTED)
       doc.text(item.title, 14, s.y); s.y += 4
-      s.setF('sans', 'normal', 6.6, MUTED)
-      const lines = doc.splitTextToSize(item.text || 'No text data available.', 182)
-      s.ensure(lines.length * 3.2 + 2)
-      for (const line of lines) { doc.text(line, 14, s.y); s.y += 3.2 }
-      s.y += 2
+      const blocks = item.blocks ?? [{ kind: 'text' as const, text: item.text || 'No text data available.' }]
+      for (const bl of blocks) {
+        if (bl.kind === 'text') { prose(bl.text); continue }
+        const { head, rows } = bl.table
+        const n = Math.max(head?.length ?? 0, ...rows.map((r) => r.length))
+        const pad = (r: readonly string[]) => Array.from({ length: n }, (_, k) => r[k] ?? '')
+        const theme = s.tableTheme()
+        autoTable(doc, {
+          ...theme, startY: s.y,
+          ...(head ? { head: [pad(head)] } : {}),
+          body: rows.map(pad),
+          styles: { ...(theme.styles as object), fontSize: 6.3, cellPadding: 1.2, overflow: 'linebreak' },
+        })
+        s.y = (s.lastY() ?? s.y) + 3
+      }
+      s.y += 1.5
     }
   }
 

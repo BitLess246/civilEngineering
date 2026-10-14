@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import type { CalcPdfInput } from '../lib/calcPdf'
+import type { CalcPdfInput, CalcPdfDetail } from '../lib/calcPdf'
 import { svgToPng } from '../lib/svgToPng'
+import { extractBlocks, tableOf, domStyleOf } from '../lib/pdfCapture'
 
 export interface ExportPdfButtonProps extends Omit<CalcPdfInput, 'drawing' | 'figures'> {
   /**
@@ -88,22 +89,27 @@ export function ExportPdfButton({
         if (value !== '') capturedData.push([label, value])
       }
 
-      // Include actual rendered tables (result schedules, reinforcement tables,
-      // etc.) even when the calculator did not manually duplicate them into its
-      // report payload.
-      const capturedDetails: { title: string; text: string }[] = []
+      // The page's own schedules and detail blocks, kept as tables and lines
+      // (lib/pdfCapture) — not flattened to "a | b | c" or run-on text.
+      // Detail blocks go first: a table inside one belongs to it, and
+      // anything marked data-pdf-skip is already in the typed report payload.
+      const capturedDetails: CalcPdfDetail[] = []
+      const consumed = new Set<Element>()
+      for (const el of reportRoot.querySelectorAll('[data-pdf-detail]')) {
+        if (el.closest('[data-pdf-skip]')) continue
+        const blocks = extractBlocks(el, domStyleOf, consumed)
+        if (blocks.length) capturedDetails.push({ title: el.getAttribute('data-pdf-detail') || 'Additional calculator data', blocks })
+      }
       const seenTables = new Set<string>()
       for (const table of reportRoot.querySelectorAll('table')) {
-        const text = Array.from(table.querySelectorAll('tr'))
-          .map((tr) => Array.from(tr.querySelectorAll('th,td')).map((cell) => cell.textContent?.trim() ?? '').join(' | '))
-          .filter(Boolean).join('\n')
-        if (!text || seenTables.has(text)) continue
-        seenTables.add(text)
-        capturedDetails.push({ title: table.getAttribute('aria-label') || table.caption?.textContent || 'Rendered table data', text })
-      }
-      for (const el of reportRoot.querySelectorAll('[data-pdf-detail]')) {
-        const text = el.textContent?.trim()
-        if (text) capturedDetails.push({ title: el.getAttribute('data-pdf-detail') || 'Additional calculator data', text })
+        if (consumed.has(table) || table.closest('[data-pdf-skip], [data-pdf-detail]')) continue
+        const title = table.getAttribute('aria-label') || table.caption?.textContent?.trim()
+          || table.closest('section')?.querySelector('h2, h3, h4')?.textContent?.trim() || 'Schedule'
+        const t = tableOf(table, domStyleOf, title)
+        const key = t ? JSON.stringify([t.head, t.rows]) : ''
+        if (!t || seenTables.has(key)) continue
+        seenTables.add(key)
+        capturedDetails.push({ title, blocks: [{ kind: 'table', table: { ...t, title: undefined } }] })
       }
       const capturedAssumptions = Array.from(reportRoot.querySelectorAll('[data-pdf-assumption]'))
         .map((el) => el.textContent?.trim()).filter((v): v is string => Boolean(v))
@@ -113,8 +119,8 @@ export function ExportPdfButton({
       // data. The warning in ReportControls makes clear this is a fallback,
       // not a substitute for exposing internal assumptions from calculation code.
       if (!document.querySelector('[data-pdf-calc-root]')) {
-        const transcript = (reportRoot instanceof HTMLElement ? reportRoot.innerText : reportRoot.textContent)?.trim()
-        if (transcript) capturedDetails.push({ title: 'Rendered calculator content transcript', text: transcript })
+        const blocks = extractBlocks(reportRoot, domStyleOf)
+        if (blocks.length) capturedDetails.push({ title: 'Rendered calculator content', blocks })
       }
 
       const { generateCalcPdf } = await import('../lib/calcPdf')

@@ -159,7 +159,14 @@ export function CheckCard({ title, basis, status, value, unit, formula, ratio, r
   pillLabel?: string
 }) {
   return (
-    <section className="rail-card rounded-lg border border-hairline bg-sheet p-4">
+    // data-pdf-card-*: the PDF export prints each card as one table row
+    // (lib/pdfCapture) — its visible text would otherwise run together.
+    <section className="rail-card rounded-lg border border-hairline bg-sheet p-4"
+      data-pdf-card="" data-pdf-card-title={title} data-pdf-card-basis={basis ?? ''}
+      data-pdf-card-value={unit ? `${value} ${unit}` : value}
+      data-pdf-card-ratio={ratio !== undefined && Number.isFinite(ratio) ? `${(ratio * 100).toFixed(1)}%` : '—'}
+      data-pdf-card-status={pillLabel ?? STATUS[status].label}
+      data-pdf-card-pairs={pairs?.map((p) => `${p.label}: ${p.value}`).join(' · ') ?? ''}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="text-[13px] font-bold text-ink">{title}</h3>
@@ -170,7 +177,7 @@ export function CheckCard({ title, basis, status, value, unit, formula, ratio, r
       <p className="mt-2.5 font-mono text-[24px] font-bold leading-none text-brand">
         {value}{unit && <span className="ml-1 text-[11.5px] font-semibold text-faint">{unit}</span>}
       </p>
-      {formula && <p className="mt-1.5 text-[11px] text-muted">{formula}</p>}
+      {formula && <p data-pdf-card-note="" className="mt-1.5 text-[11px] text-muted">{formula}</p>}
       {ratio !== undefined && Number.isFinite(ratio) && (
         <div className="mt-3">
           <div className="flex items-baseline justify-between text-[11px]">
