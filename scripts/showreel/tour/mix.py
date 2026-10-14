@@ -5,7 +5,8 @@ import json, os, wave
 import numpy as np
 R = os.path.dirname(os.path.abspath(__file__))
 SR = 48000
-tl = json.load(open(f'{R}/audio/timeline.json'))
+AUD = os.environ.get('AUD', 'audio')
+tl = json.load(open(f'{R}/{AUD}/timeline.json'))
 T = tl[-1]['t1']
 n = int(T * SR)
 t = np.arange(n) / SR
@@ -53,7 +54,7 @@ mus *= fade[:, None]
 # narration on its segments
 vo = np.zeros(n)
 for s in tl:
-    clip = np.fromfile(f'{R}/audio/vo_{s["id"]}.f32', dtype=np.float32)
+    clip = np.fromfile(f'{R}/{AUD}/vo_{s["id"]}.f32', dtype=np.float32)
     i = int((s['t0'] + s['vo']) * SR); vo[i:i + len(clip)] += clip[: max(0, n - i)]
 vo *= 0.9 / max(1e-6, np.abs(vo).max())
 # duck the bed under the voice: 80 ms attack, 400 ms release, −10 dB
@@ -66,7 +67,7 @@ for k in range(n):
 mus /= max(1e-6, np.abs(mus).max())
 mix = mus * (0.42 * (1 - 0.68 * g))[:, None] + vo[:, None]
 mix /= max(1.0, np.abs(mix).max() / 0.97)
-with wave.open(f'{R}/audio/tour_mix.wav', 'wb') as w:
+with wave.open(f'{R}/{AUD}/tour_mix.wav', 'wb') as w:
     w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
     w.writeframes((mix * 32767).astype(np.int16).tobytes())
 print('mixed', round(T, 2), 's')

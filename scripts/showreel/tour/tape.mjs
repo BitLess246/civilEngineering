@@ -4,21 +4,32 @@
 // replay it as ONE unbroken screen recording: the cursor travels to each real
 // button, clicks it, the page changes under it. No cuts between views.
 //   node tour/tape.mjs   (dev server on :5192)
+// Resume a capture with FROM=c08 [UNTIL=c08] [DPR=1]: the chapters before FROM
+// replay silently to rebuild the model state, the tape keeps what it had before
+// FROM, and frame numbers carry on. (The cage view hangs a 2× WebGL screenshot,
+// so c08 is captured at 1×; the compositor scales every frame to 1600 css.)
 import { open, clean } from '../lib.mjs'
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
-const OUT = 'cap/tour2'; rmSync(OUT, { recursive: true, force: true }); mkdirSync(OUT, { recursive: true })
-const { b, p } = await open({ dpr: 2, w: 1600, h: 900 })
+import { mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs'
+const OUT = 'cap/tour2', FROM = process.env.FROM, UNTIL = process.env.UNTIL || 'c99'
+if (!FROM) rmSync(OUT, { recursive: true, force: true })
+mkdirSync(OUT, { recursive: true })
+const { b, p } = await open({ dpr: +(process.env.DPR || 2), w: 1600, h: 900 })
 p.setDefaultTimeout(180000)
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a)
-const tape = []
-let n = 0, chapter = 'c01'
+const kept = FROM ? JSON.parse(readFileSync(`${OUT}/tape.json`, 'utf8')).filter((s) => s.chapter < FROM) : []
+const real = [...kept]
+let n = Math.max(0, ...readdirSync(OUT).map((f) => +(f.match(/^f(\d+)\.jpg$/)?.[1] ?? 0))), chapter = 'c01'
+const rec = () => !FROM || (chapter >= FROM && chapter <= UNTIL)
+const scratch = []
+const tape = new Proxy(real, { get: (t, k) => { const a = rec() ? real : scratch; const v = a[k]; return typeof v === 'function' ? v.bind(a) : v } })
 const shot = async () => {
+  if (!rec()) return null
   const f = `f${String(++n).padStart(4, '0')}.jpg`
   await p.screenshot({ path: `${OUT}/${f}`, type: 'jpeg', quality: 88, timeout: 240000 })
   return f
 }
 const boxOf = async (loc) => { const r = await loc.boundingBox(); return r && { x: r.x, y: r.y, w: r.width, h: r.height } }
-const save = () => writeFileSync(`${OUT}/tape.json`, JSON.stringify(tape, null, 1))
+const save = () => writeFileSync(`${OUT}/tape.json`, JSON.stringify(real, null, 1))
 const tab = (name) => p.getByRole('button', { name, exact: true }).first()
 const btn = (re) => p.getByRole('button', { name: re }).first()
 const busy = () => p.evaluate(() => /⏳/.test(document.body.innerText))
@@ -129,9 +140,11 @@ await scroll(-(await p.evaluate(() => scrollY)), 10)
 // 08 — cages
 chapter = 'c08'
 await click(tab('Display'), 'Display')
-await click(p.locator('input[name="contour"][value="off"]').locator('xpath=ancestor::label[1]'), 'None', { wait: 2500 })
+await click(p.locator('input[name="contour"][value="none"]').locator('xpath=ancestor::label[1]'), 'None', { wait: 2500 })
 await click(p.getByLabel(/Show reinforcement cages/).locator('xpath=ancestor::label[1]'), 'Show reinforcement cages', { wait: 12000 })
 await orbit(20, 11, 'Drag to orbit')
+await click(p.getByLabel(/Show reinforcement cages/).locator('xpath=ancestor::label[1]'), 'Show reinforcement cages', { wait: 3000 })
+if (UNTIL === 'c08') { await b.close(); log('done', n, 'frames'); process.exit(0) }
 // 09 — plans
 chapter = 'c09'
 await click(tab('Plans'), 'Plans', { wait: 7000 })
