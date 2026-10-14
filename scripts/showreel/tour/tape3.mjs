@@ -12,17 +12,19 @@
 // depend on). The cage chapter renders slowly at 2×, so it is captured on its
 // own pass at 1×:
 //   SKIP=c07b,c13 node tour/tape3.mjs         (everything else, 2×)
+//   FROM=c10 SKIP=c07b,c13 node tour/tape3.mjs (resume a failed pass: earlier chapters replay silently)
 //   ONLY=c07b node tour/tape3.mjs             (the mode animation, appended)
 //   ONLY=c13 DPR=1 node tour/tape3.mjs        (cages, appended)
 import { open, clean } from '../lib.mjs'
 import { mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs'
-const OUT = 'cap/tour3', ONLY = process.env.ONLY, SKIP = (process.env.SKIP || '').split(',').filter(Boolean)
-if (!ONLY) rmSync(OUT, { recursive: true, force: true })
+const OUT = 'cap/tour3', ONLY = process.env.ONLY, FROM = process.env.FROM, SKIP = (process.env.SKIP || '').split(',').filter(Boolean)
+if (!ONLY && !FROM) rmSync(OUT, { recursive: true, force: true })
 mkdirSync(OUT, { recursive: true })
 const { b, p } = await open({ dpr: +(process.env.DPR || 2), w: 1600, h: 900 })
 p.setDefaultTimeout(180000)
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a)
-const tape = ONLY ? JSON.parse(readFileSync(`${OUT}/tape.json`, 'utf8')) : []
+const tape = ONLY ? JSON.parse(readFileSync(`${OUT}/tape.json`, 'utf8'))
+  : FROM ? JSON.parse(readFileSync(`${OUT}/tape.json`, 'utf8')).filter((s) => s.chapter < FROM) : []
 let n = Math.max(0, ...readdirSync(OUT).map((f) => +(f.match(/^f(\d+)\.jpg$/)?.[1] ?? 0))), chapter = 'c01', mode = 'rec'
 const rec = () => mode === 'rec'
 const save = () => writeFileSync(`${OUT}/tape.json`, JSON.stringify(tape, null, 1))
@@ -217,7 +219,12 @@ CH.c10 = async () => {                                       // optimise → pas
   const head = p.getByRole('heading', { name: /c0\.0\.0 — worked solution/ })
   await panelScroll(head, 120, 8)
   await hold('Bar layout', head, { w: 1150, dur: 2.8, grow: { b: 560, r: 600 } })
-  for (const re of [/Capacity along the strong-axis/, /Biaxial check — Bresler/, /Bar selection & limits/]) {
+  // which steps a solution has depends on the member (a uniaxial column has no
+  // Bresler step) — hold on the first three of these that this one carries
+  const steps = [/Capacity along the strong-axis/, /Biaxial check — Bresler/, /Required longitudinal steel/, /Bar selection & limits/, /Design axial strength/]
+  const present = []
+  for (const re of steps) if (present.length < 3 && await p.getByRole('heading', { name: re }).count()) present.push(re)
+  for (const re of present) {
     const h = p.getByRole('heading', { name: re }).first()
     await panelScroll(h, 120, 8)
     await hold(re.source, h, { w: 1150, dur: 2.6, grow: { b: 560, r: 600 } })
@@ -264,7 +271,7 @@ await p.goto((process.env.APP || 'http://localhost:5192') + '/model', { waitUnti
 await p.evaluate(() => scrollTo(0, 0))
 for (const [id, fn] of Object.entries(CH)) {
   chapter = id
-  mode = ONLY ? (id === ONLY ? 'rec' : 'silent') : SKIP.includes(id) ? 'state' : 'rec'
+  mode = ONLY ? (id === ONLY ? 'rec' : 'silent') : FROM && id < FROM ? 'silent' : SKIP.includes(id) ? 'state' : 'rec'
   if (id === 'c07b' && mode !== 'rec') continue
   if (ONLY && id > ONLY) break
   log('──', id, mode)
