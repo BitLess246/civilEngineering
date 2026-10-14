@@ -270,7 +270,7 @@ export default function BeamAnalysis() {
                   </tbody>
                 </table>
               </div>
-            <p className="mt-1 text-[11px] text-muted">★ governing (largest |M|). Click a row to view its reactions and diagrams.</p>
+            <p className="mt-1 text-[11px] text-muted">★ governing (largest |M|).<span className="no-print"> Click a row to view its reactions and diagrams.</span></p>
           </div>
         ) },
         { title: `Shear, moment and deflection — ${shown.combo.name}`, node: (

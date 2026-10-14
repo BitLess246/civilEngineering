@@ -80,6 +80,12 @@ describe('pdfCapture — what the PDF keeps of the rendered page', () => {
     expect(out).toEqual([{ kind: 'text', text: 'Reaction A · 52.8 kN\nkept' }])
   })
 
+  it('leaves out screen-only help marked no-print, as printing does', () => {
+    const out = blocks(h('div', {}, h('p', {}, '★ governing (largest |M|).', h('span', { class: 'no-print' }, ' Click a row to view its reactions.')),
+      h('div', { class: 'no-print pointer-events-none' }, 'drag to orbit · scroll to zoom')))
+    expect(out).toEqual([{ kind: 'text', text: '★ governing (largest |M|).' }])
+  })
+
   it('keeps text and tables in page order', () => {
     const out = blocks(h('div', {}, h('p', {}, 'Before'), h('table', {}, h('tr', {}, h('td', {}, '1'))), h('p', {}, 'After')))
     expect(out.map((b) => b.kind)).toEqual(['text', 'table', 'text'])
