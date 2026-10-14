@@ -99,7 +99,7 @@ function chapter(id, shots, opts = {}) {
       let cam = null
       layers.forEach(({ sh, src }, i) => {
         const [p0, p1] = sh.span ?? [0, 1]
-        const vis = u >= p0 && (u < p1 || i === layers.length - 1)
+        const vis = u >= p0 && (u < p1 + 0.07 || i === layers.length - 1)   // the outgoing shot holds under the incoming fade
         const fadeIn = i ? E.outCubic(seg(u, p0, p0 + 0.06)) : 1
         src.wrap.style.opacity = vis ? fadeIn : 0
         if (!vis) return
@@ -176,8 +176,8 @@ chapter('c06', [
 ], { color: BAD })
 chapter('c07', [
   { name: 's10_optimised_top', from: [1040, 110, 580], to: [1040, 110, 560], span: [0, 0.35], mark: { key: 'optimise', at: 0.02, click: 0.18 } },
-  { name: 's11_schedule_pass', from: [180, 180, 900], to: [180, 200, 760], span: [0.35, 1], mark: { key: 'chip', at: 0.45 } },
-], { color: OK })
+  { name: 's11_schedule_pass', from: [200, 140, 900], to: [230, 150, 760], span: [0.35, 1], mark: { key: 'chip', at: 0.45 } },
+], { color: AMBER })
 chapter('c08', [
   { name: 's12_cages', from: FULL, to: [200, 110, 1000], span: [0, 0.35] },
   { kind: 'seq', name: 'o3_cages', n: BX.o3_cages?.n ?? 1, from: CANVAS('o3_cages'), to: [180, 160, 560], span: [0.35, 1] },
@@ -201,10 +201,10 @@ scene2('end', (root, s) => {
   const box = h('div', { class: 'abs', style: { left: '140px', top: '250px' } }, root)
   h('div', { style: { display: 'flex', alignItems: 'center', gap: '22px', color: WHITE } }, box, LOGO('ec').replace('width="64" height="64"', 'width="110" height="110"') + WORD_SVG(64, WHITE))
   h('div', { class: 'mono', style: { color: AMBER, fontSize: '24px', marginTop: '44px', letterSpacing: '.2em' } }, box, 'START FREE')
-  h('div', { style: { font: "800 64px 'Archivo'", color: WHITE, marginTop: '14px', letterSpacing: '-.02em' } }, box, 'Structural engineering, made clearer.')
+  h('div', { style: { font: "800 60px/1.02 'Archivo'", color: WHITE, marginTop: '14px', letterSpacing: '-.02em', width: '960px' } }, box, 'Structural engineering,<br>made clearer.')
   const btn = h('div', { style: { display: 'inline-flex', marginTop: '36px', background: AMBER, color: NAVY, font: "800 40px 'Archivo'", padding: '16px 34px', borderRadius: '999px', gap: '16px', alignItems: 'center' } }, box, 'zetastruct.app <span style="font-size:36px">→</span>')
   h('div', { style: { fontSize: '24px', color: '#9eb0c5', marginTop: '28px' } }, box, 'Free calculators · 3D Model Space on the Pro plan')
-  const shot = h('img', { class: 'abs', src: '../cap/tour/s12_cages.jpg', style: { left: '1180px', top: '300px', width: '640px', borderRadius: '12px', boxShadow: '0 50px 120px -30px rgba(0,0,0,.7)' } }, root)
+  const shot = h('img', { class: 'abs', src: '../cap/tour/s12_cages.jpg', style: { left: '1200px', top: '330px', width: '620px', borderRadius: '12px', boxShadow: '0 50px 120px -30px rgba(0,0,0,.7)' } }, root)
   return { update(t) {
     const k = E.outExpo(seg(t, s.t0 + 0.1, s.t0 + 1.0))
     box.style.opacity = k; box.style.transform = `translateY(${(1 - k) * 30}px)`
