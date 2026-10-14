@@ -752,6 +752,15 @@ export default function ModelSpace() {
     downloadText(`${slug}.std`, text, 'text/plain')
     setInterop({ title: `Exported ${slug}.std for STAAD.Pro`, lines: warnings })
   }
+  // ETABS: export only for now (import is the next phase). Same lazy load.
+  const exportEtabs = async () => {
+    if (!model) return
+    const { toEtabs2k } = await import('../engine/interop/etabs')
+    const { text, warnings } = toEtabs2k(model)
+    const slug = (model.name || 'model').trim().replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'model'
+    downloadText(`${slug}.e2k`, text, 'text/plain')
+    setInterop({ title: `Exported ${slug}.e2k for ETABS`, lines: warnings })
+  }
   const importStaad = async (file: File) => {
     const { fromStaad } = await import('../engine/interop/staad')
     let r: Awaited<ReturnType<typeof fromStaad>>
@@ -2232,6 +2241,8 @@ export default function ModelSpace() {
                   hint: model ? 'Geometry, sections, supports, releases, loads by category and NSCP combinations' : 'Build a model first' },
                 { label: 'Import from STAAD.Pro (.std)', onSelect: () => importInput.current?.click(),
                   hint: 'Replaces the current model — Undo brings it back' },
+                { label: 'Export to ETABS (.e2k)', disabled: !model, onSelect: () => void exportEtabs(),
+                  hint: model ? 'Stories, frames, slabs and walls, supports, releases, load patterns and NSCP combinations' : 'Build a model first' },
                 { label: 'Export tables to Excel (.xlsx)', disabled: !model, onSelect: () => void exportExcel(),
                   hint: model ? 'Model, analysis, modal, spectrum, time history, pushover, nonlinear and design — every table run' : 'Build a model first' },
               ]} />
