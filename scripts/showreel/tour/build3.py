@@ -12,7 +12,8 @@ CAP = f'{SR}/cap/tour3'
 FPS = 30
 script = json.load(open(f'{R}/script3.json'))
 vo = json.load(open(f'{R}/audio3/vo.json'))
-tape = json.load(open(f'{CAP}/tape.json'))
+# the animation and cage passes append their chapters at the end — put them back in order
+tape = sorted(json.load(open(f'{CAP}/tape.json')), key=lambda s: s['chapter'])
 W, H = 1600, 900
 FULL = (0.0, 0.0, 1600.0)
 GAP = 0.35                                       # air between two beats

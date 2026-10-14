@@ -9,9 +9,15 @@ doc = pymupdf.open(os.path.join(CAP, 'report.pdf'))
 WANT = [r'TRACEABILITY', r'worked solution|WORKED SOLUTION', r'FRAMING PLAN', r'MODAL', r'PUSHOVER']
 picked, used = [0], {0}
 for pat in WANT:
+    if pat.startswith('worked'):
+        # the section heading can sit at the foot of a schedule page — take the
+        # most drawn-on page in the stretch that follows it instead
+        h = next(i for i, pg in enumerate(doc) if re.search(r'WORKED SOLUTIONS', pg.get_text()))
+        best = max(range(h + 1, min(len(doc), h + 40)), key=lambda i: len(doc[i].get_images()) * 50 + len(doc[i].get_drawings()))
+        picked.append(best); used.add(best); continue
     for i, pg in enumerate(doc):
         if i in used: continue
-        if re.search(pat, pg.get_text()) and (pat != r'worked solution|WORKED SOLUTION' or pg.get_images()):
+        if re.search(pat, pg.get_text()):
             picked.append(i); used.add(i); break
 for f in os.listdir(CAP):
     if f.startswith('report_p') and f.endswith('.jpg'): os.remove(os.path.join(CAP, f))
