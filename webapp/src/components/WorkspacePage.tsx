@@ -88,7 +88,8 @@ export function WorkspacePage(p: WorkspacePageProps) {
                     <div data-pdf-drawing>{p.drawing.node}</div>
                   </DocSection>
                 )}
-                <DocSection num={resultsNum} title="Results summary"><ResultsTable rows={p.results} caption={p.resultsCaption} /></DocSection>
+                {/* the report prints these rows itself (resultRows) — the PDF skips this HTML copy */}
+                <DocSection num={resultsNum} title="Results summary"><div data-pdf-skip=""><ResultsTable rows={p.results} caption={p.resultsCaption} /></div></DocSection>
                 {p.extraSections?.map((x, i) => (
                   <DocSection key={x.title} num={resultsNum + 1 + i} title={x.title}><div data-pdf-detail={x.title}>{x.node}</div></DocSection>
                 ))}
@@ -96,7 +97,9 @@ export function WorkspacePage(p: WorkspacePageProps) {
             ),
           },
           { id: 'calc', label: 'Calculations', content: <WorkedSolution steps={p.steps} title={`${p.title} — step by step`} /> },
-          { id: 'refs', label: 'References', content: <DocSection num="R" title="Basis of each result"><div data-pdf-detail="Reference notes"><ReferenceList items={p.references} /></div></DocSection> },
+          { id: 'refs', label: 'References', content: <DocSection num="R" title="Basis of each result"><div {...(p.references.every((r) => typeof r.basis === 'string')
+            ? { 'data-pdf-skip': '' }                       // printed as the References table already
+            : { 'data-pdf-detail': 'Reference notes' })}><ReferenceList items={p.references} /></div></DocSection> },
         ]} />
         </div>
       }
