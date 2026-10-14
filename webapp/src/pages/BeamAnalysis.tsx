@@ -118,8 +118,9 @@ export default function BeamAnalysis() {
 
   const res = useMemo(() => {
     if (!valid) return null
-    try { return analyzeBeam(supports, loads, L, spans[0].E, spans[0].I, segments) } catch { return null }
-  }, [supports, loads, L, spans, segments, valid])
+    const total = segments[segments.length - 1].x1
+    try { return analyzeBeam(supports, loads, total, spans[0].E, spans[0].I, segments) } catch { return null }
+  }, [supports, loads, spans, segments, valid])
 
   const shownIdx = selIdx !== null && res && res.perCombo[selIdx]?.result ? selIdx : res?.govIdx ?? 0
   const shown = res ? res.perCombo[shownIdx] : null
