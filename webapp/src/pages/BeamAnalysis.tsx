@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   analyzeBeam, spansToSegments, type Support, type SupportType, type BeamLoad, type LoadCategory,
 } from '../engine/beamAnalysis'
+import { deriveBeam } from '../engine/beamDerivation'
 import { detectCriticalSections } from '../engine/beamSections'
 import { SECTIONS_HANDOFF_KEY } from './BeamDesign'
 import { BEAM_LOADS_HANDOFF_KEY } from './LoadPath'
@@ -141,6 +142,11 @@ export default function BeamAnalysis() {
   const multi = spans.length > 1
   const spanName = (k: number) => (multi ? `span ${k + 1}` : 'span')
   const gov = res ? res.perCombo[res.govIdx] : null
+  // the hand derivation of the combination on screen — reactions, V, M and
+  // the elastic curve worked the way they are on paper
+  const derivation = useMemo(() => (shown?.result
+    ? deriveBeam(supports, shown.factored, segments[segments.length - 1].x1, spans[0].E, spans[0].I, segments, shown.combo.name, shown.result.reactions)
+    : null), [shown, supports, segments, spans])
   const report = res && r && shown ? {
     docCode: 'BA-01',
     ok: deflOK,
@@ -161,15 +167,24 @@ export default function BeamAnalysis() {
             : ld.type === 'vdl' ? `${f2(ld.w1)}→${f2(ld.w2)} kN/m, ${f2(ld.x1)}–${f2(ld.x2)} m`
               : `${f2(ld.M)} kN·m @ ${f2(ld.x)} m`] as [string, string]),
     ] as [string, string][],
-    steps: res.perCombo.filter((pc) => pc.result).map((pc) => ({
-      title: pc.combo.name,
-      lines: [{ text: `Vmax ${f1(pc.result!.Vmax)} kN · Mmax ${f1(pc.result!.Mmax)} kN·m · δmax ${f2(pc.result!.Dmax)} mm` }],
-    })),
+    steps: [
+      {
+        title: 'Load combinations',
+        lines: [
+          ...res.perCombo.filter((pc) => pc.result).map((pc) => ({
+            item: `${pc.combo.name}: Vmax ${f1(pc.result!.Vmax)} kN · Mmax ${f1(pc.result!.Mmax)} kN·m · δmax ${f2(pc.result!.Dmax)} mm${pc === gov ? ' — governs' : ''}`,
+          })),
+          { text: `The derivation below is worked for ${shown.combo.name}${shownIdx === res.govIdx ? ' (governing)' : ''}; pick another row in the combinations table to work that one instead.` },
+        ],
+        clause: 'NSCP 2015 §203.3.1',
+      },
+      ...(derivation?.steps ?? []),
+    ],
   } : undefined
 
   return (
     <WorkspacePage title="Beam Analysis" badges={['Analysis', 'NSCP 2015 combinations']}
-      intro="Euler–Bernoulli finite elements over one or more spans, each span with its own E and I, with pin, roller, fixed or spring supports anywhere along the beam, and categorised loads run through the NSCP 2015 load combinations. Continuous beams carry a three-moment (Clapeyron) cross-check, generalized for a different EI in each span."
+      intro="Euler–Bernoulli finite elements over one or more spans, each span with its own E and I, with pin, roller, fixed or spring supports anywhere along the beam, and categorised loads run through the NSCP 2015 load combinations. Continuous beams carry a three-moment (Clapeyron) cross-check, generalized for a different EI in each span, and the Calculations tab works the combination by hand: reactions, shear and moment equations, and the elastic curve by double integration."
       report={report}
       inputs={<>
         <InputGroup title="Spans" hint={multi ? `${spans.length} spans · total ${f2(L)} m` : undefined}>
@@ -356,8 +371,9 @@ export default function BeamAnalysis() {
             </table>
             <p className="mt-1 text-xs text-muted">
               M₍ᵢ₋₁₎Lᵢ/EIᵢ + 2Mᵢ(Lᵢ/EIᵢ + Lᵢ₊₁/EIᵢ₊₁) + Mᵢ₊₁Lᵢ₊₁/EIᵢ₊₁ = −6(Q/L)ᵢ/EIᵢ − 6(Q/L)ᵢ₊₁/EIᵢ₊₁ — end
-              moments zero, the interior solved from the tri-diagonal system, governing combination; with one EI throughout it
-              is the classic form. Compare with the FEM reactions as an independent hand check.
+              moments zero, or set by statics where an overhang carries load; the interior solved from the tri-diagonal
+              system, governing combination; with one EI throughout it is the classic form. Compare with the FEM reactions
+              as an independent hand check.
             </p>
           </div>
         ) }] : []),
@@ -366,6 +382,7 @@ export default function BeamAnalysis() {
       references={[
         { topic: 'Load combinations', basis: 'categorised loads factored per combination', source: 'NSCP 2015 §203.3' },
         { topic: 'Analysis', basis: 'Hermite beam elements, EI per span; three-moment cross-check with Lᵢ/EIᵢ terms', source: 'Hibbeler, Structural Analysis' },
+        { topic: 'Hand derivation', basis: 'statics; three-moment equation; force method by virtual work; double integration EI y″ = M', source: 'Hibbeler, Structural Analysis ch. 2, 8, 10, 12' },
         { topic: 'Deflection limit', basis: 'L/360 of each span', source: 'ACI 318-14 Table 24.2.2 · NSCP 2015 Table 424.2.2' },
       ]}
     />

@@ -22,6 +22,13 @@ describe('texToPlain', () => {
       .toBe("ρ = 0.02(1-√(1-2Rn/(0.85 f'c)))")
   })
 
+  it('runs the rows of an aligned block back onto one line', () => {
+    expect(texToPlain(String.raw`\begin{aligned}V &= 52.80 - 17.60x \\ &\quad - 0.500x^{2}\end{aligned}`))
+      .toBe('V = 52.80 - 17.60x - 0.500x²')
+    expect(texToPlain(String.raw`\begin{aligned}&R_A + 52.80 = 0 \\ &R_A = 52.80\ \text{kN}\end{aligned}`))
+      .toBe('RA + 52.80 = 0; RA = 52.80 kN')
+  })
+
   it('converts operators, arrows and check marks', () => {
     expect(texToPlain(String.raw`V_u = 88.1 \;\le\; \phi V_c\;\checkmark`)).toBe('Vu = 88.1 ≤ φ Vc ✓')
     expect(texToPlain(String.raw`M_u \Rightarrow \textbf{SRB}`)).toBe('Mu ⇒ SRB')
