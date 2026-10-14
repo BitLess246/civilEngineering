@@ -7,7 +7,7 @@
 // messages), the model list is the free allowlist only, and actions resolve
 // their display names through ALL_TOOLS — a route the app does not have can
 // never be offered, because it has no name here.
-import { useRef, useState } from 'react'
+import { Suspense, lazy, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ALL_TOOLS } from '../../lib/tools'
 import {
@@ -18,6 +18,11 @@ import { savePendingCalculatorInputs } from '../../lib/ai/pendingAction'
 import { formatPageSnapshot, usePageSnapshot, composePageContext } from '../../lib/ai/pageContext'
 import { readDomContext, formatDomContext } from '../../lib/ai/domContext'
 import { getClient } from '../../lib/auth/authClient'
+
+// The reply renderer pulls in KaTeX (~50 kB gzip). The widget sits in the app
+// shell, so a static import put KaTeX in every visitor's initial bundle; it
+// loads the first time a reply is shown instead.
+const AssistantMarkdown = lazy(() => import('./AssistantMarkdown').then((m) => ({ default: m.AssistantMarkdown })))
 
 /** Pages the assistant may read off the screen: the calculators, never a
  *  profile, billing or sign-in page. */
@@ -161,10 +166,18 @@ export function AiAssistantWidget() {
             )}
             {messages.map((m, i) => (
               <div key={i} className={`mb-2 max-w-full ${m.role === 'user' ? 'ml-8 text-right' : 'mr-4'}`}>
-                <p className={`inline-block whitespace-pre-wrap rounded-lg px-2.5 py-1.5 text-[13px] leading-relaxed ${
-                  m.role === 'user' ? 'bg-brand text-on-solid' : 'bg-sheet-2 text-ink-2'}`}>
-                  {m.content}
-                </p>
+                {m.role === 'user' ? (
+                  <p className="inline-block whitespace-pre-wrap rounded-lg bg-brand px-2.5 py-1.5 text-[13px] leading-relaxed text-on-solid">
+                    {m.content}
+                  </p>
+                ) : (
+                  // replies are markdown + LaTeX; rendered, not printed raw
+                  <div className="inline-block max-w-full rounded-lg bg-sheet-2 px-2.5 py-1.5 text-left text-[13px] leading-relaxed text-ink-2">
+                    <Suspense fallback={<p className="whitespace-pre-wrap">{m.content}</p>}>
+                      <AssistantMarkdown text={m.content} />
+                    </Suspense>
+                  </div>
+                )}
                 {m.actions?.map((a) => (
                   <ActionCard key={a.route} action={a} onOpen={openAction} />
                 ))}
