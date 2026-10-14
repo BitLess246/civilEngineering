@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { solveFEM, analyzeBeam, threeMoment, nscpCombos, NSCP_COMBOS, applyCombo, type Support, type BeamLoad } from './beamAnalysis'
+import { solveFEM, analyzeBeam, threeMoment, nscpCombos, NSCP_COMBOS, applyCombo, spansToSegments, type Support, type BeamLoad, type BeamSegment } from './beamAnalysis'
 
 describe('NSCP §203.3.1 — f₁ live-load factor', () => {
   it('f₁ scales L in eqs 203-3/4/5 only; default export is the 1.0 set', () => {
@@ -154,5 +154,58 @@ describe('analyzeBeam — NSCP combinations', () => {
     const withFixed: Support[] = [{ type: 'fixed', x: 0 }, { type: 'roller', x: 3 }, { type: 'roller', x: 6 }]
     const res = analyzeBeam(withFixed, [{ type: 'udl', x1: 0, x2: 6, w: 10, cat: 'D' }], 6, E, I)!
     expect(res.tmt).toBeNull()
+  })
+})
+
+describe('multiple spans with their own E and I', () => {
+  // span 1: E, I · span 2: same E, 3I — stiff second span
+  const L = 5, w = 12
+  const segs = spansToSegments([{ L, E, I }, { L, E, I: 3 * I }])
+
+  it('spansToSegments lays spans end to end from x = 0', () => {
+    expect(segs).toEqual([{ x0: 0, x1: 5, E, I }, { x0: 5, x1: 10, E, I: 3 * I }])
+  })
+
+  it('uniform segments reproduce the single-EI beam exactly', () => {
+    const sup: Support[] = [{ type: 'pin', x: 0 }, { type: 'roller', x: 5 }, { type: 'roller', x: 10 }]
+    const lds: BeamLoad[] = [{ type: 'udl', x1: 0, x2: 10, w, cat: 'D' }]
+    const a = solveFEM(sup, lds, 10, E, I)!
+    const b = solveFEM(sup, lds, 10, E, I, spansToSegments([{ L, E, I }, { L, E, I }]))!
+    expect(b.Dmax).toBeCloseTo(a.Dmax, 9)
+    expect(b.reactions.map((r) => r.Rv)).toEqual(a.reactions.map((r) => expect.closeTo(r.Rv, 9)))
+  })
+
+  it('two-segment cantilever: δtip = P(L³ − b³)/3EI₁ + P·b³/3EI₂ (virtual work)', () => {
+    const a = 2, b = 3, Lc = a + b, P = 20
+    const sg: BeamSegment[] = [{ x0: 0, x1: a, E, I: 2 * I }, { x0: a, x1: Lc, E, I }]
+    const r = solveFEM([{ type: 'fixed', x: 0 }], [{ type: 'point', x: Lc, P, cat: 'D' }], Lc, E, I, sg)!
+    const EI1 = (E * 2 * I) * 1e-9, EI2 = (E * I) * 1e-9
+    const tip = (P * (Lc ** 3 - b ** 3)) / (3 * EI1) + (P * b ** 3) / (3 * EI2)
+    expect(r.Dmax).toBeCloseTo(tip * 1000, 2)
+    // statics do not care about stiffness
+    expect(r.reactions[0].Rv).toBeCloseTo(P, 6)
+  })
+
+  it('two spans, UDL on span 1 only: M_B = −wL²/(8(1 + I₁/I₂)) — FEM and three-moment agree', () => {
+    // generalized Clapeyron, equal spans: 2M_B(L/EI₁ + L/EI₂) = −wL³/(4EI₁)
+    const MB = (-w * L * L) / (8 * (1 + I / (3 * I)))           // = −3wL²/32
+    const sup: Support[] = [{ type: 'pin', x: 0 }, { type: 'roller', x: L }, { type: 'roller', x: 2 * L }]
+    const lds: BeamLoad[] = [{ type: 'udl', x1: 0, x2: L, w, cat: 'D' }]
+    const tmt = threeMoment([L, L], [lds, []], [E * I * 1e-9, E * 3 * I * 1e-9])!
+    expect(tmt.supportMoments[1]).toBeCloseTo(MB, 2)
+    const fem = solveFEM(sup, lds, 2 * L, E, I, segs)!
+    const k = fem.xs.findIndex((x) => Math.abs(x - L) < 1e-9)
+    expect(fem.M[k]).toBeCloseTo(MB, 1)
+    // and the stiffer span 2 attracts more moment than equal sections would (−wL²/16)
+    expect(Math.abs(MB)).toBeGreaterThan((w * L * L) / 16)
+  })
+
+  it('analyzeBeam runs the three-moment check with per-span EI, and skips it when EI changes inside a span', () => {
+    const sup: Support[] = [{ type: 'pin', x: 0 }, { type: 'roller', x: L }, { type: 'roller', x: 2 * L }]
+    const lds: BeamLoad[] = [{ type: 'udl', x1: 0, x2: L, w, cat: 'D' }]
+    const res = analyzeBeam(sup, lds, 2 * L, E, I, segs)!
+    expect(res.tmt!.supportMoments[1] / 1.4).toBeCloseTo((-w * L * L) / (8 * (1 + 1 / 3)), 1)   // 1.4D governs
+    const mid = analyzeBeam(sup, lds, 2 * L, E, I, [{ x0: 0, x1: 2.5, E, I }, { x0: 2.5, x1: 10, E, I: 2 * I }])!
+    expect(mid.tmt).toBeNull()
   })
 })
