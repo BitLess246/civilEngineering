@@ -12,8 +12,11 @@ const SUP = '#0056b3'
 
 /** Elevation sketch of the analysis model: beam line, support symbols
  *  (pin / roller / fixed / spring) and load glyphs (point, UDL/VDL, moment). */
-export function BeamElevation({ L, supports, loads }: {
+export function BeamElevation({ L, supports, loads, spans }: {
   L: number; supports: Support[]; loads: BeamLoad[]
+  /** Spans laid end to end, each with its own section: dimensioned one by one
+   *  and drawn thicker where the section is stiffer (E·I). Omit for one span. */
+  spans?: readonly { L: number; E: number; I: number }[]
 }): JSX.Element {
   // Distributed loads that overlap along the span are STACKED, one tier per
   // load, each sitting on the one below — drawn at the same height, a live
@@ -29,7 +32,11 @@ export function BeamElevation({ L, supports, loads }: {
     placed.push({ a, b, t }); tierOf[i] = t
   })
   const tiers = Math.max(1, ...placed.map((p) => p.t + 1))
-  const W = 560, H = 170 + (tiers - 1) * TIER
+  const multi = !!spans && spans.length > 1
+  let acc = 0
+  const spanXs = (spans ?? []).map((s) => { const g = { x0: acc, x1: acc + s.L, E: s.E, I: s.I }; acc += s.L; return g })
+  const eiMax = Math.max(1e-9, ...spanXs.map((g) => g.E * g.I))
+  const W = 560, H = 170 + (tiers - 1) * TIER + (multi ? 16 : 0)
   const padL = 30, padR = 30
   const bx0 = padL, bx1 = W - padR
   const sx = (x: number) => bx0 + ((bx1 - bx0) * Math.max(0, Math.min(L, x))) / Math.max(L, 1e-9)
@@ -124,12 +131,26 @@ export function BeamElevation({ L, supports, loads }: {
     <DrawingFrame label="beam elevation">
       <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
         style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-        <line x1={bx0} y1={by} x2={bx1} y2={by} stroke={BEAM} strokeWidth={4} strokeLinecap="round" />
+        {multi ? spanXs.map((g, k) => (
+          // stroke 3–7 px by relative E·I, so a stiffer span reads as heavier
+          <line key={`b${k}`} x1={sx(g.x0)} y1={by} x2={sx(g.x1)} y2={by} stroke={BEAM} strokeLinecap="butt"
+            strokeWidth={3 + 4 * Math.cbrt((g.E * g.I) / eiMax)} />
+        )) : <line x1={bx0} y1={by} x2={bx1} y2={by} stroke={BEAM} strokeWidth={4} strokeLinecap="round" />}
+        {multi && spanXs.slice(1).map((g, k) => (
+          <line key={`j${k}`} x1={sx(g.x0)} y1={by - 9} x2={sx(g.x0)} y2={by + 9} stroke={BEAM} strokeWidth={0.8} strokeDasharray="2 2" />
+        ))}
         {supports.map(supSym)}
         {loads.map(loadGlyph)}
         {/* the span, dimensioned — it used to be two loose labels, "0" and
             "L = 6 m", with nothing between them */}
-        <DimBelow xA={bx0} xB={bx1} featY={by + 36} dY={by + 54} label={`L = ${L} m`} />
+        {multi ? spanXs.map((g, k) => (
+          <g key={`d${k}`}>
+            <DimBelow xA={sx(g.x0)} xB={sx(g.x1)} featY={by + 36} dY={by + 54} label={`L${k + 1} = ${+(g.x1 - g.x0).toFixed(3)} m`} />
+            <text x={(sx(g.x0) + sx(g.x1)) / 2} y={by + 76} fontSize={8} fill={BEAM} textAnchor="middle">
+              E {g.E} MPa · I {g.I.toExponential(2)} mm⁴
+            </text>
+          </g>
+        )) : <DimBelow xA={bx0} xB={bx1} featY={by + 36} dY={by + 54} label={`L = ${L} m`} />}
       </svg>
     </DrawingFrame>
   )

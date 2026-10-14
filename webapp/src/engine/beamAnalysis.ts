@@ -5,6 +5,9 @@
 // moment) run through the NSCP 2015 load combinations. Includes the
 // three-moment (Clapeyron) cross-check for continuous pin/roller beams.
 // Faithful port of the legacy beamDesign.html analysis module.
+// A beam can be cut into SEGMENTS (spans) that each carry their own E and I —
+// every element takes the EI of the segment it lies in, and the three-moment
+// check divides each span's terms by its EI (generalized Clapeyron).
 // Units: m, kN, kN·m; E in MPa; I in mm⁴; deflection returned in mm.
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -17,6 +20,21 @@ export type BeamLoad =
   | { type: 'udl'; x1: number; x2: number; w: number; cat: LoadCategory }
   | { type: 'vdl'; x1: number; x2: number; w1: number; w2: number; cat: LoadCategory }
   | { type: 'moment'; x: number; M: number; cat: LoadCategory }
+
+/** A stretch of the beam with its own section: E in MPa, I in mm⁴, x0 < x1 in m. */
+export interface BeamSegment { x0: number; x1: number; E: number; I: number }
+
+/** Flexural rigidity (kN·m²) at x — the segment containing x, else the uniform E·I. */
+export function eiAt(x: number, E_MPa: number, I_mm4: number, segments?: readonly BeamSegment[]): number {
+  const s = segments?.find((g) => x >= g.x0 - 1e-9 && x <= g.x1 + 1e-9)
+  return (s ? s.E * s.I : E_MPa * I_mm4) * 1e-9
+}
+
+/** Consecutive spans (lengths in m, each with E and I) laid end to end from x = 0. */
+export function spansToSegments(spans: readonly { L: number; E: number; I: number }[]): BeamSegment[] {
+  let x = 0
+  return spans.map((s) => { const g = { x0: x, x1: x + s.L, E: s.E, I: s.I }; x += s.L; return g })
+}
 
 export interface Reaction { type: SupportType; x: number; Rv: number; Rm: number; k?: number }
 export interface FemResult {
@@ -133,11 +151,14 @@ function gauss5Vec(f: (x: number) => number[], a: number, b: number): number[] {
 }
 
 // ── FEM solver ────────────────────────────────────────────────────────────
-export function solveFEM(supports: Support[], loads: BeamLoad[], L: number, E_MPa: number, I_mm4: number): FemResult | null {
-  const EI = E_MPa * I_mm4 * 1e-9 // kN·m²
-
-  // Node set: ends, supports, load anchors, then N_INT subdivisions per span.
+export function solveFEM(
+  supports: Support[], loads: BeamLoad[], L: number, E_MPa: number, I_mm4: number,
+  segments?: readonly BeamSegment[],
+): FemResult | null {
+  // Node set: ends, supports, load anchors, section changes, then N_INT
+  // subdivisions between anchors — so no element straddles a change of EI.
   const nodeSet = new Set<number>([roundX(0), roundX(L)])
+  segments?.forEach((g) => { nodeSet.add(roundX(clamp(g.x0, 0, L))); nodeSet.add(roundX(clamp(g.x1, 0, L))) })
   supports.forEach((s) => nodeSet.add(roundX(clamp(s.x, 0, L))))
   loads.forEach((ld) => {
     if (ld.type === 'point' || ld.type === 'moment') nodeSet.add(roundX(clamp(ld.x, 0, L)))
@@ -162,7 +183,7 @@ export function solveFEM(supports: Support[], loads: BeamLoad[], L: number, E_MP
     const x1n = nodes[e], x2n = nodes[e + 1]
     const le = x2n - x1n
     if (le < 1e-10) continue
-    const c = EI / (le * le * le)
+    const c = eiAt((x1n + x2n) / 2, E_MPa, I_mm4, segments) / (le * le * le)
     const ke = [
       [12 * c, 6 * le * c, -12 * c, 6 * le * c],
       [6 * le * c, 4 * le * le * c, -6 * le * c, 2 * le * le * c],
@@ -369,7 +390,15 @@ function trapz(y: number[], x: number[]): number {
 
 export interface ThreeMomentResult { supportMoments: number[]; reactions: number[] }
 
-export function threeMoment(spans: number[], loadsPerSpan: BeamLoad[][]): ThreeMomentResult | null {
+/**
+ * Support moments of a continuous beam on simple supports by the three-moment
+ * equation, generalized for a different EI in each span (Hibbeler §12.4):
+ *   Mᵢ₋₁·Lᵢ/EIᵢ + 2Mᵢ(Lᵢ/EIᵢ + Lᵢ₊₁/EIᵢ₊₁) + Mᵢ₊₁·Lᵢ₊₁/EIᵢ₊₁
+ *     = −6(A·x̄/L)ᵢ/EIᵢ − 6(A·x̄′/L)ᵢ₊₁/EIᵢ₊₁
+ * `ei` per span is optional; equal values cancel back to the classic form.
+ */
+export function threeMoment(spans: number[], loadsPerSpan: BeamLoad[][], ei?: readonly number[]): ThreeMomentResult | null {
+  const ei_ = (i: number) => (ei ? ei[i] : 1)
   const n = spans.length
   if (n === 1) {
     const { Ra, Rb } = reactionsSS(spans[0], loadsPerSpan[0])
@@ -390,10 +419,10 @@ export function threeMoment(spans: number[], loadsPerSpan: BeamLoad[][]): ThreeM
   const A = Array.from({ length: size }, () => new Array(size).fill(0))
   const b = new Array(size).fill(0)
   for (let k = 0; k < size; k++) {
-    A[k][k] = 2 * (spans[k] + spans[k + 1])
-    if (k > 0) A[k][k - 1] = spans[k]
-    if (k < size - 1) A[k][k + 1] = spans[k + 1]
-    b[k] = -(sixL[k] + sixR[k + 1])
+    A[k][k] = 2 * (spans[k] / ei_(k) + spans[k + 1] / ei_(k + 1))
+    if (k > 0) A[k][k - 1] = spans[k] / ei_(k)
+    if (k < size - 1) A[k][k + 1] = spans[k + 1] / ei_(k + 1)
+    b[k] = -(sixL[k] / ei_(k) + sixR[k + 1] / ei_(k + 1))
   }
   const Mint = solveLinear(A, b)
   if (!Mint) return null
@@ -419,13 +448,16 @@ export interface BeamAnalysisResult {
   tmt: TmtCheck | null
 }
 
-export function analyzeBeam(supports: Support[], loads: BeamLoad[], L: number, E: number, I: number): BeamAnalysisResult | null {
+export function analyzeBeam(
+  supports: Support[], loads: BeamLoad[], L: number, E: number, I: number,
+  segments?: readonly BeamSegment[],
+): BeamAnalysisResult | null {
   const perCombo: ComboRun[] = []
   let govIdx = -1, govM = -1
   for (const combo of NSCP_COMBOS) {
     const factored = applyCombo(loads, combo.f)
     if (factored.length === 0) { perCombo.push({ combo, result: null, factored, skipped: true }); continue }
-    const r = solveFEM(supports, factored, L, E, I)
+    const r = solveFEM(supports, factored, L, E, I, segments)
     perCombo.push({ combo, result: r, factored, skipped: false })
     if (r && r.Mmax > govM) { govM = r.Mmax; govIdx = perCombo.length - 1 }
   }
@@ -465,7 +497,15 @@ export function analyzeBeam(supports: Support[], loads: BeamLoad[], L: number, E
       }
       loadsPer.push(spanLoads)
     }
-    const res = threeMoment(spans, loadsPer)
+    // each span between supports needs ONE EI for the equation to hold —
+    // a section change inside a span leaves the check out rather than wrong
+    const eiOf = (xa: number, xb: number): number | null => {
+      const here = eiAt((xa + xb) / 2, E, I, segments)
+      const inside = segments?.some((g) => (g.x0 > xa + 1e-6 && g.x0 < xb - 1e-6) || (g.x1 > xa + 1e-6 && g.x1 < xb - 1e-6))
+      return inside ? null : here
+    }
+    const eis = spans.map((_, i) => eiOf(distinct[i], distinct[i + 1]))
+    const res = eis.every((v) => v !== null) ? threeMoment(spans, loadsPer, eis as number[]) : null
     if (res) tmt = { positions: distinct, supportMoments: res.supportMoments, reactions: res.reactions }
   }
 
