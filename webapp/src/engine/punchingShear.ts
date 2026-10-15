@@ -40,9 +40,9 @@ export interface PunchingResult {
   betac: number       // long/short column aspect ratio (≥ 1)
   alphaS: number      // αs: 40 interior / 30 edge / 20 corner
 
-  Vc1: number         // Eq. 22.6.5.2a, kN
-  Vc2: number         // Eq. 22.6.5.2b, kN
-  Vc3: number         // Eq. 22.6.5.2c, kN
+  Vc1: number         // Table 22.6.5.2(b), 0.17(1 + 2/βc)λ√f'c·b0·d, kN
+  Vc2: number         // Table 22.6.5.2(c), 0.083(2 + αs·d/b0)λ√f'c·b0·d, kN
+  Vc3: number         // Table 22.6.5.2(a), 0.33λ√f'c·b0·d, kN
   Vc: number          // min of Vc1–Vc3, kN
   phiVc: number       // φ·Vc, kN
 

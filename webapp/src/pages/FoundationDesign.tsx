@@ -27,6 +27,7 @@ import { WorkspacePage } from '../components/WorkspacePage'
 import { ModelMemberResults } from '../components/ModelMemberResults'
 import type { MemberLoadRequest } from '../lib/modelMemberResults'
 import { f0, f2, f3 } from '../lib/format'
+import { codeLink } from '../lib/codes/links'
 import 'katex/dist/katex.min.css'
 
 type FootingType = 'square' | 'rectangular'
@@ -308,6 +309,20 @@ export default function FoundationDesign() {
   // required-over-provided effective depth per shear mode (capacity grows with
   // d, so this is the honest "how close to the limit" bar for the report).
   const punchRatio = view ? view.dPunch / view.dProvided : 0
+  // "Explain this check" — only where the Code Library pages ARE this
+  // calculator's arithmetic: a square pad under a concentric load, uniform qu.
+  // (The eccentric pad's trapezoidal pressure and the rectangular pad's two
+  // directions are checked differently, and a link would explain another check.)
+  const plain = view && view.type === 'square' && view.loading === 'concentric'
+  const from = { route: '/foundation', label: 'Foundation Design' }
+  // the engine's section takes columnWidth as the dimension a free edge truncates (c₂ here)
+  const explainPunch = plain ? codeLink('two-way-punching-shear', {
+    c1: colWidthY, c2: colWidth, h: view.Dc, d: view.dProvided, fc: form.fc, lambda: 1, position: form.position,
+    Pu: ultimateLoad, qu: view.qu,
+  }, from) : undefined
+  const explainBeam = plain ? codeLink('footing-one-way-shear', {
+    B: view.Bx, L: view.Bx, c: globalThis.Math.min(colWidth, colWidthY), h: view.Dc, d: view.dProvided, fc: form.fc, lambda: 1, qu: view.qu,
+  }, from) : undefined
   const beamRatio = view ? globalThis.Math.max(view.dBeamLong, view.dBeamShort) / view.dProvided : 0
   // A pad whose resultant leaves the kern is not an OK design however its
   // shear checks land — it lifts off the soil. The banner used to read
@@ -563,9 +578,9 @@ export default function FoundationDesign() {
       checks={view ? <>
         <CheckCard title="Two-way shear" basis="d required ÷ d provided" status={view.punchOK ? 'pass' : 'fail'}
           value={f0(view.dPunch)} unit="mm req." ratio={punchRatio} ratioLabel="d req ÷ d prov"
-          pairs={[{ label: 'd provided', value: `${f0(view.dProvided)} mm` }, { label: 'Dc', value: `${f0(view.Dc)} mm` }]} />
+          pairs={[{ label: 'd provided', value: `${f0(view.dProvided)} mm` }, { label: 'Dc', value: `${f0(view.Dc)} mm` }]} explain={explainPunch} />
         <CheckCard title="One-way shear" basis={view.type === 'square' ? 'each way' : 'long / short'} status={view.beamOK ? 'pass' : 'fail'}
-          value={view.type === 'square' ? f0(view.dBeamLong) : `${f0(view.dBeamLong)} / ${f0(view.dBeamShort)}`} unit="mm req." ratio={beamRatio} ratioLabel="d req ÷ d prov" />
+          value={view.type === 'square' ? f0(view.dBeamLong) : `${f0(view.dBeamLong)} / ${f0(view.dBeamShort)}`} unit="mm req." ratio={beamRatio} ratioLabel="d req ÷ d prov" explain={explainBeam} />
         <CheckCard title="Minimum depth" basis="§413.3.1.2" status={view.minDepthOK ? 'pass' : 'fail'}
           value={f0(view.dProvided)} unit="mm" ratio={MIN_FOOTING_DEPTH / view.dProvided} ratioLabel={`${MIN_FOOTING_DEPTH} ÷ d`} />
         {kern && <CheckCard title="Resultant in the kern" basis={`${form.position} column`} status={kern.kernOK ? 'pass' : 'fail'}
