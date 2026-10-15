@@ -21,6 +21,7 @@ import { memberRows, memberSection, type MemberKind } from '../modelMemberResult
 import { beamProvidedCapacities } from '../beamSolution'
 import { shapeByName } from '../../engine/aiscSections'
 import { codeLink } from './links'
+import { punchingExample } from './punching'
 
 export type InspectState = 'pass' | 'near' | 'fail' | 'unrated'
 
@@ -146,6 +147,37 @@ function steelChecks(model: StructuralModel, d: StructureDesign, kind: 'steelBea
   ]
 }
 
+/**
+ * An isolated footing's punching check, itemised and linked, read back off
+ * the pad the pipeline designed: the column (or pedestal) width it was sized
+ * around — `padColumnWidth`, square — the built d (Dc − cover − db), its
+ * factored pressure qu and the governing Pu. The ratio is that example's own
+ * Vu/φVc, so the row and the page it opens agree. The remaining checks
+ * (bearing, one-way shear, flexure) stay one row at the schedule's ratio.
+ */
+function footingChecks(model: StructuralModel, d: StructureDesign, id: string, util: number | null, state: InspectState): InspectedCheck[] {
+  const rest: InspectedCheck = { name: 'Bearing, one-way shear, flexure', clause: 'NSCP 2015 §413, §422.5', util, state }
+  const row = d.footings.find((f) => f.node === id)
+  const col = model.members.find((m) => m.role === 'column' && (m.i === id || m.j === id))
+  const sec = col ? memberSection(model, col.id) : undefined
+  const ped = (d.pedestals ?? []).find((p) => p.node === id)
+  const c = ped?.design.side || (sec ? Math.min(sec.b, sec.h) : 0)
+  const fc = sec?.fc
+  if (!row || !(c > 0) || !(fc != null && fc > 0)) return [{ ...KIND_CLAUSE.footing, util, state }]
+  const ex = {
+    c1: c, c2: c, h: row.design.Dc, d: row.design.dProvided, fc, lambda: 1, position: 'interior' as const,
+    Pu: row.Pu, qu: row.design.qu,
+  }
+  const r = punchingExample(ex)
+  if (!r) return [{ ...KIND_CLAUSE.footing, util, state }]
+  const u = r.phiVc > 0 ? r.Vu / r.phiVc : null
+  return [
+    { name: 'Two-way (punching) shear', clause: 'NSCP 2015 §422.6', util: u, state: stateOf(row.design.punchOK, u),
+      explain: codeLink('two-way-punching-shear', ex, { route: '/model', label: `Model Space · footing ${id}` }) },
+    rest,
+  ]
+}
+
 const KINDS: MemberKind[] = ['beam', 'column', 'steelBeam', 'steelColumn', 'slab', 'footing', 'combined']
 
 /** Every designed member as code checks, worst first (fail → near → pass → unrated, then by utilisation). */
@@ -163,7 +195,8 @@ export function inspectDesign(model: StructuralModel, d: StructureDesign): Inspe
       const state = stateOf(r.ok, r.util)
       const checks = kind === 'steelBeam' || kind === 'steelColumn'
         ? steelChecks(model, d, kind, r.id)
-        : [{ ...KIND_CLAUSE[kind], util: r.util, state }]
+        : kind === 'footing' ? footingChecks(model, d, r.id, r.util, state)
+          : [{ ...KIND_CLAUSE[kind], util: r.util, state }]
       out.push({ id: r.id, kind, kindLabel: KIND_LABEL[kind], section: r.section, detail: r.detail, util: r.util, state, checks })
     }
   }
