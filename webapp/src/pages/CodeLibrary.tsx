@@ -10,15 +10,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
-  CODE_EDITIONS, provisionById, searchProvisions, shelves, CATEGORY_LABEL,
-  BEAM_LAYERS, type Provision, type BeamExampleInput, type CheckState, type BeamLayer,
+  CODE_EDITIONS, provisionById, rcBeamProvision, searchProvisions, shelves, CATEGORY_LABEL,
+  BEAM_LAYERS, runProvision, walkOf, flowOf,
+  type Provision, type BeamExampleInput, type SteelExampleInput, type LoadExampleInput, type CheckState, type BeamLayer,
 } from '../lib/codes'
 import { Math as TeX } from '../lib/math'
 import { Num } from '../components/qty'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { BeamFlexureDiagram, BeamShearDiagram } from '../components/codes/RcBeamDiagram'
 import { CodeFlowchart } from '../components/codes/CodeFlowchart'
-import { exampleFromQuery } from '../lib/codes/links'
+import { SteelLtbCurve, SteelShearWeb, SteelColumnCurve, LoadCombosChart } from '../components/codes/SteelDiagrams'
+import { exampleFromQuery, fieldsFromQuery } from '../lib/codes/links'
 
 // ── per-browser conveniences: bookmarks and recently viewed ───────────────
 const BK = 'zeta-codes-bookmarks', RC = 'zeta-codes-recent'
@@ -130,8 +132,12 @@ function Landing() {
 // ── one provision ──────────────────────────────────────────────────────────
 function ProvisionView({ p }: { p: Provision }) {
   const [search] = useSearchParams()
-  const linked = useMemo(() => exampleFromQuery(search), [search])
-  const [inp, setInp] = useState<BeamExampleInput>(linked.inp)
+  // A link carries the calculator's example: an RC beam through the beam codec,
+  // any other family screened by its own fields.
+  const isRc = p.family === 'rc-beam'
+  const linked = useMemo(() => (isRc ? exampleFromQuery(search) : fieldsFromQuery(search, p)), [isRc, search, p])
+  const [inp, setInp] = useState<Record<string, number | string>>(() => ({ ...linked.inp }))
+  const beam = inp as unknown as BeamExampleInput
   // keep a calculator's beam when moving between provisions
   const qs = linked.carried.length || linked.from ? `?${search.toString()}` : ''
   const [hl, setHl] = useState<string | null>(null)
@@ -139,14 +145,15 @@ function ProvisionView({ p }: { p: Provision }) {
   const [bookmarks, setBookmarks] = useState(() => readList(BK))
   const [tab, setTab] = useState<'diagram' | 'equations'>('diagram')
   const [step, setStep] = useState<number | null>(null)
-  const ex = useMemo(() => p.evaluate(inp), [p, inp])
-  const walk = useMemo(() => p.walk?.(inp) ?? [], [p, inp])
-  const flow = useMemo(() => p.flow?.(inp), [p, inp])
+  const ex = useMemo(() => runProvision(p, inp), [p, inp])
+  const walk = useMemo(() => walkOf(p, inp), [p, inp])
+  const flow = useMemo(() => flowOf(p, inp), [p, inp])
   const ws = step != null ? walk[step] : undefined
   const shownLayers = useMemo<ReadonlySet<BeamLayer>>(() => (ws ? new Set(ws.layers) : layers), [ws, layers])
   const shownHl = ws?.hl ?? hl
-  const flex = useMemo(() => provisionById('rc-beam-flexure')!.evaluate(inp).values, [inp])
-  const shearV = useMemo(() => provisionById('rc-beam-shear')!.evaluate(inp).values, [inp])
+  // the RC drawings read the flexure and shear provisions' values whichever RC page is open
+  const flex = useMemo(() => (isRc ? rcBeamProvision('rc-beam-flexure')!.evaluate(beam).values : {}), [isRc, beam])
+  const shearV = useMemo(() => (isRc ? rcBeamProvision('rc-beam-shear')!.evaluate(beam).values : {}), [isRc, beam])
   const marked = bookmarks.includes(p.id)
 
   useEffect(() => { writeList(RC, [p.id, ...readList(RC).filter((x) => x !== p.id)].slice(0, 8)) }, [p.id])
@@ -154,7 +161,8 @@ function ProvisionView({ p }: { p: Provision }) {
     const next = marked ? bookmarks.filter((x) => x !== p.id) : [p.id, ...bookmarks]
     setBookmarks(next); writeList(BK, next)
   }
-  const set = (k: keyof BeamExampleInput) => (v: number) => setInp((s) => ({ ...s, [k]: v }))
+  const [edited, setEdited] = useState(false)
+  const set = (k: string) => (v: number | string) => { setEdited(true); setInp((s) => ({ ...s, [k]: v })) }
   const sel = hl ? p.variables[hl] : null
   const selVal = hl != null ? ex.values[hl] : undefined
   const fmt = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(1) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toPrecision(3))
@@ -187,9 +195,12 @@ function ProvisionView({ p }: { p: Provision }) {
   const diagram = (
     <div className="space-y-3">
       <div className="rounded-lg border border-hairline bg-sheet p-3">
-        {p.diagram === 'rc-beam-shear'
-          ? <BeamShearDiagram i={inp} v={shearV} hl={hl} />
-          : <BeamFlexureDiagram i={inp} v={flex} layers={shownLayers} hl={shownHl} />}
+        {p.diagram === 'rc-beam-shear' ? <BeamShearDiagram i={beam} v={shearV} hl={hl} />
+          : p.diagram === 'rc-beam-flexure' ? <BeamFlexureDiagram i={beam} v={flex} layers={shownLayers} hl={shownHl} />
+            : p.diagram === 'steel-ltb-curve' ? <SteelLtbCurve i={inp as unknown as SteelExampleInput} hl={hl} />
+              : p.diagram === 'steel-shear-web' ? <SteelShearWeb i={inp as unknown as SteelExampleInput} hl={hl} />
+                : p.diagram === 'steel-column-curve' ? <SteelColumnCurve i={inp as unknown as SteelExampleInput} hl={hl} />
+                  : <LoadCombosChart i={inp as unknown as LoadExampleInput} hl={hl} />}
         {walk.length > 0 && (
           <div className="mt-2 rounded-md border border-hairline bg-sheet-2 p-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -226,21 +237,19 @@ function ProvisionView({ p }: { p: Provision }) {
         )}
       </div>
       <div className="rounded-lg border border-hairline bg-sheet p-3">
-        <p className="mb-2 text-[12px] font-semibold text-muted">Try it — change the beam and every number on the page follows</p>
+        <p className="mb-2 text-[12px] font-semibold text-muted">Try it — change the inputs and every number on the page follows</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Num label="b" unit="mm" value={inp.b} onChange={set('b')} min={150} max={1200} />
-          <Num label="h" unit="mm" value={inp.h} onChange={set('h')} min={200} max={1500} />
-          <Num label="Bars" value={inp.nBars} onChange={set('nBars')} min={2} max={12} step="1" />
-          <Num label="Bar ⌀" unit="mm" value={inp.barDia} onChange={set('barDia')} min={10} max={36} step="1" />
-          <Num label="f′c" unit="MPa" value={inp.fc} onChange={set('fc')} min={17} max={70} />
-          <Num label="fy" unit="MPa" value={inp.fy} onChange={set('fy')} min={230} max={550} />
-          {p.diagram === 'rc-beam-shear' ? <>
-            <Num label="Vu" unit="kN" value={inp.Vu} onChange={set('Vu')} min={0} />
-            <Num label="Stirrup s" unit="mm" value={inp.s} onChange={set('s')} min={50} max={600} step="10" />
-            <Num label="Stirrup ⌀" unit="mm" value={inp.stirrupDia} onChange={set('stirrupDia')} min={8} max={16} step="1" />
-            <Num label="Legs" value={inp.legs} onChange={set('legs')} min={2} max={6} step="1" />
-            <Num label="fyt" unit="MPa" value={inp.fyt} onChange={set('fyt')} min={230} max={550} />
-          </> : <Num label="Mu" unit="kN·m" value={inp.Mu} onChange={set('Mu')} min={0} />}
+          {p.fields.map((f) => f.options
+            ? (
+              <label key={f.key} className="col-span-2 flex flex-col gap-1 text-[12px] text-muted">
+                {f.label}
+                <select value={String(inp[f.key])} onChange={(e) => set(f.key)(e.target.value)}
+                  className="h-9 rounded-md border border-field-line bg-field px-2 text-[13px] text-ink">
+                  {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </label>
+            )
+            : <Num key={f.key} label={f.label} unit={f.unit} value={Number(inp[f.key])} onChange={set(f.key)} min={f.min} max={f.max} step={f.step} />)}
         </div>
       </div>
       {flow && (
@@ -318,10 +327,10 @@ function ProvisionView({ p }: { p: Provision }) {
       {linked.from && (
         <div role="note" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-line bg-brand-tint px-3 py-2 text-[12.5px] text-ink-2">
           <p>
-            Explaining the check from <span className="font-semibold text-ink">{linked.from.label}</span> with your beam's numbers
-            {inp === linked.inp ? '' : ' (since edited here)'}.
+            Explaining the check from <span className="font-semibold text-ink">{linked.from.label}</span> with your {isRc ? 'beam' : p.family === 'steel' ? 'member' : 'loads'}'s numbers
+            {edited ? ' (since edited here)' : ''}.
             {linked.from.layers ? ` Your design stacks ${linked.from.layers} bar layers; this page draws one layer, so its d and φMn differ from the calculator's.` : ''}
-            {!linked.carried.includes('s') && p.diagram === 'rc-beam-shear' ? ' No stirrups were adopted there, so the spacing shown is the library default.' : ''}
+            {isRc && !(linked.carried as string[]).includes('s') && p.diagram === 'rc-beam-shear' ? ' No stirrups were adopted there, so the spacing shown is the library default.' : ''}
           </p>
           <span className="shrink-0 text-[11.5px] text-muted">{linked.from.label} is still open in its own tab.</span>
         </div>
@@ -353,7 +362,8 @@ function ProvisionView({ p }: { p: Provision }) {
       </div>
 
       <div className="mt-6">
-        <WorkedSolution title={`Worked example — ${p.title}`} steps={[{ title: 'This beam, step by step', lines: ex.lines, note: 'Computed by the same engine functions the Beam Design calculator uses.' }]} />
+        <WorkedSolution title={`Worked example — ${p.title}`} steps={[{ title: isRc ? 'This beam, step by step' : p.family === 'steel' ? 'This member, step by step' : 'These loads, combined', lines: ex.lines,
+          note: `Computed by the same engine functions the ${p.calculators[0]?.label.replace(/^Open /, '') ?? 'calculator'} calculator uses.` }]} />
       </div>
       <p className="mt-4 text-[11px] leading-relaxed text-faint">
         {p.verification === 'engine-matched'

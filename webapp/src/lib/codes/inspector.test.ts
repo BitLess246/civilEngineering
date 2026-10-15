@@ -6,8 +6,8 @@ import { memberRows, memberSection } from '../modelMemberResults'
 import { beamProvidedCapacities } from '../beamSolution'
 import { inspectDesign, summarize, stateOf, NEAR_LIMIT, sceneKeyOf } from './inspector'
 import { footingLayout } from '../../engine/footingLayout'
-import { exampleFromQuery } from './links'
-import { provisionById } from './index'
+import { exampleFromQuery, fieldsFromQuery } from './links'
+import { provisionById, runProvision } from './index'
 
 const soil = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 }
 function design(section: RectSection, q = 4.8) {
@@ -121,5 +121,33 @@ describe('scene keys line up with what the 3D view draws', () => {
     for (const p of pads) expect(keys.has(p.key), p.key).toBe(true)
     for (const s of d.slabs) expect(keys.has(s.plate), s.plate).toBe(true)
     expect(sceneKeyOf({ kind: 'combined', id: 'n1 + n2' })).toBe('cf-n1-n2')
+  })
+})
+
+describe('steel members link to the steel provisions with their own numbers', () => {
+  const { model } = design(ok)
+  model.sections = model.sections.map((s) => ({ ...s, material: 'steel' as const, shape: 'W310x79', steelFy: 345, steelFu: 448 }))
+  const d = designStructure(model, soil)!
+  const items = inspectDesign(model, d)
+  it('a steel beam itemises flexure, shear and deflection; its Explain reproduces its own φMn', () => {
+    const it = items.find((x) => x.kind === 'steelBeam')!
+    const row = d.steelBeams.find((b) => b.id === it.id)!
+    expect(it.checks.map((c) => c.name)).toEqual([`Flexure, §${row.clause}`, `Shear, §${row.shearClause ?? 'G2.1'}`, 'Deflection, L/240 (simply supported bound)'])
+    const href = it.checks[0].explain!
+    const [path, q] = href.split('?')
+    const p = provisionById(path.replace('/codes/', ''))!
+    const ex = fieldsFromQuery(new URLSearchParams(q), p)
+    expect(ex.inp.shape).toBe('W310x79')
+    expect(ex.inp.Fy).toBe(345)
+    // the provision, run on what the link carried, lands on the schedule's own φMn
+    expect(runProvision(p, ex.inp).values.phiMn).toBeCloseTo(row.phiMn, 6)
+    expect(it.state === 'fail').toBe(!row.ok)
+  })
+  it('a steel column\'s Explain reproduces its own φcPn', () => {
+    const it = items.find((x) => x.kind === 'steelColumn')!
+    const row = d.steelColumns.find((c) => c.id === it.id)!
+    const [path, q] = it.checks[0].explain!.split('?')
+    const p = provisionById(path.replace('/codes/', ''))!
+    expect(runProvision(p, fieldsFromQuery(new URLSearchParams(q), p).inp).values.phiPn).toBeCloseTo(row.phiPn, 6)
   })
 })

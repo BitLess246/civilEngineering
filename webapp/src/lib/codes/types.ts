@@ -99,7 +99,42 @@ export interface WalkStep { title: string; text: string; tex?: string; layers: B
 
 export interface CalculatorLink { to: string; label: string }
 
-export interface Provision {
+/** Which kind of worked example — and so which inputs and diagrams — a provision uses. */
+export type ProvisionFamily = 'rc-beam' | 'steel' | 'loads'
+
+/** A rolled steel member checked under AISC 360-16 (NSCP 2015 Chapter 5). Units: mm, MPa, m, kN, kN·m. */
+export interface SteelExampleInput {
+  /** AISC designation, e.g. 'W460x74' (W-shapes only). */
+  shape: string
+  Fy: number
+  /** Unbraced length for lateral–torsional buckling, m. */
+  Lb: number
+  Cb: number
+  Mu: number
+  Vu: number
+  /** Column length and effective-length factors about x and y. */
+  L: number; Kx: number; Ky: number
+  Pu: number
+}
+
+/** Service load effects to be combined, in any one consistent unit. */
+export interface LoadExampleInput { D: number; L: number; Lr: number; W: number; E: number }
+
+/** One "Try it" input the provision page renders. A field with `options` is a picker. */
+export interface InputField<I> {
+  key: keyof I & string
+  label: string
+  unit?: string
+  min?: number; max?: number; step?: string
+  options?: readonly string[]
+}
+
+export type DiagramKind =
+  | 'rc-beam-flexure' | 'rc-beam-shear'
+  | 'steel-ltb-curve' | 'steel-shear-web' | 'steel-column-curve'
+  | 'load-combos'
+
+interface ProvisionBase {
   id: string
   title: string
   category: CodeCategory
@@ -115,7 +150,7 @@ export interface Provision {
   variables: Record<string, CodeVariable>
   equations: CodeEquation[]
   /** Which interactive diagram the page shows. */
-  diagram: 'rc-beam-flexure' | 'rc-beam-shear'
+  diagram: DiagramKind
   calculators: CalculatorLink[]
   related: string[]
   verification: Verification
@@ -123,12 +158,34 @@ export interface Provision {
   reviewed?: { by: string; on: string }
   /** Search words beyond the title and summary. */
   keywords: string[]
-  evaluate: (i: BeamExampleInput) => ExampleResult
-  /** The decision procedure, evaluated for the live example. */
-  flow?: (i: BeamExampleInput) => Flowchart
-  /** The diagram built up one idea at a time. */
-  walk?: (i: BeamExampleInput) => WalkStep[]
 }
+
+export interface ProvisionOf<F extends ProvisionFamily, I extends object> extends ProvisionBase {
+  family: F
+  /** The example the page opens with. */
+  defaults: I
+  /** The inputs the page offers, in order. */
+  fields: InputField<I>[]
+  evaluate: (i: I) => ExampleResult
+  /** The decision procedure, evaluated for the live example. */
+  flow?: (i: I) => Flowchart
+  /** The diagram built up one idea at a time. */
+  walk?: (i: I) => WalkStep[]
+}
+
+export type RcBeamProvision = ProvisionOf<'rc-beam', BeamExampleInput>
+export type SteelProvision = ProvisionOf<'steel', SteelExampleInput>
+export type LoadsProvision = ProvisionOf<'loads', LoadExampleInput>
+export type Provision = RcBeamProvision | SteelProvision | LoadsProvision
+
+// The provision's own input type travels with it, but a caller holding the
+// UNION cannot name it. These run a provision on an input the page built from
+// that same provision's `defaults` and `fields` — the one place the family is
+// erased, so nothing else needs a cast.
+type Loose = ProvisionOf<ProvisionFamily, object>
+export const runProvision = (p: Provision, i?: object): ExampleResult => (p as unknown as Loose).evaluate(i ?? p.defaults)
+export const flowOf = (p: Provision, i: object): Flowchart | undefined => (p as unknown as Loose).flow?.(i)
+export const walkOf = (p: Provision, i: object): WalkStep[] => (p as unknown as Loose).walk?.(i) ?? []
 
 export const CATEGORY_LABEL: Record<CodeCategory, string> = {
   concrete: 'Reinforced concrete',

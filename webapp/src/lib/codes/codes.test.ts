@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROVISIONS, provisionById, searchProvisions, shelves, DEFAULT_BEAM, checkState, flowPath, BEAM_LAYERS } from './index'
+import { PROVISIONS, provisionById, rcBeamProvision, runProvision, searchProvisions, shelves, DEFAULT_BEAM, checkState, flowPath, BEAM_LAYERS } from './index'
 import { effDepth, shearFlow, phiFlow, flexureWalk } from './rcBeam'
 import { phiFromStrain } from '../../engine/flexure'
 import { designBeam } from '../../engine/beamDesign'
@@ -28,7 +28,7 @@ describe('provision records hold together', () => {
   })
   it('every example evaluates every variable it lists', () => {
     for (const p of PROVISIONS) {
-      const ex = p.evaluate(DEFAULT_BEAM)
+      const ex = runProvision(p)
       for (const k of Object.keys(ex.values)) expect(p.variables[k], `${p.id} value ${k}`).toBeDefined()
       for (const c of ex.checks) expect(p.refs[c.ref], `${p.id} check ${c.label}`).toBeDefined()
       expect(ex.lines.length).toBeGreaterThan(0)
@@ -46,16 +46,16 @@ describe('engine-matched: the worked examples are the Beam Design engine\'s numb
     expect(dz.d).toBeCloseTo(effDepth(ex), 9)
   })
   it('flexure: the stress block of the provided bars', () => {
-    const v = provisionById('rc-beam-flexure')!.evaluate(ex).values
+    const v = rcBeamProvision('rc-beam-flexure')!.evaluate(ex).values
     expect(v.As).toBeCloseTo(dz.AsProv, 6)
     expect(v.a).toBeCloseTo(dz.a, 6)
     expect(v.phiMn).toBeGreaterThanOrEqual(inp.Mu)       // the designed beam passes its own check
   })
   it('minimum steel: the same ρmin', () => {
-    expect(provisionById('rc-beam-min-steel')!.evaluate(ex).values.rhoMin).toBeCloseTo(dz.rhoMin, 12)
+    expect(rcBeamProvision('rc-beam-min-steel')!.evaluate(ex).values.rhoMin).toBeCloseTo(dz.rhoMin, 12)
   })
   it('shear: the same Vc and Vs,max', () => {
-    const v = provisionById('rc-beam-shear')!.evaluate(ex).values
+    const v = rcBeamProvision('rc-beam-shear')!.evaluate(ex).values
     expect(v.Vc).toBeCloseTo(dz.Vc, 9)
     expect(v.VsMax).toBeCloseTo(dz.VsMax, 9)
   })
@@ -65,14 +65,14 @@ describe('hand checks on the default beam (300 × 500, 4-⌀20, f′c 28, fy 415
   const d = 500 - 40 - 10 - 10           // 440
   const As = 4 * Math.PI * 100           // 1256.6
   it('flexure by hand', () => {
-    const v = provisionById('rc-beam-flexure')!.evaluate(DEFAULT_BEAM).values
+    const v = rcBeamProvision('rc-beam-flexure')!.evaluate(DEFAULT_BEAM).values
     const a = (As * 415) / (0.85 * 28 * 300)
     expect(v.a).toBeCloseTo(a, 9)
     expect(v.Mn).toBeCloseTo((As * 415 * (d - a / 2)) / 1e6, 9)
     expect(v.phi).toBe(0.9)                                  // εt well past 0.005
   })
   it('shear by hand', () => {
-    const v = provisionById('rc-beam-shear')!.evaluate(DEFAULT_BEAM).values
+    const v = rcBeamProvision('rc-beam-shear')!.evaluate(DEFAULT_BEAM).values
     expect(v.Vc).toBeCloseTo((0.17 * Math.sqrt(28) * 300 * d) / 1000, 9)
     expect(v.Vs).toBeCloseTo((2 * 25 * Math.PI * 275 * d) / 200 / 1000, 9)
     expect(v.sMax).toBe(220)                                 // light stirrups: min(d/2, 600)
@@ -123,7 +123,7 @@ describe('flowcharts follow the live example', () => {
     const seen = new Set<number>()
     for (let n = 2; n <= 12; n++) {
       const i = { ...DEFAULT_BEAM, nBars: n, barDia: 28 }
-      const et = provisionById('rc-beam-flexure')!.evaluate(i).values.et
+      const et = rcBeamProvision('rc-beam-flexure')!.evaluate(i).values.et
       const p = flowPath(phiFlow(i))
       const phi = phiFromStrain(et, i.fy)
       if (phi === 0.9) expect(p, `n=${n}`).toEqual({ last: 1, branched: true })
@@ -153,7 +153,7 @@ describe('the flexure walkthrough', () => {
     for (const s of w) if (s.hl) expect(flex.variables[s.hl], s.hl).toBeDefined()
   })
   it('quotes the same Mn as the provision', () => {
-    const Mn = provisionById('rc-beam-flexure')!.evaluate(DEFAULT_BEAM).values.Mn
+    const Mn = rcBeamProvision('rc-beam-flexure')!.evaluate(DEFAULT_BEAM).values.Mn
     expect(w[4].tex).toContain(Mn.toFixed(1))
   })
 })
