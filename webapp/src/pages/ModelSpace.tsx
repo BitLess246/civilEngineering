@@ -134,7 +134,7 @@ import { downloadText } from '../lib/downloadSvg'
 import { ExchangeMenu } from '../components/modelSpace/ExchangeMenu'
 import type { SolverKind } from '../lib/featureGate'
 import { BaseHardware3D, ComplianceHalo3D, Footing3D, GridBubbles3D, HorizonGrid, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
-import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/modelSpace/sceneTokens'
+import { COMPLIANCE_COLOR, DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/modelSpace/sceneTokens'
 import { ActionBtn, DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
 import {
@@ -146,7 +146,7 @@ import { buildDesignSnapshot } from '../engine/designSnapshot'
 import { buildSha } from '../lib/buildInfo'
 import { usePublishPageSnapshot } from '../lib/ai/pageContext'
 import { modelPageSnapshot } from '../lib/ai/modelContext'
-import { inspectDesign, type InspectState } from '../lib/codes/inspector'
+import { inspectDesign, sceneKeyOf, type InspectState } from '../lib/codes/inspector'
 import { ComplianceInspector } from '../components/codes/ComplianceInspector'
 
 /** How the biaxial utilisation in the column schedule was arrived at. The
@@ -1983,6 +1983,16 @@ export default function ModelSpace() {
     }
     return m
   }, [inspection])
+  /** Slab panels (plate id) and footings (the scene's `ft-…` / `cf-…` keys) by state. */
+  const complianceTint = useMemo(() => {
+    const m = new Map<string, string>()
+    if (!complianceColour) return m
+    for (const it of inspection) {
+      if (it.state === 'unrated') continue
+      if (it.kind === 'slab' || it.kind === 'footing' || it.kind === 'combined') m.set(sceneKeyOf(it), COMPLIANCE_COLOR[it.state])
+    }
+    return m
+  }, [inspection, complianceColour])
   const selMember: Member | undefined = model?.members.find((m) => m.id === selected)
   const selPlate: Plate | undefined = model?.plates.find((p) => p.id === selected)
 
@@ -2409,7 +2419,7 @@ export default function ModelSpace() {
                   const cs = p.corners.map((c) => nodePos.get(c))
                   if (cs.some((c) => !c)) return null
                   return <Slab3D key={p.id} corners={cs as THREE.Vector3[]} shell={model.shellElements} deck={p.deck}
-                    thickness={p.thickness / 1000} style={surface}
+                    thickness={p.thickness / 1000} style={surface} tint={complianceTint.get(p.id)}
                     selected={p.id === selected} onPick={() => setSelected(p.id)} />
                 })}
                 {model.supports.map((s) => {
@@ -2425,7 +2435,8 @@ export default function ModelSpace() {
                 {showConns && design && (design.joints.length > 0 || design.beamJoints.length > 0) && (
                   <JointConnections3D joints={design.joints} beamJoints={design.beamJoints} model={model} nodePos={nodePos} />
                 )}
-                {showFootings && design && (() => {
+                {/* compliance colouring shows the pads too: their verdict is part of it */}
+                {(showFootings || complianceColour) && design && (() => {
                   const xz = new Map([...nodePos].map(([id, p]) => [id, { x: p.x, z: p.z }]))
                   const { items, overlaps } = footingLayout(
                     design.footings.map((f) => ({
@@ -2441,7 +2452,7 @@ export default function ModelSpace() {
                   return <group>{items.map((f) => (
                     <Footing3D key={f.key} cx={f.cx} cz={f.cz} bx={f.bx} bz={f.bz} bz1={f.bz1} bz2={f.bz2}
                       dc={f.dc} yTop={f.yTop} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label}
-                      style={surface} />
+                      style={surface} tint={complianceTint.get(f.key)} />
                   ))}
                   {/* the plate / post base on each pedestal, its rods and straps */}
                   {design.basePlates.map((bp) => {

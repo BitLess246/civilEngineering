@@ -48,7 +48,7 @@ export function ComplianceInspector({ items, selected, onSelect, colour, onColou
       </div>
       <label className="flex items-center gap-2 text-[12px] text-ink-2">
         <input type="checkbox" checked={colour} onChange={(e) => onColour(e.target.checked)} className="h-3.5 w-3.5 accent-brand" />
-        Colour the 3D model by compliance <span className="text-faint">(red fail · orange ≥ 90 % · green pass)</span>
+        Colour the 3D model by compliance <span className="text-faint">(members, slabs and footings · red fail · orange ≥ 90 % · green pass)</span>
       </label>
       <ul className="max-h-[420px] space-y-1 overflow-y-auto pr-1" aria-label="Members by compliance" tabIndex={0}>
         {rows.map((m) => {
