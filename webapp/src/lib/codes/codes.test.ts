@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { PROVISIONS, provisionById, searchProvisions, shelves, DEFAULT_BEAM, checkState } from './index'
-import { effDepth } from './rcBeam'
+import { PROVISIONS, provisionById, searchProvisions, shelves, DEFAULT_BEAM, checkState, flowPath, BEAM_LAYERS } from './index'
+import { effDepth, shearFlow, phiFlow, flexureWalk } from './rcBeam'
+import { phiFromStrain } from '../../engine/flexure'
 import { designBeam } from '../../engine/beamDesign'
 import { ALL_TOOLS } from '../tools'
 
@@ -96,5 +97,63 @@ describe('search and shelves', () => {
     const s = shelves()
     expect(s.map((x) => x.category)).toEqual(['concrete', 'steel', 'loads', 'seismic', 'foundations', 'analysis', 'masonry', 'timber'])
     expect(s[0].items.length).toBe(4)
+  })
+})
+
+describe('flowcharts follow the live example', () => {
+  // default beam: d = 440, Vc = 0.17·√28·300·440 = 118.7 kN, φVc = 89.0, ½φVc = 44.5
+  const at = (Vu: number) => flowPath(shearFlow({ ...DEFAULT_BEAM, Vu }))
+  it('shear: each band of Vu lands on its own terminal', () => {
+    expect(at(30)).toEqual({ last: 1, branched: true })     // ≤ ½φVc: no stirrups
+    expect(at(80)).toEqual({ last: 2, branched: true })     // ≤ φVc: minimum only
+    expect(at(120)).toEqual({ last: 5, branched: true })    // Vs,req = 41.3 ≤ ⅓√f′c·bw·d = 232.8: d/2
+    expect(at(300)).toEqual({ last: 6, branched: false })   // Vs,req = 281.3 > 232.8: d/4
+    expect(at(600)).toEqual({ last: 4, branched: true })    // Vs,req = 681 > ⅔√f′c·bw·d = 465.7: too small
+  })
+  it('shear: the bands meet at the hand-computed boundaries', () => {
+    const d = 440, Vc = (0.17 * Math.sqrt(28) * 300 * d) / 1000
+    const third = (Math.sqrt(28) * 300 * d) / 3 / 1000
+    const vuAt = (Vs: number) => 0.75 * (Vc + Vs)
+    expect(at(vuAt(third) - 0.01).last).toBe(5)
+    expect(at(vuAt(third) + 0.01).last).toBe(6)
+    expect(at(0.75 * Vc * 0.5).last).toBe(1)
+    expect(at(0.75 * Vc * 0.5 + 0.01).last).toBe(2)
+  })
+  it('φ: the route agrees with the engine\'s φ for every bar count', () => {
+    const seen = new Set<number>()
+    for (let n = 2; n <= 12; n++) {
+      const i = { ...DEFAULT_BEAM, nBars: n, barDia: 28 }
+      const et = provisionById('rc-beam-flexure')!.evaluate(i).values.et
+      const p = flowPath(phiFlow(i))
+      const phi = phiFromStrain(et, i.fy)
+      if (phi === 0.9) expect(p, `n=${n}`).toEqual({ last: 1, branched: true })
+      else if (et < 0.004) expect(p, `n=${n}`).toEqual({ last: 2, branched: true })
+      else expect(p, `n=${n}`).toEqual({ last: 3, branched: false })
+      seen.add(p.last)
+    }
+    expect([...seen].sort()).toEqual([1, 2, 3])                // all three outcomes are exercised
+  })
+  it('every decision has a branch and every branch ends in a terminal', () => {
+    for (const f of [shearFlow(DEFAULT_BEAM), phiFlow(DEFAULT_BEAM)]) {
+      for (const s of f.steps) if (s.kind === 'decision') { expect(s.branch).toBeDefined(); expect(s.branch!.to.kind).toBe('end') }
+      expect(f.steps[f.steps.length - 1].kind).toBe('end')
+      expect(f.steps.filter((s) => s.branch?.taken).length).toBeLessThanOrEqual(1)
+    }
+  })
+})
+
+describe('the flexure walkthrough', () => {
+  const w = flexureWalk(DEFAULT_BEAM)
+  it('only ever adds layers, ends with all of them, and lights a defined variable', () => {
+    const flex = provisionById('rc-beam-flexure')!
+    for (let k = 1; k < w.length; k++) {
+      expect(w[k - 1].layers.filter((l) => !w[k].layers.includes(l)), `step ${k}`).toEqual([])
+    }
+    expect(new Set(w[w.length - 1].layers)).toEqual(new Set(BEAM_LAYERS.map((l) => l.id)))
+    for (const s of w) if (s.hl) expect(flex.variables[s.hl], s.hl).toBeDefined()
+  })
+  it('quotes the same Mn as the provision', () => {
+    const Mn = provisionById('rc-beam-flexure')!.evaluate(DEFAULT_BEAM).values.Mn
+    expect(w[4].tex).toContain(Mn.toFixed(1))
   })
 })

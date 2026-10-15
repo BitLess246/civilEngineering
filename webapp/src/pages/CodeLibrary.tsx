@@ -17,6 +17,7 @@ import { Math as TeX } from '../lib/math'
 import { Num } from '../components/qty'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { BeamFlexureDiagram, BeamShearDiagram } from '../components/codes/RcBeamDiagram'
+import { CodeFlowchart } from '../components/codes/CodeFlowchart'
 
 // ── per-browser conveniences: bookmarks and recently viewed ───────────────
 const BK = 'zeta-codes-bookmarks', RC = 'zeta-codes-recent'
@@ -132,7 +133,13 @@ function ProvisionView({ p }: { p: Provision }) {
   const [layers, setLayers] = useState<ReadonlySet<BeamLayer>>(() => new Set(BEAM_LAYERS.map((l) => l.id)))
   const [bookmarks, setBookmarks] = useState(() => readList(BK))
   const [tab, setTab] = useState<'diagram' | 'equations'>('diagram')
+  const [step, setStep] = useState<number | null>(null)
   const ex = useMemo(() => p.evaluate(inp), [p, inp])
+  const walk = useMemo(() => p.walk?.(inp) ?? [], [p, inp])
+  const flow = useMemo(() => p.flow?.(inp), [p, inp])
+  const ws = step != null ? walk[step] : undefined
+  const shownLayers = useMemo<ReadonlySet<BeamLayer>>(() => (ws ? new Set(ws.layers) : layers), [ws, layers])
+  const shownHl = ws?.hl ?? hl
   const flex = useMemo(() => provisionById('rc-beam-flexure')!.evaluate(inp).values, [inp])
   const shearV = useMemo(() => provisionById('rc-beam-shear')!.evaluate(inp).values, [inp])
   const marked = bookmarks.includes(p.id)
@@ -177,14 +184,36 @@ function ProvisionView({ p }: { p: Provision }) {
       <div className="rounded-lg border border-hairline bg-sheet p-3">
         {p.diagram === 'rc-beam-shear'
           ? <BeamShearDiagram i={inp} v={shearV} hl={hl} />
-          : <BeamFlexureDiagram i={inp} v={flex} layers={layers} hl={hl} />}
+          : <BeamFlexureDiagram i={inp} v={flex} layers={shownLayers} hl={shownHl} />}
+        {walk.length > 0 && (
+          <div className="mt-2 rounded-md border border-hairline bg-sheet-2 p-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[12px] font-semibold text-ink">
+                {ws ? <>Step {step! + 1} of {walk.length} — {ws.title}</> : 'Build the diagram up one idea at a time'}
+              </p>
+              <div className="flex gap-1.5">
+                {ws ? <>
+                  <button type="button" disabled={step === 0} onClick={() => setStep((k) => Math.max(0, (k ?? 0) - 1))}
+                    className="rounded border border-hairline px-2 py-0.5 text-[12px] text-ink-2 disabled:opacity-40">◀ Back</button>
+                  {step! < walk.length - 1
+                    ? <button type="button" onClick={() => setStep((k) => (k ?? 0) + 1)} className="rounded border border-brand-line bg-brand-tint px-2 py-0.5 text-[12px] font-semibold text-brand">Next ▶</button>
+                    : <button type="button" onClick={() => setStep(null)} className="rounded border border-brand-line bg-brand-tint px-2 py-0.5 text-[12px] font-semibold text-brand">Done</button>}
+                </> : <button type="button" onClick={() => setStep(0)} className="rounded border border-brand-line bg-brand-tint px-2 py-0.5 text-[12px] font-semibold text-brand">Step through ▶</button>}
+              </div>
+            </div>
+            {ws && <div aria-live="polite" className="mt-1.5 text-[12.5px] leading-relaxed text-ink-2">
+              <p>{ws.text}</p>
+              {ws.tex && <div className="mt-1 overflow-x-auto text-[14px]"><TeX tex={ws.tex} block /></div>}
+            </div>}
+          </div>
+        )}
         {p.diagram === 'rc-beam-flexure' && (
           <div className="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Diagram layers">
             {BEAM_LAYERS.map((l) => {
-              const on = layers.has(l.id)
+              const on = shownLayers.has(l.id)
               return (
                 <button key={l.id} type="button" aria-pressed={on}
-                  onClick={() => setLayers((s) => { const n = new Set(s); if (on) n.delete(l.id); else n.add(l.id); return n })}
+                  onClick={() => { setLayers(() => { const n = new Set(shownLayers); if (on) n.delete(l.id); else n.add(l.id); return n }); setStep(null) }}
                   className={`rounded-full border px-2.5 py-0.5 text-[11px] ${on ? 'border-brand-line bg-brand-tint font-semibold text-brand' : 'border-hairline text-muted'}`}>{l.label}</button>
               )
             })}
@@ -209,6 +238,13 @@ function ProvisionView({ p }: { p: Provision }) {
           </> : <Num label="Mu" unit="kN·m" value={inp.Mu} onChange={set('Mu')} min={0} />}
         </div>
       </div>
+      {flow && (
+        <div className="rounded-lg border border-hairline bg-sheet p-3">
+          <p className="mb-2 text-[13px] font-bold text-ink">{flow.title}</p>
+          <CodeFlowchart f={flow} />
+          <p className="mt-1.5 text-[11px] text-faint">The solid route is this beam's. Change the inputs above and watch it move.</p>
+        </div>
+      )}
     </div>
   )
 

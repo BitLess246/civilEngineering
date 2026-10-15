@@ -71,6 +71,32 @@ export interface ExampleResult {
   lines: SolutionLine[]
 }
 
+/** One box of a decision flowchart. */
+export interface FlowNode {
+  kind: 'start' | 'decision' | 'process' | 'end'
+  text: string
+  /** Key into the provision's `refs`. */
+  ref?: string
+  /** Outcome colour for a terminal. */
+  state?: CheckState
+}
+
+/**
+ * A flowchart drawn as a spine: the steps run top to bottom, and a decision may
+ * branch OFF the spine to a terminal on the right. `branch.taken` says whether
+ * the live example leaves the spine there — so the page can light its path.
+ */
+export interface FlowStep extends FlowNode {
+  branch?: { when: string; to: FlowNode; taken: boolean }
+  /** Label on the edge that continues down the spine from a decision. */
+  next?: string
+}
+
+export interface Flowchart { title: string; steps: FlowStep[] }
+
+/** One stop of the stepped walkthrough: what to say, which diagram layers to show, what to light. */
+export interface WalkStep { title: string; text: string; tex?: string; layers: BeamLayer[]; hl?: string }
+
 export interface CalculatorLink { to: string; label: string }
 
 export interface Provision {
@@ -98,6 +124,10 @@ export interface Provision {
   /** Search words beyond the title and summary. */
   keywords: string[]
   evaluate: (i: BeamExampleInput) => ExampleResult
+  /** The decision procedure, evaluated for the live example. */
+  flow?: (i: BeamExampleInput) => Flowchart
+  /** The diagram built up one idea at a time. */
+  walk?: (i: BeamExampleInput) => WalkStep[]
 }
 
 export const CATEGORY_LABEL: Record<CodeCategory, string> = {
@@ -128,3 +158,13 @@ export const BEAM_LAYERS: { id: BeamLayer; label: string }[] = [
   { id: 'strain', label: 'Strain' },
   { id: 'forces', label: 'C–T couple' },
 ]
+
+/**
+ * Where the live example goes through a flowchart: the last step it reaches,
+ * and whether it leaves the spine there by that step's branch. A chart with no
+ * taken branch runs to its final step.
+ */
+export function flowPath(f: Flowchart): { last: number; branched: boolean } {
+  const k = f.steps.findIndex((s) => s.branch?.taken)
+  return k >= 0 ? { last: k, branched: true } : { last: f.steps.length - 1, branched: false }
+}
