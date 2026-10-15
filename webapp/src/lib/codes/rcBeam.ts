@@ -8,7 +8,7 @@
 // Units: mm, MPa, kN, kN·m.
 import { rectCapacity, beta1, phiFromStrain, rhoMin } from '../../engine/flexure'
 import { oneWayVc } from '../../engine/shear'
-import type { BeamExampleInput, CodeRef, Provision, ExampleCheck } from './types'
+import type { BeamExampleInput, CodeRef, Provision, ExampleCheck, Flowchart, WalkStep } from './types'
 import { checkState } from './types'
 
 const ED = 'NSCP 2015' as const
@@ -83,6 +83,7 @@ const flexure: Provision = {
   related: ['rc-beam-phi', 'rc-beam-min-steel', 'rc-beam-shear'],
   verification: 'engine-matched',
   keywords: ['moment', 'bending', 'Mn', 'phi Mn', 'stress block', 'Whitney', 'neutral axis', 'singly reinforced', 'SRRB'],
+  walk: flexureWalk,
   evaluate(i) {
     const d = effDepth(i), As = steelArea(i)
     const cap = rectCapacity(i.b, d, d, As, i.fc, i.fy)
@@ -137,6 +138,7 @@ const phiProv: Provision = {
   calculators: CALC_BEAM,
   related: ['rc-beam-flexure', 'rc-beam-min-steel'],
   verification: 'engine-matched',
+  flow: phiFlow,
   keywords: ['phi', 'strength reduction', 'tension controlled', 'compression controlled', 'transition', 'net tensile strain', 'ductility', 'over-reinforced', 'rho max'],
   evaluate(i) {
     const d = effDepth(i), As = steelArea(i)
@@ -250,6 +252,7 @@ const shear: Provision = {
   related: ['rc-beam-flexure'],
   verification: 'engine-matched',
   keywords: ['shear', 'stirrups', 'Vc', 'Vs', 'spacing', 'diagonal tension', 'Av min', 'phi Vn'],
+  flow: shearFlow,
   evaluate(i) {
     const d = effDepth(i)
     const Vc = oneWayVc({ fc: i.fc, b: i.b, d })
@@ -282,6 +285,87 @@ const shear: Provision = {
       ],
     }
   },
+}
+
+// ── walkthrough and flowcharts ─────────────────────────────────────────────
+
+/** The flexure diagram built up the way the strength is derived: steel → block → N.A. → strain → couple → φ. */
+export function flexureWalk(i: BeamExampleInput): WalkStep[] {
+  const d = effDepth(i), As = steelArea(i)
+  const cap = rectCapacity(i.b, d, d, As, i.fc, i.fy)
+  const b1 = beta1(i.fc), ety = i.fy / 200000
+  const T = (As * cap.fs) / 1000
+  return [
+    { title: 'The tension steel', layers: ['stirrup', 'bars'], hl: 'As',
+      text: `${i.nBars} bars of ⌀${i.barDia} sit at the effective depth d = ${n1(d)} mm, measured from the compression face to their centroid.`,
+      tex: `A_s = ${n0(As)}\\ \\text{mm}^2,\\quad d = ${n1(d)}\\ \\text{mm}` },
+    { title: 'Equilibrium sizes the compression block', layers: ['stirrup', 'bars', 'block', 'forces'], hl: 'a',
+      text: cap.fsYields
+        ? 'Assume the steel yields, so T = As·fy. The concrete balances it with a uniform 0.85f′c block of depth a: C = T.'
+        : 'If the steel yielded, the block would be too deep for it to — so fs < fy, and C = T is solved together with strain compatibility.',
+      tex: `0.85\\,f'_c\\,a\\,b_w = A_s f_s \\;\\Rightarrow\\; a = ${n1(cap.a)}\\ \\text{mm}` },
+    { title: 'The neutral axis', layers: ['stirrup', 'bars', 'block', 'forces', 'na'], hl: 'c',
+      text: `The block is shallower than the true compression zone by β1 = ${n3(b1)}; the neutral axis sits at c = a/β1.`,
+      tex: `c = \\dfrac{${n1(cap.a)}}{${n3(b1)}} = ${n1(cap.c)}\\ \\text{mm}` },
+    { title: 'Strain compatibility', layers: ['stirrup', 'bars', 'block', 'forces', 'na', 'strain'], hl: 'et',
+      text: `Plane sections stay plane: with 0.003 at the top fibre and zero at the neutral axis, the strain at the steel follows by similar triangles. εt ${cap.et >= ety ? '≥' : '<'} εty = ${n4(ety)}, so the steel ${cap.fsYields ? 'has yielded — the assumption holds' : 'has not yielded'}.`,
+      tex: `\\varepsilon_t = 0.003\\,\\dfrac{${n1(d)} - ${n1(cap.c)}}{${n1(cap.c)}} = ${n4(cap.et)}` },
+    { title: 'The internal couple', layers: ['stirrup', 'bars', 'block', 'forces', 'na', 'strain'], hl: 'Mn',
+      text: `C and T are equal and opposite, ${n1(T)} kN each, a lever arm d − a/2 apart. Their couple is the nominal strength.`,
+      tex: `M_n = ${n1(T)}\\cdot\\left(${n1(d)} - \\tfrac{${n1(cap.a)}}{2}\\right)/1000 = ${n1(cap.Mn)}\\ \\text{kN·m}` },
+    { title: 'Design strength and the check', layers: ['stirrup', 'bars', 'block', 'forces', 'na', 'strain'], hl: 'phiMn',
+      text: `εt = ${n4(cap.et)} gives φ = ${n3(cap.phi)}. The section ${i.Mu <= cap.phiMn ? 'carries' : 'does NOT carry'} the factored moment.`,
+      tex: `\\phi M_n = ${n3(cap.phi)}\\cdot${n1(cap.Mn)} = ${n1(cap.phiMn)}\\ ${i.Mu <= cap.phiMn ? '\\ge' : '<'}\\ M_u = ${n1(i.Mu)}\\ \\text{kN·m}` },
+  ]
+}
+
+/** φ for flexure from the net tensile strain (§421.2.2), with the beam ductility floor (§409.3.3.1). */
+export function phiFlow(i: BeamExampleInput): Flowchart {
+  const d = effDepth(i), As = steelArea(i)
+  const cap = rectCapacity(i.b, d, d, As, i.fc, i.fy)
+  const et = cap.et, ety = i.fy / 200000
+  const phi = phiFromStrain(et, i.fy)
+  return {
+    title: 'Which φ applies?',
+    steps: [
+      { kind: 'start', text: `From equilibrium: εt = 0.003(dt − c)/c = ${n4(et)}`, ref: 'phi' },
+      { kind: 'decision', text: 'εt ≥ 0.005 ?', ref: 'phi', next: 'No',
+        branch: { when: 'Yes', taken: et >= 0.005, to: { kind: 'end', text: 'Tension-controlled: φ = 0.90', state: 'pass' } } },
+      { kind: 'decision', text: 'εt ≥ 0.004 ?  (beam ductility floor)', ref: 'limit', next: 'Yes',
+        branch: { when: 'No', taken: et < 0.004, to: { kind: 'end', text: 'Not permitted in a beam — add compression steel or deepen it', state: 'fail' } } },
+      { kind: 'end', ref: 'phi', state: 'limit',
+        text: `Transition: φ = 0.65 + 0.25(εt − εty)/(0.005 − εty)${et < 0.005 && et >= 0.004 ? ` = ${n3(phi)}` : ''}, with εty = ${n4(ety)}` },
+    ],
+  }
+}
+
+/** The stirrup decision for a factored shear Vu (§409.6.3.1, §422.5, §409.7.6.2.2). */
+export function shearFlow(i: BeamExampleInput): Flowchart {
+  const d = effDepth(i)
+  const Vc = oneWayVc({ fc: i.fc, b: i.b, d })
+  const phiVc = PHI_SHEAR * Vc
+  const VsReq = Math.max(0, i.Vu / PHI_SHEAR - Vc)
+  const VsMax = ((2 / 3) * Math.sqrt(i.fc) * i.b * d) / 1000
+  const VsHalf = (Math.sqrt(i.fc) * i.b * d) / 3 / 1000
+  const light = i.Vu <= 0.5 * phiVc, minOnly = !light && i.Vu <= phiVc
+  const tooBig = !light && !minOnly && VsReq > VsMax
+  const loose = !light && !minOnly && !tooBig && VsReq <= VsHalf
+  return {
+    title: 'Are stirrups needed, and how close?',
+    steps: [
+      { kind: 'start', text: `Vc = 0.17λ√f′c·bw·d = ${n1(Vc)} kN,  φVc = ${n1(phiVc)} kN`, ref: 'vc' },
+      { kind: 'decision', text: `Vu ≤ ½φVc ?  (${n1(i.Vu)} vs ${n1(0.5 * phiVc)} kN)`, ref: 'need', next: 'No',
+        branch: { when: 'Yes', taken: light, to: { kind: 'end', text: 'No stirrups required by strength', state: 'pass' } } },
+      { kind: 'decision', text: `Vu ≤ φVc ?  (${n1(i.Vu)} vs ${n1(phiVc)} kN)`, ref: 'avmin', next: 'No',
+        branch: { when: 'Yes', taken: minOnly, to: { kind: 'end', text: `Minimum stirrups, s ≤ min(d/2, 600) = ${n0(Math.min(d / 2, 600))} mm`, state: 'pass' } } },
+      { kind: 'process', text: `Stirrups must carry Vs = Vu/φ − Vc = ${n1(VsReq)} kN`, ref: 'vs' },
+      { kind: 'decision', text: `Vs ≤ ⅔√f′c·bw·d ?  (${n1(VsReq)} vs ${n1(VsMax)} kN)`, ref: 'vsMax', next: 'Yes',
+        branch: { when: 'No', taken: tooBig, to: { kind: 'end', text: 'Section too small — enlarge bw or d', state: 'fail' } } },
+      { kind: 'decision', text: `Vs ≤ ⅓√f′c·bw·d ?  (${n1(VsReq)} vs ${n1(VsHalf)} kN)`, ref: 'smax', next: 'No',
+        branch: { when: 'Yes', taken: loose, to: { kind: 'end', text: `s ≤ min(d/2, 600) = ${n0(Math.min(d / 2, 600))} mm`, state: 'pass' } } },
+      { kind: 'end', text: `Spacing limit halves: s ≤ min(d/4, 300) = ${n0(Math.min(d / 4, 300))} mm`, ref: 'smax', state: 'limit' },
+    ],
+  }
 }
 
 export const RC_BEAM_PROVISIONS: Provision[] = [flexure, phiProv, minSteel, shear]
