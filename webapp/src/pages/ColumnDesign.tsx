@@ -23,6 +23,7 @@ import { WorkspacePage } from '../components/WorkspacePage'
 import { Math as KTex } from '../lib/math'
 import { f0, f1, f2 } from '../lib/format'
 import type { SolutionStep } from '../lib/solution'
+import { codeLink, codeReferenceStep } from '../lib/codes/links'
 
 type Mode = 'axial' | 'eccentric'
 type LoadInput = 'direct' | 'individual'
@@ -133,6 +134,7 @@ export default function ColumnDesign() {
       shape: tied ? 'tied' : 'spiral', b, h, D, cover, barDia: dbEff, tieDia, fc, fy, fyt, Pu,
       numBars: barMode === 'analyze' || eccentric ? numBars : cageChoice?.bars ?? undefined,
     }, axial))
+    if (tied && steps.length) steps.push(codeReferenceStep(['rc-column-pm']))
     return withRebarSelection(
       steps, cageChoice ? buildRebarSelectionSolution(cageChoice.selection, 'cage') : [],
     )
@@ -140,6 +142,17 @@ export default function ColumnDesign() {
   }, [slender, eccentric, inter, cap, axial, Pu, MuEff, cageChoice])
 
   const util = cap && cap.phi * cap.Pn > 1e-9 ? Pu / (cap.phi * cap.Pn) : null
+
+  // "Explain this check": the Code Library page runs the same `interaction` /
+  // `capacityAtEccentricity`, so it opens on this column. Eccentric: the bars
+  // as entered and the (magnified) moment the curve is read with. Axial: the
+  // cage this page adopted, with no moment. A spiral column is not a tied
+  // section, so it gets no link rather than one to a different check.
+  const explainColumn = !tied ? undefined : codeLink('rc-column-pm', eccentric
+    ? { b, h, cover, tieDia, barDia, numBars, layout, fc, fy, Pu, Mu: Number.isFinite(MuEff) ? MuEff : undefined }
+    : { b, h, cover, tieDia, barDia: dbEff, numBars: axial?.bars, layout: 'all-around', fc, fy, Pu, Mu: 0 },
+  { route: '/column-design', label: 'Column Design' })
+  const explainFor = (name: string) => (/^(Axial|P–M)/.test(name) ? explainColumn : undefined)
 
   /**
    * The on-screen verdict, and the SAME object the printed report uses.
@@ -374,7 +387,7 @@ export default function ColumnDesign() {
           pairs={verdict.stats.slice(1).map((st) => ({ label: st.label, value: `${st.value}${st.unit ? ` ${st.unit}` : ''}` }))} />
         {verdict.checks.map((c) => (
           <CheckCard key={c.name} title={c.name} basis="ACI 318-14 / NSCP 2015" status={c.ratio === null ? 'info' : c.ratio <= 1.0001 ? 'pass' : 'fail'}
-            pillLabel={c.ratio === null ? 'NOT RUN' : undefined} value={c.ratio === null ? '—' : f2(c.ratio)} ratio={c.ratio ?? undefined} ratioLabel="Utilization" />
+            pillLabel={c.ratio === null ? 'NOT RUN' : undefined} value={c.ratio === null ? '—' : f2(c.ratio)} ratio={c.ratio ?? undefined} ratioLabel="Utilization" explain={explainFor(c.name)} />
         ))}
       </> : (
         <CheckCard title="Check the inputs" basis="column" status="warn" pillLabel="CHECK" value="—" formula="Positive section, materials and load." />

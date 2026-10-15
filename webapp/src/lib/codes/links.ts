@@ -15,7 +15,7 @@ import { provisionById } from './index'
 
 /** Accepted range per field — the provision page's input limits. Units: mm, MPa, kN, kN·m. */
 const RANGE: Record<keyof BeamExampleInput, [number, number, boolean?]> = {
-  b: [150, 1200], h: [200, 1500], cover: [20, 100], stirrupDia: [8, 16, true],
+  b: [150, 4000], h: [200, 1500], cover: [20, 100], stirrupDia: [8, 16, true],
   nBars: [1, 12, true], barDia: [10, 36, true], fc: [17, 70], fy: [230, 550], fyt: [230, 550],
   Mu: [0, 1e5], Vu: [0, 1e5], legs: [2, 6, true], s: [25, 600],
 }

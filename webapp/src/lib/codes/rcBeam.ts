@@ -34,7 +34,7 @@ const CALC_BEAM = [{ to: '/beam-design', label: 'Open Beam Design' }]
 
 /** The section and materials every RC-beam page offers; flexure pages add Mu, the shear page its stirrups. */
 const SECTION_FIELDS: InputField<BeamExampleInput>[] = [
-  { key: 'b', label: 'b', unit: 'mm', min: 150, max: 1200 },
+  { key: 'b', label: 'b', unit: 'mm', min: 150, max: 4000 },
   { key: 'h', label: 'h', unit: 'mm', min: 200, max: 1500 },
   { key: 'nBars', label: 'Bars', min: 2, max: 12, step: '1' },
   { key: 'barDia', label: 'Bar ⌀', unit: 'mm', min: 10, max: 36, step: '1' },

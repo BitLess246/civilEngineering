@@ -5,6 +5,7 @@ import { Num, Pick } from '../components/qty'
 import { InputGroup, CheckCard } from '../components/workspace'
 import { WorkspacePage } from '../components/WorkspacePage'
 import { TSection } from '../components/TSection'
+import { codeLink } from '../lib/codes/links'
 
 const f0 = (v: number) => v.toFixed(0)
 const f1 = (v: number) => v.toFixed(1)
@@ -45,6 +46,15 @@ export default function TBeamDesign() {
   const flexRatio = r ? Math.abs(Mu) / Math.max(r.phiMn, 1e-9) : NaN
   const tcRatio = r ? AsProv / Math.max(r.AsMax, 1e-9) : NaN
   const behaviour = r ? (r.tBehavior ? 'true T (a > hf)' : Mu < 0 ? 'web rectangle (hogging)' : 'rectangular (a ≤ hf)') : ''
+  // "Explain this check" only where the rectangular-beam page IS this check: a
+  // sagging section whose block stays in the flange (so it is a bf-wide
+  // rectangle), one layer of designed bars, d derived from h and the cover.
+  // A true T, a hogging web, stacked layers or a given d are computed
+  // differently, and a link would explain another number.
+  const explainFlexure = r && mode === 'design' && !(dGiven > 0) && Mu > 0 && !r.tBehavior && r.layers.length === 1
+    ? codeLink('rc-beam-flexure', { b: r.bf, h, cover, stirrupDia, nBars: r.bars, barDia, fc, fy, fyt: fy, Mu },
+      { route: '/tbeam-design', label: 'T-Beam Design' })
+    : undefined
   return (
     <WorkspacePage title="T-Beam Design" badges={['Concrete', 'ACI 318-14 · NSCP 2015']}
       intro="Flanged-beam flexure, both ways. Design solves the compression block from the moment and the steel from C = T — the block fills the flange before it enters the web. Analysis takes the steel as given and solves C(c) = T(c) for the neutral axis with fs = min(fy, 600(d − c)/c), so an over-reinforced section settles below yield. §6.3.2 effective width, §9.6.1.2 minimum steel, εt and φ per §21.2.2. Positive Mu = flange in compression."
@@ -103,7 +113,7 @@ export default function TBeamDesign() {
           value={mode === 'analyze' ? `${f0(AsProv)} mm²` : `${r.bars}-⌀${barDia}`} unit={mode === 'analyze' ? 'given' : `${f0(AsProv)} mm²`}
           pairs={[{ label: 'bf', value: `${f0(r.bf)} mm` }, { label: 'd', value: `${f1(r.d)} mm` }]} />
         <CheckCard title="Flexure" basis="Mu ≤ φMn" status={flexRatio <= 1.0001 ? 'pass' : 'fail'} value={f1(r.phiMn)} unit="kN·m φMn"
-          ratio={flexRatio} ratioLabel="Mu ÷ φMn" pairs={[{ label: 'εt / φ', value: `${r.et.toFixed(4)} / ${r.phi.toFixed(2)}` }, { label: 'fs', value: `${f1(r.fs)} MPa${r.fsYields ? ' (yields)' : ' < fy'}` }]} />
+          ratio={flexRatio} ratioLabel="Mu ÷ φMn" explain={explainFlexure} pairs={[{ label: 'εt / φ', value: `${r.et.toFixed(4)} / ${r.phi.toFixed(2)}` }, { label: 'fs', value: `${f1(r.fs)} MPa${r.fsYields ? ' (yields)' : ' < fy'}` }]} />
         <CheckCard title="Tension-controlled" basis="As,prov ≤ As,max" status={tcRatio <= 1.0001 ? 'pass' : 'fail'} value={f0(r.AsMax)} unit="mm² As,max"
           ratio={tcRatio} ratioLabel="As,prov ÷ As,max" pairs={[{ label: 'Block a req / prov', value: `${f1(r.aReq)} / ${f1(r.a)} mm` }, { label: 'a max', value: `${f1(r.aMax)} mm` }]} />
       </> : (
