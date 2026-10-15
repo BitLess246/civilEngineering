@@ -8,9 +8,9 @@
 // verification badge says exactly that, and nothing on the page claims a
 // review against the authorized code that has not happened.
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
-  CODE_EDITIONS, provisionById, searchProvisions, shelves, DEFAULT_BEAM, CATEGORY_LABEL,
+  CODE_EDITIONS, provisionById, searchProvisions, shelves, CATEGORY_LABEL,
   BEAM_LAYERS, type Provision, type BeamExampleInput, type CheckState, type BeamLayer,
 } from '../lib/codes'
 import { Math as TeX } from '../lib/math'
@@ -18,6 +18,7 @@ import { Num } from '../components/qty'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { BeamFlexureDiagram, BeamShearDiagram } from '../components/codes/RcBeamDiagram'
 import { CodeFlowchart } from '../components/codes/CodeFlowchart'
+import { exampleFromQuery } from '../lib/codes/links'
 
 // ── per-browser conveniences: bookmarks and recently viewed ───────────────
 const BK = 'zeta-codes-bookmarks', RC = 'zeta-codes-recent'
@@ -128,7 +129,11 @@ function Landing() {
 
 // ── one provision ──────────────────────────────────────────────────────────
 function ProvisionView({ p }: { p: Provision }) {
-  const [inp, setInp] = useState<BeamExampleInput>(DEFAULT_BEAM)
+  const [search] = useSearchParams()
+  const linked = useMemo(() => exampleFromQuery(search), [search])
+  const [inp, setInp] = useState<BeamExampleInput>(linked.inp)
+  // keep a calculator's beam when moving between provisions
+  const qs = linked.carried.length || linked.from ? `?${search.toString()}` : ''
   const [hl, setHl] = useState<string | null>(null)
   const [layers, setLayers] = useState<ReadonlySet<BeamLayer>>(() => new Set(BEAM_LAYERS.map((l) => l.id)))
   const [bookmarks, setBookmarks] = useState(() => readList(BK))
@@ -163,7 +168,7 @@ function ProvisionView({ p }: { p: Provision }) {
           <ul className="space-y-0.5">
             {s.items.map((it) => (
               <li key={it.id}>
-                <Link to={`/codes/${it.id}`} aria-current={it.id === p.id ? 'page' : undefined}
+                <Link to={`/codes/${it.id}${qs}`} aria-current={it.id === p.id ? 'page' : undefined}
                   className={`block rounded px-2 py-1 ${it.id === p.id ? 'bg-brand-tint font-semibold text-brand' : 'text-ink-2 hover:bg-sheet-2'}`}>{it.title}</Link>
               </li>
             ))}
@@ -173,7 +178,7 @@ function ProvisionView({ p }: { p: Provision }) {
       <div>
         <p className="mb-1 font-mono text-[10.5px] font-semibold tracking-wide text-faint">RELATED</p>
         <ul className="space-y-0.5">{p.related.map((r) => provisionById(r)).filter((x): x is Provision => !!x).map((r) => (
-          <li key={r.id}><Link to={`/codes/${r.id}`} className="block rounded px-2 py-1 text-ink-2 hover:bg-sheet-2">{r.title}</Link></li>
+          <li key={r.id}><Link to={`/codes/${r.id}${qs}`} className="block rounded px-2 py-1 text-ink-2 hover:bg-sheet-2">{r.title}</Link></li>
         ))}</ul>
       </div>
     </nav>
@@ -310,6 +315,17 @@ function ProvisionView({ p }: { p: Provision }) {
         </div>
       </div>
       <p className="mt-2 max-w-4xl text-[14px] leading-relaxed text-ink-2">{p.summary}</p>
+      {linked.from && (
+        <div role="note" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-line bg-brand-tint px-3 py-2 text-[12.5px] text-ink-2">
+          <p>
+            Explaining the check from <span className="font-semibold text-ink">{linked.from.label}</span> with your beam's numbers
+            {inp === linked.inp ? '' : ' (since edited here)'}.
+            {linked.from.layers ? ` Your design stacks ${linked.from.layers} bar layers; this page draws one layer, so its d and φMn differ from the calculator's.` : ''}
+            {!linked.carried.includes('s') && p.diagram === 'rc-beam-shear' ? ' No stirrups were adopted there, so the spacing shown is the library default.' : ''}
+          </p>
+          <span className="shrink-0 text-[11.5px] text-muted">{linked.from.label} is still open in its own tab.</span>
+        </div>
+      )}
 
       {/* phones: switch between the diagram and the equations */}
       <div className="mt-4 flex gap-1 border-b border-hairline lg:hidden" role="tablist">
