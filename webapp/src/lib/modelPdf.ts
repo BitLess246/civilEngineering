@@ -324,6 +324,9 @@ export async function buildModelPdfInto(
       // solution's stretch washed) goes full width under the header.
       const cuts = (item.figures ?? []).filter((f) => f.kind === 'section')
       const sheets = (item.figures ?? []).filter((f) => f.kind === 'elevation')
+      // the member's own V and M, in the band beside the section cut that the
+      // name and summary used to leave blank: Vy | Mz | SECTION on one row
+      const diagrams = (item.figures ?? []).filter((f) => f.kind === 'diagram')
       const boxW = 58, boxPad = 2
       const cutBox = { x: 0, y: 0, w: boxW - 2 * boxPad, maxH: 44 }
       const cutSizes = cuts.map((f) => paintedSize(f.drawing, cutBox))
@@ -340,10 +343,43 @@ export async function buildModelPdfInto(
       // The header and the sheet under it move to the next page TOGETHER: a
       // header left at the foot of one page with its elevation at the head
       // of the next reads as two items, and leaves a page-third blank.
-      const need = (cuts.length ? boxH + 5 : 20) + sheetSizes.reduce((s, z) => s + z.height + 9, 0)
+      const diagGap = 3
+      const diagSlotW = ((cuts.length ? CONTENT_W - boxW - 4 : CONTENT_W) - diagGap * (diagrams.length - 1)) / Math.max(diagrams.length, 1)
+      const diagBox = { x: M, y: 0, w: diagSlotW, maxH: Math.max(boxH, 34) }
+      const diagH = diagrams.length ? Math.max(...diagrams.map((f) => paintedSize(f.drawing, diagBox).height)) : 0
+      const need = (cuts.length ? boxH + 5 : 20) + sheetSizes.reduce((s, z) => s + z.height + 9, 0) + (diagrams.length ? 16 : 0)
       ensure(Math.min(need, 200))
+      if (diagrams.length) {
+        // name, sub, summary and location across the full width, then the row
+        setF('sans', 'bold', 7.8, INK)
+        doc.text(item.title, M, sh.y + 1)
+        sh.y += 4.4
+        if (item.sub) {
+          setF('mono', 'normal', 5.8, FAINT)
+          for (const w of doc.splitTextToSize(item.sub, CONTENT_W)) { doc.text(w, M, sh.y); sh.y += 3 }
+        }
+        const meta = [item.details, item.loc].filter(Boolean).join('  ·  ')
+        if (meta) { setF('sans', 'normal', 6.4, MUTED); doc.text(meta, M, sh.y + 0.4); sh.y += 3.3 }
+        const rowTop = sh.y + 1
+        diagrams.forEach((f, c) => paintDrawing(doc, f.drawing, { ...diagBox, x: M + c * (diagSlotW + diagGap), y: rowTop + 2.5 }))
+        if (cuts.length) {
+          const fx = M + CONTENT_W - boxW
+          setF('sans', 'bold', 5, FAINT)
+          doc.text('SECTION', fx + 1, rowTop + 1.5)
+          doc.setDrawColor(...HAIR); doc.setLineWidth(0.2)
+          doc.roundedRect(fx, rowTop + 2.5, boxW, boxH, 1, 1, 'S')
+          let fy = rowTop + 2.5 + boxPad
+          cuts.forEach((f, k) => {
+            const z = cutSizes[k]
+            paintDrawing(doc, f.drawing, { ...cutBox, x: fx + (boxW - z.width) / 2, y: fy })
+            fy += z.height + boxPad
+          })
+        }
+        sh.y = rowTop + 2.5 + Math.max(boxH, diagH) + 2.5
+      }
       const headTop = sh.y
       const leftW = cuts.length ? CONTENT_W - boxW - 6 : CONTENT_W
+      if (!diagrams.length) {
       if (cuts.length) {
         const fx = M + CONTENT_W - boxW
         setF('sans', 'bold', 5, FAINT)
@@ -382,6 +418,7 @@ export async function buildModelPdfInto(
       // clear the figure box before anything else begins
       if (cuts.length) sh.y = Math.max(sh.y, headTop + 2.5 + boxH)
       sh.y += 2.5
+      }
       // the sheet, kept with its caption — the same rule the drawings section uses
       sheets.forEach((f, k) => {
         const z = sheetSizes[k]

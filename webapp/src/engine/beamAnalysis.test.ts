@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { solveFEM, analyzeBeam, threeMoment, nscpCombos, NSCP_COMBOS, applyCombo, spansToSegments, type Support, type BeamLoad, type BeamSegment } from './beamAnalysis'
+import { solveFEM, analyzeBeam, threeMoment, loadsOffBeam, nscpCombos, NSCP_COMBOS, applyCombo, spansToSegments, type Support, type BeamLoad, type BeamSegment } from './beamAnalysis'
 
 describe('NSCP §203.3.1 — f₁ live-load factor', () => {
   it('f₁ scales L in eqs 203-3/4/5 only; default export is the 1.0 set', () => {
@@ -246,5 +246,20 @@ describe('regressions found by the hand derivation (Oct 2026)', () => {
       const gov = res.perCombo[res.govIdx].result!
       res.tmt!.reactions.forEach((R, i) => expect(R).toBeCloseTo(gov.reactions[i].Rv, 1))
     }
+  })
+})
+
+describe('loads past the beam end (a span shortened under them)', () => {
+  it('only the part on the beam is analysed, so V and M close at the free end', () => {
+    const sup: Support[] = [{ type: 'pin', x: 0 }, { type: 'roller', x: 6 }, { type: 'roller', x: 8 }]
+    const off: BeamLoad[] = [{ type: 'udl', x1: 0, x2: 12, w: 8, cat: 'D' }, { type: 'point', x: 11, P: 30, cat: 'D' }]
+    const on: BeamLoad[] = [{ type: 'udl', x1: 0, x2: 10, w: 8, cat: 'D' }]
+    expect(loadsOffBeam(off, 10)).toBe(true)
+    expect(loadsOffBeam(on, 10)).toBe(false)
+    const a = analyzeBeam(sup, off, 10, E, I)!.perCombo[0].result!
+    const b = analyzeBeam(sup, on, 10, E, I)!.perCombo[0].result!
+    expect(a.V.at(-1)).toBeCloseTo(0, 6)   // was +1.4·8·2 = 22.4 kN: the 2 m hanging past the end
+    expect(a.M.at(-1)).toBeCloseTo(0, 6)
+    a.reactions.forEach((r, i) => expect(r.Rv).toBeCloseTo(b.reactions[i].Rv, 9))
   })
 })

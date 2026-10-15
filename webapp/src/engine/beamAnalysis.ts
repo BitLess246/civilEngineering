@@ -519,10 +519,34 @@ export interface BeamAnalysisResult {
   tmt: TmtCheck | null
 }
 
+/**
+ * The loads cut to the beam [0, L]: a distributed load is clipped, a point
+ * load or couple off the beam is dropped. The stiffness solve only ever saw
+ * the part on the beam, but the equilibrium correction and the statics took
+ * the whole resultant — so a load hanging past the free end (left behind when
+ * a span was shortened) was "carried" by the supports without being on the
+ * beam, and V and M did not close to zero at the free end (Oct 2026).
+ */
+export function clipToBeam(loads: readonly BeamLoad[], L: number): BeamLoad[] {
+  const out: BeamLoad[] = []
+  for (const ld of loads) {
+    if (ld.type === 'point' || ld.type === 'moment') { if (ld.x >= -1e-9 && ld.x <= L + 1e-9) out.push(ld) }
+    else { const c = clipDist(ld, 0, L); if (c) out.push(c) }
+  }
+  return out
+}
+
+/** True when any load reaches past the beam [0, L] — the page warns, the solve clips. */
+export const loadsOffBeam = (loads: readonly BeamLoad[], L: number): boolean =>
+  loads.some((ld) => (ld.type === 'point' || ld.type === 'moment')
+    ? ld.x < -1e-9 || ld.x > L + 1e-9
+    : Math.min(ld.x1, ld.x2) < -1e-9 || Math.max(ld.x1, ld.x2) > L + 1e-9)
+
 export function analyzeBeam(
-  supports: Support[], loads: BeamLoad[], L: number, E: number, I: number,
+  supports: Support[], allLoads: BeamLoad[], L: number, E: number, I: number,
   segments?: readonly BeamSegment[],
 ): BeamAnalysisResult | null {
+  const loads = clipToBeam(allLoads, L)
   const perCombo: ComboRun[] = []
   let govIdx = -1, govM = -1
   for (const combo of NSCP_COMBOS) {

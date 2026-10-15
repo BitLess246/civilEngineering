@@ -22,6 +22,7 @@ import { buildPrestressedSolution } from './prestressedSolution'
 import type { SolutionStep, SolutionLine } from './solution'
 import { estimateTakeoff, barKgPerM, type TakeoffResult } from '../engine/takeoff'
 import { columnStackByMember } from './planDetails'
+import { memberDiagramDrawing } from '../engine/memberDiagramDrawing'
 import {
   beamSectionDrawing, columnElevationDrawing, columnSectionDrawing, columnStoreyOf,
 } from './scheduleFigures'
@@ -45,7 +46,8 @@ export interface ReportTable { title: string; head: string[]; rows: string[][]; 
  * used to draw a section of its own from the bar count and a cover, and it
  * could show neither a lap, a crank, nor the stirrup set the cage placed.
  */
-export interface ReportFigure { kind: 'section' | 'elevation'; caption: string; drawing: Drawing }
+/** `diagram` is a member's own V or M along its length — drawn small, two to a row. */
+export interface ReportFigure { kind: 'section' | 'elevation' | 'diagram'; caption: string; drawing: Drawing }
 export interface ReportSolution {
   title: string; sub?: string; steps: SolutionStep[]
   figures?: ReportFigure[]
@@ -577,6 +579,15 @@ export function buildModelReport(
     const cut = beamSectionDrawing(model, cages, bm, bm.sections[k], sec)
     return cut ? [{ kind: 'section', caption: cut.title, drawing: cut }] : []
   }
+  // The governing-envelope V and M the beam was designed for, along its length.
+  const beamDiagrams = (bm: StructureDesign['beams'][number]): ReportFigure[] => {
+    const g = bm.diag
+    if (!g || g.xs.length < 2) return []
+    return [
+      { kind: 'diagram', caption: `${bm.id} shear`, drawing: memberDiagramDrawing(g.xs, g.Vy, { title: `${bm.id} · SHEAR Vy`, unit: 'kN', color: '#1f77b4', height: 62 }) },
+      { kind: 'diagram', caption: `${bm.id} moment`, drawing: memberDiagramDrawing(g.xs, g.Mz, { title: `${bm.id} · MOMENT Mz (+sag)`, unit: 'kN·m', color: '#d62728', height: 62 }) },
+    ]
+  }
   const columnFigures = (c: StructureDesign['columns'][number], cs: RectSection): ReportFigure[] => {
     if (!cages) return []
     const out: ReportFigure[] = []
@@ -602,7 +613,8 @@ export function buildModelReport(
         details: `Mu ${f1(Math.abs(s.Mu))} kN·m · Vu ${f1(s.Vu)} kN`,
         loc: memberLoc(bm.id),
         steps: beamSectionSolution(sec, s),
-        figures: beamFigures(bm, k, sec),
+        // the member's own shear and moment, once per beam — on its first station
+        figures: [...(k === 0 ? beamDiagrams(bm) : []), ...beamFigures(bm, k, sec)],
       }))
     }),
   })
