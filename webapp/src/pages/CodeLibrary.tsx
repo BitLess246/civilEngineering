@@ -12,7 +12,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   CODE_EDITIONS, provisionById, rcBeamProvision, searchProvisions, shelves, CATEGORY_LABEL,
   BEAM_LAYERS, runProvision, walkOf, flowOf,
-  type Provision, type BeamExampleInput, type SteelExampleInput, type LoadExampleInput, type PunchingExampleInput, type FootingShearInput, type CheckState, type BeamLayer,
+  type Provision, type BeamExampleInput, type SteelExampleInput, type LoadExampleInput, type PunchingExampleInput, type FootingShearInput, type ColumnExampleInput, type CheckState, type BeamLayer,
 } from '../lib/codes'
 import { Math as TeX } from '../lib/math'
 import { Num } from '../components/qty'
@@ -23,6 +23,7 @@ import { SteelLtbCurve, SteelShearWeb, SteelColumnCurve, LoadCombosChart } from 
 import { exampleFromQuery, fieldsFromQuery } from '../lib/codes/links'
 import { PunchingPlan } from '../components/PunchingPlan'
 import { FootingOneWayDiagram } from '../components/codes/FootingDiagrams'
+import { ColumnPmDiagram } from '../components/codes/ColumnDiagrams'
 
 // ── per-browser conveniences: bookmarks and recently viewed ───────────────
 const BK = 'zeta-codes-bookmarks', RC = 'zeta-codes-recent'
@@ -73,7 +74,7 @@ export default function CodeLibrary() {
 }
 
 /** What a linked example is, in the banner and the worked solution. */
-const NOUN: Record<Provision['family'], string> = { 'rc-beam': 'beam', steel: 'member', loads: 'loads', punching: 'column', 'footing-shear': 'footing' }
+const NOUN: Record<Provision['family'], string> = { 'rc-beam': 'beam', steel: 'member', loads: 'loads', punching: 'column', 'footing-shear': 'footing', 'rc-column': 'column' }
 
 /** The critical section drawn by the Punching Shear calculator's own plan, labelled from the engine. */
 function PunchingDiagram({ i, v }: { i: PunchingExampleInput; v: Record<string, number> }) {
@@ -213,6 +214,7 @@ function ProvisionView({ p }: { p: Provision }) {
                 : p.diagram === 'steel-column-curve' ? <SteelColumnCurve i={inp as unknown as SteelExampleInput} hl={hl} />
                   : p.diagram === 'punching-perimeter' ? <PunchingDiagram i={inp as unknown as PunchingExampleInput} v={ex.values} />
                     : p.diagram === 'footing-one-way' ? <FootingOneWayDiagram i={inp as unknown as FootingShearInput} hl={hl} />
+                      : p.diagram === 'column-pm' ? <ColumnPmDiagram i={inp as unknown as ColumnExampleInput} hl={hl} />
                     : <LoadCombosChart i={inp as unknown as LoadExampleInput} hl={hl} />}
         {walk.length > 0 && (
           <div className="mt-2 rounded-md border border-hairline bg-sheet-2 p-2.5">

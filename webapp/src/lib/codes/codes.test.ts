@@ -96,7 +96,7 @@ describe('search and shelves', () => {
   it('lists every category, with the concrete shelf populated', () => {
     const s = shelves()
     expect(s.map((x) => x.category)).toEqual(['concrete', 'steel', 'loads', 'seismic', 'foundations', 'analysis', 'masonry', 'timber'])
-    expect(s[0].items.length).toBe(4)
+    expect(s[0].items.length).toBe(5)
   })
 })
 
