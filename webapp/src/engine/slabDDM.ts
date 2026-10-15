@@ -24,6 +24,14 @@ export interface SlabInput {
   exterior?: { x: boolean; y: boolean }
   /** Beams on all edges (grid panels) → end-span coefficients per case (b). */
   withBeams?: boolean
+  /**
+   * The edge beams that stiffen each direction's column strip, mm — the weaker
+   * of the panel's two edges parallel to that span. Credited in the §424.2
+   * deflection only (Nilson–Walters, see slabDeflection), at 0.35·Ig — the
+   * §406.6.3.1.1 cracked-beam stiffness, a lower bound at service load. The
+   * slab STEEL still neglects beam stiffness (conservative, as before).
+   */
+  edgeBeams?: { x?: { b: number; h: number }; y?: { b: number; h: number } }
 }
 
 export interface SlabSectionSteel {
@@ -98,6 +106,10 @@ export interface SlabDesignResult {
   y: SlabDirResult
   deflection: SlabDeflectionResult
 }
+
+/** Gross inertia of an edge beam, b·h³/12, mm⁴ (slabDeflection credits it cracked). */
+const beamInertia = (bm?: { b: number; h: number }): number | undefined =>
+  bm && bm.b > 0 && bm.h > 0 ? (bm.b * bm.h ** 3) / 12 : undefined
 
 const interp = (r: number, a: number, b: number, c: number): number =>
   r <= 0.5 ? a : r >= 2 ? c : r <= 1 ? a + (b - a) * (r - 0.5) / 0.5 : b + (c - b) * (r - 1) / 1
@@ -274,6 +286,7 @@ export function designSlabDDM(i: SlabInput): SlabDesignResult {
       AsCol: pos.column.As, AsMid: pos.middle.As,
       MaCol: pos.column.M * scale, MaMid: pos.middle.M * scale,
       exterior: dr.dir === 'x' ? (i.exterior?.x ?? false) : (i.exterior?.y ?? false),
+      beamIg: beamInertia(dr.dir === 'x' ? i.edgeBeams?.x : i.edgeBeams?.y), l1: dr.l1,
     }
   }
   const deflection = slabPanelDeflection({

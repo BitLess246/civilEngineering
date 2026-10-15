@@ -258,7 +258,7 @@ export default function ModelSpace() {
   // Concrete & reinforcement (shared material applied to every generated section)
   const [fc, setFc] = useState(n('fc', 28)); const [fy, setFy] = useState(n('fy', 415))
   const [barDia, setBarDia] = useState(n('barDia', 20)); const [tieDia, setTieDia] = useState(n('tieDia', 10))
-  const [cover, setCover] = useState(n('cover', 40)); const [slabThk, setSlabThk] = useState(n('slabThk', 150))
+  const [cover, setCover] = useState(n('cover', 40)); const [slabThk, setSlabThk] = useState(n('slabThk', 175))
   // Prestressing (applied to beam/girder sections as RectSection.ps)
   const [psOn, setPsOn] = useState(false)
   const [psAps, setPsAps] = useState(600); const [psFpu, setPsFpu] = useState(1860)

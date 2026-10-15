@@ -672,15 +672,48 @@ describe('RC serviceability — §424.2 computed deflection reaches the schedule
   })
 })
 
+describe('the default Model Space frame', () => {
+  // 2 × 1 bays of 6 × 5 m, 3.5 + 3 m storeys, 400² columns, 300×500 girders,
+  // 250×450 beams, 4.8 kPa SDL + 2.4 kPa live — Model Space's defaults. With
+  // the edge beams credited in the §424.2 crossing strips, 175 mm passes every
+  // panel; it used to fail all four at any practical thickness.
+  const mat = { fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const role = (b: number, h: number, id: string): RectSection => ({ id, name: `${b}×${h}`, b, h, ...mat })
+  const frame = (t: number) => {
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.5, 3], column: role(400, 400, 'COL'),
+      girder: role(300, 500, 'GIR'), beam: role(250, 450, 'BEA'), slabThickness: t })
+    m.loads = buildGravityLoads(m, 4.8, 2.4, 24)
+    return designStructure(m, soil)!
+  }
+  it('designs every slab, beam and column to pass at the 175 mm default', () => {
+    const d = frame(175)
+    expect(d.slabs.length).toBe(4)
+    expect(d.slabs.every((s) => s.ok)).toBe(true)
+    expect(d.beams.every((b) => b.ok)).toBe(true)
+    expect(d.columns.every((c) => c.ok)).toBe(true)
+  })
+  it('it is deflection that sets the 175: it passes there, and 150 still falls short', () => {
+    const s = frame(175).slabs[0]
+    expect(s.design.deflection.totalOK).toBe(true)
+    // 150 mm still falls short of ℓn/240 under the sustained 4.8 kPa SDL — which is why the default moved
+    expect(frame(150).slabs.every((q) => !q.design.deflection.totalOK)).toBe(true)
+  })
+}, 120_000)
+
 describe('optimizer covers every design check (slabs, walls, SCWB)', () => {
   it('slab §424.2 deflection failure gates designOK and the optimizer thickens the panel', () => {
+    // A heavy floor (8 kPa D on 6×5 m): with the edge beams credited (Nilson–
+    // Walters), 150 mm under the usual 4.8 kPa now passes, so the load is what
+    // makes this panel fail — and it fails ON DEFLECTION, above its minimum h.
     const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
     m.loads = m.plates.flatMap((p) => [
-      { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 8, cat: 'D' as const },
       { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
     ])
     const first = designStructure(m, soil)!
-    expect(first.slabs[0].ok).toBe(false)          // 150 mm on 6×5 m violates ℓn/240
+    expect(first.slabs[0].ok).toBe(false)          // 150 mm on 6×5 m under 8 kPa violates ℓn/240
+    expect(first.slabs[0].design.h).toBeGreaterThanOrEqual(first.slabs[0].design.hmin)
+    expect(first.slabs[0].design.deflection.totalOK).toBe(false)
     expect(designOK(first)).toBe(false)
     const r = optimizeStructure(m, soil)!
     expect(r.converged).toBe(true)
@@ -689,7 +722,7 @@ describe('optimizer covers every design check (slabs, walls, SCWB)', () => {
     // the slab self-weight delta rode along into the panel's area-D load
     const areaD = r.model.loads.find((l) => l.kind === 'area' && l.cat === 'D') as { q: number }
     const dt = (r.model.plates[0].thickness - 150) / 1000
-    expect(areaD.q).toBeCloseTo(4.8 + dt * 24, 6)
+    expect(areaD.q).toBeCloseTo(8 + dt * 24, 6)
   }, 120_000)
 
   it('failing SCWB joints (§418.7.3.2) gate designOK and the optimizer grows the columns', () => {

@@ -113,3 +113,47 @@ describe('slabPanelDeflection', () => {
     expect(r.totalOK).toBe(false)
   })
 })
+
+describe('slabPanelDeflection with edge beams (Nilson–Walters)', () => {
+  // A square interior panel, uncracked (small moments), so every inertia is
+  // gross and the whole calculation can be done by hand.
+  const fc = 28, h = 150, wD = 6, wL = 2
+  const dir = (beamIg?: number) => ({
+    ln: 5.6, csW: 3, msW: 3, h, d: 125, AsCol: 600, AsMid: 600,
+    MaCol: 1, MaMid: 1, exterior: false, l1: 6, ...(beamIg === undefined ? {} : { beamIg }),
+  })
+  const beamIg = (300 * 500 ** 3) / 12
+
+  it('matches the hand calculation: column strip + beam, middle strip alone', () => {
+    const r = slabPanelDeflection({ x: dir(beamIg), y: dir(beamIg), wD, wL, fc })
+    const E = Ec(fc) * 1000                                   // kPa
+    const Is = (3000 * h ** 3) / 12                           // each strip, uncracked
+    // α = Ib / Is(ℓ2) = 3.125e9 / 1.6875e9 = 1.85 ⇒ α·ℓ2/ℓ1 ≥ 1 ⇒ LDF = 0.75 at ℓ2/ℓ1 = 1
+    const ldf = 0.75
+    const Ic = Is + 0.35 * beamIg, Im = Is
+    const d = (share: number, I: number, w: number) => (share * w * 6 * 5.6 ** 4) / (384 * E * (I / 1e12)) * 1000
+    const immDL = d(ldf, Ic, wD + wL) + d(1 - ldf, Im, wD + wL)
+    expect(r.immediate).toBeCloseTo(immDL, 9)
+    expect(r.immLive).toBeCloseTo(d(ldf, Ic, wL) + d(1 - ldf, Im, wL), 9)
+    expect(r.cracked).toBe(false)
+  })
+  it('a stiffer beam deflects less, and no beam data leaves the old answer untouched', () => {
+    const none = slabPanelDeflection({ x: dir(), y: dir(), wD, wL, fc })
+    const weak = slabPanelDeflection({ x: dir(beamIg / 4), y: dir(beamIg / 4), wD, wL, fc })
+    const stiff = slabPanelDeflection({ x: dir(beamIg), y: dir(beamIg), wD, wL, fc })
+    expect(stiff.immediate).toBeLessThan(weak.immediate)
+    // the pre-existing beamless strips: each under its own tributary load
+    const E = Ec(fc) * 1000, Is = (3000 * h ** 3) / 12
+    const old = 2 * (8 * 3 * 5.6 ** 4) / (384 * E * (Is / 1e12)) * 1000
+    expect(none.immediate).toBeCloseTo(old, 9)
+  })
+  it('a beam too flexible to earn the with-beam split keeps part of the no-beam share', () => {
+    // α·ℓ2/ℓ1 = 0.5 ⇒ LDF halfway from the DDM split (0.5 here) to 0.75
+    const Is6 = (6000 * h ** 3) / 12
+    const r = slabPanelDeflection({ x: dir(0.5 * Is6), y: dir(0.5 * Is6), wD, wL, fc })
+    const E = Ec(fc) * 1000, Is = (3000 * h ** 3) / 12
+    const ldf = 0.5 + 0.5 * (0.75 - 0.5)
+    const d = (share: number, I: number) => (share * 8 * 6 * 5.6 ** 4) / (384 * E * (I / 1e12)) * 1000
+    expect(r.immediate).toBeCloseTo(d(ldf, Is + 0.35 * 0.5 * Is6) + d(1 - ldf, Is), 9)
+  })
+})

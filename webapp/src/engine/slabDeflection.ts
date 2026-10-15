@@ -8,6 +8,19 @@
 // Mid-panel deflection uses the crossing-strip model (ACI R24.2): the column
 // strip in one direction plus the orthogonal middle strip. The governing
 // (larger) crossing combination is reported.
+//
+// WITH EDGE BEAMS (`beamIg` given for a direction) the strips follow the
+// Nilson–Walters equivalent-frame method (ACI 435R §4.5): the frame carries
+// the whole panel load w·ℓ2 in that direction, the column strip takes its
+// share LDF of it on the slab strip PLUS the edge beam (0.35·Ig), and the
+// middle strip takes 1 − LDF on its own slab. LDF is the column-strip share of
+// positive moment the beam earns — the no-beam split interpolated toward the
+// §408.10.5.5 with-beam fraction by α·ℓ2/ℓ1:
+//   δcs = k·LDF·w·ℓ2·ℓn⁴ / (384·Ec·(Ie,cs + Ibeam))
+//   δms = k·(1 − LDF)·w·ℓ2·ℓn⁴ / (384·Ec·Ie,ms)
+// Without it the column strip was a bare slab under its own tributary load —
+// a 6 × 5 m panel on 250 × 450 beams read 42 mm at 150 mm thick, 3–7× the
+// plate answer, and no practical thickness passed ℓn/240.
 // Units: spans m; h/d/db mm; moments kN·m; loads kPa; deflections mm.
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -87,31 +100,66 @@ export interface SlabDeflectionResult {
   cracked: boolean        // any contributing strip cracked under service load
 }
 
+export interface SlabDirParams {
+  ln: number; csW: number; msW: number; h: number; d: number
+  AsCol: number; AsMid: number; MaCol: number; MaMid: number; exterior: boolean
+  /** GROSS inertia of the edge beam in this direction's column strip, mm⁴ — credited
+   *  at 0.35·Ig (§406.6.3.1.1, cracked). Absent ⇒ no beam credited. */
+  beamIg?: number
+  /** Centre-to-centre span in this direction, m (for ℓ2/ℓ1). */
+  l1?: number
+}
+
+/** Column-strip share of positive moment for α·ℓ2/ℓ1 ≥ 1 (§408.10.5.5 / ACI Table 8.10.5.5). */
+const csPositiveWithBeams = (r: number) =>
+  r <= 0.5 ? 0.9 : r >= 2 ? 0.45 : r <= 1 ? 0.9 - 0.15 * (r - 0.5) / 0.5 : 0.75 - 0.3 * (r - 1)
+
 /**
  * Mid-panel deflection by the crossing-strip method: δ = δ(column strip, dir A)
  * + δ(middle strip, dir B). Both crossing combinations are evaluated and the
  * larger governs. Live deflection → ℓn/360; long-term + live → ℓn/240.
  */
 export function slabPanelDeflection(params: {
-  x: { ln: number; csW: number; msW: number; h: number; d: number; AsCol: number; AsMid: number; MaCol: number; MaMid: number; exterior: boolean }
-  y: { ln: number; csW: number; msW: number; h: number; d: number; AsCol: number; AsMid: number; MaCol: number; MaMid: number; exterior: boolean }
+  x: SlabDirParams
+  y: SlabDirParams
   wD: number; wL: number      // service AREA loads, kPa
   fc: number; lambda?: number
 }): SlabDeflectionResult {
   const { wD, wL, fc } = params
   const lambda = params.lambda ?? 1
 
-  // Per-direction column-strip & middle-strip deflections (load on the strip =
-  // area load × strip width).
-  const strip = (s: typeof params.x, which: 'col' | 'mid') => {
+  // Per-direction column-strip & middle-strip deflections (without a beam: load
+  // on the strip = area load × strip width).
+  const strip = (s: SlabDirParams, which: 'col' | 'mid') => {
     const bStrip = (which === 'col' ? s.csW : s.msW) * 1000
     const As = which === 'col' ? s.AsCol : s.AsMid
     const Ma = which === 'col' ? s.MaCol : s.MaMid
-    const wWidth = which === 'col' ? s.csW : s.msW
-    return stripDeflection({
-      ln: s.ln, bStrip, h: s.h, d: s.d, As,
-      wD: wD * wWidth, wL: wL * wWidth, Ma, fc, exterior: s.exterior, lambda,
-    })
+    if (s.beamIg === undefined) {
+      const wWidth = which === 'col' ? s.csW : s.msW
+      return stripDeflection({
+        ln: s.ln, bStrip, h: s.h, d: s.d, As,
+        wD: wD * wWidth, wL: wL * wWidth, Ma, fc, exterior: s.exterior, lambda,
+      })
+    }
+    // Nilson–Walters: the strip's moment share of the whole frame load, on the
+    // strip's slab (Branson Ie) plus — for the column strip — the edge beam.
+    // The share is the one the beam earns: the DDM's no-beam split, moved
+    // toward the with-beam column-strip fraction by α·ℓ2/ℓ1 (capped at 1),
+    // the linear interpolation §408.10.5 permits. α from gross inertias.
+    const l2 = s.csW + s.msW
+    const total = s.MaCol + s.MaMid
+    const ldf0 = total > 1e-12 ? s.MaCol / total : s.csW / l2
+    const l1 = s.l1 ?? s.ln
+    const alpha = s.beamIg / ((l2 * 1000 * s.h ** 3) / 12)
+    const t = Math.min(1, (alpha * l2) / l1)
+    const ldfCol = ldf0 + t * (csPositiveWithBeams(l2 / l1) - ldf0)
+    const share = which === 'col' ? ldfCol : 1 - ldfCol
+    const sl = effectiveInertia({ Ma, b: bStrip, h: s.h, d: s.d, As, fc, lambda })
+    const I = sl.Ie + (which === 'col' ? 0.35 * s.beamIg : 0)
+    const E = Ec(fc) * 1000, k = spanCoeff(s.exterior)
+    const defl = (w: number) => (k * share * w * l2 * s.ln ** 4) / (384 * E * (I / 1e12)) * 1000
+    const immD = defl(wD), immDL = defl(wD + wL)
+    return { Ie: I, Icr: sl.Icr, Ig: sl.Ig, Mcr: sl.Mcr, immD, immL: immDL - immD, immDL, cracked: Ma > sl.Mcr }
   }
 
   const xc = strip(params.x, 'col'), xm = strip(params.x, 'mid')
