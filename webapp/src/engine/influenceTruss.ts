@@ -35,7 +35,9 @@
 // Units: span, height, positions in m; forces in kN per kN of unit load.
 // ─────────────────────────────────────────────────────────────────────────
 
-export type TrussType = 'Pratt' | 'Howe' | 'Warren'
+/** `Custom` is a user-drawn truss (`buildCustomTruss`) — any determinate,
+ *  stable plane truss on one pin and one roller. */
+export type TrussType = 'Pratt' | 'Howe' | 'Warren' | 'Custom'
 export type DeckLevel = 'through' | 'deck'
 export type MemberKind = 'bottom' | 'top' | 'vertical' | 'diagonal' | 'endpost' | 'reaction'
 
@@ -199,6 +201,7 @@ export function buildTruss(p: InfluenceInput): TrussGeom {
 
 /** Mirror-image member id (reactions pair RL ↔ RR); null when self-mirrored. */
 export function mirrorOf(geom: TrussGeom, id: string): string | null {
+  if (geom.type === 'Custom') return customMirror(geom, id)
   if (id === 'RL') return 'RR'
   if (id === 'RR') return 'RL'
   const m = geom.members.find((mm) => mm.id === id)
@@ -372,4 +375,144 @@ export const KIND_NAME: Record<MemberKind | 'reaction', string> = {
   vertical: 'vertical',
   diagonal: 'diagonal',
   endpost: 'end post',
+}
+
+// ── custom trusses ─────────────────────────────────────────────────────────
+//
+// A truss the user draws: nodes (x, y, support) and members between them.
+// It is accepted when it is a STABLE, DETERMINATE plane truss on exactly one
+// pin and one (horizontal) roller — m + r = 2j with r = 3, and the joint-
+// equilibrium system non-singular (a shape that passes the count but is a
+// mechanism, e.g. a missing diagonal with a redundant elsewhere, fails there).
+// The deck is the chord at the lowest ('through') or highest ('deck') nodes;
+// a support that is not on the deck adds an abutment position over it, where
+// a load goes straight into the bearing and stresses no member. Everything
+// downstream (ordinates, patch areas, extremes) is the parametric pipeline.
+// 'RL' is the PIN's vertical reaction and 'RR' the ROLLER's, wherever they sit.
+
+export interface CustomTrussInput {
+  nodes: { id: string; x: number; y: number; support: 'pin' | 'roller' | null }[]
+  members: { a: string; b: string }[]
+  deck: DeckLevel
+}
+
+const TOL = 1e-6
+
+/** Printable problems with a user-drawn truss, empty when it can be solved. */
+export function validateCustom(c: CustomTrussInput): string[] {
+  const out: string[] = []
+  const ids = c.nodes.map((n) => n.id.trim())
+  if (c.nodes.length < 3) out.push('A truss needs at least 3 nodes.')
+  if (ids.some((id) => !id)) out.push('Every node needs a name.')
+  const dup = ids.find((id, k) => id && ids.indexOf(id) !== k)
+  if (dup) out.push(`Node name ${dup} is used twice.`)
+  if (c.nodes.some((n) => !Number.isFinite(n.x) || !Number.isFinite(n.y))) out.push('Every node needs numeric x and y.')
+  const pins = c.nodes.filter((n) => n.support === 'pin'), rollers = c.nodes.filter((n) => n.support === 'roller')
+  if (pins.length !== 1 || rollers.length !== 1) out.push(`Give exactly one pin and one roller (have ${pins.length} pin, ${rollers.length} roller).`)
+  else if (Math.abs(pins[0].x - rollers[0].x) < TOL) out.push('The pin and the roller must be at different x.')
+  const known = new Set(ids)
+  const seen = new Set<string>()
+  for (const [k, m] of c.members.entries()) {
+    if (!known.has(m.a) || !known.has(m.b)) { out.push(`Member ${k + 1} joins a node that does not exist.`); continue }
+    if (m.a === m.b) { out.push(`Member ${k + 1} joins ${m.a} to itself.`); continue }
+    const key = [m.a, m.b].sort().join('|')
+    if (seen.has(key)) out.push(`Member ${m.a}–${m.b} is listed twice.`)
+    seen.add(key)
+    const A = c.nodes.find((n) => n.id === m.a)!, B = c.nodes.find((n) => n.id === m.b)!
+    if (Math.hypot(A.x - B.x, A.y - B.y) < TOL) out.push(`Member ${m.a}–${m.b} has zero length.`)
+  }
+  const used = new Set(c.members.flatMap((m) => [m.a, m.b]))
+  const loose = ids.filter((id) => id && !used.has(id))
+  if (loose.length) out.push(`Node${loose.length > 1 ? 's' : ''} ${loose.join(', ')} ${loose.length > 1 ? 'have' : 'has'} no member.`)
+  const need = 2 * c.nodes.length - 3
+  if (c.members.length < need) out.push(`Unstable: m + r = ${c.members.length + 3} < 2j = ${2 * c.nodes.length} — add ${need - c.members.length} member${need - c.members.length > 1 ? 's' : ''}.`)
+  if (c.members.length > need) out.push(`Indeterminate: m + r = ${c.members.length + 3} > 2j = ${2 * c.nodes.length} — remove ${c.members.length - need} member${c.members.length - need > 1 ? 's' : ''} (influence lines here are for determinate trusses).`)
+  return out
+}
+
+/** Build the user's truss on the influence-line geometry; throws a printable error. */
+export function buildCustomTruss(c: CustomTrussInput): TrussGeom {
+  const problems = validateCustom(c)
+  if (problems.length) throw new Error(problems[0])
+  const x0 = Math.min(...c.nodes.map((n) => n.x)), y0 = Math.min(...c.nodes.map((n) => n.y))
+  const nodes: TrussNode[] = c.nodes.map((n) => ({ id: n.id.trim(), x: n.x - x0, y: n.y - y0, support: n.support }))
+  const span = Math.max(...nodes.map((n) => n.x)), height = Math.max(...nodes.map((n) => n.y)) || 1
+  const at = (id: string) => nodes.find((n) => n.id === id)!
+  const tol = TOL * Math.max(span, height, 1)
+  const deckY = c.deck === 'through' ? 0 : Math.max(...nodes.map((n) => n.y))
+  const onDeck = nodes.filter((n) => Math.abs(n.y - deckY) < tol).sort((p, q) => p.x - q.x)
+  if (onDeck.length < 2) throw new Error(`The ${c.deck === 'through' ? 'bottom' : 'top'} chord needs at least two nodes for the load to walk along.`)
+  const loadPositions: LoadPosition[] = onDeck.map((n) => ({ id: n.id, x: n.x, label: n.id, node: n.id }))
+  // a support off the deck still bounds the load path: the load can stand
+  // over it and go straight into the bearing
+  for (const s of nodes.filter((n) => n.support && Math.abs(n.y - deckY) >= tol)) {
+    if (!loadPositions.some((lp) => Math.abs(lp.x - s.x) < tol)) loadPositions.push({ id: `ABUT-${s.id}`, x: s.x, label: `Abut. ${s.id}`, node: null })
+  }
+  loadPositions.sort((p, q) => p.x - q.x)
+  const xs = loadPositions.map((lp) => lp.x)
+  const members: TrussMember[] = c.members.map((m) => {
+    const A = at(m.a), B = at(m.b)
+    const horiz = Math.abs(A.y - B.y) < tol, vert = Math.abs(A.x - B.x) < tol
+    const kind: MemberKind = vert ? 'vertical' : horiz && Math.abs(A.y) < tol ? 'bottom' : horiz && Math.abs(A.y - height) < tol ? 'top' : 'diagonal'
+    const mid = (A.x + B.x) / 2
+    const panel = Math.max(0, xs.findIndex((x, k) => k + 1 < xs.length && mid >= x - tol && mid <= xs[k + 1] + tol))
+    return { id: `${m.a}-${m.b}`, label: `${m.a}–${m.b}`, nodes: `${m.a}–${m.b}`, kind, panel, a: m.a, b: m.b }
+  })
+  const geom: TrussGeom = {
+    type: 'Custom', deck: c.deck, panels: Math.max(1, loadPositions.length - 1), span, height,
+    nodes, members, loadPositions, joints: nodes.length, determinate: true,
+  }
+  // the count passed; a mechanism still makes the joint system singular
+  solveUnitLoad(geom, onDeck[0].id)
+  return geom
+}
+
+/** Influence lines of a user-drawn truss — every member plus RL (pin) and RR (roller). */
+export function customInfluenceLines(c: CustomTrussInput): InfluenceResult {
+  const geom = buildCustomTruss(c)
+  const positions = geom.loadPositions.map((lp) => lp.x)
+  const labels = geom.loadPositions.map((lp) => lp.label)
+  const ids = geom.members.map((mm) => mm.id).concat(['RL', 'RR'])
+  const il: Record<string, number[]> = {}
+  for (const id of ids) il[id] = new Array<number>(positions.length).fill(0)
+  geom.loadPositions.forEach((lp, k) => {
+    if (lp.node === null) return
+    const f = solveUnitLoad(geom, lp.node)
+    for (const id of ids) il[id][k] = f[id] ?? 0
+  })
+  // vertical reactions by statics about the other support — exact at every
+  // position, abutments included (a load over a bearing goes into it)
+  const xp = geom.nodes.find((n) => n.support === 'pin')!.x, xr = geom.nodes.find((n) => n.support === 'roller')!.x
+  il.RL = positions.map((x) => (xr - x) / (xr - xp))
+  il.RR = positions.map((x) => (x - xp) / (xr - xp))
+  return { geom, positions, labels, il }
+}
+
+/** A parametric truss as an editable custom one — the starting point for drawing your own. */
+export function trussToCustom(geom: TrussGeom): CustomTrussInput {
+  return {
+    nodes: geom.nodes.map((n) => ({ id: n.id, x: +n.x.toFixed(3), y: +n.y.toFixed(3), support: n.support })),
+    members: geom.members.map((m) => ({ a: m.a, b: m.b })),
+    deck: geom.deck,
+  }
+}
+
+/** Mirror by geometry about the span's midpoint (a custom truss has no naming scheme to reflect). */
+function customMirror(geom: TrussGeom, id: string): string | null {
+  const tol = TOL * Math.max(geom.span, 1)
+  const mirrorNode = (nid: string) => {
+    const n = geom.nodes.find((q) => q.id === nid)
+    return n ? geom.nodes.find((q) => Math.abs(q.x - (geom.span - n.x)) < tol && Math.abs(q.y - n.y) < tol)?.id ?? null : null
+  }
+  if (id === 'RL' || id === 'RR') {
+    const own = geom.nodes.find((n) => n.support === (id === 'RL' ? 'pin' : 'roller'))!
+    const other = geom.nodes.find((n) => n.support === (id === 'RL' ? 'roller' : 'pin'))!
+    return Math.abs(other.x - (geom.span - own.x)) < tol ? (id === 'RL' ? 'RR' : 'RL') : null
+  }
+  const m = geom.members.find((q) => q.id === id)
+  if (!m) return null
+  const a = mirrorNode(m.a), b = mirrorNode(m.b)
+  if (!a || !b) return null
+  const hit = geom.members.find((q) => (q.a === a && q.b === b) || (q.a === b && q.b === a))
+  return hit && hit.id !== id ? hit.id : null
 }
