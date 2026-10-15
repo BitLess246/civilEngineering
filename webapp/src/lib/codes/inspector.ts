@@ -143,3 +143,14 @@ export function summarize(items: InspectedMember[]): Record<InspectState, number
   for (const i of items) s[i.state]++
   return s
 }
+
+/**
+ * The key the 3D scene draws an inspected item under: a member or slab panel
+ * by its own id, an isolated pad as `ft-<node>`, a combined pad as
+ * `cf-<n1>-<n2>` — the keys `footingLayout` gives the footings it lays out.
+ */
+export function sceneKeyOf(it: Pick<InspectedMember, 'kind' | 'id'>): string {
+  if (it.kind === 'footing') return `ft-${it.id}`
+  if (it.kind === 'combined') return `cf-${it.id.split(' + ').join('-')}`
+  return it.id
+}

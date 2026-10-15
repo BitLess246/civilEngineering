@@ -4,7 +4,8 @@ import { designStructure } from '../../engine/pipeline'
 import type { RectSection } from '../../engine/model'
 import { memberRows, memberSection } from '../modelMemberResults'
 import { beamProvidedCapacities } from '../beamSolution'
-import { inspectDesign, summarize, stateOf, NEAR_LIMIT } from './inspector'
+import { inspectDesign, summarize, stateOf, NEAR_LIMIT, sceneKeyOf } from './inspector'
+import { footingLayout } from '../../engine/footingLayout'
 import { exampleFromQuery } from './links'
 import { provisionById } from './index'
 
@@ -102,5 +103,23 @@ describe('a failing design shows up as failures', () => {
     expect(failing.length).toBeGreaterThan(0)
     for (const id of failing) expect(items.find((x) => x.kind === 'beam' && x.id === id)!.state).toBe('fail')
     expect(items[0].state).toBe('fail')
+  })
+})
+
+describe('scene keys line up with what the 3D view draws', () => {
+  const { model, design: d } = design(ok)
+  const items = inspectDesign(model, d)
+  it('every laid-out footing is keyed by an inspected item, and every slab by its plate', () => {
+    const xz = new Map(model.nodes.map((n) => [n.id, { x: n.x, z: n.z }]))
+    const { items: pads } = footingLayout(
+      d.footings.map((f) => ({ node: f.node, B: f.design.B, Dc: f.design.Dc, pedestal: f.pedestal })),
+      d.combined.map((cf) => ({ nodes: cf.nodes, Bx: cf.design.Bx, By1: cf.design.By1, By2: cf.design.By2, x1: cf.design.x1, Dc: cf.design.Dc })),
+      xz,
+    )
+    const keys = new Set(items.map(sceneKeyOf))
+    expect(pads.length).toBeGreaterThan(0)
+    for (const p of pads) expect(keys.has(p.key), p.key).toBe(true)
+    for (const s of d.slabs) expect(keys.has(s.plate), s.plate).toBe(true)
+    expect(sceneKeyOf({ kind: 'combined', id: 'n1 + n2' })).toBe('cf-n1-n2')
   })
 })

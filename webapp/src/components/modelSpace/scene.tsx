@@ -324,7 +324,7 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, axisRotation, s
  */
 const SLAB_FALLBACK_T = 0.125
 
-export function Slab3D({ corners, thickness, selected, shell, deck, style = 'solid', color, onPick }: {
+export function Slab3D({ corners, thickness, selected, shell, deck, style = 'solid', color, tint, onPick }: {
   corners: THREE.Vector3[]; thickness?: number
   selected: boolean; shell?: boolean; deck?: WoodDeck
   /** See `viewMode`. A floor is the largest thing in the model and the one
@@ -333,6 +333,10 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
   /** Panel tint override (Drafting3D finish materials). Absent keeps the
    *  classic concrete blue, and the deck/shell branches ignore it. */
   color?: string
+  /** Code-compliance tint (Model Space inspector). Unlike `color` it applies to
+   *  every branch — solid, meshed shell and timber deck — because a verdict
+   *  has to read the same whatever the panel is drawn as. */
+  tint?: string
   onPick: () => void
 }) {
   // The node line of a floor is the TOP of the beams framing into it — see
@@ -423,7 +427,7 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
     return (
       <group onClick={(e) => { e.stopPropagation(); onPick() }}>
         <mesh geometry={shellGeo.fill}>
-          <meshStandardMaterial color={selected ? SEL : '#14b8a6'} transparent opacity={selected ? 0.75 : 0.4}
+          <meshStandardMaterial color={selected ? SEL : (tint ?? '#14b8a6')} transparent opacity={selected ? 0.75 : 0.4}
             side={THREE.DoubleSide} depthWrite={false} />
         </mesh>
         <primitive object={new THREE.Line(shellGeo.diag, new THREE.LineBasicMaterial({ color: selected ? SEL : '#0f766e' }))} />
@@ -450,7 +454,7 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
     return (
       <group onClick={(e) => { e.stopPropagation(); onPick() }}>
         <mesh geometry={prism ?? undefined}>
-          <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : '#c8a06a'}
+          <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : (tint ?? '#c8a06a')}
             transparent opacity={selected ? 0.6 : 0.3} depthWrite={style === 'solid'} />
         </mesh>
         <lineSegments geometry={deckGeo}>
@@ -464,7 +468,7 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
   return (
     <mesh geometry={prism}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
-      <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : (color ?? '#7ba6d4')}
+      <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : (tint ?? color ?? '#7ba6d4')}
         transparent opacity={selected ? 0.85 : 0.45} depthWrite={style === 'solid'} />
     </mesh>
   )
@@ -590,7 +594,7 @@ export function GridBubbles3D({ model }: { model: StructuralModel }) {
  *  footprints are visible. bx/bz = plan dimensions (m), dc = depth (m), angle =
  *  plan rotation about Y (combined footings follow the column axis). Overlapping
  *  footings are tinted red. */
-export function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, yTop = 0, angle = 0, overlap = false, label, style = 'solid' }: {
+export function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, yTop = 0, angle = 0, overlap = false, label, style = 'solid', tint }: {
   cx: number; cz: number; bx: number; bz: number; bz1?: number; bz2?: number
   dc: number
   /** See `viewMode`. */
@@ -600,6 +604,8 @@ export function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, yTop = 0, angle = 0, o
    *  founded 1.5 m down appeared at the surface with nothing under the column. */
   yTop?: number
   angle?: number; overlap?: boolean; label?: string
+  /** Code-compliance tint (Model Space inspector); an overlap's red still wins — it is a geometry fault. */
+  tint?: string
 }) {
   // A tapered pad is drawn tapered. Boxing it on the mean width puts the plan
   // edge in the wrong place at BOTH ends — which is the whole difference
@@ -616,7 +622,7 @@ export function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, yTop = 0, angle = 0, o
     <group position={[cx, yTop - dc / 2, cz]} rotation={[0, -angle, 0]}>
       <mesh geometry={geom ?? undefined}>
         {!geom && <boxGeometry args={[bx, dc, bz]} />}
-        <meshStandardMaterial key={surfaceKey(style)} color={overlap ? '#dc2626' : '#b45309'}
+        <meshStandardMaterial key={surfaceKey(style)} color={overlap ? '#dc2626' : (tint ?? '#b45309')}
           transparent opacity={style === 'wire' ? WIRE_OPACITY : overlap ? 0.6 : 0.45}
           depthWrite={style === 'solid'} side={THREE.DoubleSide} />
         <WireEdges style={style} color={overlap ? '#991b1b' : '#7c2d12'} />
