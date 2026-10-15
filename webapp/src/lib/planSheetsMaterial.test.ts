@@ -67,7 +67,11 @@ describe('the sheet set for a steel frame', () => {
     }
     const fp = set.find((s) => s.key === 'foundation-plan')!
     expect(fp.warnings).toEqual([])
-    expect(fp.subtitle).toBeUndefined()
+    expect(fp.subtitle).not.toMatch(/not drawn/)
+    // and each pedestal is on the plan: a solid outline at its pad's centre
+    const solid = fp.drawing.primitives.filter((p) => p.kind === 'rect' && !p.dash && p.fill === 'none' && p.width === 1.0)
+    expect(solid.length).toBe((d.pedestals ?? []).length)
+    expect(solid.length).toBeGreaterThan(0)
   })
 
   it('schedules beams and columns by their shape, with the steel grade', () => {

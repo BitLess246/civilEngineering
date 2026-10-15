@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from './modelBuilder'
-import { buildPlan, planToSvg, extensionLines, RAKE_DASH, type PlanPrimitive } from './planRenderer'
+import { buildPlan, planToSvg, extensionLines, RAKE_DASH, tofTag, wrapText, type PlanPrimitive } from './planRenderer'
 import { measureBounds } from './detailSheet'
 import type { RectSection } from './model'
 import { shapeByName } from './aiscSections'
@@ -191,12 +191,57 @@ describe('planRenderer — foundation plan with designed footings', () => {
     expect(f.columnSchedule[0].mark).toBe('C1')
   })
 
-  it('draws tie beams (FTB1) between adjacent footings', () => {
-    expect(texts(f.primitives)).toContain('FTB1')
+  it('draws no tie beam the design did not size', () => {
+    // FTB1 used to be drawn between every pair of pads, with no size and no
+    // schedule row — a member nothing designs and nobody can build.
+    expect(texts(f.primitives).some((s) => /FTB/.test(s))).toBe(false)
+    expect(f.beamSchedule).toHaveLength(0)
   })
 
-  it('tags each footing with its ELEV when foundingElev is given', () => {
-    expect(texts(f.primitives).some((s) => s === 'EL -1.50 m')).toBe(true)
+  it('tags each pad with its TOP — founding level plus its thickness — as the footing detail does', () => {
+    // founding −1.50, Dc 350 → T.O.F. −1.15; the detail prints the same tag
+    expect(texts(f.primitives)).toContain('T.O.F. EL -1.15 m')
+    expect(tofTag(-1.5, 350)).toBe('T.O.F. EL -1.15 m')
+    expect(texts(f.primitives).some((s) => s === 'EL -1.50 m')).toBe(false)
+  })
+
+  it('counts each footing type on the schedule', () => {
+    // six base nodes, alternating 1.5 / 2.0 m
+    expect(f.footingSchedule.map((r) => r.qty)).toEqual([3, 3])
+    expect(f.footingSchedule.reduce((s, r) => s + r.qty, 0)).toBe(base.length)
+    expect(texts(f.primitives)).toContain('NO.')
+  })
+
+  it('prints the notes it is given, wrapped and numbered, under the schedules', () => {
+    const long = 'FOOTINGS ARE SIZED FOR AN ALLOWABLE SOIL BEARING PRESSURE qa = 150 kPa. CONFIRM BY GEOTECHNICAL INVESTIGATION BEFORE EXCAVATION.'
+    const g = buildPlan(model, { kind: 'foundation', footings, foundingElev: -1.5, notes: [long, 'SECOND NOTE.'] })!
+    const t = texts(g.primitives)
+    expect(t).toContain('NOTES')
+    expect(t.some((s) => s.startsWith('1. FOOTINGS'))).toBe(true)
+    expect(t).toContain('2. SECOND NOTE.')
+    // wrapped: the long note is split, and the sheet is no wider than without it
+    const i1 = t.findIndex((s) => s.startsWith('1. ')), i2 = t.indexOf('2. SECOND NOTE.')
+    expect(i2 - i1).toBeGreaterThan(1)
+    expect(t.slice(i1, i2).join(' ')).toBe(`1. ${long}`)
+    expect(g.bounds.maxX - g.bounds.minX).toBeCloseTo(f.bounds.maxX - f.bounds.minX, 6)
+  })
+
+  it('draws a pedestal as a solid outline inside its pad', () => {
+    const withPed = footings.map((x, i) => (i === 0 ? { ...x, pedestal: 600 } : x))
+    const g = buildPlan(model, { kind: 'foundation', footings: withPed })!
+    const n = base[0]
+    const ped = g.primitives.filter((p) => p.kind === 'rect' && !p.dash
+      && Math.abs(p.w - 0.6) < 1e-9 && Math.abs(p.x + p.w / 2 - n.x) < 1e-9 && Math.abs(p.y + p.h / 2 - n.z) < 1e-9)
+    expect(ped).toHaveLength(1)
+  })
+})
+
+describe('wrapText', () => {
+  it('breaks on words within the width and keeps every word', () => {
+    const t = 'ONE TWO THREE FOUR FIVE SIX'
+    const lines = wrapText(t, 9)
+    expect(lines.every((l) => l.length <= 9)).toBe(true)
+    expect(lines.join(' ')).toBe(t)
   })
 })
 

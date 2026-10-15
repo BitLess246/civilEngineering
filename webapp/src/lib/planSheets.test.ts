@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure } from '../engine/pipeline'
 import { buildStructureCages } from '../engine/cageBuilder'
-import { buildSheetSet, planSheets, detailSheets, groupSheets, generalNotesSheet, floorName, type PlanSheet } from './planSheets'
+import { buildSheetSet, planSheets, detailSheets, groupSheets, generalNotesSheet, floorName, foundationNotes, type PlanSheet } from './planSheets'
 import { planToSvg } from '../engine/planRenderer'
 import { paintDrawing, paintedSize } from './drawingPdf'
 import { M, CONTENT_W, PAGE_W, PAGE_H } from './pdfKit'
@@ -147,7 +147,45 @@ describe('the sheet set', () => {
     expect(only.every((s) => s.group === 'Plans' || s.group === 'General notes')).toBe(true)
     expect(only[0].group).toBe('General notes')
     expect(only.length).toBeGreaterThan(0)
-    expect(only.some((s) => s.key === 'foundation-plan')).toBe(false)
+    // The foundation plan is there before the design: the column layout on
+    // the grid, saying the footings are not sized yet.
+    const fp = only.find((s) => s.key === 'foundation-plan')!
+    expect(fp.subtitle).toMatch(/sized when the design runs/)
+    const t = fp.drawing.primitives.flatMap((p) => (p.kind === 'text' ? [p.text] : []))
+    expect(t.some((x) => /FOOTINGS ARE SIZED WHEN THE DESIGN RUNS/.test(x))).toBe(true)
+    expect(t).not.toContain('FOOTING SCHEDULE')
+  })
+
+  it('leads the Plans group with the foundation plan, S-02, then the framing plans on S-03', () => {
+    const plans = sheets.filter((s) => s.group === 'Plans')
+    expect(plans[0].key).toBe('foundation-plan')
+    const tx = (s: PlanSheet) => s.drawing.primitives.flatMap((p) => (p.kind === 'text' ? [p.text] : []))
+    expect(tx(plans[0])).toContain('S-02')
+    plans.slice(1).forEach((s, i) => {
+      expect(tx(s)).toContain('S-03')
+      expect(tx(s)).toContain(String(i + 1))
+    })
+  })
+
+  it('states the bearing pressure, founding level and cover the pads were sized for', () => {
+    const fp = sheets.find((s) => s.key === 'foundation-plan')!
+    const t = fp.drawing.primitives.flatMap((p) => (p.kind === 'text' ? [p.text] : [])).join(' ')
+    expect(t).toContain('NOTES')
+    expect(t).toMatch(/FOUNDING|BOTTOM OF FOOTING/)
+    expect(t).toMatch(/75 mm/)
+    expect(fp.subtitle).toMatch(/^\d+ footings?, \d+ types?$/)
+  })
+})
+
+describe('foundationNotes', () => {
+  it('says only what the design used', () => {
+    const n = foundationNotes({ qAllow: 150, H: 1.5 }, true, true)
+    expect(n[0]).toContain('qa = 150 kPa')
+    expect(n[1]).toContain('EL -1.50 m')
+    expect(n.some((x) => x.includes('S-05'))).toBe(true)
+    expect(n.at(-1)).toMatch(/NO TIE OR GRADE BEAMS/)
+    expect(foundationNotes({}, true, true, true).some((x) => /GRADE BEAMS/.test(x))).toBe(false)
+    expect(foundationNotes({ qAllow: 150 }, false, false)).toHaveLength(1)
   })
 })
 

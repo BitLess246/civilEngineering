@@ -96,49 +96,93 @@ const REF: Record<SheetGroup, string> = {
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
 /**
- * Every framing plan, one per framed floor, named by floor.
+ * The foundation plan, then every framing plan (one per framed floor, named by
+ * floor) — the order a set is read and the structure is built in.
  *
- * Kept separate from the details because it needs only the model — a model that
- * has not been designed yet still has plans, and the tab shows them.
+ * Needs only the model, so a model that has not been designed yet still has
+ * all of them: before the design the foundation plan is the column layout on
+ * the grid, its footings noted as not yet sized; after it, the designed pads,
+ * pedestals and schedules.
  */
 export function planSheets(model: StructuralModel, design: StructureDesign | null, soil: SoilInput = {}): PlanSheet[] {
   const out: PlanSheet[] = []
+  const foundation = foundationSheet(model, design, soil)
+  if (foundation) out.push(foundation)
   const ys = [...new Set(model.nodes.map((n) => Math.round(n.y * 100) / 100))].sort((a, b) => a - b)
   const floors = ys.slice(1)                       // skip the base (foundation)
   const idxs = floors.length ? floors.map((_, i) => i + 1) : [1]
   idxs.forEach((level, i) => {
     const name = floorName(level)
+    // One sheet, S-03, a detail per floor — numbering a sheet per floor ran
+    // into S-04, the frame elevations, from the second floor up.
     const d = buildPlan(model, {
-      kind: 'framing', level, detailNo: '1', sheetRef: `S-${3 + i}`,
+      kind: 'framing', level, detailNo: String(i + 1), sheetRef: REF.Plans,
       title: `${name} FRAMING PLAN`.toUpperCase(),
     })
     if (!d) return
     out.push({ key: `framing-${slug(name)}`, group: 'Plans', title: `${name} framing plan`, warnings: [], drawing: d })
   })
+  return out
+}
 
-  if (design) {
-    const d = buildPlan(model, {
-      kind: 'foundation', detailNo: '1', sheetRef: 'S-02',
-      footings: footingsForPlan(design),
-      foundingElev: soil.H != null ? -Math.abs(soil.H) : undefined,
-    })
-    // A steel or timber column's footing sheet draws its RC pedestal and the
-    // plate on it (planDetails). One with no pedestal designed under it has no
-    // true sheet to draw; say so rather than let the gap pass for an oversight.
-    const secById = new Map(model.sections.map((sc) => [sc.id, sc]))
-    const peds = new Set((design.pedestals ?? []).map((p) => p.node))
-    const bare = design.footings.filter((f) => {
-      const col = model.members.find((m) => m.role === 'column' && (m.i === f.node || m.j === f.node))
-      return col && !isRcSection(secById.get(col.section)) && !peds.has(f.node)
-    })
-    const warnings = bare.length
-      ? [`No pedestal was designed under the steel/timber column at ${bare.map((f) => f.node).join(', ')}, so its footing detail is not drawn. The footing schedule on this plan still applies.`]
-      : []
-    if (d) out.push({
-      key: 'foundation-plan', group: 'Plans', title: 'Foundation plan', warnings, drawing: d,
-      ...(bare.length ? { subtitle: `${bare.length} footing detail${bare.length > 1 ? 's' : ''} not drawn` } : {}),
-    })
+/** Sheet S-02: the foundation plan, its schedules and its notes. */
+function foundationSheet(model: StructuralModel, design: StructureDesign | null, soil: SoilInput): PlanSheet | null {
+  const footings = design ? footingsForPlan(design) : []
+  const H = soil.H != null ? Math.abs(soil.H) : undefined
+  const yBase = Math.min(...model.nodes.map((n) => n.y))
+  const nodeY = new Map(model.nodes.map((n) => [n.id, n.y]))
+  const atBase = (id: string) => Math.abs((nodeY.get(id) ?? Infinity) - yBase) < 0.05
+  const gradeBeams = model.members.some((m) => m.role !== 'column' && atBase(m.i) && atBase(m.j))
+  const notes = foundationNotes(soil, design != null, footings.length > 0, gradeBeams)
+  const d = buildPlan(model, {
+    kind: 'foundation', detailNo: '1', sheetRef: 'S-02', footings,
+    foundingElev: H != null && design ? -H : undefined, notes,
+  })
+  if (!d) return null
+  if (!design) return {
+    key: 'foundation-plan', group: 'Plans', title: 'Foundation plan',
+    subtitle: 'column layout · footings are sized when the design runs', warnings: [], drawing: d,
   }
+  // A steel or timber column's footing sheet draws its RC pedestal and the
+  // plate on it (planDetails). One with no pedestal designed under it has no
+  // true sheet to draw; say so rather than let the gap pass for an oversight.
+  const secById = new Map(model.sections.map((sc) => [sc.id, sc]))
+  const peds = new Set((design.pedestals ?? []).map((p) => p.node))
+  const bare = design.footings.filter((f) => {
+    const col = model.members.find((m) => m.role === 'column' && (m.i === f.node || m.j === f.node))
+    return col && !isRcSection(secById.get(col.section)) && !peds.has(f.node)
+  })
+  const warnings = bare.length
+    ? [`No pedestal was designed under the steel/timber column at ${bare.map((f) => f.node).join(', ')}, so its footing detail is not drawn. The footing schedule on this plan still applies.`]
+    : []
+  const n = d.footingSchedule.reduce((s, r) => s + r.qty, 0)
+  return {
+    key: 'foundation-plan', group: 'Plans', title: 'Foundation plan', warnings, drawing: d,
+    subtitle: bare.length
+      ? `${bare.length} footing detail${bare.length > 1 ? 's' : ''} not drawn`
+      : `${n} footing${n === 1 ? '' : 's'}, ${d.footingSchedule.length} type${d.footingSchedule.length === 1 ? '' : 's'}`,
+  }
+}
+
+/**
+ * The notes a foundation plan carries: the bearing pressure the pads were
+ * sized for and where it has to come from, the founding level, the cover, and
+ * where the details are. Only what the design actually used is stated.
+ */
+export function foundationNotes(soil: SoilInput, designed: boolean, hasFootings: boolean, gradeBeams = false): string[] {
+  if (!designed) return [
+    'FOOTINGS ARE SIZED WHEN THE DESIGN RUNS. THIS SHEET SHOWS THE COLUMN LAYOUT ONLY.',
+  ]
+  const out: string[] = []
+  if (soil.qAllow != null)
+    out.push(`FOOTINGS ARE SIZED FOR AN ALLOWABLE SOIL BEARING PRESSURE qa = ${Math.round(soil.qAllow)} kPa. CONFIRM BY GEOTECHNICAL INVESTIGATION BEFORE EXCAVATION.`)
+  if (soil.H != null)
+    out.push(`BOTTOM OF FOOTING AT EL ${(-Math.abs(soil.H)).toFixed(2)} m, ±0.00 BEING THE COLUMN BASE LEVEL OF THE MODEL. T.O.F. = TOP OF FOOTING.`)
+  if (hasFootings) {
+    out.push(`CLEAR COVER TO FOOTING BARS ${FOOTING_COVER} mm, CAST AGAINST EARTH (§420.6.1.3.1).`)
+    out.push(`FOR FOOTING DETAILS SEE ${REF['Footing details']}; FOR COLUMN DETAILS SEE ${REF['Column details']}.`)
+  }
+  if (!gradeBeams) out.push('NO TIE OR GRADE BEAMS ARE MODELLED, SO NONE ARE DESIGNED OR SHOWN. ADD THEM AT THE BASE LEVEL OF THE MODEL TO HAVE THEM DESIGNED.')
   return out
 }
 
