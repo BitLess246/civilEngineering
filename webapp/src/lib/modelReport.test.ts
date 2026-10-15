@@ -7,6 +7,9 @@ import { buildStructureCages } from '../engine/cageBuilder'
 import { texToPlain } from './texText'
 import type { IrregularityFlag } from '../engine/irregularity'
 
+/** A worked-solution item's drawn figures, without the member's V/M diagrams. */
+const cutsOf = (it: { figures?: { kind: string; drawing: unknown }[] }) => (it.figures ?? []).filter((f) => f.kind !== 'diagram') as { kind: string; drawing: never }[]
+
 // The PDF payload assembler must mirror the pipeline results 1:1: same member
 // counts, same verdict, a worked solution for EVERY designed member (the
 // user-selected report depth), and only PDF-renderable content (no raw LaTeX
@@ -75,7 +78,7 @@ describe('buildModelReport', () => {
     for (const it of beams) {
       expect(it.details).toMatch(/^Mu .* kN·m · Vu .* kN$/)
       expect(it.loc).toMatch(/·/)                       // "<floor> · <grid>"
-      expect(it.figures ?? []).toEqual([])              // no cages given → no figures
+      expect(cutsOf(it)).toEqual([])                    // no cages given → no drawn cuts
     }
     const cols = rpt.groups.find((g) => g.title === 'RC columns')!.items
     for (const it of cols) {
@@ -268,12 +271,25 @@ describe('buildModelReport — worked-solution figures from the cages', () => {
     // which stretch is washed. It stays in the Plans tab, where it is one sheet
     // per grid line at a size it can be read at.
     for (const it of items('RC beams & girders')) {
-      const figs = it.figures ?? []
+      const figs = cutsOf(it)
       expect(figs.map((f) => f.kind)).toEqual(['section'])
       const cut = figs[0]!
       expect(texts(cut.drawing).some((t) => t.startsWith('FRAME ELEVATION'))).toBe(false)
       expect(texts(cut.drawing).some((t) => /^\d+-⌀\d+ (TOP|BOT)/.test(t))).toBe(true)
       expect(texts(cut.drawing).some((t) => /^STIRRUPS/.test(t))).toBe(true)
+    }
+  })
+
+  it('each beam carries its own shear and moment diagrams once, on its first station', () => {
+    const beams = items('RC beams & girders')
+    for (const bm of design.beams) {
+      const its = beams.filter((i) => i.title.startsWith(`${bm.id} ·`))
+      const diags = its.map((i) => (i.figures ?? []).filter((f) => f.kind === 'diagram').length)
+      expect(diags[0]).toBe(2)
+      expect(diags.slice(1).every((n) => n === 0)).toBe(true)
+      const [v, m] = (its[0].figures ?? []).filter((f) => f.kind === 'diagram')
+      expect(texts(v.drawing)[0]).toBe(`${bm.id} · SHEAR Vy`)
+      expect(texts(m.drawing)[0]).toBe(`${bm.id} · MOMENT Mz (+sag)`)
     }
   })
 
@@ -285,7 +301,7 @@ describe('buildModelReport — worked-solution figures from the cages', () => {
     const ends = items('RC beams & girders').filter((i) => / · End [ij]$/.test(i.title))
     expect(ends.length).toBeGreaterThan(0)
     for (const it of ends) {
-      const d = it.figures![0]!.drawing as { primitives: { kind: string }[] }
+      const d = cutsOf(it)[0]!.drawing as { primitives: { kind: string }[] }
       expect(d.primitives.filter((p) => p.kind === 'circle').length).toBeGreaterThanOrEqual(4)
     }
   })
@@ -308,8 +324,8 @@ describe('buildModelReport — worked-solution figures from the cages', () => {
     const hog = its.find((i) => bm.sections.find((s) => `${bm.id} · ${s.label}` === i.title)?.hogging)
     const sag = its.find((i) => !bm.sections.find((s) => `${bm.id} · ${s.label}` === i.title)?.hogging)
     expect(hog && sag).toBeTruthy()
-    expect(texts(hog!.figures![0].drawing).some((t) => / TOP/.test(t))).toBe(true)
-    expect(texts(sag!.figures![0].drawing).some((t) => / BOT/.test(t))).toBe(true)
+    expect(texts(cutsOf(hog!)[0].drawing).some((t) => / TOP/.test(t))).toBe(true)
+    expect(texts(cutsOf(sag!)[0].drawing).some((t) => / BOT/.test(t))).toBe(true)
   })
 
   it('the schedule and the section callout name the SAME two stirrup regions', () => {
@@ -320,7 +336,7 @@ describe('buildModelReport — worked-solution figures from the cages', () => {
     const twoRegion = cells.match(/@\d+ in 2h, @\d+ elsewhere/g) ?? []
     const seen = new Set<string>()
     for (const it of items('RC beams & girders')) {
-      const cut = it.figures?.[0]
+      const cut = cutsOf(it)[0]
       if (!cut) continue
       const note = texts(cut.drawing).find((t) => t.startsWith('STIRRUPS'))
       if (note) seen.add(note)

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  analyzeBeam, spansToSegments, type Support, type SupportType, type BeamLoad, type LoadCategory,
+  analyzeBeam, spansToSegments, loadsOffBeam, type Support, type SupportType, type BeamLoad, type LoadCategory,
 } from '../engine/beamAnalysis'
 import { deriveBeam } from '../engine/beamDerivation'
 import { detectCriticalSections } from '../engine/beamSections'
@@ -240,6 +240,11 @@ export default function BeamAnalysis() {
         </InputGroup>
         <InputGroup title="Loads">
           <div className="col-span-2">
+            {loadsOffBeam(loads, L) && (
+              <p role="status" className="mb-3 rounded-md border border-warn-line bg-warn-tint px-3 py-2 text-xs text-warn">
+                A load reaches past the beam (0–{f2(L)} m) — only the part on the beam is analysed. Shortening a span leaves loads where they were; adjust their extents.
+              </p>
+            )}
             <div className="no-print mb-3 flex flex-wrap gap-2">
               {([['point', '+ Point'], ['udl', '+ UDL'], ['vdl', '+ VDL'], ['moment', '+ Moment']] as const).map(([t, lbl]) => (
                 <button key={t} type="button" onClick={() => addLoad(t)}

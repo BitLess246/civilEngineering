@@ -1,6 +1,8 @@
 import type { JSX } from 'react'
 import { DrawingFrame } from './DrawingFrame'
+import { useId } from 'react'
 import { markerLabelPos, sameValue, DIAGRAM_VIEW_W, DIAGRAM_MIN_FONT } from '../lib/diagramLabel'
+import { guardedRange } from '../engine/memberDiagramDrawing'
 
 export interface DiagramProps {
   /** Station coordinates along the footing, m (monotonic increasing). */
@@ -41,10 +43,16 @@ export function Diagram({
   let yMax = Math.max(0, ...ys)
   let yMin = Math.min(0, ...ys)
   if (yMax === yMin) { yMax = 1; yMin = -1 }
-  const ySpan = yMax - yMin
+  // GUARD: the plot runs past the data on both sides of zero, so a peak and
+  // its diamond sit inside the frame rather than on its edge, and the curve is
+  // clipped to the plot below — nothing is drawn over the axes or cut off in
+  // the PDF capture. The tick labels still read the data's own extremes.
+  const { lo: pMin, hi: pMax } = guardedRange(ys)
+  const ySpan = pMax - pMin
 
   const sx = (x: number) => padL + ((x - xMin) / xSpan) * plotW
-  const sy = (y: number) => padT + ((yMax - y) / ySpan) * plotH
+  const sy = (y: number) => padT + ((pMax - y) / ySpan) * plotH
+  const clipId = `dg${useId().replace(/:/g, '')}`
   const y0 = sy(0)
 
   const linePts = xs.map((x, i) => `${sx(x).toFixed(1)},${sy(ys[i]).toFixed(1)}`).join(' ')
@@ -101,8 +109,10 @@ export function Diagram({
           </g>
         ))}
 
-        {/* column / reference verticals */}
-        {vlines.map((v, k) => (
+        <defs><clipPath id={clipId}><rect x={padL} y={padT} width={plotW} height={plotH} /></clipPath></defs>
+
+        {/* column / reference verticals — only the ones on the plotted span */}
+        {vlines.filter((v) => v.x >= xMin - 1e-9 && v.x <= xMax + 1e-9).map((v, k) => (
           <g key={`v${k}`}>
             <line x1={sx(v.x)} y1={padT} x2={sx(v.x)} y2={H - padB} stroke="#cbd5e1" strokeWidth={1} strokeDasharray="4 3" />
             {v.label && <text x={sx(v.x)} y={padT - 2} fontSize={DIAGRAM_MIN_FONT} fill="#94a3b8" textAnchor="middle">{v.label}</text>}
@@ -110,8 +120,10 @@ export function Diagram({
         ))}
 
         {/* fill + curve */}
-        <polygon points={fillPts} fill={color} opacity={0.12} />
-        <polyline points={linePts} fill="none" stroke={color} strokeWidth={1.8} />
+        <g clipPath={`url(#${clipId})`}>
+          <polygon points={fillPts} fill={color} opacity={0.12} />
+          <polyline points={linePts} fill="none" stroke={color} strokeWidth={1.8} />
+        </g>
 
         {markExtrema && Math.abs(ys[iMax]) > 1e-6 && marker(iMax, 'above')}
         {/* a flat diagram (a uniform load) has one value, not a max and a min */}
