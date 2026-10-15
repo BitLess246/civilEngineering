@@ -133,7 +133,7 @@ import { UpgradeNotice } from '../components/UpgradeNotice'
 import { downloadText } from '../lib/downloadSvg'
 import { ExchangeMenu } from '../components/modelSpace/ExchangeMenu'
 import type { SolverKind } from '../lib/featureGate'
-import { BaseHardware3D, Footing3D, GridBubbles3D, HorizonGrid, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
+import { BaseHardware3D, ComplianceHalo3D, Footing3D, GridBubbles3D, HorizonGrid, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
 import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/modelSpace/sceneTokens'
 import { ActionBtn, DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
@@ -146,6 +146,8 @@ import { buildDesignSnapshot } from '../engine/designSnapshot'
 import { buildSha } from '../lib/buildInfo'
 import { usePublishPageSnapshot } from '../lib/ai/pageContext'
 import { modelPageSnapshot } from '../lib/ai/modelContext'
+import { inspectDesign, type InspectState } from '../lib/codes/inspector'
+import { ComplianceInspector } from '../components/codes/ComplianceInspector'
 
 /** How the biaxial utilisation in the column schedule was arrived at. The
  *  column shows one number and it comes from Mux AND Muy, so the row says
@@ -517,6 +519,8 @@ export default function ModelSpace() {
   // schedules, plans and 3D design overlays blank. applyModel still clears the
   // key on every geometry edit, so a stale design can never attach here.
   const [design, setDesign] = useState<StructureDesign | null>(() => readSessionDesign())
+  // Code Compliance Inspector: the design read as code checks, and the 3D tint by its verdicts
+  const [complianceColour, setComplianceColour] = useState(false)
   // typical-detail marks, so a connection's drawing names the sheet it is on
   const connMarks = useMemo(() => (design ? connectionMarks(design) : null), [design])
   // What the assistant sees of this page: the 3D canvas has no text to read,
@@ -1970,6 +1974,15 @@ export default function ModelSpace() {
   const axialUnconverged = useMemo(
     () => (axialSets ?? []).filter((a) => a && !a.converged).length, [axialSets])
 
+  const inspection = useMemo(() => (model && design ? inspectDesign(model, design) : []), [model, design])
+  /** Members (not pads or panels) by inspector state — what the 3D tint reads. */
+  const complianceOf = useMemo(() => {
+    const m = new Map<string, Exclude<InspectState, 'unrated'>>()
+    for (const it of inspection) {
+      if (it.state !== 'unrated' && ['beam', 'column', 'steelBeam', 'steelColumn'].includes(it.kind)) m.set(it.id, it.state)
+    }
+    return m
+  }, [inspection])
   const selMember: Member | undefined = model?.members.find((m) => m.id === selected)
   const selPlate: Plate | undefined = model?.plates.find((p) => p.id === selected)
 
@@ -2380,6 +2393,10 @@ export default function ModelSpace() {
                           end. The skeleton has no gap for it to bridge — the
                           line already starts at the node — so drawn there it
                           is a stub lying inside its own member. */}
+                      {complianceColour && complianceOf.has(m.id) && (
+                        <ComplianceHalo3D a={skeleton ? a : aV} b={skeleton ? bb : bV} role={m.role} axisRotation={m.axisRotation}
+                          sec={skeleton ? { b: 60, h: 60 } : sec} state={complianceOf.get(m.id)!} />
+                      )}
                       {!skeleton && manI && <RigidArm3D a={a} b={aV} />}
                       {!skeleton && manJ && <RigidArm3D a={bb} b={bV} />}
                       {inactiveIds.has(m.id) && (skeleton
@@ -4884,6 +4901,12 @@ export default function ModelSpace() {
                   Click any schedule row for its step-by-step solution and plan/elevation drawings.
                 </p>
               </Sec>
+              {design && model && (
+                <Sec title="Code compliance" hint="every member's checks, worst first" grid={false}>
+                  <ComplianceInspector items={inspection} selected={selected} onSelect={setSelected}
+                    colour={complianceColour} onColour={setComplianceColour} />
+                </Sec>
+              )}
               <Sec title="Design options" hint="used by Design & Optimize">
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={allAround} onChange={(e) => setAllAround(e.target.checked)} />

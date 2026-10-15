@@ -26,7 +26,7 @@ import { memberDiagramRibbon, type DiagramComp } from '../../engine/memberDiagra
 import { footingPrism } from '../../engine/footingLayout'
 import { shapeByName, effectiveSection } from '../../engine/aiscSections'
 import { buildSectionShapes } from '../../lib/sectionShapes3d'
-import { SEL, LOAD_COLOR, levelDrop, memberColor, DIAG_COLOR, UP, TRIB_COLOR, slabTributaryPolys, wallPrismCorners, WALL_TOP_LIFT_M, type TribKind } from './sceneTokens'
+import { SEL, COMPLIANCE_COLOR, LOAD_COLOR, levelDrop, memberColor, DIAG_COLOR, UP, TRIB_COLOR, slabTributaryPolys, wallPrismCorners, WALL_TOP_LIFT_M, type TribKind } from './sceneTokens'
 
 /**
  * The EDGES of the mesh this sits inside, drawn only in wireframe.
@@ -184,6 +184,30 @@ export function Member3D({ a, b, role, selected, sec, axisRotation, style = 'sol
           transparent false → true change to a material that already exists, so
           the material has to be rebuilt. See modelSpace/viewMode.ts. */}
       <meshStandardMaterial key={surfaceKey(style)} color={color} {...surfaceMaterial(style)} />
+    </mesh>
+  )
+}
+
+/** A translucent sleeve around a member, coloured by its code-compliance
+ *  state — the inspector's verdict drawn on the model. Same frame and level
+ *  drop as `Member3D`, a few centimetres proud of it on every face. */
+export function ComplianceHalo3D({ a, b, role, axisRotation, sec, state }: {
+  a: THREE.Vector3; b: THREE.Vector3; role: string; axisRotation?: number
+  sec?: { b: number; h: number }
+  state: keyof typeof COMPLIANCE_COLOR
+}) {
+  const { mid, quat, len } = useMemo(() => {
+    const len = a.distanceTo(b)
+    const quat = frameQuaternion(a, b, role, axisRotation, 'box')
+    return { mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len }
+  }, [a, b, role, axisRotation])
+  const ty = sec ? sec.h / 1000 : role === 'column' ? 0.3 : 0.22
+  const tz = sec ? sec.b / 1000 : role === 'column' ? 0.3 : 0.22
+  const drop = levelDrop(role, ty, a, b)
+  return (
+    <mesh name={`compliance-${state}`} position={[mid.x, mid.y - drop, mid.z]} quaternion={quat} raycast={() => null}>
+      <boxGeometry args={[Math.max(0.01, len - 0.04), ty + 0.07, tz + 0.07]} />
+      <meshBasicMaterial color={COMPLIANCE_COLOR[state]} transparent opacity={state === 'pass' ? 0.22 : 0.5} depthWrite={false} />
     </mesh>
   )
 }

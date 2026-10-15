@@ -16,6 +16,10 @@ export const ROLE_COLOR: Record<string, string> = {
 
 export const SEL = '#f59e0b'
 
+/** Code-compliance halo colours (Model Space inspector). Near-limit is orange,
+ *  not amber, so it never reads as the amber of the selected member. */
+export const COMPLIANCE_COLOR = { fail: '#dc2626', near: '#ea580c', pass: '#16a34a' } as const
+
 /**
  * What colour one member is drawn in — role, then material, then how hard it is
  * working, then whether it is the selected one.
