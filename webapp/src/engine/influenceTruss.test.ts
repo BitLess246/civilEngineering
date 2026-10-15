@@ -230,3 +230,72 @@ describe('input validation', () => {
     expect(() => buildTruss({ type: 'Pratt', deck: 'through', panels: 7, span: 7, height: 1 })).toThrow(/even/)
   })
 })
+
+// ── custom trusses ─────────────────────────────────────────────────────────
+import { buildTruss as _bt, influenceLines as _il, customInfluenceLines, validateCustom, trussToCustom, buildCustomTruss, mirrorOf as _mirror, type CustomTrussInput } from './influenceTruss'
+
+describe('custom (user-drawn) trusses', () => {
+  it('a parametric truss redrawn as custom gives the same influence lines, member by member', () => {
+    for (const type of ['Pratt', 'Howe', 'Warren'] as const) for (const deck of ['through', 'deck'] as const) {
+      const p = { type, deck, panels: 6, span: 42, height: 7 }
+      const ref = _il(p)
+      const cus = customInfluenceLines(trussToCustom(_bt(p)))
+      expect(cus.positions).toEqual(ref.positions)
+      for (const m of ref.geom.members) {
+        const id = `${m.a}-${m.b}`
+        cus.il[id].forEach((v, k) => expect(v).toBeCloseTo(ref.il[m.id][k], 9))
+      }
+      cus.il.RL.forEach((v, k) => expect(v).toBeCloseTo(ref.il.RL[k], 12))
+    }
+  })
+
+  it('king-post truss: hand statics at the midspan panel point', () => {
+    // A(0,0) pin · M(2,0) · B(4,0) roller · C(2,2); unit load at M
+    const c: CustomTrussInput = {
+      nodes: [{ id: 'A', x: 0, y: 0, support: 'pin' }, { id: 'M', x: 2, y: 0, support: null }, { id: 'B', x: 4, y: 0, support: 'roller' }, { id: 'C', x: 2, y: 2, support: null }],
+      members: [{ a: 'A', b: 'M' }, { a: 'M', b: 'B' }, { a: 'A', b: 'C' }, { a: 'C', b: 'B' }, { a: 'C', b: 'M' }],
+      deck: 'through',
+    }
+    const r = customInfluenceLines(c)
+    const k = r.positions.indexOf(2)
+    expect(r.il['C-M'][k]).toBeCloseTo(1, 12)              // the king post hangs the load
+    expect(r.il['A-C'][k]).toBeCloseTo(-1 / Math.SQRT2, 12) // each rafter: ½ / sin 45°, compression
+    expect(r.il['A-M'][k]).toBeCloseTo(0.5, 12)             // tie: ½ · cot 45°
+    expect(r.il.RL[k]).toBeCloseTo(0.5, 12)
+    expect(_mirror(r.geom, 'A-C')).toBe('C-B')
+    expect(r.geom.members.find((m) => m.id === 'C-M')!.kind).toBe('vertical')
+  })
+
+  it('supports anywhere: an overhanging deck, pin and roller inboard', () => {
+    // a 3-panel bottom chord with the supports at the second and third nodes
+    const c = trussToCustom(_bt({ type: 'Pratt', deck: 'through', panels: 4, span: 16, height: 4 }))
+    c.nodes = c.nodes.map((n) => ({ ...n, support: n.id === 'L1' ? 'pin' : n.id === 'L3' ? 'roller' : null }))
+    const r = customInfluenceLines(c)
+    // reactions by lever about the other support: RL = (12 − x)/8
+    r.positions.forEach((x, k) => expect(r.il.RL[k]).toBeCloseTo((12 - x) / 8, 12))
+    // and the members balance them: ΣFy at each position is the unit load (checked via the pin row)
+    expect(r.il.RL[0]).toBeCloseTo(1.5, 12)
+  })
+
+  it('names what is wrong instead of solving a bad truss', () => {
+    const base: CustomTrussInput = {
+      nodes: [{ id: 'A', x: 0, y: 0, support: 'pin' }, { id: 'B', x: 4, y: 0, support: 'roller' }, { id: 'C', x: 4, y: 3, support: null }, { id: 'D', x: 0, y: 3, support: null }],
+      members: [{ a: 'A', b: 'B' }, { a: 'B', b: 'C' }, { a: 'C', b: 'D' }, { a: 'D', b: 'A' }],
+      deck: 'through',
+    }
+    expect(validateCustom(base).join(' ')).toMatch(/Unstable.*add 1 member/)
+    expect(validateCustom({ ...base, members: [...base.members, { a: 'A', b: 'C' }, { a: 'B', b: 'D' }] }).join(' ')).toMatch(/Indeterminate.*remove 1/)
+    expect(validateCustom({ ...base, nodes: base.nodes.map((n) => ({ ...n, support: 'pin' as const })) }).join(' ')).toMatch(/exactly one pin and one roller/)
+    expect(validateCustom({ ...base, members: [...base.members, { a: 'A', b: 'Z' }] }).join(' ')).toMatch(/does not exist/)
+    expect(validateCustom({ ...base, members: [...base.members, { a: 'A', b: 'C' }] })).toEqual([])
+    // the count is right (m + r = 2j) but C is held only by two collinear
+    // members — nothing resists a vertical load there, a mechanism
+    const mech: CustomTrussInput = {
+      nodes: [{ id: 'A', x: 0, y: 0, support: 'pin' }, { id: 'C', x: 2, y: 0, support: null }, { id: 'B', x: 4, y: 0, support: 'roller' }, { id: 'D', x: 2, y: 2, support: null }],
+      members: [{ a: 'A', b: 'C' }, { a: 'C', b: 'B' }, { a: 'A', b: 'D' }, { a: 'D', b: 'B' }, { a: 'A', b: 'B' }],
+      deck: 'through',
+    }
+    expect(validateCustom(mech)).toEqual([])
+    expect(() => buildCustomTruss(mech)).toThrow(/unstable/)
+  })
+})

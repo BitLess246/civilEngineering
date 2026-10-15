@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import {
   influenceLines, ilAt, ilArea, ilExtremes, memberGroups, memberById, mirrorOf,
-  validateInput, KIND_NAME,
-  type TrussType, type DeckLevel, type MemberKind, type InfluenceResult,
+  validateInput, KIND_NAME, customInfluenceLines, validateCustom, trussToCustom, buildTruss,
+  type TrussType, type DeckLevel, type MemberKind, type InfluenceResult, type CustomTrussInput,
 } from '../engine/influenceTruss'
 import { Card, Num, Pick, ResultCard, Row } from '../components/qty'
 import { DrawingCard } from '../components/calc'
@@ -36,30 +36,69 @@ export function TrussMode() {
   const [w, setW] = useState(10)
   const [a, setA] = useState(0)
   const [b, setB] = useState(42)
+  // the user-drawn truss — seeded from the parametric one the first time
+  // "Custom" is picked, so editing starts from a working truss, not a blank
+  const [custom, setCustom] = useState<CustomTrussInput | null>(null)
+  const isCustom = type === 'Custom'
+  const pickType = (v: TrussType) => {
+    if (v === 'Custom' && !custom) {
+      try { setCustom(trussToCustom(buildTruss({ type: type === 'Custom' ? 'Pratt' : type, deck, panels, span, height }))) } catch { /* bad params: start blank-ish below */ }
+    }
+    setType(v)
+  }
+  const cust: CustomTrussInput = custom ?? { nodes: [], members: [], deck }
 
-  const problems = validateInput({ type, deck, panels, span, height })
+  const problems = isCustom ? validateCustom(cust) : validateInput({ type, deck, panels, span, height })
   // Validated input never throws — the guard below is for the impossible case,
   // and there are deliberately NO hooks after it: the engine is cheap enough
   // (≤ 13 solves of a ≤ 60×60 system) to run inline on every render, the same
   // way the welded-connection page does.
+  let buildError: string | null = null
   const res: InfluenceResult | null = (() => {
-    try { return influenceLines({ type, deck, panels, span, height }) } catch { return null }
+    try { return isCustom ? customInfluenceLines(cust) : influenceLines({ type, deck, panels, span, height }) } catch (e) { buildError = e instanceof Error ? e.message : String(e); return null }
   })()
+
+  const trussCard = (
+    <Card title="Truss">
+      <Pick label="Truss type" value={type} onChange={(v) => pickType(v as TrussType)}
+        options={[['Pratt', 'Pratt — diagonals toward midspan'], ['Howe', 'Howe — diagonals toward the ends'], ['Warren', 'Warren — alternating, with verticals'], ['Custom', 'Custom — draw your own nodes and members']]} />
+      {isCustom ? (
+        <Pick label="Deck level" value={cust.deck} onChange={(v) => setCustom({ ...cust, deck: v as DeckLevel })}
+          options={[['through', 'Through — load on the lowest nodes'], ['deck', 'Deck — load on the highest nodes']]} />
+      ) : <>
+        <Pick label="Deck level" value={deck} onChange={(v) => setDeck(v as DeckLevel)}
+          options={[['through', 'Through — deck on the bottom chord'], ['deck', 'Deck — load on the top chord']]} />
+        <Pick label="Panels" value={String(panels)} onChange={(v) => setPanels(Number(v))}
+          options={[['4', '4 panels'], ['6', '6 panels'], ['8', '8 panels'], ['10', '10 panels'], ['12', '12 panels']]} />
+        <Num label="Span L" unit="m" value={span} onChange={setSpan} min={6} max={120} step="0.5" />
+        <Num label="Depth h" unit="m" value={height} onChange={setHeight} min={1} max={span} step="0.25" />
+      </>}
+    </Card>
+  )
+  const editor = isCustom ? <CustomEditor value={cust} onChange={setCustom}
+    onReset={() => { try { setCustom(trussToCustom(buildTruss({ type: 'Pratt', deck, panels, span, height }))) } catch { /* params invalid */ } }} /> : null
+  const issues = problems.length ? problems : buildError ? [buildError] : []
 
   if (!res) {
     return (
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <ul className="mt-4 list-disc pl-5 text-sm text-fail">
-          {problems.map((p) => <li key={p}>{p}</li>)}
-        </ul>
+        <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+          <div className="space-y-5">{trussCard}{editor}</div>
+          <div role="status" className="rounded-lg border border-fail/40 bg-fail-tint px-4 py-3 text-sm text-fail">
+            <p className="font-semibold">This truss cannot be solved yet:</p>
+            <ul className="mt-1 list-disc pl-5">{issues.map((p) => <li key={p}>{p}</li>)}</ul>
+          </div>
+        </div>
       </div>
     )
   }
 
-  const xc = Math.min(Math.max(x, 0), span)
+  const L = res.geom.span
+  const xc = Math.min(Math.max(x, 0), L)
   const groups = memberGroups(res.geom)
+  const supportOf = (k: 'pin' | 'roller') => res.geom.nodes.find((n) => n.support === k)?.id ?? ''
   const sel: Sel = selId === 'RL' || selId === 'RR'
-    ? { id: selId, label: selId, nodes: selId === 'RL' ? 'pin, L0' : 'roller, Ln', kind: 'reaction' }
+    ? { id: selId, label: selId, nodes: selId === 'RL' ? `pin, ${supportOf('pin')}` : `roller, ${supportOf('roller')}`, kind: 'reaction' }
     : (() => {
         const m = memberById(res.geom, selId)
         return m
@@ -69,8 +108,8 @@ export function TrussMode() {
   const selReal = sel.kind !== 'reaction'
   const ordNow = ilAt(res, sel.id, xc)
   const ext = ilExtremes(res, sel.id)
-  const aEff = Math.min(Math.max(a, 0), span)
-  const bEff = Math.min(Math.max(b, 0), span)
+  const aEff = Math.min(Math.max(a, 0), L)
+  const bEff = Math.min(Math.max(b, 0), L)
   const area = ilArea(res, sel.id, aEff, bEff)
   const fUdl = w * area
   const ordRow = res.il[sel.id]
@@ -80,12 +119,15 @@ export function TrussMode() {
     const g = res.geom
     const m = g.members.length
     const j = g.joints
-    const RLv = (span - xc) / span
+    const RLv = ilAt(res, 'RL', xc)
+    const xp = g.nodes.find((n) => n.support === 'pin')!.x, xr = g.nodes.find((n) => n.support === 'roller')!.x
     const out: SolutionStep[] = [
       {
         title: 'Truss geometry and determinacy',
         lines: [
-          { text: `${g.type} truss, ${g.panels} panels of ${f2(span / g.panels)} m — span ${f2(span)} m, depth ${f2(height)} m, deck at the ${g.deck === 'through' ? 'bottom' : 'top'} chord. The unit load enters at the ${g.deck === 'through' ? 'bottom' : 'top'} panel points, which is where the floor beams sit.` },
+          { text: g.type === 'Custom'
+            ? `Custom truss: ${j} nodes and ${m} members over ${f2(L)} m, depth ${f2(g.height)} m; pin at ${supportOf('pin')}, roller at ${supportOf('roller')}. The unit load walks the ${g.deck === 'through' ? 'lowest' : 'highest'} nodes (${res.labels.join(', ')}).`
+            : `${g.type} truss, ${g.panels} panels of ${f2(L / g.panels)} m — span ${f2(L)} m, depth ${f2(g.height)} m, deck at the ${g.deck === 'through' ? 'bottom' : 'top'} chord. The unit load enters at the ${g.deck === 'through' ? 'bottom' : 'top'} panel points, which is where the floor beams sit.` },
           { tex: `j = ${j},\\; m = ${m},\\; r = 3 \\;\\Rightarrow\\; m + r = ${m + 3} = 2j \\;\\checkmark` },
           { text: 'Statically determinate and stable, so each member force is unique and its influence line is an exact polygon joining the panel-point ordinates.' },
         ],
@@ -93,9 +135,9 @@ export function TrussMode() {
       {
         title: `Reactions under the unit load at x = ${f2(xc)} m`,
         lines: [
-          { text: 'Simply supported on a span L, so the reactions follow from moments about each support — per kN of moving load:' },
-          { tex: `R_L = \\frac{L - x}{L} = \\frac{${f2(span)} - ${f2(xc)}}{${f2(span)}} = ${f3(RLv)}\\text{ kN}` },
-          { tex: `R_R = \\frac{x}{L} = \\frac{${f2(xc)}}{${f2(span)}} = ${f3(1 - RLv)}\\text{ kN}` },
+          { text: 'Moments about each support give the vertical reactions — per kN of moving load, with the pin at x_p and the roller at x_r:' },
+          { tex: `R_L = \\frac{x_r - x}{x_r - x_p} = \\frac{${f2(xr)} - ${f2(xc)}}{${f2(xr)} - ${f2(xp)}} = ${f3(RLv)}\\text{ kN}` },
+          { tex: `R_R = \\frac{x - x_p}{x_r - x_p} = \\frac{${f2(xc)} - ${f2(xp)}}{${f2(xr)} - ${f2(xp)}} = ${f3(1 - RLv)}\\text{ kN}` },
         ],
       },
       {
@@ -132,16 +174,8 @@ export function TrussMode() {
         <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
           {/* ── inputs ── */}
           <div className="space-y-5">
-            <Card title="Truss">
-              <Pick label="Truss type" value={type} onChange={(v) => setType(v as TrussType)}
-                options={[['Pratt', 'Pratt — diagonals toward midspan'], ['Howe', 'Howe — diagonals toward the ends'], ['Warren', 'Warren — alternating, with verticals']]} />
-              <Pick label="Deck level" value={deck} onChange={(v) => setDeck(v as DeckLevel)}
-                options={[['through', 'Through — deck on the bottom chord'], ['deck', 'Deck — load on the top chord']]} />
-              <Pick label="Panels" value={String(panels)} onChange={(v) => setPanels(Number(v))}
-                options={[['4', '4 panels'], ['6', '6 panels'], ['8', '8 panels'], ['10', '10 panels'], ['12', '12 panels']]} />
-              <Num label="Span L" unit="m" value={span} onChange={setSpan} min={6} max={120} step="0.5" />
-              <Num label="Depth h" unit="m" value={height} onChange={setHeight} min={1} max={span} step="0.25" />
-            </Card>
+            {trussCard}
+            {editor}
 
             <Card title="Member" hint={<span className="no-print">or click one in the drawing</span>}>
               <label className="flex flex-col text-sm sm:col-span-2 lg:col-span-3">
@@ -151,13 +185,13 @@ export function TrussMode() {
                     <optgroup key={g.title} label={g.title}>
                       {g.ids.map((id) => {
                         const mm = memberById(res.geom, id)
-                        return <option key={id} value={id}>{mm ? `${mm.label} · ${mm.nodes}` : id === 'RL' ? 'RL · left reaction' : 'RR · right reaction'}</option>
+                        return <option key={id} value={id}>{mm ? `${mm.label} · ${mm.nodes}` : id === 'RL' ? `RL · pin reaction (${supportOf('pin')})` : `RR · roller reaction (${supportOf('roller')})`}</option>
                       })}
                     </optgroup>
                   ))}
                 </select>
                 <span className="mt-0.5 text-[10px] text-faint">
-                  {mirror ? `Mirror member: ${mirror} — its line is this one reflected about midspan.` : 'Self-mirrored about midspan.'}
+                  {mirror ? `Mirror member: ${mirror} — its line is this one reflected about midspan.` : isCustom ? 'No separate mirror member about midspan.' : 'Self-mirrored about midspan.'}
                 </span>
               </label>
             </Card>
@@ -166,12 +200,12 @@ export function TrussMode() {
               <div className="sm:col-span-2 lg:col-span-3">
                 <label className="flex flex-col text-sm">
                   <span className="mb-1 text-[11.5px] font-semibold text-muted">Position x</span>
-                  <input type="range" min={0} max={span} step={span / 400} value={xc}
+                  <input type="range" min={0} max={L} step={L / 400} value={xc}
                     onChange={(e) => setX(parseFloat(e.target.value))} className="w-full accent-brand" />
                 </label>
                 <div className="mt-2 grid grid-cols-2 gap-3">
-                  <Num label="x" unit="m" value={xc} onChange={setX} min={0} max={span} step="0.1" />
-                  <Num label="Panel length" unit="m" value={span / panels} onChange={() => {}} disabled />
+                  <Num label="x" unit="m" value={xc} onChange={setX} min={0} max={L} step="0.1" />
+                  {!isCustom && <Num label="Panel length" unit="m" value={span / panels} onChange={() => {}} disabled />}
                 </div>
                 <p className="mt-1 text-[10px] text-faint">
                   Between panel points the deck beams share the unit load with adjacent floor beams, so the ordinate interpolates linearly.
@@ -181,8 +215,8 @@ export function TrussMode() {
 
             <Card title="Uniform load patch">
               <Num label="w" unit="kN/m" value={w} onChange={setW} min={0} max={100} step="0.5" />
-              <Num label="From a" unit="m" value={a} onChange={setA} min={0} max={span} step="0.5" />
-              <Num label="To b" unit="m" value={b} onChange={setB} min={0} max={span} step="0.5" />
+              <Num label="From a" unit="m" value={a} onChange={setA} min={0} max={L} step="0.5" />
+              <Num label="To b" unit="m" value={b} onChange={setB} min={0} max={L} step="0.5" />
               <p className="text-[10px] text-faint sm:col-span-2 lg:col-span-3">
                 F = w × (area under the influence line over [a, b]) — the force the patch puts in the selected member.
               </p>
@@ -203,7 +237,7 @@ export function TrussMode() {
               <Row label={`Uniform ${f2(w)} kN/m over ${f2(aEff)}–${f2(bEff)} m`} value={`${signed(fUdl)} kN`} sub={`area = ${f3(area)} m`} />
             </ResultCard>
 
-            <DrawingCard title="Truss elevation" meta={`L = ${f2(span)} m · h = ${f2(height)} m · ${panels} panels`}>
+            <DrawingCard title="Truss elevation" meta={isCustom ? `custom · ${res.geom.joints} nodes · ${res.geom.members.length} members · L = ${f2(L)} m` : `L = ${f2(span)} m · h = ${f2(height)} m · ${panels} panels`}>
               <DrawingFrame label="Truss elevation with the unit load at its current position">
                 <TrussFigure res={res} xc={xc} selId={sel.id} onSelect={setSelId} ordAt={(id) => ilAt(res, id, xc)} />
               </DrawingFrame>
@@ -233,7 +267,7 @@ export function TrussMode() {
                 </thead>
                 <tbody>
                   {res.positions.map((px, k) => (
-                    <tr key={k} className={`border-t border-hairline-2 ${Math.abs(px - xc) < span / (panels * 2) ? 'bg-brand-tint' : ''}`}>
+                    <tr key={k} className={`border-t border-hairline-2 ${Math.abs(px - xc) < L / (res.geom.panels * 2) ? 'bg-brand-tint' : ''}`}>
                       <td className="py-1 pr-2 font-mono">{res.labels[k]}</td>
                       <td className="pr-2 font-mono">{f2(px)}</td>
                       <td className="pr-2 text-right font-mono font-semibold">{f3(ordRow[k])}</td>
@@ -397,5 +431,95 @@ function InfluencePlot({ res, id, xc }: { res: InfluenceResult; id: string; xc: 
         textAnchor={xc > res.geom.span / 2 ? 'end' : 'start'}
         fontSize={10} fill="#b45309" fontFamily="'IBM Plex Mono', monospace" fontWeight={600}>{f2(xc)} m → {f3(now)}</text>
     </svg>
+  )
+}
+
+// ── custom truss editor ────────────────────────────────────────────────────
+
+const cell = 'w-full min-w-0 rounded border border-field-line bg-field px-1.5 py-1 font-mono text-[12px] text-ink'
+
+/** Nodes (name, x, y, support) and members (node to node) of a user-drawn truss. */
+function CustomEditor({ value, onChange, onReset }: {
+  value: CustomTrussInput
+  onChange: (c: CustomTrussInput) => void
+  onReset: () => void
+}) {
+  const { nodes, members } = value
+  const setNode = (k: number, patch: Partial<CustomTrussInput['nodes'][number]>) => {
+    const old = nodes[k].id
+    const next = nodes.map((n, i) => (i === k ? { ...n, ...patch } : n))
+    // renaming a node carries its members with it
+    const ms = patch.id !== undefined && patch.id !== old
+      ? members.map((m) => ({ a: m.a === old ? patch.id! : m.a, b: m.b === old ? patch.id! : m.b }))
+      : members
+    onChange({ ...value, nodes: next, members: ms })
+  }
+  const removeNode = (k: number) => {
+    const id = nodes[k].id
+    onChange({ ...value, nodes: nodes.filter((_, i) => i !== k), members: members.filter((m) => m.a !== id && m.b !== id) })
+  }
+  const addNode = () => {
+    let i = nodes.length + 1
+    while (nodes.some((n) => n.id === `N${i}`)) i++
+    const last = nodes[nodes.length - 1]
+    onChange({ ...value, nodes: [...nodes, { id: `N${i}`, x: last ? last.x + 2 : 0, y: last ? last.y : 0, support: null }] })
+  }
+  const setMember = (k: number, patch: Partial<CustomTrussInput['members'][number]>) =>
+    onChange({ ...value, members: members.map((m, i) => (i === k ? { ...m, ...patch } : m)) })
+  const addMember = () => {
+    if (nodes.length < 2) return
+    onChange({ ...value, members: [...members, { a: nodes[0].id, b: nodes[nodes.length - 1].id }] })
+  }
+  const need = 2 * nodes.length - 3
+
+  return (
+    <Card title="Custom truss" hint={<span className="no-print">m + r = 2j: {members.length} + 3 {members.length + 3 === 2 * nodes.length ? '=' : '≠'} {2 * nodes.length}</span>}>
+      <div className="space-y-3 sm:col-span-2 lg:col-span-3">
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[11.5px] font-semibold text-muted">Nodes ({nodes.length})</span>
+            <span className="text-[10px] text-faint">x, y in m · one pin, one roller</span>
+          </div>
+          <div className="grid grid-cols-[1fr_1fr_1fr_1.3fr_auto] gap-1.5 text-[10.5px] text-faint">
+            <span>name</span><span>x</span><span>y</span><span>support</span><span />
+            {nodes.map((n, k) => (
+              <div key={k} className="contents">
+                <input aria-label={`Node ${k + 1} name`} className={cell} value={n.id} onChange={(e) => setNode(k, { id: e.target.value })} />
+                <input aria-label={`Node ${n.id} x`} className={cell} type="number" step="0.5" value={n.x} onChange={(e) => setNode(k, { x: parseFloat(e.target.value) })} />
+                <input aria-label={`Node ${n.id} y`} className={cell} type="number" step="0.5" value={n.y} onChange={(e) => setNode(k, { y: parseFloat(e.target.value) })} />
+                <select aria-label={`Node ${n.id} support`} className={cell} value={n.support ?? ''} onChange={(e) => setNode(k, { support: (e.target.value || null) as 'pin' | 'roller' | null })}>
+                  <option value="">free</option><option value="pin">pin</option><option value="roller">roller</option>
+                </select>
+                <button type="button" onClick={() => removeNode(k)} aria-label={`Remove node ${n.id}`} className="px-1 text-xs text-fail hover:underline">✕</button>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={addNode} className="no-print mt-1.5 rounded-md border border-brand-line bg-brand-tint px-2.5 py-1 text-xs font-semibold text-brand">+ Node</button>
+        </div>
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[11.5px] font-semibold text-muted">Members ({members.length}{need > 0 ? ` of ${need} needed` : ''})</span>
+          </div>
+          <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5 text-[10.5px] text-faint">
+            <span>from</span><span>to</span><span />
+            {members.map((m, k) => (
+              <div key={k} className="contents">
+                {(['a', 'b'] as const).map((end) => (
+                  <select key={end} aria-label={`Member ${k + 1} ${end === 'a' ? 'from' : 'to'}`} className={cell} value={m[end]} onChange={(e) => setMember(k, { [end]: e.target.value })}>
+                    {!nodes.some((n) => n.id === m[end]) && <option value={m[end]}>{m[end] || '—'}</option>}
+                    {nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
+                  </select>
+                ))}
+                <button type="button" onClick={() => onChange({ ...value, members: members.filter((_, i) => i !== k) })} aria-label={`Remove member ${m.a}–${m.b}`} className="px-1 text-xs text-fail hover:underline">✕</button>
+              </div>
+            ))}
+          </div>
+          <div className="no-print mt-1.5 flex gap-2">
+            <button type="button" onClick={addMember} className="rounded-md border border-brand-line bg-brand-tint px-2.5 py-1 text-xs font-semibold text-brand">+ Member</button>
+            <button type="button" onClick={onReset} className="rounded-md border border-hairline px-2.5 py-1 text-xs text-muted hover:text-ink">Reset to a Pratt truss</button>
+          </div>
+        </div>
+      </div>
+    </Card>
   )
 }
