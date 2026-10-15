@@ -1,0 +1,135 @@
+<!doctype html><html><head><meta charset="utf-8">
+<!-- Zeta 9:16 campaign posters (1080×1920). Every image on these is a capture of
+     the running app in marketing/evidence — nothing is mocked up. Rendered by
+     tools/render-posters.mjs; one poster per #id, shown by ?p=<id>. -->
+<link rel="stylesheet" href="../../scripts/showreel/fonts/fonts.css">
+<style>
+:root{--ink:#0f1b2a;--ink2:#15283f;--brand:#0f4c92;--accent:#6ba4dc;--amber:#f2b53a;--fog:#9eb0c5;--paper:#f4f3ef;--white:#f2f5f9;--ok:#1f9d55;--warn:#ea580c;--fail:#dc2626}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1920px;overflow:hidden;background:var(--ink)}
+body{font-family:'Archivo',system-ui,sans-serif;color:var(--white);-webkit-font-smoothing:antialiased}
+.poster{position:absolute;inset:0;display:none;overflow:hidden;background:radial-gradient(1300px 1100px at 50% 40%,#15283f 0%,#0f1b2a 58%,#0a131e 100%)}
+.poster.on{display:block}
+.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(107,164,220,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(107,164,220,.10) 1px,transparent 1px),linear-gradient(rgba(107,164,220,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(107,164,220,.04) 1px,transparent 1px);background-size:180px 180px,180px 180px,36px 36px,36px 36px}
+/* safe zone: content lives in x 90–990, y 150–1640; the bottom 280 px hold only the URL */
+.safe{position:absolute;left:90px;right:90px;top:150px;bottom:280px;display:flex;flex-direction:column;gap:30px}
+.top{position:absolute;left:90px;right:90px;top:70px;display:flex;justify-content:space-between;align-items:center}
+.top img{height:46px}
+.stamp{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:17px;letter-spacing:.12em;color:var(--amber);border:1.5px solid rgba(242,181,58,.55);border-radius:999px;padding:7px 16px}
+.kick{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:22px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber)}
+h1{font-weight:800;font-size:82px;line-height:.98;letter-spacing:-.035em;color:var(--white)}
+h1 em{font-style:normal;color:var(--accent)}
+.lede{font-size:30px;line-height:1.4;color:var(--fog)}
+.card{background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 30px 80px -30px rgba(0,0,0,.7)}
+.card img{display:block;width:100%}
+.crop{position:relative;overflow:hidden;border-radius:18px;background:#f6f7f9;box-shadow:0 30px 80px -30px rgba(0,0,0,.7)}
+.crop img{position:absolute;display:block}
+.row{display:flex;gap:24px}
+.row>*{flex:1}
+.label{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:19px;letter-spacing:.14em;color:var(--accent);margin-bottom:10px}
+.note{font-family:'IBM Plex Mono',monospace;font-size:19px;line-height:1.5;letter-spacing:.02em;color:var(--fog)}
+.note b{color:var(--white);font-weight:600}
+.big{font-weight:800;font-size:56px;letter-spacing:-.03em;line-height:1.05}
+.chips{display:flex;gap:14px;flex-wrap:wrap}
+.chip{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:24px;letter-spacing:.06em;padding:10px 20px;border-radius:999px;border:2px solid}
+.foot{position:absolute;left:90px;right:90px;bottom:150px;display:flex;justify-content:space-between;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:26px;letter-spacing:.08em}
+.foot .url{color:var(--white);font-weight:600}
+.foot .tag{color:var(--fog);font-size:20px}
+.steps{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.step .crop{height:330px}
+.arrow{font-size:40px;color:var(--amber);text-align:center;line-height:1}
+</style></head><body>
+
+<!-- 01 · Introducing Zeta ─────────────────────────────────────────────── -->
+<section class="poster" id="intro"><div class="grid"></div>
+  <div class="top"><img src="../../branding/zeta-logo-paper.svg" alt="Zeta"><span class="stamp">ACTUAL ZETA OUTPUT</span></div>
+  <div class="safe">
+    <div class="kick">Structural engineering, connected</div>
+    <h1>Model. Analyze.<br>Design. <em>Detail.</em><br>Deliver.</h1>
+    <div class="steps">
+      <div class="step"><div class="label">01 · MODEL + ANALYZE</div><div class="crop"><img src="../evidence/model-space/3d-model.png" style="left:-30px;top:-79px;width:470px"></div></div>
+      <div class="step"><div class="label">02 · DESIGN</div><div class="crop"><img src="../evidence/model-space/compliance-3d.png" style="left:-30px;top:-79px;width:470px"></div></div>
+      <div class="step"><div class="label">03 · DETAIL</div><div class="crop"><img src="../evidence/model-space/rebar-cages.png" style="left:-30px;top:-79px;width:470px"></div></div>
+      <div class="step"><div class="label">04 · DELIVER</div><div class="crop" style="background:#fff"><img src="../evidence/reports/framing-plan.png" style="left:8px;top:6px;width:390px"></div></div>
+    </div>
+    <div class="lede">One browser workbench: a 3D frame, its analysis, the design of every member, the reinforcement, the drawings and the bill of quantities. <b style="color:var(--white)">108 tools</b>, built around NSCP 2015.</div>
+  </div>
+  <div class="foot"><span class="url">zetastruct.app</span><span class="tag">2×1-bay, 2-storey frame · one session</span></div>
+</section>
+
+<!-- 02 · 3D Model Space ───────────────────────────────────────────────── -->
+<section class="poster" id="model"><div class="grid"></div>
+  <div class="top"><img src="../../branding/zeta-logo-paper.svg" alt="Zeta"><span class="stamp">ACTUAL ZETA OUTPUT</span></div>
+  <div class="safe">
+    <div class="kick">3D Model Space</div>
+    <h1>From a column grid to a <em>designed frame.</em></h1>
+    <div class="crop" style="height:830px"><img src="../evidence/model-space/compliance-3d.png" style="left:-162px;top:-182px;width:1150px"></div>
+    <div class="chips">
+      <span class="chip" style="color:#fca5a5;border-color:#dc2626">FAIL 0</span>
+      <span class="chip" style="color:#fdba74;border-color:#ea580c">NEAR LIMIT 8</span>
+      <span class="chip" style="color:#86efac;border-color:#1f9d55">PASS 28</span>
+    </div>
+    <div class="note">Every beam, column, slab and footing coloured by its own design check — <b>the default 2×1-bay, 2-storey frame, designed in one click.</b></div>
+  </div>
+  <div class="foot"><span class="url">zetastruct.app</span><span class="tag">Model · Analyze · Design</span></div>
+</section>
+
+<!-- 03 · Concrete design ──────────────────────────────────────────────── -->
+<section class="poster" id="concrete"><div class="grid"></div>
+  <div class="top"><img src="../../branding/zeta-logo-paper.svg" alt="Zeta"><span class="stamp">ACTUAL ZETA OUTPUT</span></div>
+  <div class="safe">
+    <div class="kick">Engineering explained</div>
+    <h1>Why a beam needs bars <em>and</em> stirrups.</h1>
+    <div class="card" style="padding:26px 22px 14px"><img src="../evidence/crops/rc-flexure-diagram.png"></div>
+    <div class="lede" style="font-size:28px">The bottom bars carry the <b style="color:var(--white)">tension</b> bending creates. The stirrups tie the diagonal <b style="color:var(--white)">shear</b> cracks shut. Two jobs, two kinds of steel.</div>
+    <div class="row">
+      <div class="card"><img src="../evidence/crops/beam-card-flexure.png"></div>
+      <div class="card"><img src="../evidence/crops/beam-card-shear.png"></div>
+    </div>
+    <div class="note"><b>300×500 · f′c 28 · fy 415 · 4-⌀20 · Mu 180 kN·m · Vu 150 kN</b><br>Beam Design calculator, checked by hand: φMn 189.4 kN·m, φVn 186.8 kN.</div>
+  </div>
+  <div class="foot"><span class="url">zetastruct.app</span><span class="tag">ACI 318-14 · NSCP 2015</span></div>
+</section>
+
+<!-- 04 · Steel design ─────────────────────────────────────────────────── -->
+<section class="poster" id="steel"><div class="grid"></div>
+  <div class="top"><img src="../../branding/zeta-logo-paper.svg" alt="Zeta"><span class="stamp">ACTUAL ZETA OUTPUT</span></div>
+  <div class="safe">
+    <div class="kick">Design check</div>
+    <h1>Can this steel beam <em>pass?</em></h1>
+    <div class="card" style="padding:22px 18px 6px"><img src="../evidence/crops/steel-elevation.png"></div>
+    <div class="card" style="padding:22px 18px 10px"><img src="../evidence/crops/steel-ltb-curve.png"></div>
+    <div class="row" style="align-items:center">
+      <div class="card" style="flex:0 0 430px"><img src="../evidence/crops/steel-card-flexure.png"></div>
+      <div><div class="big" style="color:#fca5a5">No — 147 %.</div><div class="lede" style="font-size:27px;margin-top:12px">Braced at 2 m, the flange buckles sideways first. Brace closer or go deeper.</div></div>
+    </div>
+    <div class="note"><b>W310×38.7 · 6 m span · Lb 2 m · Fy 345 MPa · Mu 261 kN·m</b><br>φbMn 178.0 kN·m — AISC beam chart 180.9 (Zeta 1.6 % lower, the conservative side).</div>
+  </div>
+  <div class="foot"><span class="url">zetastruct.app</span><span class="tag">AISC 360-16 §F2</span></div>
+</section>
+
+<!-- 05 · From model to deliverable ────────────────────────────────────── -->
+<section class="poster" id="deliver"><div class="grid"></div>
+  <div class="top"><img src="../../branding/zeta-logo-paper.svg" alt="Zeta"><span class="stamp">ACTUAL ZETA OUTPUT</span></div>
+  <div class="safe" style="gap:22px">
+    <div class="kick">From calculation to deliverable</div>
+    <h1>The design doesn't end at the <em>check.</em></h1>
+    <div class="label">REINFORCEMENT, DRAWN FROM THE DESIGN</div>
+    <div class="crop" style="height:440px;margin-top:-12px"><img src="../evidence/model-space/rebar-cages.png" style="left:-150px;top:-240px;width:1170px"></div>
+    <div class="row" style="align-items:flex-start">
+      <div><div class="label">FRAMING PLAN</div><div class="card" style="padding:8px"><img src="../evidence/reports/framing-plan.png"></div></div>
+      <div><div class="label">GENERAL NOTES SHEET</div><div class="card" style="padding:8px"><img src="../evidence/reports/general-notes-sheet.png"></div></div>
+    </div>
+    <div class="label" style="margin-bottom:-10px">QUANTITIES</div>
+    <div class="crop" style="height:74px;background:#f4f3ef"><img src="../evidence/reports/boq-totals.png" style="left:0;top:0;width:1800px"></div>
+    <div class="crop" style="height:74px;background:#f4f3ef;margin-top:-14px"><img src="../evidence/reports/boq-totals.png" style="left:-900px;top:0;width:1800px"></div>
+    <div class="note"><b>Same session, same frame:</b> bars for every member, the plan and schedules, and the quantities priced with your own unit costs.</div>
+  </div>
+  <div class="foot"><span class="url">zetastruct.app</span><span class="tag">Detail · Draw · Quantify</span></div>
+</section>
+
+<script>
+const id = new URLSearchParams(location.search).get('p') || 'intro'
+document.getElementById(id).classList.add('on')
+</script>
+</body></html>
