@@ -69,6 +69,7 @@ describe('the routes PUBLIC_ROUTES promises', () => {
       '/', '/signin', '/signup', '/forgot-password', '/reset-password',
       '/terms', '/privacy', '/refunds', '/contact', '/profile',
       '/steel', '/geotech', '/hydrostatics', '/dynamics', '/surveying', '/geometric-design', '/eng-economy',
+      '/codes/:id',   // one Code Library provision; the library itself is in the catalogue
     ])
     for (const r of PUBLIC_ROUTES) {
       expect(tools.has(r) || known.has(r), `PUBLIC_ROUTES promises ${r}, which is neither a tool nor a known page`).toBe(true)

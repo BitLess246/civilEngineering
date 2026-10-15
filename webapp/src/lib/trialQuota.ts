@@ -88,6 +88,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
   // blank shell AND was told the route was freely readable. It now 404s like
   // any other wrong address; add it back the day the page ships.
   '/', '/docs', '/validation', '/pricing',
+  // the Code Library is reference reading — free, like the docs
+  '/codes', '/codes/:id',
   // A REDIRECT STUB, not a calculator: /bolted-connection now bounces to
   // /steel, which is where the run gets charged. Leaving it unclassified made
   // it members-only by default, so a guest following an old link hit a wall

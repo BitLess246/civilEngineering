@@ -101,6 +101,7 @@ const Trigonometry = lazy(() => import('./pages/Trigonometry'))
 const SphericalTriangle = lazy(() => import('./pages/SphericalTriangle'))
 const Drafting3D = lazy(() => import('./pages/Drafting3D'))
 const Documentation = lazy(() => import('./pages/Documentation'))
+const CodeLibrary = lazy(() => import('./pages/CodeLibrary'))
 const Validation = lazy(() => import('./pages/Validation'))
 const Terms = lazy(() => import('./pages/legal/Terms'))
 const Privacy = lazy(() => import('./pages/legal/Privacy'))
@@ -261,6 +262,8 @@ export default function App() {
             <Suspense fallback={<RouteLoading />}>
             <Routes>
         <Route path="/docs" element={<Documentation />} />
+        <Route path="/codes" element={<CodeLibrary />} />
+        <Route path="/codes/:id" element={<CodeLibrary />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/refunds" element={<Refunds />} />

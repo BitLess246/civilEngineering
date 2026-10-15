@@ -256,6 +256,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolRef[] = [
   { route: '/estimate/chb', name: 'CHB Wall', sub: 'Block count', group: 'Estimates' },
   { route: '/estimate/box-culvert', name: 'Box Culvert', sub: 'Culvert estimate', group: 'Estimates' },
   { route: '/docs', name: 'Documentation', sub: 'User guide', group: 'Reference' },
+  { route: '/codes', name: 'Code Library', sub: 'NSCP visualizer', group: 'Reference' },
   { route: '/validation', name: 'Validation', sub: 'Engine vs hand calc', group: 'Reference' },
   { route: '/pricing', name: 'Plans', sub: 'Pricing · PHP', group: 'Reference' },
   { route: '/rigid-pavement', name: 'Rigid Pavement', sub: 'AASHTO 93 · D-slab · J', group: 'Transportation' },
