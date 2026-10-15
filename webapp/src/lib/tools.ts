@@ -9,6 +9,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     label: 'Reference',
     tools: [
       { to: '/docs', name: 'Documentation', sub: 'User guide' },
+      { to: '/codes', name: 'Code Library', sub: 'NSCP visualizer' },
       { to: '/validation', name: 'Validation', sub: 'Engine vs hand calc' },
       { to: '/pricing', name: 'Plans', sub: 'Pricing · PHP' },
     ],
@@ -206,7 +207,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = (() => {
 export const ALL_TOOLS: (ToolDef & { groupLabel: string })[] =
   SIDEBAR_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, groupLabel: g.label })))
 
-/** The Reference group (docs, validation, pricing) is pages, not tools. */
+/** The Reference group (docs, code library, validation, pricing) is pages, not tools. */
 export const isReferenceGroup = (label: string): boolean => label === 'Reference'
 
 /** How many TOOLS the app has — every catalogue entry except the Reference

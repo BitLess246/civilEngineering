@@ -100,6 +100,40 @@ export const SHELL_TOOLS: DocTool[] = [
     ],
   },
   {
+    id: 'code-library',
+    name: 'Code Library',
+    route: '/codes',
+    group: 'Reference',
+    summary: 'The NSCP visualizer: code provisions explained with a live diagram, the equations term by term, the checks, a worked example from Zeta\u2019s own engine, and the calculator that applies them.',
+    sections: [
+      {
+        id: 'codes-shelf',
+        title: 'Finding a provision',
+        controls: [
+          { kind: 'field', name: 'Search', what: 'Matches a topic, a symbol name or a clause number (e.g. "409.6"). Every word must match; title hits rank first.' },
+          { kind: 'choice', name: 'Edition', what: 'The code edition the provisions cite. NSCP 2015 is the edition Zeta implements.' },
+          { kind: 'button', name: 'Provision card', what: 'Opens the provision. Shelves with no provisions yet are marked planned.' },
+        ],
+        notes: ['Bookmarks and recently viewed provisions are kept in this browser only.'],
+      },
+      {
+        id: 'codes-provision',
+        title: 'A provision page',
+        controls: [
+          { kind: 'button', name: 'Diagram layers', what: 'Toggle the stirrup, bars, neutral axis, compression block, strain profile and C–T couple of the beam section.' },
+          { kind: 'field', name: 'Try it inputs', what: 'Change the beam (b, h, bars, f′c, fy, Mu or Vu and the stirrups); the diagram, checks and worked example all follow.' },
+          { kind: 'button', name: 'Variable chips', what: 'Under each equation. Click one to see its meaning, unit, role and current value, and to highlight it in the diagram.' },
+          { kind: 'button', name: '☆ Bookmark', what: 'Keeps the provision on the library\u2019s Bookmarked shelf.' },
+          { kind: 'button', name: 'Open Beam Design →', what: 'Opens the calculator that applies the provision.' },
+        ],
+        notes: [
+          'ENGINE-MATCHED means the equation shown is exactly what Zeta evaluates and a test holds the worked example to the engine. It does not mean the provision has been reviewed against an authorized copy of the code.',
+          'The explanations are Zeta\u2019s own words with clause references; the code text itself is not reproduced.',
+        ],
+      },
+    ],
+  },
+  {
     id: 'documentation',
     name: 'Documentation',
     route: '/docs',

@@ -24,6 +24,8 @@ export const DOC_TOOLS: DocTool[] = [
  * page — it only passes for routes deliberately folded into a parent.
  */
 export const DOC_ROUTE_ALIASES: Record<string, string> = {
+  // one provision of the Code Library is documented with the library itself
+  '/codes/:id': 'code-library',
   // Steel Design split into four pages; /steel is a stub that lands on the beam
   '/steel': 'steel-beam',
   // the geotechnical index was navigation only; the route now redirects
