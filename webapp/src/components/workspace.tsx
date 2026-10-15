@@ -14,6 +14,7 @@
 // document — so on a phone the answer comes straight after the inputs.
 // ─────────────────────────────────────────────────────────────────────────
 import { useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { ExportPdfButton } from './ExportPdfButton'
 import type { CalcReportData } from './ReportControls'
 import type { LetterheadState } from './calc'
@@ -144,7 +145,7 @@ export interface CheckPair { label: string; value: string }
  * when the check has a demand/capacity ratio — the utilization with its bar,
  * and the demand/allowable pair underneath.
  */
-export function CheckCard({ title, basis, status, value, unit, formula, ratio, ratioLabel = 'Utilization', pairs, pillLabel }: {
+export function CheckCard({ title, basis, status, value, unit, formula, ratio, ratioLabel = 'Utilization', pairs, pillLabel, explain }: {
   title: string
   /** The governing case or the basis of the number ("D + Lr", "Zone 1"). */
   basis?: string
@@ -157,6 +158,8 @@ export function CheckCard({ title, basis, status, value, unit, formula, ratio, r
   ratioLabel?: string
   pairs?: CheckPair[]
   pillLabel?: string
+  /** The Code Library page that explains this check, opened with this calculator's numbers. */
+  explain?: string
 }) {
   return (
     // data-pdf-card-*: the PDF export prints each card as one table row
@@ -198,6 +201,12 @@ export function CheckCard({ title, basis, status, value, unit, formula, ratio, r
             </div>
           ))}
         </dl>
+      )}
+      {explain && (
+        // A new tab: the calculator keeps its inputs, which live only in memory.
+        <Link to={explain} target="_blank" rel="noopener" data-pdf-skip="" className="mt-2.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand hover:underline">
+          Explain this check ↗
+        </Link>
       )}
     </section>
   )

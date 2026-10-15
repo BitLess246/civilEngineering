@@ -18,10 +18,14 @@ import { RebarRanking } from '../components/RebarRanking'
 import { buildRebarSelectionSolution, withRebarSelection } from '../lib/rebarSolution'
 import { Num, Pick } from '../components/qty'
 import { InputGroup, CheckCard, ResultsTable, type ResultRow } from '../components/workspace'
+import { codeLink, codeReferenceStep } from '../lib/codes/links'
 import { WorkspacePage } from '../components/WorkspacePage'
 import { Math as KTex } from '../lib/math'
 import { f0, f1, f2 } from '../lib/format'
 import { usePublishPageSnapshot, type PageSnapshot } from '../lib/ai/pageContext'
+
+/** The Code Library provisions this calculator applies — listed in its report. */
+const BEAM_PROVISIONS = ['rc-beam-flexure', 'rc-beam-phi', 'rc-beam-min-steel', 'rc-beam-shear']
 
 interface FormState extends BeamDesignInput { fyt: number; legs: number; comprBarDia: number }
 
@@ -231,7 +235,7 @@ export default function BeamDesign() {
   const solution = useMemo(
     () => (r
       ? withRebarSelection(
-          buildBeamSolution({ ...fd, ...demand }, r),
+          [...buildBeamSolution({ ...fd, ...demand }, r), codeReferenceStep(BEAM_PROVISIONS)],
           selection ? buildRebarSelectionSolution(selection, 'cage') : [],
         )
       : null),
@@ -266,9 +270,15 @@ export default function BeamDesign() {
   // passing one — on a sheet an engineer signs.
   const allOK = !!r && sectionOK(r) && (!deflection || (deflection.liveOK && deflection.totalOK))
   const cap = r ? beamProvidedCapacities(fd, r) : null
-  const checks: VerdictCheck[] = r && cap ? [
-    { name: 'Flexure Mu/φMn', ratio: demand.Mu / cap.phiMn },
-    { name: 'Shear Vu/φVn', ratio: demand.Vu / cap.phiVn },
+  // "Explain this check": the Code Library page, loaded with THIS beam.
+  const explainAt = (id: string) => r ? codeLink(id, {
+    b: fd.b, h: fd.h, cover: fd.cover, stirrupDia: fd.stirrupDia, nBars: r.bars, barDia: fd.barDia,
+    fc: fd.fc, fy: fd.fy, fyt: fd.fyt, Mu: demand.Mu, Vu: demand.Vu, legs: fd.legs,
+    ...(r.sAdopt > 0 ? { s: r.sAdopt } : {}),
+  }, { route: '/beam-design', label: 'Beam Design', layers: r.layers.length }) : undefined
+  const checks: (VerdictCheck & { explain?: string })[] = r && cap ? [
+    { name: 'Flexure Mu/φMn', ratio: demand.Mu / cap.phiMn, explain: explainAt('rc-beam-flexure') },
+    { name: 'Shear Vu/φVn', ratio: demand.Vu / cap.phiVn, explain: explainAt('rc-beam-shear') },
     { name: `Bar spacing (${r.layers.length} layer${r.layers.length > 1 ? 's' : ''})`, ratio: r.sMinClear / Math.max(r.sClear, 1e-9) },
     deflection
       // §409.3.1.1: the computed check is waived when h ≥ h_min, so a waived
@@ -520,7 +530,7 @@ export default function BeamDesign() {
           <CheckCard key={c.name} title={c.name} basis={c.ratio === null ? 'not run' : 'ACI 318-14 / NSCP 2015'}
             status={c.ratio === null ? 'info' : c.ratio <= 1.0001 ? 'pass' : 'fail'} pillLabel={c.ratio === null ? 'NOT RUN' : undefined}
             value={c.ratio === null ? '—' : f2(c.ratio)} formula={c.ratio === null ? c.note : undefined}
-            ratio={c.ratio ?? undefined} ratioLabel="Utilization" />
+            ratio={c.ratio ?? undefined} ratioLabel="Utilization" explain={c.explain} />
         ))}
       </> : (
         <CheckCard title="Check the inputs" basis="beam section" status="warn" pillLabel="CHECK" value="—" formula={detailingNotes(f)[0] ?? 'Enter a valid section.'} />
