@@ -2219,10 +2219,26 @@ function designFromRuns(
     const cs = footSec(p.corners[0])
     const extX = cc.some((q) => Math.abs(q.x - xMin) < 1e-4) || cc.some((q) => Math.abs(q.x - xMax) < 1e-4)
     const extZ = cc.some((q) => Math.abs(q.z - zMin) < 1e-4) || cc.some((q) => Math.abs(q.z - zMax) < 1e-4)
+    // The edge beams stiffening each direction's column strip: the members on
+    // the two panel edges PARALLEL to that span (corner 0→1 is 'x'), the
+    // weaker one governing. An edge with no single member on it (split by a
+    // plate mesh, or open) credits no beam in that direction.
+    const edgeMember = (a: string, b: string) => {
+      const m = model.members.find((q) => (q.i === a && q.j === b) || (q.i === b && q.j === a))
+      const sc = m ? secById.get(m.section) : undefined
+      return sc && sc.material !== 'steel' && sc.material !== 'wood' ? { b: sc.b, h: sc.h } : undefined
+    }
+    const weaker = (u?: { b: number; h: number }, v?: { b: number; h: number }) =>
+      u && v ? (u.b * u.h ** 3 <= v.b * v.h ** 3 ? u : v) : undefined
+    const [k0, k1, k2, k3] = p.corners
+    const edgeBeams = {
+      x: weaker(edgeMember(k0, k1), edgeMember(k3, k2)),
+      y: weaker(edgeMember(k0, k3), edgeMember(k1, k2)),
+    }
     const sin = {
       lx, ly: lz, colWidth: Math.min(cs.b, cs.h), D: areaD, L: areaL,
       fc: cs.fc, fy: cs.fy, h: p.thickness, cover: 20, barDia: 12,
-      exterior: { x: extX, y: extZ }, withBeams: true,
+      exterior: { x: extX, y: extZ }, withBeams: true, edgeBeams,
     }
     // One diameter for the panel, spacing per strip. The 12 above is only a
     // seed for the degenerate path — the search replaces it.
