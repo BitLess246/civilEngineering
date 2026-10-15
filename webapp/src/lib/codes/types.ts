@@ -100,7 +100,7 @@ export interface WalkStep { title: string; text: string; tex?: string; layers: B
 export interface CalculatorLink { to: string; label: string }
 
 /** Which kind of worked example — and so which inputs and diagrams — a provision uses. */
-export type ProvisionFamily = 'rc-beam' | 'steel' | 'loads' | 'punching'
+export type ProvisionFamily = 'rc-beam' | 'steel' | 'loads' | 'punching' | 'footing-shear'
 
 /** A rolled steel member checked under AISC 360-16 (NSCP 2015 Chapter 5). Units: mm, MPa, m, kN, kN·m. */
 export interface SteelExampleInput {
@@ -129,6 +129,17 @@ export interface PunchingExampleInput {
   Pu: number; qu: number
 }
 
+/**
+ * A spread footing checked for one-way (beam) shear in one direction. `L` is
+ * its plan length in the direction the shear acts, `B` the width the section
+ * crosses (a square pad: B = L), `c` the column's dimension along L. Units:
+ * m for the plan, mm for the section, MPa, kPa.
+ */
+export interface FootingShearInput {
+  B: number; L: number; c: number; h: number; d: number
+  fc: number; lambda: number; qu: number
+}
+
 /** Service load effects to be combined, in any one consistent unit. */
 export interface LoadExampleInput { D: number; L: number; Lr: number; W: number; E: number }
 
@@ -146,6 +157,7 @@ export type DiagramKind =
   | 'steel-ltb-curve' | 'steel-shear-web' | 'steel-column-curve'
   | 'load-combos'
   | 'punching-perimeter'
+  | 'footing-one-way'
 
 interface ProvisionBase {
   id: string
@@ -190,7 +202,8 @@ export type RcBeamProvision = ProvisionOf<'rc-beam', BeamExampleInput>
 export type SteelProvision = ProvisionOf<'steel', SteelExampleInput>
 export type LoadsProvision = ProvisionOf<'loads', LoadExampleInput>
 export type PunchingProvision = ProvisionOf<'punching', PunchingExampleInput>
-export type Provision = RcBeamProvision | SteelProvision | LoadsProvision | PunchingProvision
+export type FootingShearProvision = ProvisionOf<'footing-shear', FootingShearInput>
+export type Provision = RcBeamProvision | SteelProvision | LoadsProvision | PunchingProvision | FootingShearProvision
 
 // The provision's own input type travels with it, but a caller holding the
 // UNION cannot name it. These run a provision on an input the page built from
