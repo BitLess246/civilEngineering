@@ -241,6 +241,25 @@ function footingBearing(
  * take its lines from every node, so on a 2×1-bay frame the details named
  * columns A3 and B3 on a plan whose grid has no line 3.
  */
+const ORD_WORD = ['Ground', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh',
+  'Eighth', 'Ninth', 'Tenth', 'Eleventh', 'Twelfth']
+const suffix = (n: number) => (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')
+
+/**
+ * The name of a level, counted from the model's base (k = 0) up to its top
+ * (k = top). Philippine (and US) practice: the base is the GROUND floor, at
+ * grade — the plans put ±0.00 there — so the first framed level is the SECOND
+ * floor, and the topmost framed level is the ROOF. They used to be named one
+ * floor low and without a roof: on a two-storey frame the slab at EL 3.50 was
+ * the "Ground Floor framing plan" and the roof at 6.50 the "Second Floor".
+ */
+export function levelName(k: number, top: number): string {
+  if (k <= 0) return 'Ground Floor'
+  if (k >= top) return 'Roof'
+  const n = k + 1
+  return `${ORD_WORD[n - 1] ?? `${n}${suffix(n)}`} Floor`
+}
+
 export function modelGrid(model: StructuralModel): {
   floorOf: (y: number) => string
   gridRef: (x: number, z: number) => string
@@ -248,17 +267,12 @@ export function modelGrid(model: StructuralModel): {
 } {
   const round6 = (v: number) => Math.round(v * 1e6) / 1e6
   const levels = [...new Set(model.nodes.map((n) => round6(n.y)))].sort((a, b) => a - b)
-  const ORD = ['GROUND', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'SEVENTH',
-    'EIGHTH', 'NINTH', 'TENTH', 'ELEVENTH', 'TWELFTH']
   const { xs, zs } = planGridLines(model)
   // The nearest line: a column off the grid takes the line it is closest to.
   const nearest = (v: number, at: number[]) => at.reduce((k, x, i) => (Math.abs(x - v) < Math.abs(at[k] - v) ? i : k), 0)
   return {
     levels,
-    floorOf: (y) => {
-      const k = levels.indexOf(round6(y))
-      return k <= 0 ? 'BASE' : `${ORD[k - 1] ?? `${k}TH`} FLOOR`
-    },
+    floorOf: (y) => levelName(Math.max(0, levels.indexOf(round6(y))), levels.length - 1).toUpperCase(),
     gridRef: (x, z) => `${String.fromCharCode(65 + nearest(x, xs))}${1 + nearest(z, zs)}`,
   }
 }

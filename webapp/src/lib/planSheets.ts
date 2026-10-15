@@ -31,7 +31,7 @@ const SLAB_COVER = 20
 import {
   footingsForPlan, footingDetailBundles,
   slabOpeningBundles, wallDetailBundles, frameElevationBundles,
-  columnStackBundles, isRcSection,
+  columnStackBundles, isRcSection, levelName,
   type SoilInput,
 } from './planDetails'
 import { buildFrameElevation } from '../engine/frameElevation'
@@ -73,9 +73,9 @@ export interface SheetSetOptions {
   sheetRefs?: Partial<Record<SheetGroup, string>>
 }
 
-const FLOOR_ORD = ['Ground', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth', 'Eleventh', 'Twelfth']
-/** Framed-level ordinal (1 = first floor above the base) → floor name. */
-export function floorName(k: number): string { return `${FLOOR_ORD[k - 1] ?? `${k}th`} Floor` }
+/** Framed-level ordinal (1 = first level above the base) → its name, given
+ *  how many framed levels there are: the top one is the roof (`levelName`). */
+export function floorName(k: number, framed = Infinity): string { return levelName(k, framed) }
 
 const REF: Record<SheetGroup, string> = {
   'General notes': GENERAL_NOTES_REF,
@@ -112,7 +112,7 @@ export function planSheets(model: StructuralModel, design: StructureDesign | nul
   const floors = ys.slice(1)                       // skip the base (foundation)
   const idxs = floors.length ? floors.map((_, i) => i + 1) : [1]
   idxs.forEach((level, i) => {
-    const name = floorName(level)
+    const name = floorName(level, floors.length || 1)
     // One sheet, S-03, a detail per floor — numbering a sheet per floor ran
     // into S-04, the frame elevations, from the second floor up.
     const d = buildPlan(model, {
