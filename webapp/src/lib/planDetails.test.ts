@@ -273,7 +273,9 @@ describe('modelGrid — the plan bubbles\' naming', () => {
   it('letters the lines along x and numbers the rows along z, as buildPlan bubbles them', () => {
     // 3 × 2 lines: A–C across x, 1–2 down z. There is no line 3 and no line D.
     const model = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.5, 3], section, slabThickness: 150 })
-    const { gridRef } = modelGrid(model)
+    const { gridRef, floorOf } = modelGrid(model)
+    // and the levels the column details label: grade, the slab, the roof
+    expect([0, 3.5, 6.5].map(floorOf)).toEqual(['GROUND FLOOR', 'SECOND FLOOR', 'ROOF'])
     expect(gridRef(0, 0)).toBe('A1')
     expect(gridRef(12, 0)).toBe('C1')
     expect(gridRef(6, 5)).toBe('B2')

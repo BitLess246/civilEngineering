@@ -195,7 +195,7 @@ export interface PlanOptions {
   foundingElev?: number
   /** Foundation plan: numbered notes printed under the schedules. */
   notes?: string[]
-  /** Full sheet title override, e.g. 'GROUND FLOOR FRAMING PLAN'. */
+  /** Full sheet title override, e.g. 'SECOND FLOOR FRAMING PLAN'. */
   title?: string
 }
 

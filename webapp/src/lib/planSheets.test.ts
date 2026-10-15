@@ -26,10 +26,21 @@ function full() {
 }
 
 describe('floorName', () => {
-  it('names the framed levels in order and falls back past the table', () => {
-    expect(floorName(1)).toBe('Ground Floor')
-    expect(floorName(3)).toBe('Third Floor')
-    expect(floorName(20)).toBe('20th Floor')
+  it('counts from the ground floor at the base: the first framed level is the second floor, the top one the roof', () => {
+    expect(floorName(1)).toBe('Second Floor')
+    expect(floorName(2)).toBe('Third Floor')
+    expect(floorName(2, 2)).toBe('Roof')
+    expect(floorName(1, 1)).toBe('Roof')
+    expect(floorName(19)).toBe('20th Floor')
+    expect(floorName(20)).toBe('21st Floor')
+    expect(floorName(21)).toBe('22nd Floor')
+    expect(floorName(10)).toBe('Eleventh Floor')
+    expect(floorName(12)).toBe('13th Floor')
+  })
+
+  it('titles a two-storey frame\'s framing plans Second Floor and Roof', () => {
+    const titles = planSheets(full().model, null, soil).filter((s) => s.key.startsWith('framing-')).map((s) => s.title)
+    expect(titles).toEqual(['Second Floor framing plan', 'Roof framing plan'])
   })
 })
 
