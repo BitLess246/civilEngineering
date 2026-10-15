@@ -1,18 +1,26 @@
 // Code Library registry — every provision, the shelves, and search.
 import { RC_BEAM_PROVISIONS } from './rcBeam'
-import type { CodeCategory, Provision } from './types'
+import { STEEL_PROVISIONS } from './steel'
+import { LOADS_PROVISIONS } from './loads'
+import type { CodeCategory, Provision, RcBeamProvision } from './types'
 import { CATEGORY_LABEL } from './types'
 
 export * from './types'
 export { DEFAULT_BEAM } from './rcBeam'
 
-export const PROVISIONS: Provision[] = [...RC_BEAM_PROVISIONS]
+export const PROVISIONS: Provision[] = [...RC_BEAM_PROVISIONS, ...STEEL_PROVISIONS, ...LOADS_PROVISIONS]
 
 export const CODE_EDITIONS = [
   { id: 'NSCP 2015', available: true },
 ] as const
 
 export const provisionById = (id: string): Provision | undefined => PROVISIONS.find((p) => p.id === id)
+
+/** An RC-beam provision by id — narrowed, so its example can be run on a beam. */
+export const rcBeamProvision = (id: string): RcBeamProvision | undefined => {
+  const p = provisionById(id)
+  return p?.family === 'rc-beam' ? p : undefined
+}
 
 /** Shelves in display order, with the provisions on each (empty shelves are "planned"). */
 export function shelves(): { category: CodeCategory; label: string; items: Provision[] }[] {

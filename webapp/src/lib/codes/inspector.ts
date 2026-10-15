@@ -19,6 +19,7 @@ import type { StructuralModel } from '../../engine/model'
 import type { StructureDesign } from '../../engine/pipeline'
 import { memberRows, memberSection, type MemberKind } from '../modelMemberResults'
 import { beamProvidedCapacities } from '../beamSolution'
+import { shapeByName } from '../../engine/aiscSections'
 import { codeLink } from './links'
 
 export type InspectState = 'pass' | 'near' | 'fail' | 'unrated'
@@ -116,6 +117,35 @@ function beamChecks(model: StructuralModel, d: StructureDesign, id: string): { c
   return { checks, util: us.length ? Math.max(...us) : null }
 }
 
+/** Steel beams and columns itemise their checks; W-shapes link to the §F/§G/§E provisions. */
+function steelChecks(model: StructuralModel, d: StructureDesign, kind: 'steelBeam' | 'steelColumn', id: string): InspectedCheck[] {
+  const sec = memberSection(model, id)
+  const Fy = sec?.steelFy ?? 248                     // the pipeline's own default
+  const isW = (shape: string) => shapeByName(shape)?.family === 'W'
+  const from = { route: '/model', label: `Model Space · ${id}` }
+  if (kind === 'steelBeam') {
+    const r = d.steelBeams.find((b) => b.id === id)
+    if (!r) return []
+    // the pipeline checks a steel beam over its full length at Cb = 1 (Lb in mm on the row)
+    const ex = isW(r.shape) ? { shape: r.shape, Fy, Lb: r.Lb / 1000, Cb: 1, Mu: Math.abs(r.Mu), Vu: Math.abs(r.Vu) } : undefined
+    return [
+      { name: `Flexure, §${r.clause}`, clause: `NSCP 2015 §506 · AISC 360-16 §${r.clause}`, util: r.utilM, state: stateOf(r.utilM <= 1 + 1e-9, r.utilM),
+        ...(ex ? { explain: codeLink('steel-beam-flexure', ex, from) } : {}) },
+      { name: `Shear, §${r.shearClause ?? 'G2.1'}`, clause: `NSCP 2015 §507 · AISC 360-16 §${r.shearClause ?? 'G2.1'}`, util: r.utilV, state: stateOf(r.utilV <= 1 + 1e-9, r.utilV),
+        ...(ex && (r.shearClause ?? 'G2.1') === 'G2.1' ? { explain: codeLink('steel-beam-shear', ex, from) } : {}) },
+      { name: 'Deflection, L/240 (simply supported bound)', clause: 'NSCP 2015 §424 serviceability', util: r.deflLim > 0 ? r.defl / r.deflLim : null, state: pass(r.deflOK) },
+    ]
+  }
+  const r = d.steelColumns.find((c) => c.id === id)
+  if (!r) return []
+  const uP = r.phiPn > 1e-9 ? Math.abs(r.Pu) / r.phiPn : null
+  return [
+    { name: 'Compression, φcPn', clause: 'NSCP 2015 §505 · AISC 360-16 §E3', util: uP, state: stateOf(uP === null ? null : uP <= 1 + 1e-9, uP),
+      ...(isW(r.shape) ? { explain: codeLink('steel-column-compression', { shape: r.shape, Fy, L: r.L, Kx: r.Kx, Ky: r.Ky, Pu: Math.abs(r.Pu) }, from) } : {}) },
+    { name: `Axial + bending, §H1-1 (${r.equation})`, clause: 'NSCP 2015 §508 · AISC 360-16 §H1-1', util: r.ratio, state: stateOf(r.ok, r.ratio) },
+  ]
+}
+
 const KINDS: MemberKind[] = ['beam', 'column', 'steelBeam', 'steelColumn', 'slab', 'footing', 'combined']
 
 /** Every designed member as code checks, worst first (fail → near → pass → unrated, then by utilisation). */
@@ -131,8 +161,10 @@ export function inspectDesign(model: StructuralModel, d: StructureDesign): Inspe
         continue
       }
       const state = stateOf(r.ok, r.util)
-      out.push({ id: r.id, kind, kindLabel: KIND_LABEL[kind], section: r.section, detail: r.detail, util: r.util, state,
-        checks: [{ ...KIND_CLAUSE[kind], util: r.util, state }] })
+      const checks = kind === 'steelBeam' || kind === 'steelColumn'
+        ? steelChecks(model, d, kind, r.id)
+        : [{ ...KIND_CLAUSE[kind], util: r.util, state }]
+      out.push({ id: r.id, kind, kindLabel: KIND_LABEL[kind], section: r.section, detail: r.detail, util: r.util, state, checks })
     }
   }
   return out.sort((a, b) => RANK[a.state] - RANK[b.state] || (b.util ?? -1) - (a.util ?? -1))

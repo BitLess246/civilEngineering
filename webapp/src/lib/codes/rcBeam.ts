@@ -8,7 +8,7 @@
 // Units: mm, MPa, kN, kN·m.
 import { rectCapacity, beta1, phiFromStrain, rhoMin } from '../../engine/flexure'
 import { oneWayVc } from '../../engine/shear'
-import type { BeamExampleInput, CodeRef, Provision, ExampleCheck, Flowchart, WalkStep } from './types'
+import type { BeamExampleInput, CodeRef, RcBeamProvision, ExampleCheck, Flowchart, WalkStep, InputField } from './types'
 import { checkState } from './types'
 
 const ED = 'NSCP 2015' as const
@@ -32,6 +32,25 @@ export const DEFAULT_BEAM: BeamExampleInput = {
 
 const CALC_BEAM = [{ to: '/beam-design', label: 'Open Beam Design' }]
 
+/** The section and materials every RC-beam page offers; flexure pages add Mu, the shear page its stirrups. */
+const SECTION_FIELDS: InputField<BeamExampleInput>[] = [
+  { key: 'b', label: 'b', unit: 'mm', min: 150, max: 1200 },
+  { key: 'h', label: 'h', unit: 'mm', min: 200, max: 1500 },
+  { key: 'nBars', label: 'Bars', min: 2, max: 12, step: '1' },
+  { key: 'barDia', label: 'Bar ⌀', unit: 'mm', min: 10, max: 36, step: '1' },
+  { key: 'fc', label: 'f′c', unit: 'MPa', min: 17, max: 70 },
+  { key: 'fy', label: 'fy', unit: 'MPa', min: 230, max: 550 },
+]
+const FLEXURE_FIELDS: InputField<BeamExampleInput>[] = [...SECTION_FIELDS, { key: 'Mu', label: 'Mu', unit: 'kN·m', min: 0 }]
+const SHEAR_FIELDS: InputField<BeamExampleInput>[] = [
+  ...SECTION_FIELDS,
+  { key: 'Vu', label: 'Vu', unit: 'kN', min: 0 },
+  { key: 's', label: 'Stirrup s', unit: 'mm', min: 50, max: 600, step: '10' },
+  { key: 'stirrupDia', label: 'Stirrup ⌀', unit: 'mm', min: 8, max: 16, step: '1' },
+  { key: 'legs', label: 'Legs', min: 2, max: 6, step: '1' },
+  { key: 'fyt', label: 'fyt', unit: 'MPa', min: 230, max: 550 },
+]
+
 const COMMON_VARS = {
   b: { tex: 'b_w', name: 'Web width', unit: 'mm', role: 'geometry' as const },
   d: { tex: 'd', name: 'Effective depth — top fibre to the tension steel centroid', unit: 'mm', role: 'geometry' as const },
@@ -41,7 +60,10 @@ const COMMON_VARS = {
 }
 
 // ── 1 · flexural strength ─────────────────────────────────────────────────
-const flexure: Provision = {
+const flexure: RcBeamProvision = {
+  family: 'rc-beam',
+  defaults: DEFAULT_BEAM,
+  fields: FLEXURE_FIELDS,
   id: 'rc-beam-flexure',
   title: 'Flexural strength of a rectangular beam',
   category: 'concrete',
@@ -107,7 +129,10 @@ const flexure: Provision = {
 }
 
 // ── 2 · φ and tension control ──────────────────────────────────────────────
-const phiProv: Provision = {
+const phiProv: RcBeamProvision = {
+  family: 'rc-beam',
+  defaults: DEFAULT_BEAM,
+  fields: FLEXURE_FIELDS,
   id: 'rc-beam-phi',
   title: 'Strength reduction factor and tension control',
   category: 'concrete',
@@ -160,7 +185,10 @@ const phiProv: Provision = {
 }
 
 // ── 3 · minimum flexural steel ─────────────────────────────────────────────
-const minSteel: Provision = {
+const minSteel: RcBeamProvision = {
+  family: 'rc-beam',
+  defaults: DEFAULT_BEAM,
+  fields: FLEXURE_FIELDS,
   id: 'rc-beam-min-steel',
   title: 'Minimum flexural reinforcement',
   category: 'concrete',
@@ -205,7 +233,10 @@ const minSteel: Provision = {
 }
 
 // ── 4 · one-way shear ──────────────────────────────────────────────────────
-const shear: Provision = {
+const shear: RcBeamProvision = {
+  family: 'rc-beam',
+  defaults: DEFAULT_BEAM,
+  fields: SHEAR_FIELDS,
   id: 'rc-beam-shear',
   title: 'One-way shear in beams',
   category: 'concrete',
@@ -368,4 +399,4 @@ export function shearFlow(i: BeamExampleInput): Flowchart {
   }
 }
 
-export const RC_BEAM_PROVISIONS: Provision[] = [flexure, phiProv, minSteel, shear]
+export const RC_BEAM_PROVISIONS: RcBeamProvision[] = [flexure, phiProv, minSteel, shear]
