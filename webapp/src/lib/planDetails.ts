@@ -38,11 +38,13 @@ export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: nu
  * scheduled and costed — and then simply not drawn.
  */
 export function footingsForPlan(design: StructureDesign): PlanFooting[] {
+  const ped = new Map((design.pedestals ?? []).map((p) => [p.node, p.design.side]))
   const isolated: PlanFooting[] = design.footings.map((r) => ({
     kind: 'isolated' as const,
     node: r.node, B: r.design.B, Dc: r.design.Dc,
     bars: r.design.bars, barSpacing: r.design.barSpacing,
     barDia: r.barDia,
+    ...(ped.has(r.node) ? { pedestal: ped.get(r.node) } : {}),
   }))
   const combined: PlanFooting[] = design.combined.map((r) => {
     const d = r.design
@@ -228,13 +230,16 @@ function footingBearing(
 }
 
 /**
- * How a model names its own positions — the convention the framing plans'
- * bubbles already use: a LETTERED line for the z ordinate, a NUMBERED one for
- * the x, and floors counted up from the base.
+ * How a model names its own positions — the convention the plans' bubbles
+ * use (`buildPlan`, on `planGridLines`): a LETTERED line at each x, a NUMBERED
+ * row at each z, and floors counted up from the base.
  *
- * Shared, because two sheet sets name the same joint: the framing plan's bubbles
- * and the column stack detail must agree about which position is A1, or the
- * drawing set is describing two different buildings.
+ * Shared, because two sheet sets name the same joint: the plan's bubbles and
+ * the column stack detail must agree about which position is A1, or the
+ * drawing set is describing two different buildings. It used to letter the z
+ * ordinate and number the x — the other way round from the bubbles — and to
+ * take its lines from every node, so on a 2×1-bay frame the details named
+ * columns A3 and B3 on a plan whose grid has no line 3.
  */
 export function modelGrid(model: StructuralModel): {
   floorOf: (y: number) => string
@@ -245,16 +250,16 @@ export function modelGrid(model: StructuralModel): {
   const levels = [...new Set(model.nodes.map((n) => round6(n.y)))].sort((a, b) => a - b)
   const ORD = ['GROUND', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'SEVENTH',
     'EIGHTH', 'NINTH', 'TENTH', 'ELEVENTH', 'TWELFTH']
-  const xs = [...new Set(model.nodes.map((n) => round6(n.x)))].sort((a, b) => a - b)
-  const zs = [...new Set(model.nodes.map((n) => round6(n.z)))].sort((a, b) => a - b)
+  const { xs, zs } = planGridLines(model)
+  // The nearest line: a column off the grid takes the line it is closest to.
+  const nearest = (v: number, at: number[]) => at.reduce((k, x, i) => (Math.abs(x - v) < Math.abs(at[k] - v) ? i : k), 0)
   return {
     levels,
     floorOf: (y) => {
       const k = levels.indexOf(round6(y))
       return k <= 0 ? 'BASE' : `${ORD[k - 1] ?? `${k}TH`} FLOOR`
     },
-    gridRef: (x, z) =>
-      `${String.fromCharCode(65 + Math.max(0, zs.indexOf(round6(z))))}${1 + Math.max(0, xs.indexOf(round6(x)))}`,
+    gridRef: (x, z) => `${String.fromCharCode(65 + nearest(x, xs))}${1 + nearest(z, zs)}`,
   }
 }
 
@@ -337,7 +342,10 @@ export function columnStackBundles(
     const stackCages = cages.filter((c) => chain.some((m) => m.id === c.member)
       || c.member === `F-${base}`)
     const grid = gridRef(n0.x, n0.z)
-    const mark = `C-${grid}`
+    // Two stacks off the grid can round to one position; number the repeat
+    // rather than give two sheets one name.
+    const seen = out.filter((o) => o.grid === grid).length
+    const mark = seen ? `C-${grid}-${seen + 1}` : `C-${grid}`
     out.push({
       key: `column-detail-${mark.toLowerCase()}`,
       mark, grid,

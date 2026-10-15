@@ -120,7 +120,7 @@ export function materialNote(sec: RectSection): string {
   if (sec.material === 'wood') return `Timber ${sec.woodSpecies ?? 'custom'}${sec.woodWet ? ' (wet)' : ''}`
   return `f'c=${sec.fc} MPa`
 }
-export interface FootingScheduleRow { mark: string; size: string; thk: string; reinf: string }
+export interface FootingScheduleRow { mark: string; size: string; thk: string; reinf: string; qty: number }
 export interface ColumnScheduleRow { mark: string; size: string; notes: string }
 export interface SlabScheduleRow { mark: string; thk: string; type: string }
 
@@ -133,6 +133,9 @@ export interface SlabScheduleRow { mark: string; thk: string; type: string }
 export interface IsolatedPlanFooting {
   kind?: 'isolated'
   node: string; B: number; Dc: number; bars: number; barSpacing: number; barDia: number
+  /** Side of the RC pedestal standing on the pad under a steel or timber
+   *  column, mm — absent under a concrete column, which carries itself down. */
+  pedestal?: number
 }
 
 /**
@@ -185,8 +188,13 @@ export interface PlanOptions {
   scale?: string
   /** Foundation plan: designed footings (from `design.footings`) to draw + schedule. */
   footings?: PlanFooting[]
-  /** Foundation plan: top-of-footing elevation (m, −down) for per-footing ELEV tags. */
+  /** Foundation plan: FOUNDING level — the bottom of every footing, m (−down
+   *  from the model's base level). Each pad is tagged with its own TOP, this
+   *  plus its thickness, because that is the level the footing detail prints
+   *  (T.O.F.) and the one the formwork is set to. */
   foundingElev?: number
+  /** Foundation plan: numbered notes printed under the schedules. */
+  notes?: string[]
   /** Full sheet title override, e.g. 'GROUND FLOOR FRAMING PLAN'. */
   title?: string
 }
@@ -233,6 +241,23 @@ const uniq = (vals: number[]): number[] => {
 }
 const near = (a: number, b: number) => Math.abs(a - b) < 0.05
 const gridLabel = (i: number) => String.fromCharCode(65 + i)   // A, B, C …
+
+/** Greedy word wrap to at most `cols` characters a line. */
+export function wrapText(text: string, cols: number): string[] {
+  const out: string[] = []
+  let line = ''
+  for (const w of text.split(/\s+/)) {
+    if (line && line.length + 1 + w.length > cols) { out.push(line); line = w }
+    else line = line ? `${line} ${w}` : w
+  }
+  if (line) out.push(line)
+  return out
+}
+
+/** A pad's top-of-footing tag: its founding level plus its own thickness
+ *  (mm), worded as the footing detail words it. */
+export const tofTag = (foundingElev: number, Dc: number): string =>
+  `T.O.F. EL ${(foundingElev + Dc / 1000).toFixed(2)} m`
 
 /** Build a plan drawing (framing or foundation) from the model. */
 export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanDrawing | null {
@@ -289,7 +314,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   const markFor = (sec: RectSection): string => {
     const key = `${memberSize(sec)}|${materialNote(sec)}`
     let mk = markBySize.get(key)
-    if (!mk) { mk = `FB${markBySize.size + 1}`; markBySize.set(key, mk); schedule.push({ mark: mk, size: memberSize(sec), notes: materialNote(sec) }) }
+    if (!mk) { mk = `${foundation ? 'GB' : 'FB'}${markBySize.size + 1}`; markBySize.set(key, mk); schedule.push({ mark: mk, size: memberSize(sec), notes: materialNote(sec) }) }
     return mk
   }
   // column marks (C1, C2…) group by section id
@@ -313,7 +338,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   // footing marks (WF-1, WF-2…) group by side × thickness
   const footMarkBySize = new Map<string, string>()
   const footingSchedule: FootingScheduleRow[] = []
-  const mark = (key: string, prefix: string, row: () => Omit<FootingScheduleRow, 'mark'>): string => {
+  const mark = (key: string, prefix: string, row: () => Omit<FootingScheduleRow, 'mark' | 'qty'>): string => {
     let mk = footMarkBySize.get(key)
     if (!mk) {
       // Marks are numbered per PREFIX, so an isolated pad and a combined one
@@ -321,8 +346,9 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       const n = [...footMarkBySize.values()].filter((v) => v.startsWith(prefix)).length + 1
       mk = `${prefix}${n}`
       footMarkBySize.set(key, mk)
-      footingSchedule.push({ mark: mk, ...row() })
+      footingSchedule.push({ mark: mk, ...row(), qty: 0 })
     }
+    footingSchedule.find((r) => r.mark === mk)!.qty++
     return mk
   }
   const footMarkFor = (f: IsolatedPlanFooting): string => {
@@ -377,37 +403,24 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       .map((f) => ({ f, a: nm.get(f.nodes[0]), b: nm.get(f.nodes[1]) }))
       .filter((x): x is { f: CombinedPlanFooting; a: NonNullable<typeof x.a>; b: NonNullable<typeof x.b> } =>
         !!x.a && !!x.b && near(x.a.y, levelY))
-    // tie beams: connect footing centres that are adjacent along a grid line
-    const tieDrawn = new Set<string>()
-    const drawTies = (groups: Map<number, { x: number; z: number }[]>, axis: 'x' | 'z') => {
-      for (const pts of groups.values()) {
-        pts.sort((p, q) => (axis === 'x' ? p.z - q.z : p.x - q.x))
-        for (let i = 0; i < pts.length - 1; i++) {
-          const u = pts[i], v = pts[i + 1]
-          const kk = `${u.x.toFixed(2)},${u.z.toFixed(2)}-${v.x.toFixed(2)},${v.z.toFixed(2)}`
-          if (tieDrawn.has(kk)) continue; tieDrawn.add(kk)
-          P.push({ kind: 'line', x1: u.x, y1: u.z, x2: v.x, y2: v.z, stroke: BEAM, width: 1.2, dash: [0.35, 0.18] })
-          const mx = (u.x + v.x) / 2, mz = (u.z + v.z) / 2, vertical = axis === 'x'
-          P.push({ kind: 'text', x: mx + (vertical ? r * 0.4 : 0), y: mz + (vertical ? 0 : r * 0.45), text: 'FTB1', size: r * 0.42, anchor: 'middle', rotate: vertical ? -90 : 0, color: BEAM, weight: 600 })
-        }
-      }
-    }
-    const byX = new Map<number, { x: number; z: number }[]>()
-    const byZ = new Map<number, { x: number; z: number }[]>()
-    for (const { n } of foots) {
-      const kx = Math.round(n.x * 20) / 20, kz = Math.round(n.z * 20) / 20
-      ;(byX.get(kx) ?? byX.set(kx, []).get(kx)!).push({ x: n.x, z: n.z })
-      ;(byZ.get(kz) ?? byZ.set(kz, []).get(kz)!).push({ x: n.x, z: n.z })
-    }
-    drawTies(byX, 'x'); drawTies(byZ, 'z')
-    // footing pads + marks + ELEV tags
+    // No tie beams are drawn here. Nothing in the pipeline designs one, and a
+    // line marked FTB1 with no size and no schedule row is a member the site
+    // cannot build. Grade beams the MODEL carries at this level are drawn by
+    // the beam pass above, marked GB-n and scheduled like any other beam.
+    // footing pads + marks + T.O.F. tags
     for (const { f, n } of foots) {
       const B = f.B, mk = footMarkFor(f)
       P.push({ kind: 'rect', x: n.x - B / 2, y: n.z - B / 2, w: B, h: B, stroke: COL, fill: 'none', width: 1.1, dash: [0.3, 0.18] })
+      // The pedestal is cut by the plan, so it is a solid outline; the column
+      // drawn after it stands inside.
+      if (f.pedestal) {
+        const s = f.pedestal / 1000
+        P.push({ kind: 'rect', x: n.x - s / 2, y: n.z - s / 2, w: s, h: s, stroke: COL, fill: 'none', width: 1.0 })
+      }
       // mark centred above the pad, elevation tag below — clear of the stub
       P.push({ kind: 'text', x: n.x, y: n.z - B / 2 - r * 0.32, text: mk, size: r * 0.46, anchor: 'middle', color: COL, weight: 700 })
       if (opts.foundingElev != null)
-        P.push({ kind: 'text', x: n.x, y: n.z + B / 2 + r * 0.34, text: `EL ${opts.foundingElev.toFixed(2)} m`, size: r * 0.34, anchor: 'middle', color: PANEL, weight: 500 })
+        P.push({ kind: 'text', x: n.x, y: n.z + B / 2 + r * 0.34, text: tofTag(opts.foundingElev, f.Dc), size: r * 0.34, anchor: 'middle', color: PANEL, weight: 500 })
     }
 
     // ── combined pads: one polygon spanning two columns ──
@@ -441,7 +454,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       P.push({ kind: 'text', x: mx, y: mz, text: mk, size: r * 0.46, anchor: 'middle', color: COL, weight: 700 })
       if (opts.foundingElev != null) {
         const [ex, ez] = at(f.Bx / 2, half * 0.5)
-        P.push({ kind: 'text', x: ex, y: ez, text: `EL ${opts.foundingElev.toFixed(2)} m`, size: r * 0.34, anchor: 'middle', color: PANEL, weight: 500 })
+        P.push({ kind: 'text', x: ex, y: ez, text: tofTag(opts.foundingElev, f.Dc), size: r * 0.34, anchor: 'middle', color: PANEL, weight: 500 })
       }
     }
   }
@@ -547,7 +560,14 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   // ── title block (detail tag) + beam schedule, below the plan ──
   const detailNo = opts.detailNo ?? '1', sheetRef = opts.sheetRef ?? 'S-1', scale = opts.scale ?? 'NTS'
   const title = opts.title ?? (foundation ? 'FOUNDATION PLAN' : 'FRAMING PLAN')
-  const tbR = r * 1.15, tbY = z1 + ext + r * 2, tbX = x0 - ext
+  // Below the lowest thing the plan drew, not just the grid: a pad on the
+  // bottom row hangs past the grid line, and its T.O.F. tag ran into the title.
+  const drawnBottom = P.reduce((m, p) =>
+    p.kind === 'rect' ? Math.max(m, p.y + p.h)
+    : p.kind === 'text' && !p.rotate ? Math.max(m, p.y + p.size / 2)
+    : p.kind === 'path' ? Math.max(m, ...p.cmds.map((c) => c.y))
+    : m, z1 + ext)
+  const tbR = r * 1.15, tbY = drawnBottom + r * 2, tbX = x0 - ext
   const lnX1 = x1 + ext, lnX0 = tbX + 2 * tbR + r * 0.3
   // one continuous divider line — it bisects the tag circle AND runs under the
   // sheet title (title above, scale below), so the circle chord is a continuation
@@ -580,12 +600,30 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   if (foundation) {
     let y = tblY0
     if (footingSchedule.length) {
-      const rows = [['MARK', 'SIZE', 'THK', 'REINF.'], ...footingSchedule.map((f) => [f.mark, withUnit(f.size), withUnit(f.thk), f.reinf])]
-      y = drawTable(tbX, y, 'FOOTING SCHEDULE', BEAM, [r * 1.9, r * 3.4, r * 2.0, r * 5.4], rows) + r * 1.4
+      const rows = [['MARK', 'NO.', 'SIZE', 'THK', 'REINF.'], ...footingSchedule.map((f) => [f.mark, String(f.qty), withUnit(f.size), withUnit(f.thk), f.reinf])]
+      y = drawTable(tbX, y, 'FOOTING SCHEDULE', BEAM, [r * 1.9, r * 1.3, r * 3.4, r * 2.0, r * 5.4], rows) + r * 1.4
+    }
+    if (schedule.length) {
+      const unit = (s: BeamScheduleRow) => (/^[0-9]/.test(s.size) ? withUnit(s.size) : s.size)
+      const rows = [['MARK', 'SIZE', 'MATERIAL'], ...schedule.map((s) => [s.mark, unit(s), s.notes ?? ''])]
+      y = drawTable(tbX, y, 'GRADE BEAM SCHEDULE', BEAM, [r * 1.6, r * 3.6, r * 3.4], rows) + r * 1.4
     }
     if (columnSchedule.length) {
       const rows = [['MARK', 'SIZE', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, /^[0-9]/.test(c.size) ? withUnit(c.size) : c.size, c.notes])]
-      drawTable(tbX, y, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.4, r * 4.4], rows)
+      y = drawTable(tbX, y, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.4, r * 4.4], rows) + r * 1.4
+    }
+    if (opts.notes?.length) {
+      // Wrapped to the plan's own width, so a long note never widens the
+      // sheet (the bounds take every text's width) and shrinks the plan.
+      const size = r * 0.4, cols = Math.max(40, Math.floor((lnX1 - tbX) / (size * 0.58)))
+      P.push({ kind: 'text', x: tbX, y: y - r * 0.35, text: 'NOTES', size: r * 0.5, anchor: 'start', color: INK, weight: 700 })
+      let ly = y + r * 0.35
+      opts.notes.forEach((n, i) => {
+        wrapText(`${i + 1}. ${n}`, cols).forEach((line, k) => {
+          P.push({ kind: 'text', x: tbX + (k ? size * 1.6 : 0), y: ly, text: line, size, anchor: 'start', color: INK, weight: 500 })
+          ly += r * 0.62
+        })
+      })
     }
   } else {
     let y = tblY0

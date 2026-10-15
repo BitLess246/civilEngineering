@@ -113,7 +113,7 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
 
       {!design && (
         <p className="rounded-lg border border-dashed border-hairline px-3 py-4 text-center text-xs text-faint">
-          Run the design to generate the foundation plan &amp; the detail sheets.
+          The foundation plan shows the column layout for now. Run the design to size the footings and generate the detail sheets.
         </p>
       )}
 

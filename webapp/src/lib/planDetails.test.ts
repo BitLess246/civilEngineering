@@ -3,9 +3,10 @@ import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure } from '../engine/pipeline'
 import {
   footingsForPlan, footingDetailBundles, slabOpeningBundles, wallDetailBundles,
-  elevationBundleByMember, beamSectionZones,
+  elevationBundleByMember, beamSectionZones, modelGrid,
 } from './planDetails'
 import { buildStructureCages } from '../engine/cageBuilder'
+import { buildPlan } from '../engine/planRenderer'
 import { projectPoint } from '../engine/rebarModel'
 import { designSlabOpening } from '../engine/slabOpening'
 import { designWallDetail } from '../engine/wallDetail'
@@ -265,5 +266,21 @@ describe('beamSectionZones — where a row’s section sits on its elevation', (
   it('is null for a member the model does not have', () => {
     const bundle = index.get(design.beams[0]!.id)!
     expect(beamSectionZones(model, bundle, 'nope', [0, 3, 6])).toBeNull()
+  })
+})
+
+describe('modelGrid — the plan bubbles\' naming', () => {
+  it('letters the lines along x and numbers the rows along z, as buildPlan bubbles them', () => {
+    // 3 × 2 lines: A–C across x, 1–2 down z. There is no line 3 and no line D.
+    const model = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.5, 3], section, slabThickness: 150 })
+    const { gridRef } = modelGrid(model)
+    expect(gridRef(0, 0)).toBe('A1')
+    expect(gridRef(12, 0)).toBe('C1')
+    expect(gridRef(6, 5)).toBe('B2')
+    // off the grid: the nearest line
+    expect(gridRef(5.9, 4.8)).toBe('B2')
+    const plan = buildPlan(model, { kind: 'foundation' })!
+    const bubbles = plan.primitives.flatMap((p) => (p.kind === 'text' && p.weight === 700 && /^[A-Z]$|^\d$/.test(p.text) ? [p.text] : []))
+    expect(new Set(bubbles)).toEqual(new Set(['A', 'B', 'C', '1', '2']))
   })
 })
