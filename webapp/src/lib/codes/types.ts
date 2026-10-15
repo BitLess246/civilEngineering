@@ -100,7 +100,7 @@ export interface WalkStep { title: string; text: string; tex?: string; layers: B
 export interface CalculatorLink { to: string; label: string }
 
 /** Which kind of worked example — and so which inputs and diagrams — a provision uses. */
-export type ProvisionFamily = 'rc-beam' | 'steel' | 'loads'
+export type ProvisionFamily = 'rc-beam' | 'steel' | 'loads' | 'punching'
 
 /** A rolled steel member checked under AISC 360-16 (NSCP 2015 Chapter 5). Units: mm, MPa, m, kN, kN·m. */
 export interface SteelExampleInput {
@@ -115,6 +115,18 @@ export interface SteelExampleInput {
   /** Column length and effective-length factors about x and y. */
   L: number; Kx: number; Ky: number
   Pu: number
+}
+
+/**
+ * A column bearing on a slab or a footing, checked for two-way shear. Units:
+ * mm, MPa, kN, kPa. `qu` is the factored soil pressure under a footing — zero
+ * for a slab, where nothing pushes back inside the critical section.
+ */
+export interface PunchingExampleInput {
+  c1: number; c2: number; h: number; d: number
+  fc: number; lambda: number
+  position: 'interior' | 'edge' | 'corner'
+  Pu: number; qu: number
 }
 
 /** Service load effects to be combined, in any one consistent unit. */
@@ -133,6 +145,7 @@ export type DiagramKind =
   | 'rc-beam-flexure' | 'rc-beam-shear'
   | 'steel-ltb-curve' | 'steel-shear-web' | 'steel-column-curve'
   | 'load-combos'
+  | 'punching-perimeter'
 
 interface ProvisionBase {
   id: string
@@ -176,7 +189,8 @@ export interface ProvisionOf<F extends ProvisionFamily, I extends object> extend
 export type RcBeamProvision = ProvisionOf<'rc-beam', BeamExampleInput>
 export type SteelProvision = ProvisionOf<'steel', SteelExampleInput>
 export type LoadsProvision = ProvisionOf<'loads', LoadExampleInput>
-export type Provision = RcBeamProvision | SteelProvision | LoadsProvision
+export type PunchingProvision = ProvisionOf<'punching', PunchingExampleInput>
+export type Provision = RcBeamProvision | SteelProvision | LoadsProvision | PunchingProvision
 
 // The provision's own input type travels with it, but a caller holding the
 // UNION cannot name it. These run a provision on an input the page built from

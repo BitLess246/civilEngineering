@@ -2,13 +2,14 @@
 import { RC_BEAM_PROVISIONS } from './rcBeam'
 import { STEEL_PROVISIONS } from './steel'
 import { LOADS_PROVISIONS } from './loads'
+import { PUNCHING_PROVISIONS } from './punching'
 import type { CodeCategory, Provision, RcBeamProvision } from './types'
 import { CATEGORY_LABEL } from './types'
 
 export * from './types'
 export { DEFAULT_BEAM } from './rcBeam'
 
-export const PROVISIONS: Provision[] = [...RC_BEAM_PROVISIONS, ...STEEL_PROVISIONS, ...LOADS_PROVISIONS]
+export const PROVISIONS: Provision[] = [...RC_BEAM_PROVISIONS, ...STEEL_PROVISIONS, ...LOADS_PROVISIONS, ...PUNCHING_PROVISIONS]
 
 export const CODE_EDITIONS = [
   { id: 'NSCP 2015', available: true },

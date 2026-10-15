@@ -12,7 +12,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import {
   CODE_EDITIONS, provisionById, rcBeamProvision, searchProvisions, shelves, CATEGORY_LABEL,
   BEAM_LAYERS, runProvision, walkOf, flowOf,
-  type Provision, type BeamExampleInput, type SteelExampleInput, type LoadExampleInput, type CheckState, type BeamLayer,
+  type Provision, type BeamExampleInput, type SteelExampleInput, type LoadExampleInput, type PunchingExampleInput, type CheckState, type BeamLayer,
 } from '../lib/codes'
 import { Math as TeX } from '../lib/math'
 import { Num } from '../components/qty'
@@ -21,6 +21,7 @@ import { BeamFlexureDiagram, BeamShearDiagram } from '../components/codes/RcBeam
 import { CodeFlowchart } from '../components/codes/CodeFlowchart'
 import { SteelLtbCurve, SteelShearWeb, SteelColumnCurve, LoadCombosChart } from '../components/codes/SteelDiagrams'
 import { exampleFromQuery, fieldsFromQuery } from '../lib/codes/links'
+import { PunchingPlan } from '../components/PunchingPlan'
 
 // ── per-browser conveniences: bookmarks and recently viewed ───────────────
 const BK = 'zeta-codes-bookmarks', RC = 'zeta-codes-recent'
@@ -68,6 +69,15 @@ export default function CodeLibrary() {
     )
   }
   return p ? <ProvisionView key={p.id} p={p} /> : <Landing />
+}
+
+/** What a linked example is, in the banner and the worked solution. */
+const NOUN: Record<Provision['family'], string> = { 'rc-beam': 'beam', steel: 'member', loads: 'loads', punching: 'column' }
+
+/** The critical section drawn by the Punching Shear calculator's own plan, labelled from the engine. */
+function PunchingDiagram({ i, v }: { i: PunchingExampleInput; v: Record<string, number> }) {
+  if (!(v.b0 > 0)) return <p className="p-6 text-center text-[12px] text-faint">Enter an effective depth below the thickness to draw the section.</p>
+  return <PunchingPlan c1={i.c1} c2={i.c2} d={i.d} h={i.h} position={i.position} b0={v.b0} alphaS={v.alphaS} />
 }
 
 // ── landing ────────────────────────────────────────────────────────────────
@@ -200,7 +210,8 @@ function ProvisionView({ p }: { p: Provision }) {
             : p.diagram === 'steel-ltb-curve' ? <SteelLtbCurve i={inp as unknown as SteelExampleInput} hl={hl} />
               : p.diagram === 'steel-shear-web' ? <SteelShearWeb i={inp as unknown as SteelExampleInput} hl={hl} />
                 : p.diagram === 'steel-column-curve' ? <SteelColumnCurve i={inp as unknown as SteelExampleInput} hl={hl} />
-                  : <LoadCombosChart i={inp as unknown as LoadExampleInput} hl={hl} />}
+                  : p.diagram === 'punching-perimeter' ? <PunchingDiagram i={inp as unknown as PunchingExampleInput} v={ex.values} />
+                    : <LoadCombosChart i={inp as unknown as LoadExampleInput} hl={hl} />}
         {walk.length > 0 && (
           <div className="mt-2 rounded-md border border-hairline bg-sheet-2 p-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -327,7 +338,7 @@ function ProvisionView({ p }: { p: Provision }) {
       {linked.from && (
         <div role="note" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-brand-line bg-brand-tint px-3 py-2 text-[12.5px] text-ink-2">
           <p>
-            Explaining the check from <span className="font-semibold text-ink">{linked.from.label}</span> with your {isRc ? 'beam' : p.family === 'steel' ? 'member' : 'loads'}'s numbers
+            Explaining the check from <span className="font-semibold text-ink">{linked.from.label}</span> with your {NOUN[p.family]}'s numbers
             {edited ? ' (since edited here)' : ''}.
             {linked.from.layers ? ` Your design stacks ${linked.from.layers} bar layers; this page draws one layer, so its d and φMn differ from the calculator's.` : ''}
             {isRc && !(linked.carried as string[]).includes('s') && p.diagram === 'rc-beam-shear' ? ' No stirrups were adopted there, so the spacing shown is the library default.' : ''}
@@ -362,7 +373,7 @@ function ProvisionView({ p }: { p: Provision }) {
       </div>
 
       <div className="mt-6">
-        <WorkedSolution title={`Worked example — ${p.title}`} steps={[{ title: isRc ? 'This beam, step by step' : p.family === 'steel' ? 'This member, step by step' : 'These loads, combined', lines: ex.lines,
+        <WorkedSolution title={`Worked example — ${p.title}`} steps={[{ title: p.family === 'loads' ? 'These loads, combined' : `This ${NOUN[p.family]}, step by step`, lines: ex.lines,
           note: `Computed by the same engine functions the ${p.calculators[0]?.label.replace(/^Open /, '') ?? 'calculator'} calculator uses.` }]} />
       </div>
       <p className="mt-4 text-[11px] leading-relaxed text-faint">

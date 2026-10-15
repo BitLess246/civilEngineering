@@ -6,6 +6,7 @@ import { WorkspacePage } from '../components/WorkspacePage'
 import { buildPunchingSolution } from '../lib/punchingSolution'
 import { f0, f1, f2 } from '../lib/format'
 import { PunchingPlan } from '../components/PunchingPlan'
+import { codeLink, codeReferenceStep } from '../lib/codes/links'
 
 interface FormState {
   c1: number; c2: number         // column dimensions, mm
@@ -59,7 +60,13 @@ export default function PunchingShear() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fKey, allFinite, d])
 
-  const solution = r ? buildPunchingSolution({ c1: f.c1, c2: f.c2, d, fc: f.fc, lambda: parseFloat(f.lambda), Vu: f.Vu, position: f.position }, r) : null
+  const solution = r
+    ? [...buildPunchingSolution({ c1: f.c1, c2: f.c2, d, fc: f.fc, lambda: parseFloat(f.lambda), Vu: f.Vu, position: f.position }, r), codeReferenceStep(['two-way-punching-shear'])]
+    : null
+  // A slab: nothing pushes back inside the section, so Pu is the page's Vu and qu is zero.
+  const explain = r ? codeLink('two-way-punching-shear', {
+    c1: f.c1, c2: f.c2, h: f.h, d, fc: f.fc, lambda: parseFloat(f.lambda), position: f.position, Pu: f.Vu, qu: 0,
+  }, { route: '/punching-shear', label: 'Punching Shear' }) : undefined
 
   const report = r ? {
     docCode: 'S-PS',
@@ -116,7 +123,7 @@ export default function PunchingShear() {
       checks={r ? <>
         <CheckCard title="Punching shear" basis="Vu ≤ φVc" status={r.ok ? 'pass' : 'fail'}
           value={f1(r.phiVc)} unit="kN" ratio={r.ratio} ratioLabel="Vu ÷ φVc"
-          pairs={[{ label: 'Vu', value: `${f1(f.Vu)} kN` }, { label: 'Governs', value: `Table 22.6.5.2(${gov})` }]} />
+          pairs={[{ label: 'Vu', value: `${f1(f.Vu)} kN` }, { label: 'Governs', value: `Table 22.6.5.2(${gov})` }]} explain={explain} />
         <CheckCard title="Critical section" basis="d/2 from the face" status="info"
           value={f0(r.b0)} unit="mm"
           pairs={[{ label: 'd', value: `${f1(d)} mm` }, { label: 'αs · βc', value: `${r.alphaS} · ${f2(r.betac)}` }]} />
