@@ -21,6 +21,31 @@ interface FlexProps {
   hl: string | null
 }
 
+const TICK = 4
+
+/** Horizontal dimension: line at y, extension lines up from `from`, 45° ticks at both ends. */
+function DimH({ x1, x2, y, from, color, w }: { x1: number; x2: number; y: number; from: number; color: string; w: number }) {
+  return <g stroke={color} strokeWidth={w}>
+    <line x1={x1} y1={y} x2={x2} y2={y} />
+    {[x1, x2].map((x) => <g key={x}>
+      <line x1={x} y1={from} x2={x} y2={y + TICK} strokeWidth={0.8} />
+      <line x1={x - TICK} y1={y + TICK} x2={x + TICK} y2={y - TICK} strokeWidth={1.4} />
+    </g>)}
+  </g>
+}
+
+/** Vertical dimension: line at x, extension lines across from `from`, 45° ticks at both ends. */
+function DimV({ y1, y2, x, from, color, w }: { y1: number; y2: number; x: number; from: number; color: string; w: number }) {
+  const out = from > x ? -TICK : TICK
+  return <g stroke={color} strokeWidth={w}>
+    <line x1={x} y1={y1} x2={x} y2={y2} />
+    {[y1, y2].map((y) => <g key={y}>
+      <line x1={from} y1={y} x2={x - out} y2={y} strokeWidth={0.8} />
+      <line x1={x - TICK} y1={y + TICK} x2={x + TICK} y2={y - TICK} strokeWidth={1.4} />
+    </g>)}
+  </g>
+}
+
 /** Flexure: section · strain · stress/forces, side by side, in one SVG. */
 export function BeamFlexureDiagram({ i, v, layers, hl }: FlexProps) {
   const W = 640, H = 340, top = 40
@@ -40,7 +65,7 @@ export function BeamFlexureDiagram({ i, v, layers, hl }: FlexProps) {
   const eMax = Math.max(eTop, eBot, 1e-6)
   const SX = (e: number) => sx0 + (e / eMax) * sW * 0.5
   // stress block / forces
-  const fx0 = 465
+  const fx0 = 490
 
   return (
     <DrawingFrame label="Beam cross-section, strain profile and internal forces">
@@ -61,12 +86,12 @@ export function BeamFlexureDiagram({ i, v, layers, hl }: FlexProps) {
         <line x1={bx - 8} y1={Y(c)} x2={fx0 + 100} y2={Y(c)} stroke={strokeHL(['c'], MUTED)} strokeDasharray="5 4" strokeWidth={hl === 'c' ? 2 : 1} />
         <text x={bx + bw + 6} y={Y(c) - 4} fontSize={12} fill={MUTED}>N.A.  c = {c.toFixed(1)}</text>
       </g>}
-      {/* dimensions */}
+      {/* dimensions — extension lines and 45° ticks, drafting style */}
       <g fontSize={12} fill={MUTED}>
-        <line x1={bx} y1={top + bh + 14} x2={bx + bw} y2={top + bh + 14} stroke={strokeHL(['b'], MUTED)} strokeWidth={hl === 'b' ? 2 : 1} />
-        <text x={bx + bw / 2} y={top + bh + 27} textAnchor="middle">b = {i.b}</text>
-        <line x1={bx - 22} y1={top} x2={bx - 22} y2={Y(d)} stroke={strokeHL(['d'], MUTED)} strokeWidth={hl === 'd' ? 2.4 : 1} />
-        <text x={bx - 26} y={top + (d * sc) / 2} textAnchor="end" transform={`rotate(-90 ${bx - 26} ${top + (d * sc) / 2})`}>d = {d.toFixed(0)}</text>
+        <DimH x1={bx} x2={bx + bw} y={top + bh + 14} from={top + bh + 2} color={strokeHL(['b'], MUTED)} w={hl === 'b' ? 2 : 1} />
+        <text x={bx + bw / 2} y={top + bh + 30} textAnchor="middle">b = {i.b}</text>
+        <DimV y1={top} y2={Y(d)} x={bx - 22} from={bx - 2} color={strokeHL(['d'], MUTED)} w={hl === 'd' ? 2.4 : 1} />
+        <text x={bx - 28} y={top + (d * sc) / 2} textAnchor="middle" transform={`rotate(-90 ${bx - 28} ${top + (d * sc) / 2})`}>d = {d.toFixed(0)}</text>
       </g>
 
       {/* strain */}
@@ -76,20 +101,21 @@ export function BeamFlexureDiagram({ i, v, layers, hl }: FlexProps) {
         <polygon points={`${sx0},${Y(c)} ${SX(eBot)},${Y(d)} ${sx0},${Y(d)}`} fill={STEEL} opacity={0.3} />
         <line x1={SX(-eTop)} y1={top} x2={SX(eBot)} y2={Y(d)} stroke={strokeHL(['et'], INK)} strokeWidth={1.5} />
         <text x={SX(-eTop) - 4} y={top - 4} textAnchor="end" fontSize={12} fill={COMP}>εcu = 0.003</text>
-        <text x={SX(eBot) + 4} y={Y(d) + 4} fontSize={12} fill={STEEL} fontWeight={hl === 'et' ? 700 : 400}>εt = {eBot.toFixed(4)}</text>
+        <text x={SX(eBot)} y={Y(d) + 18} textAnchor="middle" fontSize={12} fill={STEEL} fontWeight={hl === 'et' ? 700 : 400}>εt = {eBot.toFixed(4)}</text>
       </g>}
 
-      {/* stress block + forces */}
+      {/* stress block + forces, on their own vertical reference axis */}
       {on('forces') && <g>
-        <rect x={fx0} y={top} width={40} height={a * sc} fill={COMP} opacity={0.35} stroke={strokeHL(['a'], 'none')} strokeWidth={2} />
-        <text x={fx0 + 46} y={top + 10} fontSize={12} fill={COMP}>0.85 f′c</text>
-        <line x1={fx0 + 80} y1={Y(a / 2)} x2={fx0 + 30} y2={Y(a / 2)} stroke={COMP} strokeWidth={2} markerEnd="url(#arr)" />
-        <text x={fx0 + 84} y={Y(a / 2) + 4} fontSize={12.5} fill={COMP} fontWeight={700}>C</text>
-        <line x1={fx0 + 30} y1={Y(d)} x2={fx0 + 80} y2={Y(d)} stroke={STEEL} strokeWidth={2} markerEnd="url(#arr)" />
-        <text x={fx0 + 84} y={Y(d) + 4} fontSize={12.5} fill={STEEL} fontWeight={700}>T = As·fs</text>
-        <line x1={fx0 + 22} y1={Y(a / 2)} x2={fx0 + 22} y2={Y(d)} stroke={strokeHL(['Mn', 'phiMn'], MUTED)} strokeWidth={hl === 'Mn' || hl === 'phiMn' ? 2.4 : 1} />
-        <text x={fx0 + 18} y={(Y(a / 2) + Y(d)) / 2} textAnchor="end" fontSize={12} fill={MUTED}>d − a/2</text>
-        <text x={W - 6} y={top + bh + 27} textAnchor="end" fontSize={12} fill={INK}>Mn = T·(d − a/2) = {v.Mn.toFixed(1)} kN·m</text>
+        <line x1={fx0} y1={top} x2={fx0} y2={top + bh} stroke={MUTED} />
+        <rect x={fx0 - 40} y={top} width={40} height={a * sc} fill={COMP} opacity={0.35} stroke={strokeHL(['a'], 'none')} strokeWidth={2} />
+        <text x={fx0 - 20} y={top - 4} textAnchor="middle" fontSize={12} fill={COMP}>0.85 f′c</text>
+        <line x1={fx0 + 46} y1={Y(a / 2)} x2={fx0 - 20} y2={Y(a / 2)} stroke={COMP} strokeWidth={2} markerEnd="url(#arr)" />
+        <text x={fx0 + 50} y={Y(a / 2) + 4} fontSize={12.5} fill={COMP} fontWeight={700}>C</text>
+        <line x1={fx0} y1={Y(d)} x2={fx0 + 50} y2={Y(d)} stroke={STEEL} strokeWidth={2} markerEnd="url(#arr)" />
+        <text x={fx0 + 54} y={Y(d) + 4} fontSize={12.5} fill={STEEL} fontWeight={700}>T = As·fs</text>
+        <DimV y1={Y(a / 2)} y2={Y(d)} x={fx0 - 55} from={fx0} color={strokeHL(['Mn', 'phiMn'], MUTED)} w={hl === 'Mn' || hl === 'phiMn' ? 2.4 : 1} />
+        <text x={fx0 - 60} y={(Y(a / 2) + Y(d)) / 2 + 4} textAnchor="end" fontSize={12} fill={MUTED}>d − a/2</text>
+        <text x={W - 6} y={top + bh + 30} textAnchor="end" fontSize={12} fill={INK}>Mn = T·(d − a/2) = {v.Mn.toFixed(1)} kN·m</text>
       </g>}
       <defs>
         <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
