@@ -2,6 +2,7 @@
 // Drawing for the prestressed beam calculator.
 // ─────────────────────────────────────────────────────────────────────────
 import { DimBelow, DimSide } from './dims'
+import { sideLabelReach } from './dimLabel'
 import { udlStations } from './udl'
 import { DrawingFrame } from './DrawingFrame'
 import { WATER } from './hydraulicsSketches'
@@ -11,14 +12,20 @@ import { INK, MUTED } from '../lib/influenceStyle'
  *  edge and the straight tendon at e below the centroid. Depth is exaggerated
  *  against the span so the eccentricity reads; the drawing says by how much. */
 export function PSElevation({ h, e, span }: { h: number; e: number; span: number }) {
-  const W = 340, HT = 220
-  const x0 = 46, bw = 248
-  const y0 = 74, H = 56
+  // Long, the way a prestressed girder is: the span gets the width of the sheet and
+  // the depth is drawn TO SCALE against it, exaggerated only as far as it must be to
+  // read (≥ 30) — a fixed 56-unit depth on a 248-unit span drew a 12 m × 800 beam as
+  // a ×3.4 block.
+  const x0 = 46, bw = 548
+  const trueH = (Math.max(h, 1) / Math.max(span * 1000, 1)) * bw
+  const y0 = 66, H = Math.min(60, Math.max(30, trueH))
+  const hLabel = `h = ${h} mm`
+  const W = x0 + bw + 20 + sideLabelReach(y0, y0 + H, hLabel) + 6, HT = y0 + H + 66
   const yc = y0 + H / 2, yTendon = Math.min(y0 + H - 5, yc + (e / h) * H)
   const arrows = udlStations(bw).map((t) => x0 + t * bw)
   return (
     <DrawingFrame label="prestressed section">
-      <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block w-full max-w-[380px]" style={{ fontFamily: 'Arial, sans-serif' }}>
+      <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block w-full max-w-[760px]" style={{ fontFamily: 'Arial, sans-serif' }}>
         {/* UDL: top line + arrows touching the beam's top edge */}
         <line x1={x0} y1={y0 - 26} x2={x0 + bw} y2={y0 - 26} stroke={MUTED} strokeWidth="1.4" />
         {arrows.map((x) => (
@@ -34,7 +41,7 @@ export function PSElevation({ h, e, span }: { h: number; e: number; span: number
         <rect x={x0} y={y0} width={bw} height={H} fill="rgba(15,76,146,0.08)" stroke={INK} strokeWidth="1.6" />
         <line x1={x0} y1={yc} x2={x0 + bw} y2={yc} stroke={MUTED} strokeWidth="0.8" strokeDasharray="3 4" />
         <line x1={x0} y1={yTendon} x2={x0 + bw} y2={yTendon} stroke={WATER} strokeWidth="2.2" strokeDasharray="8 4" />
-        <text x={x0 + bw / 2} y={y0 + H + 12} fontSize="8.5" fontFamily="IBM Plex Mono, monospace" fill={WATER} textAnchor="middle">
+        <text x={x0 + bw / 2} y={y0 + H + 12} fontSize="8.5" fill={WATER} textAnchor="middle">
           Aps · e = {e} mm below cg
         </text>
         {/* supports ON the soffit: pin (triangle apex at the beam) + roller */}
@@ -46,9 +53,12 @@ export function PSElevation({ h, e, span }: { h: number; e: number; span: number
         </g>
         {/* dimensions (shared template) */}
         <DimBelow xA={x0} xB={x0 + bw} featY={y0 + H + 18} dY={y0 + H + 40} label={`L = ${span} m`} />
-        <DimSide yA={y0} yB={y0 + H} featX={x0 + bw} dX={x0 + bw + 20} label={`h = ${h} mm`} side="right" />
+        <DimSide yA={y0} yB={y0 + H} featX={x0 + bw} dX={x0 + bw + 20} label={hLabel} side="right" />
         <DimSide yA={yc} yB={yTendon} featX={x0} dX={x0 - 18} label={`e`} side="left" />
-        <text x={x0} y={HT - 6} fontSize="8" fill={MUTED} fontFamily="IBM Plex Mono, monospace">depth exaggerated ×{((H / Math.max(h, 1)) / (bw / Math.max(span * 1000, 1))).toFixed(1)}</text>
+        <text x={x0} y={HT - 6} fontSize="8" fill={MUTED}>
+          {H / trueH > 1.05 ? `depth exaggerated ×${(H / trueH).toFixed(1)} so the eccentricity reads`
+            : H / trueH < 0.95 ? `depth drawn at ×${(H / trueH).toFixed(2)} of the span's scale` : 'drawn to scale'}
+        </text>
       </svg>
     </DrawingFrame>
   )
