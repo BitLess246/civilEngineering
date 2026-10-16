@@ -24,6 +24,7 @@ import type { BoltGroupGeom, BoltForce, BlockShearCase } from '../engine/steelDe
 import type { AiscShape } from '../engine/aiscSections'
 import { blockShearPath, clearDistance, holeDia, minFilletSize, type Pt } from '../lib/connectionMechanics'
 import { DrawingFrame } from './DrawingFrame'
+import { Leader } from './Leader'
 
 const INK = '#1e293b', NOTE = '#475569'
 const STEEL_FILL = '#d5dbe3', STEEL_DARK = '#9aa6b4', PLATE = '#b9c7d8'
@@ -226,8 +227,8 @@ export function ShearTabMechanics(p: ShearTabMechanicsProps) {
           {/* the tab, welded to the flange */}
           <rect x={X(0)} y={Y(H)} width={W * s} height={H * s} fill={PLATE} fillOpacity={0.92} stroke={INK} strokeWidth={1.2} />
           <line x1={X(0)} y1={Y(H)} x2={X(0)} y2={Y(0)} stroke={WELD} strokeWidth={3.2} />
-          <line x1={X(0) + 2} y1={Y(H) + 6} x2={X(0) + 22} y2={Y(H) - 16} stroke={WELD} strokeWidth={0.8} />
-          <text x={X(0) + 24} y={Y(H) - 18} fontSize={9} fill={p.weld && !p.weld.ok ? CRIT : WELD}>fillets both faces, w {wWeld}{p.weld ? ` · ${Math.round(p.weld.util * 100)} % used` : ''}</text>
+          <Leader x={X(0) + 2} y={Y(H) + 6} tx={X(0) + 24} ty={Y(H) - 18} fontSize={9} color={p.weld && !p.weld.ok ? CRIT : WELD} ink={WELD}
+            text={`fillets both faces, w ${wWeld}${p.weld ? ` · ${Math.round(p.weld.util * 100)} % used` : ''}`} />
           <text x={X(W) + 6} y={Y(0) - 2} fontSize={9.5} fill={NOTE}>PL {Math.round(W)}×{Math.round(H)}×{t}</text>
 
           {/* block shear */}

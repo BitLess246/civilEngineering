@@ -12,6 +12,7 @@ import { footingShearIso } from '../../lib/footingShearIso'
 import { AXO, boxFaces, faceVisible, fitIso, isoPath, sortFaces, type Face, type Vec3 } from '../../lib/isometric'
 import { DrawingFrame } from '../DrawingFrame'
 import { BarEnd, IsoBar } from '../isoBars'
+import { Leader } from '../Leader'
 
 const INK = 'var(--color-ink, #1f2937)', EDGE = '#37526e', CRIT = '#c2402a', LOAD = '#d4512b', DIM = '#1f77b4', HL = '#f59e0b', FAINT = '#8a8f98'
 const CONC: Record<string, string> = { '+z': '#eef3f8', '-y': '#dbe4ee', '+x': '#c9d5e2' }
@@ -35,11 +36,9 @@ export function FootingShearIso({ i, hl, bars, direction }: {
   const { p } = fit
   const P = (pts: readonly Vec3[]) => isoPath(pts.map(p))
   const seen = (fs: Face[]) => sortFaces(fs.filter((f) => faceVisible(f.n, view)), view)
-  const ctr = (pts: readonly Vec3[]): Vec3 => pts.reduce<Vec3>((s, q) => [s[0] + q[0] / pts.length, s[1] + q[1] / pts.length, s[2] + q[2] / pts.length], [0, 0, 0])
 
   const sec = g.shearArea
   const [fx, fyTop] = p(sec[3]), [, fyBot] = p(sec[0])      // the section's front edge, top and at the bottom mat
-  const secTop = p(ctr([sec[2], sec[3]]))
   // the label hangs under the front row of arrows, at its middle
   const front = g.arrows.filter((a) => a.to[1] === Math.min(...g.arrows.map((q) => q.to[1])))
   const arrowFoot = front.length ? p(front[Math.floor(front.length / 2)].from) : null
@@ -93,10 +92,17 @@ export function FootingShearIso({ i, hl, bars, direction }: {
         </g>
         <text x={fx - 17} y={(fyTop + fyBot) / 2 + 4} fontSize={11} fill={dColor} textAnchor="end" {...halo}>d = {Math.round(i.d)}</text>
 
-        <path d={`M${secTop[0].toFixed(1)} ${secTop[1].toFixed(1)} L${W - 222} 47`} stroke={CRIT} strokeWidth={0.7} fill="none" />
-        <circle cx={secTop[0]} cy={secTop[1]} r={2} fill={CRIT} />
-        <text x={W - 16} y={40} fontSize={11} fontWeight={700} fill={CRIT} textAnchor="end">critical section, d from the face</text>
-        <text x={W - 16} y={53} fontSize={11} fill={CRIT} textAnchor="end">Vc on B·d = {i.B} × {(i.d / 1000).toFixed(3)} = {(g.Bd / 1e6).toFixed(3)} m²</text>
+        {/* the callout, top right; its leader lands on the section's top edge far enough
+            along that the leg reaches it without passing under the label */}
+        {(() => {
+          const l1 = 'critical section, d from the face'
+          const l2 = `Vc on B·d = ${i.B} × ${(i.d / 1000).toFixed(3)} = ${(g.Bd / 1e6).toFixed(3)} m²`
+          const tx = W - 16 - Math.max(l1.length * 6.4, l2.length * 5.9)
+          const a = p(sec[3]), b = p(sec[2])
+          const f = Math.min(0.5, Math.max(0.08, (tx - 34 - a[0]) / ((b[0] - a[0]) || 1)))
+          return <Leader x={a[0] + (b[0] - a[0]) * f} y={a[1] + (b[1] - a[1]) * f} tx={tx} ty={40} fontSize={11}
+            color={CRIT} weight={700} leading={1.2} text={[l1, l2]} />
+        })()}
         </>}
 
         {!r.inside && (() => { const [, y] = p(g.cover[0]); return <text x={fx - 17} y={(y + fyBot) / 2 + 4} fontSize={10} fill={FAINT} textAnchor="end" {...halo}>cover — not in B·d</text> })()}
