@@ -22,6 +22,7 @@ import { CodeFlowchart } from '../components/codes/CodeFlowchart'
 import { SteelLtbCurve, SteelShearWeb, SteelColumnCurve, LoadCombosChart } from '../components/codes/SteelDiagrams'
 import { exampleFromQuery, fieldsFromQuery } from '../lib/codes/links'
 import { PunchingPlan } from '../components/PunchingPlan'
+import { PunchingIso } from '../components/PunchingIso'
 import { FootingOneWayDiagram } from '../components/codes/FootingDiagrams'
 import { ColumnPmDiagram } from '../components/codes/ColumnDiagrams'
 import { SeismicCsCurve } from '../components/codes/SeismicDiagrams'
@@ -80,7 +81,10 @@ const NOUN: Record<Provision['family'], string> = { 'rc-beam': 'beam', steel: 'm
 /** The critical section drawn by the Punching Shear calculator's own plan, labelled from the engine. */
 function PunchingDiagram({ i, v }: { i: PunchingExampleInput; v: Record<string, number> }) {
   if (!(v.b0 > 0)) return <p className="p-6 text-center text-[12px] text-faint">Enter an effective depth below the thickness to draw the section.</p>
-  return <PunchingPlan c1={i.c1} c2={i.c2} d={i.d} h={i.h} position={i.position} b0={v.b0} alphaS={v.alphaS} />
+  return <div className="space-y-3">
+    <PunchingPlan c1={i.c1} c2={i.c2} d={i.d} h={i.h} position={i.position} b0={v.b0} alphaS={v.alphaS} />
+    <PunchingIso c1={i.c1} c2={i.c2} d={i.d} h={i.h} position={i.position} alphaS={v.alphaS} />
+  </div>
 }
 
 // ── landing ────────────────────────────────────────────────────────────────
