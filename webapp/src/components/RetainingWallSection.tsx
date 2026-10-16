@@ -221,6 +221,14 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
           <line x1={x0 - 4} y1={yBase} x2={x0 - 87} y2={yBase} strokeWidth={0.6} />
           <line x1={x0 - 4} y1={yBot} x2={x0 - 113} y2={yBot} strokeWidth={0.6} />
           <VDim x={x0 - 82} y1={yTop} y2={yBase} label={`Hs = ${(Hs / 1000).toFixed(2)} m`} />
+          {/* tb chains on under Hs, so Hs + tb reads straight off as H. A base
+              too thin to carry its label along the line takes it level, beside it */}
+          {yBot - yBase >= `tb ${tb}`.length * 5 + 6
+            ? <VDim x={x0 - 82} y1={yBase} y2={yBot} label={`tb ${tb}`} />
+            : <g>
+              <VDim x={x0 - 82} y1={yBase} y2={yBot} label="" />
+              <text x={x0 - 76} y={(yBase + yBot) / 2 + 3} fontSize={8} stroke="var(--sheet, #fff)" strokeWidth={2.6} paintOrder="stroke">tb {tb}</text>
+            </g>}
           <VDim x={x0 - 108} y1={yTop} y2={yBot} label={`H = ${H.toFixed(2)} m`} />
           {/* A long heel squeezes bt and ts to a few pixels each, and their
               labels then print over one another. Any segment too narrow to
@@ -237,7 +245,6 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
             })
           })()}
           <HDim y={yDim2} x1={x0} x2={xHeel} label={`B = ${B.toFixed(2)} m`} />
-          <text x={xHeel + 6} y={(yBase + yBot) / 2 + 3} fontSize={7.5} stroke="var(--sheet, #fff)" strokeWidth={2.6} paintOrder="stroke">tb = {tb}</text>
         </g>
 
         {/* ── bearing pressure under the base ──────────────────────────────── */}
