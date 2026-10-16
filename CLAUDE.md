@@ -261,8 +261,10 @@ All shipped.
     deflections carry the model's real load pattern and end restraint instead of
     an assumed UDL. Surfaced per member in the RC beam schedule and the PDF
     report; per §409.3.1.1 a row passes on EITHER h ≥ hMin or the computed
-    check. **Open follow-up:** proper T-section gross properties — the web
-    rectangle is used, which is the conservative side.
+    check. The T-section follow-up has shipped too: `tSectionGross` and
+    `crackedInertiaT` (hogging = web rectangle), threaded through `pipeline`
+    from the flange the flexural design already uses (`validation.ts`
+    `tbeam-gross-inertia`).
 14. ~~**Slope stability by method of slices**~~ — ✔ shipped: `slopeStability.ts`
     — Fellenius/OMS, Bishop's Simplified and Janbu's Simplified over one set of
     vertical slices, with a grid search for the critical circle.
