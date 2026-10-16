@@ -4,10 +4,9 @@ import { udlStations } from './udl'
 import type { Support, BeamLoad } from '../engine/beamAnalysis'
 import { DrawingFrame } from './DrawingFrame'
 import { DimBelow } from './dims'
+import { loadColor, LOAD_NAME } from '../lib/loadColors'
 
 const BEAM = '#37526e'
-const LOAD = '#dc2626'
-const MOM = '#7c3aed'
 const SUP = '#0056b3'
 
 /** Elevation sketch of the analysis model: beam line, support symbols
@@ -21,9 +20,9 @@ export function BeamElevation({ L, supports, loads, spans }: {
   // Distributed loads that overlap along the span are STACKED, one tier per
   // load, each sitting on the one below — drawn at the same height, a live
   // UDL over the same span as the dead one vanished behind it.
-  // a tier is its arrows (26) + the gap and its label (≈ 15) + clear air — at 40
-  // the next tier's arrowheads landed ON the label below and struck it through
-  const TIER = 50
+  // a tier is its arrows (26) + clear air: the label sits INSIDE the arrows on
+  // a halo, so stacked loads no longer need room for a label between them
+  const TIER = 34
   const tierOf: number[] = []
   const placed: { a: number; b: number; t: number }[] = []
   loads.forEach((ld, i) => {
@@ -38,11 +37,14 @@ export function BeamElevation({ L, supports, loads, spans }: {
   let acc = 0
   const spanXs = (spans ?? []).map((s) => { const g = { x0: acc, x1: acc + s.L, E: s.E, I: s.I }; acc += s.L; return g })
   const eiMax = Math.max(1e-9, ...spanXs.map((g) => g.E * g.I))
-  const W = 560, H = 170 + (tiers - 1) * TIER + (multi ? 16 : 0)
+  const W = 560, H = 156 + (tiers - 1) * TIER + (multi ? 16 : 0)
   const padL = 30, padR = 30
   const bx0 = padL, bx1 = W - padR
   const sx = (x: number) => bx0 + ((bx1 - bx0) * Math.max(0, Math.min(L, x))) / Math.max(L, 1e-9)
-  const by = 92 + (tiers - 1) * TIER
+  const by = 78 + (tiers - 1) * TIER
+  // loads are coloured by category; a key appears once there is more than one
+  const cats = [...new Set(loads.map((l) => l.cat))]
+  const HALO = { paintOrder: 'stroke' as const, stroke: 'var(--sheet, #fff)', strokeWidth: 3 }
 
   const supSym = (s: Support, i: number) => {
     const x = sx(s.x)
@@ -89,12 +91,13 @@ export function BeamElevation({ L, supports, loads, spans }: {
   )
 
   const loadGlyph = (ld: BeamLoad, i: number) => {
+    const c = loadColor(ld.cat)
     if (ld.type === 'point') {
       const x = sx(ld.x)
       return (
         <g key={`l${i}`}>
-          {arrow(x, by - 44, by - 3, LOAD)}
-          <text x={x} y={by - 48} fontSize={8.5} fill={LOAD} textAnchor="middle">{ld.P} kN ({ld.cat})</text>
+          {arrow(x, by - 44, by - 3, c)}
+          <text x={x} y={by - 48} fontSize={8.5} fill={c} textAnchor="middle" {...HALO}>{ld.P} kN ({ld.cat})</text>
         </g>
       )
     }
@@ -102,10 +105,10 @@ export function BeamElevation({ L, supports, loads, spans }: {
       const x = sx(ld.x)
       const ccw = ld.M >= 0
       return (
-        <g key={`l${i}`} stroke={MOM} fill="none" strokeWidth={1.4}>
+        <g key={`l${i}`} stroke={c} fill="none" strokeWidth={1.4}>
           <path d={`M ${x - 8} ${by - 12} A 9 9 0 1 ${ccw ? 0 : 1} ${x + 8} ${by - 12}`} />
           <path d={ccw ? `M ${x + 8} ${by - 12} l -5 -4 m 5 4 l -6 2` : `M ${x - 8} ${by - 12} l 5 -4 m -5 4 l 6 2`} strokeWidth={1.2} />
-          <text x={x} y={by - 26} fontSize={8.5} fill={MOM} textAnchor="middle" stroke="none">{ld.M} kN·m ({ld.cat})</text>
+          <text x={x} y={by - 26} fontSize={8.5} fill={c} textAnchor="middle" {...HALO}>{ld.M} kN·m ({ld.cat})</text>
         </g>
       )
     }
@@ -117,14 +120,15 @@ export function BeamElevation({ L, supports, loads, spans }: {
     const label = ld.type === 'udl' ? `${ld.w} kN/m (${ld.cat})` : `${ld.w1}→${ld.w2} kN/m (${ld.cat})`
     return (
       <g key={`l${i}`}>
-        <line x1={xa} y1={base - 1 - h1} x2={xb} y2={base - 1 - h2} stroke={LOAD} strokeWidth={1.2} />
+        <line x1={xa} y1={base - 1 - h1} x2={xb} y2={base - 1 - h2} stroke={c} strokeWidth={1.2} />
         {stations.map((t, k) => {
           const x = xa + (xb - xa) * t
           const hh = h1 + (h2 - h1) * t
-          return arrow(x, base - 1 - hh, base, LOAD, k)
+          return arrow(x, base - 1 - hh, base, c, k)
         })}
-        <text x={(xa + xb) / 2} y={base - 7 - Math.max(h1, h2)} fontSize={8.5} fill={LOAD} textAnchor="middle"
-          paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{label}</text>
+        {/* inside the arrows, mid-height of the load at mid-span, on a halo */}
+        <text x={(xa + xb) / 2} y={base - 1 - Math.max(16, (h1 + h2) / 2) / 2 + 3} fontSize={8.5} fill={c} textAnchor="middle"
+          fontWeight={600} {...HALO}>{label}</text>
       </g>
     )
   }
@@ -141,6 +145,15 @@ export function BeamElevation({ L, supports, loads, spans }: {
         {multi && spanXs.slice(1).map((g, k) => (
           <line key={`j${k}`} x1={sx(g.x0)} y1={by - 9} x2={sx(g.x0)} y2={by + 9} stroke={BEAM} strokeWidth={0.8} strokeDasharray="2 2" />
         ))}
+        {cats.length > 1 && <g fontSize={8}>
+          {cats.map((cat, k) => {
+            const x = bx1 - (cats.length - 1 - k) * 74 - 60
+            return <g key={cat}>
+              <rect x={x} y={8} width={9} height={9} fill={loadColor(cat)} />
+              <text x={x + 13} y={16} fill={loadColor(cat)}>{cat} · {LOAD_NAME[cat]}</text>
+            </g>
+          })}
+        </g>}
         {supports.map(supSym)}
         {loads.map(loadGlyph)}
         {/* the span, dimensioned — it used to be two loose labels, "0" and

@@ -38,14 +38,9 @@ export function memberColor(
   return `#${base.getHexString()}`
 }
 
-// Load-diagram colours by NSCP category (dead, live, wind, seismic, …).
-
-// Load-diagram colours by NSCP category (dead, live, wind, seismic, …).
-
-// Load-diagram colours by NSCP category (dead, live, wind, seismic, …).
-export const LOAD_COLOR: Record<string, string> = {
-  D: '#64748b', L: '#15803d', Lr: '#15803d', S: '#0891b2', R: '#0891b2', W: '#0ea5e9', E: '#7c3aed',
-}
+// Load-diagram colours by NSCP category (dead, live, wind, seismic, …) —
+// shared with the 2D beam elevations.
+export { LOAD_COLOR } from '../../lib/loadColors'
 
 // ── 3D primitives ─────────────────────────────────────────────────────────
 /**
