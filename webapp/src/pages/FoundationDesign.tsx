@@ -28,6 +28,7 @@ import { ModelMemberResults } from '../components/ModelMemberResults'
 import type { MemberLoadRequest } from '../lib/modelMemberResults'
 import { f0, f2, f3 } from '../lib/format'
 import { codeLink } from '../lib/codes/links'
+import { FootingShearIso } from '../components/codes/FootingShearIso'
 import 'katex/dist/katex.min.css'
 
 type FootingType = 'square' | 'rectangular'
@@ -603,6 +604,13 @@ export default function FoundationDesign() {
           position={form.position} d={view.dProvided} pressure={view.offset ?? view.ecc}
           columnWidthY={rectCol ? colWidthY : undefined}
           bars={{ db: dbEff, cover: form.cover, long: view.long, short: view.short }} />
+        {/* the one-way shear section in 3-D, on this pad, with its adopted long-direction mat. Uniform
+            qu and a centred column only: an eccentric pad's trapezoidal pressure and an edge column's
+            offset strip are a different picture from the one this draws. */}
+        {form.position === 'interior' && view.loading === 'concentric' && <FootingShearIso hl={null}
+          i={{ B: view.By, L: view.Bx, c: colWidth, h: view.Dc, d: view.dProvided, fc: form.fc, lambda: 1, qu: view.qu }}
+          bars={{ db: dbEff, spacing: view.long.spacing }}
+          direction={view.type === 'square' ? undefined : 'long direction'} />}
       </div> } : undefined}
       resultsCaption={caption}
       results={view ? [

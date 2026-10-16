@@ -15,11 +15,12 @@
 // Geometry from `lib/punchingIso` (Σ planes asserted = engine b₀).
 // ─────────────────────────────────────────────────────────────────────────
 import { DrawingFrame } from './DrawingFrame'
+import { BarEnd, IsoBar } from './isoBars'
 import type { ColumnPosition } from '../engine/shear'
 import { punchingIsoGeometry, type ColumnSide } from '../lib/punchingIso'
 import { AXO, boxEdges, boxFaces, edgeVisible, faceVisible, fitIso, isoPath, sortFaces, type Vec3 } from '../lib/isometric'
 
-const INK = '#37526e', FAINT = '#8a8f98', CRIT = '#c2402a', DIM = '#1f77b4', BAR = '#3f4a59'
+const INK = '#37526e', FAINT = '#8a8f98', CRIT = '#c2402a', DIM = '#1f77b4'
 const COL_SHADE: Record<string, string> = { '-y': '#9fb1c6', '+x': '#7f95ae', '+z': '#c3d0dd' }
 const halo = { paintOrder: 'stroke' as const, stroke: 'var(--sheet, #fff)', strokeWidth: 2.6, strokeLinejoin: 'round' as const }
 
@@ -69,10 +70,11 @@ export function PunchingIso({ c1, c2, d, h, position, alphaS, column = 'below' }
   const yText = fit.box.y + fit.box.h + 22
   const H = yText + 59
   const lens = g.planes.map((q) => Math.round(q.len))
-  const cuts = (q: typeof planes[number], o: number) => q.cuts.map((c, k) => {
-    const [x, y] = p(c)
-    return <circle key={`${q.side}${k}`} cx={x} cy={y} r={2.3} fill={BAR} stroke="var(--sheet, #fff)" strokeWidth={0.6} opacity={o} />
-  })
+  // bars as round steel, raised to a legible floor at this scale; where one pierces a plane it shows as a ring IN that plane
+  const rb = Math.max(8, 2 / fit.s), bw = 2 * rb * fit.s
+  const cuts = (q: typeof planes[number], o: number) => q.cuts.map((c, k) => (
+    <BarEnd key={`${q.side}${k}`} c={c} axis={q.n[0] !== 0 ? 'x' : 'y'} r={rb} p={p} opacity={o} />
+  ))
 
   return (
     <DrawingFrame label="punching shear isometric">
@@ -94,7 +96,7 @@ export function PunchingIso({ c1, c2, d, h, position, alphaS, column = 'below' }
           <path d={P(q.cover)} fill="none" stroke={FAINT} strokeWidth={0.6} strokeDasharray="2 2" />
           <path d={P(q.pts)} fill={CRIT} fillOpacity={0.12} stroke={CRIT} strokeWidth={0.9} strokeDasharray="4 2" />
         </g>)}
-        {g.bars.map((b, k) => <path key={`r${k}`} d={isoPath([p(b.a), p(b.b)], false)} stroke={BAR} strokeWidth={1.3} strokeLinecap="round" opacity={0.75} />)}
+        {g.bars.map((b, k) => <IsoBar key={`r${k}`} a={b.a} b={b.b} w={bw} p={p} opacity={0.7} />)}
         {back.map((q) => cuts(q, 0.6))}
         {coneFaces.map((f) => <path key={`c${f.side}`} d={P(f.pts)} fill={CRIT} fillOpacity={faceVisible(f.n, view) ? 0.08 : 0}
           stroke={CRIT} strokeWidth={0.9} strokeDasharray="5 3" strokeLinejoin="round" />)}
@@ -149,7 +151,7 @@ export function PunchingIso({ c1, c2, d, h, position, alphaS, column = 'below' }
           b₀·d = {Math.round(g.b0).toLocaleString()} × {Math.round(d)} = {(g.area / 1e6).toFixed(3)} m² — the area Vc acts on
         </text>
         <text x={W / 2} y={yText + 39} fontSize={8} fill={FAINT} textAnchor="middle">
-          d runs from the {above ? 'top' : 'soffit'} to the {above ? 'bottom' : 'top'} bars (●, where they cross a plane); the cover is outside it.
+          d: {above ? 'top' : 'soffit'} to the {above ? 'bottom' : 'top'} bars' centres, ringed where they cross a plane.
         </text>
         <text x={W / 2} y={yText + 52} fontSize={8} fill={FAINT} textAnchor="middle">
           Planes idealise the 45° cone (§22.6.4.1); a free edge has none. Bars at schematic spacing.
