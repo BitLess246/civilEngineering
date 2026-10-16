@@ -70,6 +70,7 @@ const CRIT = '#0f4c92'
 /** The §22.6.4.1 punching perimeter. Not CRIT: that blue is the mat's STEEL
  *  blue, and since the plan draws the mat a blue dashed line sank into it. */
 const PUNCH = '#9b2f8a'
+const MUTED_LABEL = '#6b7280'
 
 /** Plan + section of a designed footing, drawn to scale. */
 export function FootingSchematic({
@@ -180,7 +181,7 @@ export function FootingSchematic({
   const hatchId = `punch-${useId().replace(/:/g, '')}`
   const dotR = bars ? Math.max(1.7, (bars.db / 1000) * sV * 0.6) : 1.7
 
-  const totalH = baseY + (pressure ? 96 : 26)
+  const totalH = baseY + (pressure ? (pressure.qMin < 0 ? 96 : 66) : 26)
   // a thin pad sets its Dc label level beside the line; leave it the room
   const dcLabel = `Dc = ${Math.round(Dc)} mm`
   const viewW = Math.max(W, slabX + sW + 8 + sideLabelReach(slabY, baseY, dcLabel) + 4)
@@ -262,34 +263,52 @@ export function FootingSchematic({
           <line x1={slabX + endSec} y1={yLong} x2={slabX + sW - endSec} y2={yLong}
             stroke={STEEL} strokeWidth={Math.max(1.3, (bars.db / 1000) * sV)} />
         )}
-        {/* Bearing pressure. Off-centre the load, and the base no longer bears
-            uniformly; past the kern part of it lifts, which is drawn ABOVE the
-            line rather than clipped away, because the lift is the finding. */}
+        {/* Bearing pressure, on the underside it bears on: qMin to qMax across the
+            base, arrows pushing UP into the soffit. Off-centre the column, or with a
+            moment on it, the base no longer bears uniformly — the trapezoid runs
+            qMin → qMax whatever caused the eccentricity (it used to take qMin only
+            for an offset column, so a centred column under M drew a flat block
+            between labels reading 87 and 169). Past the kern part of the base
+            lifts, drawn ABOVE its own datum rather than clipped away, because the
+            lift is the finding — so only then does the block stand clear of the pad. */}
         {pressure && (() => {
           const { qMax, qMin } = pressure
           const peak = Math.max(Math.abs(qMax), Math.abs(qMin), 1e-9)
-          // Its own zero datum, clear of the slab. With zero ON the base the
-          // uplift half climbed back up through the footing it was describing.
-          const sc = 34 / peak                       // px per kPa
-          const datum = baseY + 42
-          // The peak sits at the free edge (right) when the column is offset;
-          // centred, the trapezoid degenerates to the uniform rectangle.
-          const qR = qMax
-          const qL = freeX ? qMin : qMax
-          const yL = datum + qL * sc, yR = datum + qR * sc
           const lift = qMin < 0
+          const sc = 34 / peak                       // px per kPa
+          const datum = lift ? baseY + 42 : baseY + 1
+          // the peak at the right: the free edge when the column is offset, the
+          // moment's side otherwise
+          const qL = qMin, qR = qMax
+          const yL = datum + qL * sc, yR = datum + qR * sc
+          const color = lift ? FREE : CRIT
+          // arrows where the base bears (q > 0), up into the soffit
+          const n = 9, arrows: JSX.Element[] = []
+          for (let k = 0; k < n; k++) {
+            const t = (k + 0.5) / n, x = slabX + t * sW, q = qL + (qR - qL) * t
+            if (q * sc < 6) continue
+            const y0 = datum + q * sc - 1, y1 = datum + 1.5
+            arrows.push(<g key={k}>
+              <line x1={x} y1={y0} x2={x} y2={y1 + 4} stroke={color} strokeWidth={0.9} />
+              <path d={`M ${x - 2.4} ${y1 + 5} L ${x} ${y1} L ${x + 2.4} ${y1 + 5} Z`} fill={color} />
+            </g>)
+          }
           return (
             <g>
-              <line x1={slabX} y1={datum} x2={slabX + sW} y2={datum} stroke="#a39d8d" strokeWidth={0.8} strokeDasharray="3 2" />
+              {lift && <line x1={slabX} y1={datum} x2={slabX + sW} y2={datum} stroke="#a39d8d" strokeWidth={0.8} strokeDasharray="3 2" />}
               <path d={`M ${slabX} ${datum} L ${slabX + sW} ${datum} L ${slabX + sW} ${yR} L ${slabX} ${yL} Z`}
-                fill={lift ? 'rgba(194,64,42,.14)' : 'rgba(15,76,146,.14)'}
-                stroke={lift ? FREE : CRIT} strokeWidth={1} />
-              <text x={slabX + sW + 4} y={yR + 3} fontSize={7.5} fill={lift ? FREE : CRIT}>
+                fill={lift ? 'rgba(194,64,42,.14)' : 'rgba(15,76,146,.10)'}
+                stroke={color} strokeWidth={1} />
+              {arrows}
+              <text x={slabX + sW + 4} y={yR + 3} fontSize={7.5} fill={color}>
                 {Math.round(qMax)} kPa
               </text>
-              <text x={slabX - 4} y={yL + 3} fontSize={7.5} textAnchor="end" fill={lift ? FREE : CRIT}>
-                {Math.round(qMin)}
+              <text x={slabX - 4} y={yL + 3} fontSize={7.5} textAnchor="end" fill={color}>
+                {Math.round(qMin)} kPa
               </text>
+              {!lift && <text x={slabX + sW / 2} y={Math.max(yL, yR) + 12} fontSize={7} textAnchor="middle" fill={MUTED_LABEL}>
+                service bearing pressure{Math.abs(qMax - qMin) > 0.5 ? ' — linear, qMin to qMax across the base' : ' — uniform'}
+              </text>}
               {lift && (
                 <text x={slabX + sW / 2} y={datum - 26} fontSize={8} textAnchor="middle"
                   fill={FREE} fontWeight={700}>UPLIFT — resultant outside the kern</text>
