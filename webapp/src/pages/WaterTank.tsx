@@ -97,7 +97,7 @@ export default function WaterTank() {
       drawing={{ title: 'Wall section and ring plan', node: <div data-pdf-drawing>
         <TankSection H={H} D={D} t={t} freeboard={freeboard} T={r.T}
           hoopBars={`⌀${barDia} @ ${f0(r.hoopSpacing)} mm (total)`}
-          vertBars={`⌀${barDia} @ ${f0(r.vertSpacing)} mm`} />
+          vertBars={`⌀${barDia} @ ${f0(r.vertSpacing)} mm`} shell={r.shell} />
       </div> }}
       resultsCaption={[
         ...r.inputNotes,
