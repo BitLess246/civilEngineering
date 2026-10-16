@@ -24,6 +24,7 @@ import { exampleFromQuery, fieldsFromQuery } from '../lib/codes/links'
 import { PunchingPlan } from '../components/PunchingPlan'
 import { PunchingIso } from '../components/PunchingIso'
 import { FootingOneWayDiagram } from '../components/codes/FootingDiagrams'
+import { FootingShearIso } from '../components/codes/FootingShearIso'
 import { ColumnPmDiagram } from '../components/codes/ColumnDiagrams'
 import { SeismicCsCurve } from '../components/codes/SeismicDiagrams'
 
@@ -218,7 +219,7 @@ function ProvisionView({ p }: { p: Provision }) {
               : p.diagram === 'steel-shear-web' ? <SteelShearWeb i={inp as unknown as SteelExampleInput} hl={hl} />
                 : p.diagram === 'steel-column-curve' ? <SteelColumnCurve i={inp as unknown as SteelExampleInput} hl={hl} />
                   : p.diagram === 'punching-perimeter' ? <PunchingDiagram i={inp as unknown as PunchingExampleInput} v={ex.values} />
-                    : p.diagram === 'footing-one-way' ? <FootingOneWayDiagram i={inp as unknown as FootingShearInput} hl={hl} />
+                    : p.diagram === 'footing-one-way' ? <div className="space-y-3"><FootingOneWayDiagram i={inp as unknown as FootingShearInput} hl={hl} /><FootingShearIso i={inp as unknown as FootingShearInput} hl={hl} /></div>
                       : p.diagram === 'column-pm' ? <ColumnPmDiagram i={inp as unknown as ColumnExampleInput} hl={hl} />
                         : p.diagram === 'seismic-cs' ? <SeismicCsCurve i={inp as unknown as SeismicExampleInput} hl={hl} />
                     : <LoadCombosChart i={inp as unknown as LoadExampleInput} hl={hl} />}

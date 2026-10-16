@@ -9,7 +9,8 @@ import { Num, Pick } from '../components/qty'
 import { InputGroup, CheckCard, ResultsTable, type ResultRow } from '../components/workspace'
 import { WorkspacePage } from '../components/WorkspacePage'
 import { ShearTabMechanics } from '../components/ShearTabMechanics'
-import { defaultBeamFor, defaultColumn } from '../lib/connectionMechanics'
+import { BlockShearIso } from '../components/BlockShearIso'
+import { defaultBeamFor, defaultColumn, holeDia } from '../lib/connectionMechanics'
 import { W_SORTED, shapeByName } from '../engine/aiscSections'
 import type { SolutionStep } from '../lib/solution'
 import { f1, f2, f3 } from '../lib/format'
@@ -396,6 +397,8 @@ export default function BoltedConnection() {
           avail={res.avail} R={R} Vu={Vu} Hu={Hu} ex_load={ex_load} ey_load={ey_load}
           beam={beam} column={column} weld={res.weld} webBearing={res.webBearing}
           bearing={res.bearing} />
+        {res.blockShear.length > 1 && <BlockShearIso bolts={res.geom.bolts.map((b) => ({ x: b.x + res.geom.Cx, y: b.y + res.geom.Cy }))}
+          W={res.geom.plateW} H={res.geom.plateH} t={tPlate} dh={holeDia(db)} cases={res.blockShear} avail={res.availBlockShear} R={R} />}
       </div> } : undefined}
       results={res ? [
         { check: 'Bolt shear', basis: `§J3.6 · ${nShear === 2 ? 'double' : 'single'} shear`, demand: `${f2(res.avail.shear)} kN`, status: 'info' as const },

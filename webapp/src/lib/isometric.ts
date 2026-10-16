@@ -112,3 +112,22 @@ export function fitIso(pts: readonly Vec3[], x: number, y: number, w: number, h:
 export function isoPath(pts: readonly Pt[], close = true): string {
   return pts.map((q, k) => `${k ? 'L' : 'M'}${q[0].toFixed(1)} ${q[1].toFixed(1)}`).join(' ') + (close ? ' Z' : '')
 }
+
+/**
+ * A flat outline in the (x, z) plane, anticlockwise, extruded through y0 → y1:
+ * the front cap (y0), the back cap (y1), and one side per outline edge with
+ * its outward normal. A plate on edge, a notched tab.
+ */
+export function extrudeFaces(outline: readonly { x: number; y: number }[], y0: number, y1: number, shift: Vec3 = [0, 0, 0]): Face[] {
+  const at = (q: { x: number; y: number }, y: number): Vec3 => [q.x + shift[0], y + shift[1], q.y + shift[2]]
+  const sides = outline.map((a, k): Face => {
+    const b = outline[(k + 1) % outline.length]
+    const dx = b.x - a.x, dz = b.y - a.y, L = Math.hypot(dx, dz) || 1
+    return { key: `s${k}`, n: [dz / L, 0, -dx / L], pts: [at(a, y0), at(b, y0), at(b, y1), at(a, y1)] }
+  })
+  return [
+    { key: 'front', n: [0, -1, 0], pts: outline.map((q) => at(q, y0)) },
+    { key: 'back', n: [0, 1, 0], pts: outline.map((q) => at(q, y1)) },
+    ...sides,
+  ]
+}
