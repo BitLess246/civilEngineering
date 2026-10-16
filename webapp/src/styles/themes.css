@@ -43,16 +43,16 @@
 
 /* ── 1 · DRAFTING SHEET ───────────────────────────────────
    The shipped look, with its three contrast failures corrected.
-   Warm paper, ink navy, drafting blue. */
+   Light grey paper (was warm until Oct 2026), ink navy, drafting blue. */
 :root,
 [data-theme="drafting"] {
   color-scheme: light;
 
   /* Surfaces */
-  --t-paper: #f4f3ef;
+  --t-paper: #f1f2f4;
   --t-sheet: #ffffff;
-  --t-sheet-2: #f9f8f4;
-  --t-field: #fcfbf8;
+  --t-sheet-2: #f8f9fa;
+  --t-field: #fbfbfc;
 
   /* Rail — the second neutral layer (sidebar, toolbars, hero) */
   --t-rail: #0f1b2a;
@@ -64,19 +64,19 @@
   --t-ink: #0f1b2a;
   --t-ink-2: #3d4a5c;
   --t-muted: #5c6675;
-  --t-faint: #736d5e;  /* was #a39d8d — 2.44:1 on paper, below AA */
+  --t-faint: #686d76;  /* was #a39d8d — 2.44:1 on paper, below AA */
 
   /* Lines */
-  --t-hairline: #e3e1da;
-  --t-hairline-2: #eeece5;
+  --t-hairline: #e1e3e7;
+  --t-hairline-2: #eceef1;
   /* WCAG 1.4.11 wants 3:1 for the visual information that identifies a UI
      component, and the border of an input is exactly that. All five themes
      were between 1.35 and 2.30:1 — the boundary of every field in the app was
      hard to locate. Each line is solved along its OWN hue against the worst of
      the three grounds a field sits on (paper, sheet, its own fill), so the
-     warm greys stay warm and Blueprint's stays blue. axe does not check 1.4.11,
+     neutral greys stay neutral and Blueprint's stays blue. axe does not check 1.4.11,
      which is why this survived a clean axe run; theme.test.ts does. */
-  --t-field-line: #8d8b85;
+  --t-field-line: #898c93;
 
   /* Brand */
   --t-brand: #0f4c92;
@@ -120,10 +120,10 @@
   color-scheme: light;
 
   /* Surfaces */
-  --t-paper: #fafaf8;
+  --t-paper: #f7f8f9;
   --t-sheet: #ffffff;
-  --t-sheet-2: #f5f5f3;
-  --t-field: #fcfcfb;
+  --t-sheet-2: #f4f5f7;
+  --t-field: #fcfcfd;
 
   /* Rail — the second neutral layer (sidebar, toolbars, hero) */
   --t-rail: #111a2c;
@@ -138,9 +138,9 @@
   --t-faint: #686e79;
 
   /* Lines */
-  --t-hairline: #e4e2dc;
-  --t-hairline-2: #efeeea;
-  --t-field-line: #91908c;
+  --t-hairline: #e3e5e9;
+  --t-hairline-2: #eeeff2;
+  --t-field-line: #8b8e94;
 
   /* Brand */
   --t-brand: #0b4a8f;

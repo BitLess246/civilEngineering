@@ -38,7 +38,7 @@ function Diagram({ nodes, edges, width, height }: ReturnType<typeof layoutNetwor
   const h = Math.max(height, ...nodes.map((n) => posOf(n).y + n.h + 16))
 
   return (
-    <div className="overflow-auto rounded-lg border border-hairline bg-sheet [background-image:linear-gradient(#f4f3ef_1px,transparent_1px),linear-gradient(90deg,#f4f3ef_1px,transparent_1px)] [background-size:24px_24px]" style={{ maxHeight: '70vh' }}>
+    <div className="overflow-auto rounded-lg border border-hairline bg-sheet [background-image:linear-gradient(#f1f2f4_1px,transparent_1px),linear-gradient(90deg,#f1f2f4_1px,transparent_1px)] [background-size:24px_24px]" style={{ maxHeight: '70vh' }}>
       <svg width={w} height={h} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} style={{ touchAction: 'none' }}>
         <defs>
           <marker id="net-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
@@ -84,7 +84,7 @@ function Diagram({ nodes, edges, width, height }: ReturnType<typeof layoutNetwor
                   <rect width={n.w} height={n.h} rx={6} fill={fill} stroke={stroke} strokeWidth={n.critical ? 2 : 1} />
                   {n.critical && <rect width={4} height={n.h} rx={2} fill={CRITICAL} />}
                   <text x={12} y={19} className="fill-ink" style={{ fontSize: 12, fontWeight: 700 }}>{clip(n.name)}</text>
-                  <line x1={8} y1={28} x2={n.w - 8} y2={28} stroke="#eeece5" />
+                  <line x1={8} y1={28} x2={n.w - 8} y2={28} stroke="#eceef1" />
                   <text x={12} y={44} className="fill-muted" style={{ fontSize: 10, fontFamily: 'monospace' }}>ES {n.es} · EF {n.ef}</text>
                   <text x={n.w - 12} y={44} textAnchor="end" style={{ fontSize: 10, fontFamily: 'monospace', fill: n.critical ? CRITICAL : '#a39d8d' }}>TF {n.totalFloat}</text>
                 </>

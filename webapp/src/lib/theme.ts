@@ -17,8 +17,8 @@ export const THEMES = [
   {
     id: 'drafting',
     name: 'Drafting sheet',
-    blurb: 'Warm paper, ink navy and drafting blue — the workbench as a drawing sheet.',
-    swatch: ['#f4f3ef', '#0f1b2a', '#0f4c92'],
+    blurb: 'Light grey paper, ink navy and drafting blue — the workbench as a drawing sheet.',
+    swatch: ['#f1f2f4', '#0f1b2a', '#0f4c92'],
   },
   {
     id: 'daylight',

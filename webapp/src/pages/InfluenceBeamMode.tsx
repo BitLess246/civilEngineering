@@ -514,7 +514,7 @@ export function BeamFigure({ length, supports, hinges, stations, sectionX, unitX
       {/* supports */}
       {supports.map((s, i) => (
         <g key={i} stroke={MUTED} strokeWidth={1.4} fill="none">
-          <path d={`M${X(s.x) - 8},${BY + 12} L${X(s.x)},${BY} L${X(s.x) + 8},${BY + 12} Z`} fill="#f4f3ef" />
+          <path d={`M${X(s.x) - 8},${BY + 12} L${X(s.x)},${BY} L${X(s.x) + 8},${BY + 12} Z`} fill="var(--color-paper, #f1f2f4)" />
           {s.kind === 'roller'
             ? <>
               <circle cx={X(s.x) - 4} cy={BY + 15} r={2.4} />
@@ -655,7 +655,7 @@ export function FreeBodyDiagram({ length, supports, hinges, stations, sectionX, 
         return (
           <g key={i}>
             <g stroke={MUTED} strokeWidth={1.4} fill="none">
-              <path d={`M${X(s.x) - 8},${BY + 12} L${X(s.x)},${BY} L${X(s.x) + 8},${BY + 12} Z`} fill="#f4f3ef" />
+              <path d={`M${X(s.x) - 8},${BY + 12} L${X(s.x)},${BY} L${X(s.x) + 8},${BY + 12} Z`} fill="var(--color-paper, #f1f2f4)" />
               {s.kind === 'roller'
                 ? <>
                   <circle cx={X(s.x) - 4} cy={BY + 15} r={2.4} />

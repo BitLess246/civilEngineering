@@ -312,7 +312,7 @@ function TrussFigure({ res, xc, selId, onSelect, ordAt }: {
       {/* supports */}
       {geom.nodes.filter((nd) => nd.support).map((nd) => (
         <g key={nd.id} stroke={MUTED} strokeWidth={1.4} fill="none">
-          <path d={`M${X(nd.x) - 8},${Y(nd.y) + 4} L${X(nd.x)},${Y(nd.y)} L${X(nd.x) + 8},${Y(nd.y) + 4} Z`} fill="#f4f3ef" />
+          <path d={`M${X(nd.x) - 8},${Y(nd.y) + 4} L${X(nd.x)},${Y(nd.y)} L${X(nd.x) + 8},${Y(nd.y) + 4} Z`} fill="var(--color-paper, #f1f2f4)" />
           <path d={`M${X(nd.x) - 10},${Y(nd.y) + 8} L${X(nd.x) - 4},${Y(nd.y) + 4} M${X(nd.x) - 4},${Y(nd.y) + 8} L${X(nd.x) + 2},${Y(nd.y) + 4} M${X(nd.x) + 2},${Y(nd.y) + 8} L${X(nd.x) + 8},${Y(nd.y) + 4}`} />
           {nd.support === 'roller' && <>
             <circle cx={X(nd.x) - 4} cy={Y(nd.y) + 8} r={2} />
