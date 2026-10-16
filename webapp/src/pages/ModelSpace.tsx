@@ -69,6 +69,7 @@ import { autoRigidOffsets } from '../engine/rigidEndZones'
 import { columnCapRise } from '../lib/columnCap'
 import { AnalysisOptionsHelp } from '../components/AnalysisOptionsHelp'
 import { computeWind, computeCladding, type WindResult, type WindEnclosure, type CladdingResult } from '../engine/wind'
+import { roofWindLoads, type RoofWindResult, type WindDir } from '../engine/roofWind'
 import { LetterheadCard, type LetterheadState } from '../components/calc'
 import { initialLetterhead } from '../lib/letterhead'
 import { JointConnections3D } from '../components/JointConnections3D'
@@ -324,6 +325,8 @@ export default function ModelSpace() {
   const [Kzt, setKzt] = useState(n('Kzt', 1.0))
   const [wDirs, setWDirs] = useState<string[]>((si.wDirs as string[]) ?? ['+X', '-X', '+Z', '-Z'])  // directional W cases
   const [wind, setWind] = useState<WindResult | null>(null)
+  /** Roof suction on trussed roofing for the primary W direction (engine/roofWind). */
+  const [roofWind, setRoofWind] = useState<RoofWindResult | null>(null)
   const [ccArea, setCcArea] = useState(1.0)   // C&C effective wind area, m²
   const [ccEncl, setCcEncl] = useState<WindEnclosure>('enclosed')
   const [cladding, setCladding] = useState<CladdingResult | null>(null)
@@ -1102,11 +1105,21 @@ export default function ModelSpace() {
     const primaryRes = rx ?? rz
     if (!primaryRes) return
     setWind(primaryRes)
+    // A trussed roof also takes the roof's own pressure (§207B, Fig. 207B.4-1):
+    // per direction, NOT by flipping the +X case — uplift is up both ways, and
+    // −X mirrors the windward and leeward slopes rather than negating them.
+    const roof = (d: string) => roofWindLoads(model, { V: Vw, exposure: expo, Kzt, enclosure: ccEncl, dir: d as WindDir })
+    const withRoof = (c: LateralCase, d: string): LateralCase => {
+      const rw = roof(d)
+      return rw ? { ...c, loads: [...c.loads, ...rw.loads] } : c
+    }
     setWCases(wDirs.map((d) => {
       const base = (d.includes('X') ? rx : rz)?.loads ?? []
-      return dirCase(base, 'W', d)
+      return withRoof(dirCase(base, 'W', d), d)
     }))
-    const primary = dirCase(primaryRes.loads, 'W', wDirs[0] ?? '+X')
+    const d0 = wDirs[0] ?? '+X'
+    setRoofWind(roof(d0))
+    const primary = withRoof(dirCase(primaryRes.loads, 'W', d0), d0)
     saveKeepModal({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'W' && l.kind === 'node')), ...primary.loads] })
   }
 
@@ -4283,6 +4296,13 @@ export default function ModelSpace() {
                       qh = {f2(wind.qh)} kPa · B×L = {f1(wind.B)}×{f1(wind.L)} m (L/B {f2(wind.LB)}) ·
                       Cp,lee {f2(wind.CpLee)} · base shear V = {f1(wind.baseShear)} kN — {wCases.length} cat-W
                       case{wCases.length === 1 ? '' : 's'} ({wDirs.join(', ') || 'none'}). Windward Cp = 0.8, G = {wind.G}, Kd = {wind.Kd}.
+                    </p>
+                  )}
+                  {wind && roofWind && (
+                    <p className="mt-1 text-xs text-muted" data-testid="roof-wind">
+                      Roof trusses (Fig. 207B.4-1, {wDirs[0] ?? '+X'}): h = {f2(roofWind.h)} m, qh = {f2(roofWind.qh)} kPa, θ = {f1(roofWind.theta)}°,
+                      h/L = {f2(roofWind.hL)} · {roofWind.normalToRidge ? 'normal to the ridge — windward + leeward slopes' : 'zones from the windward edge'} ·
+                      GCpi +{roofWind.GCpi} (enclosure, set under Components &amp; Cladding) — <strong>uplift {f1(roofWind.uplift)} kN</strong> at the panel points, in every W case.
                     </p>
                   )}
                 </div>

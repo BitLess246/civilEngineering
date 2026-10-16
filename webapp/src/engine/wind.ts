@@ -14,8 +14,10 @@
 // nodes — the existing NSCP combinations (1.2D+1.0W+…, 0.9D+1.0W) pick them up.
 //
 // Components & Cladding (§207E.4, low-rise walls) is provided separately below
-// (`computeCladding`) for local cladding/curtain-wall pressures. Roof uplift and
-// MWFRS side-wall pressures remain out of scope.
+// (`computeCladding`) for local cladding/curtain-wall pressures. The ROOF's
+// MWFRS pressure on a trussed roof — uplift, which reverses a light truss — is
+// `engine/roofWind`, added to each directional W case. MWFRS side-wall
+// pressures, and roof pressure on a concrete roof slab, remain out of scope.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, ModelLoad } from './model'
 import { columnShares, shiftResultantLoads } from './storeyDistribution'

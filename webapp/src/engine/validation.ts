@@ -54,6 +54,7 @@ import { designDrainage } from './drainage'
 import { designSepticTank } from './septicTank'
 import { cylinderWallFixedBase } from './waterTank'
 import { addRoofTrusses, roofingLoads } from './roofTruss'
+import { roofWindLoads, cpWindwardRoof, cpLeewardRoof } from './roofWind'
 import { cyclicStressRatio, crr75 } from './soils/liquefaction'
 import { nGamma, generalBearingCapacity } from './bearingGeneral'
 import { coulombKa, mononobeOkabe } from './coulomb'
@@ -439,6 +440,28 @@ const roofTrussRoofing = (() => {
   })
   const software = roofingLoads(r.model).reduce((t, l) => t + (l.kind === 'node' ? -(l.Fy ?? 0) : 0), 0)
   return { manual: 0.5 * 12 * 5, software }
+})()
+
+// ── 12b″. Roof wind on trusses — uplift by Figure 207B.4-1 ─────────────
+// The 12 m × 5 m gable roof (rise 1.5 m, θ = 14.04°) under V = 50 m/s,
+// exposure C, wind along the span. Each slope's plan area is 30 m²; the net
+// pressure on it is qh·G·Cp − qh·GCpi with Cp read off the figure at θ and
+// h/L, so the total uplift is −(p_windward + p_leeward)·30. The engine sums
+// it panel point by panel point from each half-panel's own normal — a
+// different route to the same number.
+const roofUplift = (() => {
+  const sec = { id: 's1', name: 'C1', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const m0 = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.2], section: sec })
+  const m = addRoofTrusses({ ...m0, loads: [] }, {
+    spanAlong: 'x', profile: 'gable', web: 'howe', rise: 1.5, panel: 1.5,
+    chordShape: 'HSS89x89x6.4', webShape: 'HSS64x64x4.8', qD: 0.5, qLr: 0,
+  }).model
+  const r = roofWindLoads(m, { V: 50, exposure: 'C', dir: '+X' })!
+  const th = (Math.atan(1.5 / 6) * 180) / Math.PI, h = (3.2 + 4.7) / 2
+  const qh = velocityPressure(h, 50, 'C'), hL = h / 12
+  const pw = qh * 0.85 * cpWindwardRoof(th, hL) - qh * 0.18
+  const pl = qh * 0.85 * cpLeewardRoof(th, hL) - qh * 0.18
+  return { manual: -(pw + pl) * 30, software: r.uplift }
 })()
 
 // ── 12c. Over-reinforced T-beam — the steel that does not reach fy ──────────
@@ -1198,6 +1221,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'tank-base-moment', category: 'RC', title: 'Circular tank wall base moment (fixed base, ⌀10 m × 6 m × 250)',
     reference: 'Timoshenko & Woinowsky-Krieger §117 · PCA Circular Tanks Table A-7', formula: 'M0 = (1 − 1/βH)·γw·a·H·t/√(12(1−ν²)),  β⁴ = 3(1−ν²)/(a·t)²',
     manual: tankBaseMoment.manual, software: tankBaseMoment.software, unit: 'kN·m/m', tol: 1e-4,
+  },
+  {
+    id: 'roof-wind-uplift', category: 'Wind', title: 'Roof wind on trusses — uplift on a 14° gable (NSCP Fig. 207B.4-1)',
+    reference: 'NSCP 2015 §207B.4, Figure 207B.4-1 (roof)', formula: 'U = −Σ (qh·G·Cp − qh·GCpi)·A_plan',
+    manual: roofUplift.manual, software: roofUplift.software, unit: 'kN', tol: 1e-9,
   },
   {
     id: 'roof-truss-roofing', category: 'Steel', title: 'Roof truss roofing — panel-point loads close on q·A (12 × 5 m, uneven panels)',
