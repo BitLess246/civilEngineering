@@ -8,6 +8,7 @@
 //
 // Geometry from `lib/blockShearIso` (face areas asserted = engine Agv/Anv/Agt/Ant).
 // ─────────────────────────────────────────────────────────────────────────
+import { useId } from 'react'
 import { DrawingFrame } from './DrawingFrame'
 import { Leader } from './Leader'
 import type { BlockShearCase } from '../engine/steelDesign'
@@ -19,6 +20,7 @@ import { extrudeFaces, faceVisible, fitIso, isoPath, sortFaces, type Face, type 
 const BLOCK_VIEW: IsoView = { az: -58, el: 24 }
 const INK = '#37526e', CRIT = '#c2402a', TENS = '#b45309', FAINT = '#8a8f98'
 const STEEL: Record<string, string> = { front: '#dfe6ee', side: '#b9c6d4', top: '#ced8e3' }
+const BORE = '#97a6b6'      // the hole's inner wall, a shade darker than the plate's side
 const halo = { paintOrder: 'stroke' as const, stroke: 'var(--sheet, #fff)', strokeWidth: 2.6, strokeLinejoin: 'round' as const }
 const fmt = (v: number) => Math.round(v).toLocaleString()
 
@@ -36,6 +38,7 @@ export interface BlockShearIsoProps {
 }
 
 export function BlockShearIso({ bolts, W, H, t, dh, cases, avail, R }: BlockShearIsoProps) {
+  const uid = useId().replace(/:/g, '')
   if (cases.length < 2 || bolts.length === 0) return null
   const k = avail[1] < avail[0] ? 1 : 0
   const which = k === 0 ? 'A' : 'B'
@@ -53,20 +56,58 @@ export function BlockShearIso({ bolts, W, H, t, dh, cases, avail, R }: BlockShea
   const cap = (fs: Face[]) => fs.find((f) => f.key === 'front')!
   const ctr = (pts: readonly Vec3[]): Vec3 => pts.reduce<Vec3>((s, q) => [s[0] + q[0] / pts.length, s[1] + q[1] / pts.length, s[2] + q[2] / pts.length], [0, 0, 0])
 
-  // holes on the front face, a split hole half on each body
+  // A hole is a BORE through the plate, not a white disc on it. Each body
+  // draws only the piece of each hole it keeps (`holePieces`) — a half on the
+  // shear line, a quarter at the far bolt where the tension plane cuts too.
+  // A whole hole: its front outline filled with the bore wall and the opening
+  // seen through it left empty. A piece on a cut edge is a NOTCH: its bore,
+  // swept through the thickness, shaded where it can be seen. No hole is
+  // outlined — a hole is where the steel is not; the face around it is what
+  // gives it its edge.
   const xL = g.shear.strips[0]?.[0][0] ?? W
-  const hole = (c: Pt, from: number, to: number, shift: Vec3) => {
-    const N = 20, r = dh / 2
-    const pts: Vec3[] = Array.from({ length: N + 1 }, (_, i) => {
-      const a = from + ((to - from) * i) / N
-      return [c.x + r * Math.cos(a) + shift[0], shift[1], c.y + r * Math.sin(a) + shift[2]]
+  const hole = (pc: (typeof g.holePieces)[number], i: number) => {
+    const shift = pc.body === 'block' ? g.block.shift : [0, 0, 0] as Vec3
+    const N = 24, r = dh / 2, whole = pc.a1 - pc.a0 > 2 * Math.PI - 1e-9
+    const arc = (y: number): Vec3[] => Array.from({ length: N + 1 }, (_, k) => {
+      const a = pc.a0 + ((pc.a1 - pc.a0) * k) / N
+      return [pc.c.x + r * Math.cos(a) + shift[0], y + shift[1], pc.c.y + r * Math.sin(a) + shift[2]]
     })
-    return isoPath(pts.map(p), true)
+    const sector = (y: number): Vec3[] => whole ? arc(y) : [[pc.c.x + shift[0], y + shift[1], pc.c.y + shift[2]], ...arc(y)]
+    if (!whole) {
+      // a NOTCH in the cut edge. Its bore is the arc swept through the thickness, but only what
+      // can be SEEN of it is shaded: through the front opening, and through the strip of a cut
+      // face the hole took away, where that face is in view. No line: the steel around it is its edge.
+      const f = arc(0), b = arc(g.tDraw)
+      const at = (a: number, y: number): Vec3 => [pc.c.x + r * Math.cos(a) + shift[0], y + shift[1], pc.c.y + r * Math.sin(a) + shift[2]]
+      const ctr = (y: number): Vec3 => [pc.c.x + shift[0], y + shift[1], pc.c.y + shift[2]]
+      // each straight edge lies on a cut face; its outward normal points away from the piece
+      const cutFaces = ([[pc.a0, [Math.sin(pc.a0), -Math.cos(pc.a0)]], [pc.a1, [-Math.sin(pc.a1), Math.cos(pc.a1)]]] as const)
+        .filter(([, n]) => faceVisible([n[0], 0, n[1]], view))
+        .map(([a]) => [ctr(0), at(a, 0), at(a, g.tDraw), ctr(g.tDraw)])
+      const id = `${uid}-n${i}`
+      return <g key={id}>
+        <clipPath id={id}>
+          <path d={P(sector(0))} />
+          {cutFaces.map((q, k) => <path key={k} d={P(q)} />)}
+        </clipPath>
+        {/* the notch is open: what is not bore wall is the space through it */}
+        <path d={P(sector(0))} fill="var(--sheet, #fff)" stroke="none" />
+        <g clipPath={`url(#${id})`}>
+          {f.slice(0, -1).map((q, k) => (
+            <path key={k} d={P([q, f[k + 1], b[k + 1], b[k]])} fill={BORE} stroke={BORE} strokeWidth={0.4} strokeLinejoin="round" />
+          ))}
+        </g>
+      </g>
+    }
+    const id = `${uid}-h${i}`
+    return <g key={id}>
+      <clipPath id={id}><path d={P(sector(0))} /></clipPath>
+      <path d={P(sector(0))} fill={BORE} stroke="none" />
+      <path d={P(sector(g.tDraw))} fill="var(--sheet, #fff)" stroke="none" clipPath={`url(#${id})`} />
+    </g>
   }
-  const plateHoles = g.holes.map((h, i) => <path key={`ph${i}`} d={h.split ? hole(h.c, Math.PI / 2, 1.5 * Math.PI, [0, 0, 0]) : hole(h.c, 0, 2 * Math.PI, [0, 0, 0])}
-    fill="var(--sheet, #fff)" stroke={INK} strokeWidth={0.7} />)
-  const blockHoles = g.holes.filter((h) => h.split).map((h, i) => <path key={`bh${i}`} d={hole(h.c, -Math.PI / 2, Math.PI / 2, g.block.shift)}
-    fill="var(--sheet, #fff)" stroke={INK} strokeWidth={0.7} />)
+  const plateHoles = g.holePieces.map((pc, i) => pc.body === 'plate' ? hole(pc, i) : null)
+  const blockHoles = g.holePieces.map((pc, i) => pc.body === 'block' ? hole(pc, i) : null)
   const strips = (f: typeof g.shear, color: string) => f.strips.map((s, i) => (
     <path key={i} d={P(s)} fill={color} fillOpacity={0.45} stroke={color} strokeWidth={1.1} strokeLinejoin="round" />
   ))

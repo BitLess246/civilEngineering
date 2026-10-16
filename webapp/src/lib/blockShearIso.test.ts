@@ -46,3 +46,30 @@ describe('block shear in 3-D — the faces are the engine\'s areas', () => {
     expect(solidPieces(0, 10, [[-5, 15]])).toEqual([])
   })
 })
+
+describe('the holes are shared out the way the planes cut them', () => {
+  for (const which of ['A', 'B'] as const) {
+    it(`case ${which}: every hole's pieces make one whole circle, and each piece lies on its own body`, () => {
+      const W = 100, n = 3
+      const bolts = Array.from({ length: n }, (_, k) => ({ x: 60, y: 40 + 75 * k }))
+      const H = 40 + 75 * (n - 1) + 40, r = 11
+      const g = blockShearIso(bolts, W, H, 10, 2 * r, which)
+      const yT = which === 'A' ? bolts[n - 1].y : bolts[0].y
+      for (const b of bolts) {
+        const ps = g.holePieces.filter((p) => p.c === b)
+        expect(ps.reduce((s, p) => s + p.a1 - p.a0, 0)).toBeCloseTo(2 * Math.PI, 12)
+        for (const p of ps) for (let i = 0; i <= 12; i++) {
+          const a = p.a0 + ((p.a1 - p.a0) * i) / 12
+          const x = b.x + r * Math.cos(a), y = b.y + r * Math.sin(a)
+          const inBlock = x >= 60 - 1e-9 && (which === 'A' ? y <= yT + 1e-9 : y >= yT - 1e-9)
+          // a block piece never pokes out of the block; a plate piece never lies inside it
+          if (p.body === 'block') expect(inBlock, `${which} block piece at (${x}, ${y})`).toBe(true)
+          else expect(x > 60 + 1e-9 && (which === 'A' ? y < yT - 1e-9 : y > yT + 1e-9), `${which} plate piece at (${x}, ${y})`).toBe(false)
+        }
+      }
+      // the far bolt's hole: the block keeps a QUARTER, the plate three
+      const far = g.holePieces.filter((p) => p.c.y === yT)
+      expect(far.find((p) => p.body === 'block')!.a1 - far.find((p) => p.body === 'block')!.a0).toBeCloseTo(Math.PI / 2, 12)
+    })
+  }
+})
