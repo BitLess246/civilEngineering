@@ -1,6 +1,8 @@
 // Shared SVG dimension-line primitives — architectural 45° ticks, extension
 // lines and rotated labels — extracted from FootingSchematic so every
 // schematic (footing, combined, beam, pile cap) draws dimensions the same way.
+import { sideLabelLevel } from './dimLabel'
+
 const DIM = '#1f77b4'
 const GAP = 4
 const TK = 4
@@ -39,6 +41,8 @@ export function DimSide({ yA, yB, featX, dX, label, side }: {
   const ext = side === 'right' ? 5 : -5
   const lab = side === 'right' ? dX + 11 : dX - 11
   const e1 = side === 'right' ? featX + GAP : featX - GAP
+  const mid = (yA + yB) / 2
+  const level = sideLabelLevel(yA, yB, label)
   return (
     <g>
       <line x1={e1} y1={yA} x2={dX + ext} y2={yA} stroke={DIM} strokeWidth={0.6} />
@@ -46,8 +50,11 @@ export function DimSide({ yA, yB, featX, dX, label, side }: {
       <line x1={dX} y1={yA} x2={dX} y2={yB} stroke={DIM} strokeWidth={0.9} />
       <Tick x={dX} y={yA} />
       <Tick x={dX} y={yB} />
-      <text x={lab} y={(yA + yB) / 2} fontSize={9.5} fill={DIM} textAnchor="middle"
-        transform={`rotate(-90 ${lab} ${(yA + yB) / 2})`} paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{label}</text>
+      {level
+        ? <text x={side === 'right' ? dX + 8 : dX - 8} y={mid + 3.3} fontSize={9.5} fill={DIM} textAnchor={side === 'right' ? 'start' : 'end'}
+            paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{label}</text>
+        : <text x={lab} y={mid} fontSize={9.5} fill={DIM} textAnchor="middle"
+            transform={`rotate(-90 ${lab} ${mid})`} paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{label}</text>}
     </g>
   )
 }

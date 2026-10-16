@@ -107,7 +107,7 @@ export function LintelElevation({
         {arching ? (
           <>
             <polygon points={`${X(oL)},${Y(hL)} ${X(oR)},${Y(hL)} ${X(apex)},${Y(hL + triangleHeight)}`}
-              fill={LOAD} opacity={0.17} stroke={LOAD} strokeWidth={1.1} strokeDasharray="5 3" />
+              fill={LOAD} fillOpacity={0.17} stroke={LOAD} strokeWidth={1.1} strokeDasharray="5 3" strokeLinejoin="round" />
             {/* Clear of the apex, not straddling it: at 6 the label sat on the
                 two lines it is describing. */}
             <text x={X(apex)} y={Y(hL + triangleHeight) - 13} fontSize={8} fill={LOAD} textAnchor="middle"
@@ -118,7 +118,7 @@ export function LintelElevation({
         ) : (
           <>
             <rect x={X(oL)} y={Y(hL + wallHeightAbove)} width={opening * S} height={wallHeightAbove * S}
-              fill={LOAD} opacity={0.17} stroke={LOAD} strokeWidth={1.1} strokeDasharray="5 3" />
+              fill={LOAD} fillOpacity={0.17} stroke={LOAD} strokeWidth={1.1} strokeDasharray="5 3" />
             <text x={X(apex)} y={Y(hL + wallHeightAbove) - 6} fontSize={8} fill={LOAD} textAnchor="middle"
               paintOrder="stroke" stroke={SHEET} strokeWidth={2.6}>
               no room for the arch — the whole rectangle bears
@@ -173,11 +173,11 @@ export function LintelElevation({
             where it printed over the masonry it is not part of. */}
         <g>
           <line x1={X(oL - bear)} y1={Y(0) + 6} x2={X(oL)} y2={Y(0) + 6}
-            stroke={FAINT} strokeWidth={1.2} />
+            stroke={DIM} strokeWidth={0.85} />
           {[oL - bear, oL].map((x, k) => (
-            <line key={k} x1={X(x)} y1={Y(0) + 3} x2={X(x)} y2={Y(0) + 9} stroke={FAINT} strokeWidth={1.2} />
+            <line key={k} x1={X(x) - 3} y1={Y(0) + 9} x2={X(x) + 3} y2={Y(0) + 3} stroke={DIM} strokeWidth={1.2} />
           ))}
-          <text x={X(oL - bear / 2)} y={Y(0) + 17} fontSize={7.5} fill={FAINT} textAnchor="middle"
+          <text x={X(oL - bear / 2)} y={Y(0) + 17} fontSize={7.5} fill={DIM} textAnchor="middle"
             paintOrder="stroke" stroke={SHEET} strokeWidth={2.4}>{bearing} bearing</text>
         </g>
 

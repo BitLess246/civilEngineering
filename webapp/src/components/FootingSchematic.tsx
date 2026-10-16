@@ -1,5 +1,6 @@
 import { useId, type JSX } from 'react'
 import { DimBelow, DimSide } from './dims'
+import { sideLabelReach } from './dimLabel'
 import type { ColumnPosition } from '../engine/shear'
 import { DrawingFrame } from './DrawingFrame'
 import { STEEL, SHEET_NOTE } from '../engine/sheetInk'
@@ -180,10 +181,13 @@ export function FootingSchematic({
   const dotR = bars ? Math.max(1.7, (bars.db / 1000) * sV * 0.6) : 1.7
 
   const totalH = baseY + (pressure ? 96 : 26)
+  // a thin pad sets its Dc label level beside the line; leave it the room
+  const dcLabel = `Dc = ${Math.round(Dc)} mm`
+  const viewW = Math.max(W, slabX + sW + 8 + sideLabelReach(slabY, baseY, dcLabel) + 4)
 
   return (
     <DrawingFrame label="footing section">
-      <svg viewBox={`0 0 ${W} ${totalH}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
+      <svg viewBox={`0 0 ${viewW} ${totalH}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
         style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
         <text x={14} y={20} fontSize={11} fontWeight={700} fill="#a39d8d" fontFamily="IBM Plex Mono, monospace" letterSpacing="2">PLAN</text>
         {/* footing + column */}
@@ -294,7 +298,7 @@ export function FootingSchematic({
           )
         })()}
         <DimSide yA={gl} yB={baseY} featX={slabX} dX={slabX - 12} label={`H = ${H.toFixed(2)} m`} side="left" />
-        <DimSide yA={slabY} yB={baseY} featX={slabX + sW} dX={slabX + sW + 8} label={`Dc = ${Math.round(Dc)} mm`} side="right" />
+        <DimSide yA={slabY} yB={baseY} featX={slabX + sW} dX={slabX + sW + 8} label={dcLabel} side="right" />
       </svg>
     </DrawingFrame>
   )
