@@ -13,7 +13,9 @@
 // cards above the document; below that everything stacks — inputs, checks,
 // document — so on a phone the answer comes straight after the inputs.
 // ─────────────────────────────────────────────────────────────────────────
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
+import { EdgeFades } from './ScrollEdges'
+import { useScrollEdges } from '../lib/scrollEdges'
 import { Link } from 'react-router-dom'
 import { ExportPdfButton } from './ExportPdfButton'
 import type { CalcReportData } from './ReportControls'
@@ -321,10 +323,16 @@ export interface ResultRow {
 
 /** The "Design Summary" table: check · basis · demand · limit · util · status. */
 export function ResultsTable({ rows, caption }: { rows: ResultRow[]; caption?: ReactNode }) {
+  // The table keeps its 620 px minimum and scrolls below it; the fades say
+  // so — in a narrow column the Util. and Status columns were simply gone.
+  const box = useRef<HTMLDivElement>(null)
+  const edges = useScrollEdges(box)
   return (
     <div>
       {caption && <p className="mb-1.5 text-[11px] text-muted">{caption}</p>}
-      <div className="overflow-x-auto rounded-md border border-hairline bg-sheet">
+      <div className="relative">
+      <EdgeFades edges={edges} />
+      <div ref={box} className="overflow-x-auto rounded-md border border-hairline bg-sheet">
         <table className="w-full min-w-[620px] border-collapse text-[11.5px]">
           <thead>
             <tr className="bg-brand text-left text-[10.5px] font-bold uppercase tracking-wide text-on-solid">
@@ -346,6 +354,7 @@ export function ResultsTable({ rows, caption }: { rows: ResultRow[]; caption?: R
             ))}
           </tbody>
         </table>
+      </div>
       </div>
     </div>
   )

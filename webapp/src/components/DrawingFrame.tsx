@@ -28,9 +28,12 @@
 // drawing per resize.
 // ─────────────────────────────────────────────────────────────────────────
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ANNOTATION_FLOOR_PX, DRAWING_MAX_VH, drawingWidthBounds,
 } from '../lib/drawingScale'
+import { EdgeFades } from './ScrollEdges'
+import { useScrollEdges } from '../lib/scrollEdges'
 
 export interface DrawingFrameProps {
   children: ReactNode
@@ -99,7 +102,11 @@ export function DrawingFrame({
   // `tabIndex={0}` only while it can actually scroll: a focus stop on a box
   // with nothing to scroll is a keyboard trap for no reason.
   const scrolls = box.min > 0
+  const edges = useScrollEdges(frame)
+  const cut = edges.left || edges.right
+  const [full, setFull] = useState(false)
   return (
+    <div className="relative">
     <div
       ref={frame}
       // `contain: inline-size` is load-bearing, not a flourish, and it took
@@ -131,5 +138,49 @@ export function DrawingFrame({
         {children}
       </div>
     </div>
+    {/* A figure held at its floor is cut by its column: say so, and offer it
+        whole. The full view is the same figure at its own width — on a desktop
+        that fits the screen; on a phone it still scrolls, but over the whole
+        viewport rather than a card. */}
+    <EdgeFades edges={edges} />
+    {cut && (
+      <button type="button" data-pdf-skip onClick={() => setFull(true)}
+        className="absolute right-2 top-2 rounded-md border border-hairline bg-sheet px-2 py-0.5 text-[11px] font-medium text-muted shadow-sm hover:text-ink">
+        ⤢ Full size
+      </button>
+    )}
+    {full && <FullView label={label} min={box.min} max={box.max} onClose={() => setFull(false)}>{children}</FullView>}
+    </div>
+  )
+}
+
+/** The figure on its own, over the page, at its natural width (Esc closes). */
+function FullView({ children, label, min, max, onClose }: {
+  children: ReactNode; label: string; min: number; max: number; onClose: () => void
+}) {
+  const close = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    const back = document.activeElement as HTMLElement | null
+    close.current?.focus()
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => { window.removeEventListener('keydown', onKey); back?.focus?.() }
+  }, [onClose])
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-label={label} data-pdf-skip
+      className="fixed inset-0 z-50 flex flex-col bg-black/50 p-3 sm:p-6" onClick={onClose}>
+      <div className="mx-auto flex max-h-full w-full max-w-[96vw] flex-col overflow-hidden rounded-xl border border-hairline bg-sheet shadow-xl"
+        style={{ width: max ? Math.max(min, max) + 32 : undefined }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-hairline px-3 py-1.5">
+          <span className="text-xs font-semibold capitalize text-muted">{label}</span>
+          <button ref={close} type="button" onClick={onClose}
+            className="rounded-md border border-hairline px-2 py-0.5 text-[11px] font-medium text-muted hover:text-ink">Close (Esc)</button>
+        </div>
+        <div className="overflow-auto p-4">
+          <div style={{ minWidth: min || undefined }}>{children}</div>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
