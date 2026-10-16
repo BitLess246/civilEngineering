@@ -44,7 +44,7 @@ export function buildWaterTankSolution(i: TankSolutionInput, r: CircularTankResu
       title: 'Hoop tension at the base',
       clause: 'Thin-cylinder theory',
       lines: [
-        txt('Water pressure is greatest at the base, and a circular wall resists it by ring tension. Treating the wall as a thin cylinder free to expand gives the upper-bound ring force — a base fixed to the floor slab sheds some of it into cantilever bending, which is covered in the next step.'),
+        txt(`Water pressure is greatest at the base, and a circular wall resists it by ring tension. Treating the wall as a thin cylinder free to expand gives the upper-bound ring force. A base fixed to the floor slab sheds some of it into bending near the base — the shell solution below puts the actual peak at ${sn2(r.shell.Tmax)} kN/m, ${sn2(r.shell.xT)} m up — so designing the ring for the free value covers whatever restraint the base really gives.`),
         eq(String.raw`p = \gamma_w H = ${sn2(gammaW)} \times ${sn2(i.H)} = ${sn2(gammaW * i.H)}\ \text{kPa}`),
         eq(String.raw`T = \frac{p D}{2} = \frac{${sn2(gammaW * i.H)} \times ${sn2(i.D)}}{2} = \mathbf{${sn2(r.T)}}\ \text{kN/m}`),
       ],
@@ -59,14 +59,24 @@ export function buildWaterTankSolution(i: TankSolutionInput, r: CircularTankResu
       ],
     },
     {
-      title: 'Base cantilever moment and vertical steel',
-      clause: 'Working stress — σst, j = 0.87',
+      title: 'Base moment — the wall as a cylindrical shell',
+      clause: 'IS 3370-4 · PCA Table A-7 — shell theory',
       lines: [
-        txt('Where the wall is restrained by the floor slab it spans vertically as a cantilever under the triangular pressure, and needs vertical steel on the water face near the base.'),
-        eq(String.raw`M = ${sn2(r.M)}\ \text{kN·m/m}`),
-        eq(String.raw`d = t - cover - \tfrac{d_b}{2} = ${sn0(i.t)} - ${sn0(i.cover)} - ${sn1(i.barDia / 2)} = ${sn1(r.d)}\ \text{mm}`),
-        eq(String.raw`A_{s,vert} = \frac{M}{\sigma_{st}\,j\,d} = \frac{${sn2(r.M)} \times 10^6}{${sn0(sigmaSt)} \times ${sn2(J)} \times ${sn1(r.d)}} = ${sn0(r.vertAs)}\ \text{mm}^2\text{/m} \Rightarrow \varnothing${sn0(i.barDia)}@\mathbf{${sn0(r.vertSpacing)}}\ \text{mm}`),
+        txt('A closed ring cannot bow outward without stretching its hoops, so the wall is NOT a free cantilever: most of the pressure goes round the ring and only the zone near the fixed base bends. Thin-shell theory treats the wall as a beam on an elastic foundation whose springs are its own hoops, with β setting how far the base disturbance reaches up the wall.'),
+        eq(String.raw`\beta = \frac{\sqrt[4]{3(1-\nu^2)}}{\sqrt{a\,t}} = \frac{\sqrt[4]{3(1-0.2^2)}}{\sqrt{${sn2(i.D / 2)} \times ${sn3(i.t / 1000)}}} = ${sn3(r.shell.beta)}\ \text{m}^{-1},\qquad \frac{H^2}{D\,t} = ${sn2(r.shell.shape)}`),
+        eq(String.raw`M_0 = ${sn3(Math.abs(r.shell.coefM0))}\,\gamma_w H^3 = \mathbf{${sn2(r.M)}}\ \text{kN·m/m}\ \text{(tension on the water face)}`),
+        txt(`A free cantilever would give γw·H³/6 = ${sn2(r.Mcantilever)} kN·m/m — ${sn1(r.Mcantilever / Math.max(r.M, 1e-9))}× the shell's base moment. The span moment, tension on the outer face, peaks at ${sn2(r.shell.Mspan)} kN·m/m, ${sn2(r.shell.xSpan)} m above the base.`),
       ],
+    },
+    {
+      title: 'Vertical steel at the base',
+      clause: 'Working stress — σst, j = 0.87',
+      pass: r.steelFits,
+      lines: [
+        eq(String.raw`d = t - cover - \tfrac{d_b}{2} = ${sn0(i.t)} - ${sn0(i.cover)} - ${sn1(i.barDia / 2)} = ${sn1(r.d)}\ \text{mm}`),
+        eq(String.raw`A_{s,vert} = \frac{M_0}{\sigma_{st}\,j\,d} = \frac{${sn2(r.M)} \times 10^6}{${sn0(sigmaSt)} \times ${sn2(J)} \times ${sn1(r.d)}} = ${sn0(r.vertAs)}\ \text{mm}^2\text{/m} \Rightarrow \varnothing${sn0(i.barDia)}@\mathbf{${sn0(r.vertSpacing)}}\ \text{mm}`),
+      ],
+      note: r.steelFits ? undefined : `⌀${i.barDia} cannot supply the steel at the 50 mm minimum spacing — use a larger bar or a thicker wall.`,
     },
     {
       title: 'Crack control — concrete tensile stress',
