@@ -13,6 +13,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { DimBelow, Tick } from './dims'
 import { DrawingFrame } from './DrawingFrame'
+import { Leader } from './Leader'
 import type { StairSupport } from '../engine/stair'
 import { stairDetail, type Pt } from '../lib/stairDetail'
 
@@ -122,10 +123,10 @@ export function StairFlight({ span, t, R, G, cover, barDia, distDia, mainSpacing
           const lTx = X(g.beams[0][0]) - 12, lTy = Y(-t) + 12
           return (
             <g fontSize={8} fill="#b3402a">
-              <polyline points={`${X(ux) + 5},${Y(uz) + 5} ${uTx - 2},${uTy}`} fill="none" stroke="#b3402a" strokeWidth={0.7} />
-              <text x={uTx} y={uTy + 3} {...HALO}>bars cross<tspan x={uTx} dy={9.5}>ℓd ≥ {Math.round(g.ld)} past</tspan></text>
-              <polyline points={`${X(lx) - 5},${Y(lz) + 5} ${lTx + 2},${lTy}`} fill="none" stroke="#b3402a" strokeWidth={0.7} />
-              <text x={lTx} y={lTy + 3} textAnchor="end" {...HALO}>bars cross<tspan x={lTx} dy={9.5}>ℓd ≥ {Math.round(g.ld)} past</tspan></text>
+              <Leader x={X(ux) + 5} y={Y(uz) + 5} tx={uTx} ty={uTy + 3} fontSize={8} color="#b3402a" leading={1.19}
+                text={['bars cross', `ℓd ≥ ${Math.round(g.ld)} past`]} />
+              <Leader x={X(lx) - 5} y={Y(lz) + 5} tx={lTx} ty={lTy + 3} fontSize={8} color="#b3402a" leading={1.19}
+                text={['bars cross', `ℓd ≥ ${Math.round(g.ld)} past`]} />
             </g>
           )
         })()}
@@ -158,17 +159,15 @@ export function StairFlight({ span, t, R, G, cover, barDia, distDia, mainSpacing
           const tl = g.lowerLandingTop[0]
           return (
             <g fontSize={8.5}>
-              <line x1={X(mid[0])} y1={Y(mid[1])} x2={X(mid[0]) + 24} y2={Y(mid[1]) + 26} stroke={MAIN} strokeWidth={0.8} />
-              <text x={X(mid[0]) + 26} y={Y(mid[1]) + 34} fill={MAIN} {...HALO}>main ⌀{barDia} @ {Math.round(mainSpacing)} — bottom, into both landings</text>
-              {dm && <>
-                <line x1={X(dm[0])} y1={Y(dm[1])} x2={X(dm[0]) - 30} y2={Y(dm[1]) - 30} stroke={DIST} strokeWidth={0.8} />
-                <text x={X(dm[0]) - 32} y={Y(dm[1]) - 33} fill={DIST} textAnchor="end" {...HALO}>dist ⌀{distDia} @ {Math.round(distSpacing)}</text>
-              </>}
-              <line x1={X(ub[0] - 160)} y1={Y(ub[1])} x2={X(ub[0] - 160)} y2={Y(g.zTop) - 12} stroke={MAIN} strokeWidth={0.8} />
-              <circle cx={X(ub[0] - 160)} cy={Y(ub[1])} r={1.6} fill={MAIN} />
-              <text x={X(ub[0] - 160) + 3} y={Y(g.zTop) - 15} fill={MAIN} textAnchor="end" {...HALO}>landing ⌀{barDia} @ {Math.round(mainSpacing)} bottom</text>
-              <line x1={X(tl[0] + 120)} y1={Y(tl[1])} x2={X(tl[0] + 120)} y2={Y(tl[1]) - 20} stroke={TOP} strokeWidth={0.8} />
-              <text x={X(tl[0] + 120)} y={Y(tl[1]) - 24} fill={TOP} {...HALO}>{cont} ⌀{barDia}</text>
+              <Leader x={X(mid[0])} y={Y(mid[1])} tx={X(mid[0]) + 26} ty={Y(mid[1]) + 34} fontSize={8.5} color={MAIN}
+                text={`main ⌀${barDia} @ ${Math.round(mainSpacing)} — bottom, into both landings`} />
+              {dm && <Leader x={X(dm[0])} y={Y(dm[1])} tx={X(dm[0]) - 32} ty={Y(dm[1]) - 33} fontSize={8.5} color={DIST}
+                text={`dist ⌀${distDia} @ ${Math.round(distSpacing)}`} />}
+              {/* straight above their bars: the leader slides each label just clear so its leg drops square */}
+              <Leader x={X(ub[0] - 160)} y={Y(ub[1])} tx={X(ub[0] - 160) + 3} ty={Y(g.zTop) - 15} fontSize={8.5} color={MAIN} side="right"
+                text={`landing ⌀${barDia} @ ${Math.round(mainSpacing)} bottom`} />
+              <Leader x={X(tl[0] + 120)} y={Y(tl[1])} tx={X(tl[0] + 120)} ty={Y(tl[1]) - 24} fontSize={8.5} color={TOP} side="left"
+                text={`${cont} ⌀${barDia}`} />
             </g>
           )
         })()}

@@ -9,6 +9,7 @@
 // Geometry from `lib/blockShearIso` (face areas asserted = engine Agv/Anv/Agt/Ant).
 // ─────────────────────────────────────────────────────────────────────────
 import { DrawingFrame } from './DrawingFrame'
+import { Leader } from './Leader'
 import type { BlockShearCase } from '../engine/steelDesign'
 import { blockShearIso } from '../lib/blockShearIso'
 import type { Pt } from '../lib/connectionMechanics'
@@ -81,13 +82,9 @@ export function BlockShearIso({ bolts, W, H, t, dh, cases, avail, R }: BlockShea
   const bMid = p(ctr(cap(blockF).pts))
   const LX = 232
   const yS = Math.max(48, sAt[1]), yT = Math.max(tAt[1] + 8, yS + 46)
-  const label = (y: number, color: string, head: string, l1: string, l2: string, at: readonly [number, number]) => <g>
-    <path d={`M${at[0].toFixed(1)} ${at[1].toFixed(1)} L${LX - 6} ${y - 3}`} stroke={color} strokeWidth={0.7} fill="none" />
-    <circle cx={at[0]} cy={at[1]} r={1.8} fill={color} />
-    <text x={LX} y={y} fontSize={8.5} fontWeight={700} fill={color}>{head}</text>
-    <text x={LX} y={y + 12} fontSize={8} fill={color}>{l1}</text>
-    <text x={LX} y={y + 24} fontSize={8} fill={color}>{l2}</text>
-  </g>
+  const label = (y: number, color: string, head: string, l1: string, l2: string, at: readonly [number, number]) => (
+    <Leader x={at[0]} y={at[1]} tx={LX} ty={y} fontSize={8.5} color={color} weight={700} leading={1.41} text={[head, l1, l2]} />
+  )
   const holesOut = bolts.filter((b) => Math.abs(b.x - xL) < 1e-6).length - 0.5
   const exag = g.tDraw / t
   const yText = Math.max(fit.box.y + fit.box.h, yS + 100) + 20

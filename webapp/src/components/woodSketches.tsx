@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { DimBelow, DimSide } from './dims'
 import { DrawingFrame } from './DrawingFrame'
+import { Leader } from './Leader'
 import type { DeckMaterial, SlabSupport } from '../engine/woodSlab'
 
 const INK = '#37526e'
@@ -19,7 +20,6 @@ const GRAIN = '#c9b18a'
 const CL = '#7a8899'
 const LEAD = '#5b5446'
 const FAINT = '#a39d8d'
-const HALO = { paintOrder: 'stroke' as const, stroke: 'var(--sheet, #fff)', strokeWidth: 2.6 }
 
 export interface WoodDeckSectionProps {
   /** Joist width, depth, spacing c/c; deck thickness and board width — mm. */
@@ -90,14 +90,11 @@ export function WoodDeckSection({ b, d, s, t, boardWidth, deck, deckSupport, Lx,
           {(() => {
             const x = (joists[1] + joists[2]) / 2
             return <>
-              <line x1={x} y1={yTop + 0.5 * t * k} x2={x + 22} y2={yTop - 16} stroke={LEAD} strokeWidth={0.8} />
-              <text x={x + 25} y={yTop - 18} fill={LEAD} {...HALO}>
-                {deck === 'bamboo-slat' ? 'bamboo slat' : 'plank'} {Math.round(boardWidth)} × {Math.round(t)}
-              </text>
+              <Leader x={x} y={yTop + 0.5 * t * k} tx={x + 25} ty={yTop - 18} fontSize={9} color={LEAD}
+                text={`${deck === 'bamboo-slat' ? 'bamboo slat' : 'plank'} ${Math.round(boardWidth)} × ${Math.round(t)}`} />
             </>
           })()}
-          <line x1={joists[2]} y1={(yDeck + yBot) / 2} x2={joists[2] + 14} y2={dimY - 2} stroke={LEAD} strokeWidth={0.8} />
-          <text x={joists[2] + 16} y={dimY + 2} fill={LEAD} {...HALO}>{joistLabel}</text>
+          <Leader x={joists[2]} y={(yDeck + yBot) / 2} tx={joists[2] + 16} ty={dimY + 2} fontSize={9} color={LEAD} text={joistLabel} />
         </g>
 
         <text x={W / 2} y={H - 6} fontSize={7.5} fill={FAINT} textAnchor="middle">

@@ -14,6 +14,7 @@
 
 import { slabBarRuns, DEFAULT_EXT, type SlabBarExtensions } from '../engine/slabBarDetail'
 import { DrawingFrame } from './DrawingFrame'
+import { Leader } from './Leader'
 import { DimBelow, Tick } from './dims'
 
 const INK = '#37526e'
@@ -138,10 +139,10 @@ export function SlabBarSection({
           return (
             <g key={`b${i}`}>
               <line x1={sx(r.x1)} y1={y} x2={sx(r.x2)} y2={y} stroke={BOTBAR} strokeWidth={2.4} strokeLinecap="round" />
-              {i === 0 && <line x1={faceL + 14} y1={y} x2={faceL + 14} y2={ly - 8} stroke={BOTBAR} strokeWidth={0.7} />}
-              <text x={i === 0 ? faceL + 18 : (sx(r.x1) + sx(r.x2)) / 2} y={ly}
-                fontSize={8} fill={BOTBAR} textAnchor={i === 0 ? 'start' : 'middle'}
-                paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{r.label}</text>
+              {i === 0
+                ? <Leader x={faceL + 14} y={y} tx={faceL + 18} ty={ly} fontSize={8} color={BOTBAR} side="left" text={r.label} />
+                : <text x={(sx(r.x1) + sx(r.x2)) / 2} y={ly} fontSize={8} fill={BOTBAR} textAnchor="middle"
+                  paintOrder="stroke" stroke="var(--sheet, #fff)" strokeWidth={2.6}>{r.label}</text>}
             </g>
           )
         })}
