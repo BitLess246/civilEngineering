@@ -25,6 +25,9 @@ import { maxFilletAlongEdge, flangeTipSpan } from '../lib/connectionMechanics'
 import { DrawingFrame } from './DrawingFrame'
 
 const INK = '#1e293b', NOTE = '#475569'
+/** A paper-coloured outline behind a label that crosses the drawing's own
+ *  lines — the house convention (steelSketches, CombinedFootingSchematic). */
+const HALO = { paintOrder: 'stroke' as const, stroke: 'var(--sheet, #fff)', strokeWidth: 2.6, strokeLinejoin: 'round' as const }
 const STEEL_FILL = '#d5dbe3', STEEL_DARK = '#9aa6b4', PLATE = '#b9c7d8'
 const WELD = '#334155', CRIT = '#dc2626', LOAD = '#16a34a', CENT = '#0e7490', SHEAR = '#c2410c'
 
@@ -117,7 +120,7 @@ export function WeldedJointMechanics(p: WeldedJointMechanicsProps) {
           {/* column flange face, web behind it on the centreline */}
           <rect x={X(cX0)} y={Y(cY1)} width={cbf * s} height={(cY1 - cY0) * s} fill={STEEL_FILL} stroke={INK} strokeWidth={0.9} />
           <line x1={X(cMid)} y1={Y(cY1)} x2={X(cMid)} y2={Y(cY0)} stroke={STEEL_DARK} strokeWidth={1} strokeDasharray="8 4" />
-          <text x={X(cX0) + 4} y={Y(cY0) - 6} fontSize={9.5} fill={NOTE}>{p.column.name} flange · bf {Math.round(p.column.bf ?? cbf)}{tips ? ` (drawn ${Math.round(cbf)}, the weld spacing)` : ''}</text>
+          <text x={X(cX0) + 4} y={Y(cY0) - 6} fontSize={9.5} fill={NOTE} {...HALO}>{p.column.name} flange · bf {Math.round(p.column.bf ?? cbf)}{tips ? ` (drawn ${Math.round(cbf)}, the weld spacing)` : ''}</text>
 
           {/* the bracket plate — lapped across the flange (seen through, so the
               flange tips and their welds behind it read) or on its face */}
@@ -125,9 +128,9 @@ export function WeldedJointMechanics(p: WeldedJointMechanicsProps) {
           {tips && <>
             <line x1={X(cX0)} y1={Y(plY1)} x2={X(cX0)} y2={Y(plY0)} stroke={INK} strokeWidth={0.9} strokeDasharray="5 3" />
             <line x1={X(cX1)} y1={Y(plY1)} x2={X(cX1)} y2={Y(plY0)} stroke={INK} strokeWidth={0.9} strokeDasharray="5 3" />
-            <text x={X(cMid)} y={Y(plY1) - 6} fontSize={9.5} fill={NOTE} textAnchor="middle">flange tips {Math.round(cbf)} apart (behind the plate)</text>
+            <text x={X(cMid)} y={Y(plY1) - 6} fontSize={9.5} fill={NOTE} textAnchor="middle" {...HALO}>flange tips {Math.round(cbf)} apart (behind the plate)</text>
           </>}
-          <text x={X(plX1) - 4} y={Y(plY0) - 6} fontSize={9.5} fill={NOTE} textAnchor="end">PL {Math.round(plX1 - plX0)}×{Math.round(plY1 - plY0)}×{p.tPlate}</text>
+          <text x={X(plX1) - 4} y={Y(plY0) - 6} fontSize={9.5} fill={NOTE} textAnchor="end" {...HALO}>PL {Math.round(plX1 - plX0)}×{Math.round(plY1 - plY0)}×{p.tPlate}</text>
 
           {/* the welds: a fillet of leg w on the outside of each segment */}
           {segs.map((g) => {
@@ -161,7 +164,7 @@ export function WeldedJointMechanics(p: WeldedJointMechanicsProps) {
               <g key={k}>
                 <line x1={X(q.x)} y1={Y(q.y)} x2={X(q.x) + (q.fx / u) * L} y2={Y(q.y) - (q.fy / u) * L}
                   stroke={crit ? CRIT : WELD} strokeWidth={1.6} markerEnd={`url(#${crit ? 'wjm-c' : 'wjm-f'})`} />
-                {crit && <text x={X(q.x) + (q.fx / u) * L + 4} y={Y(q.y) - (q.fy / u) * L} fontSize={9.5} fill={CRIT} fontWeight={700}>f max {q.f.toFixed(0)} N/mm</text>}
+                {crit && <text x={X(q.x) + (q.fx / u) * L + 4} y={Y(q.y) - (q.fy / u) * L} fontSize={9.5} fill={CRIT} fontWeight={700} {...HALO}>f max {q.f.toFixed(0)} N/mm</text>}
               </g>
             )
           })}
@@ -176,16 +179,17 @@ export function WeldedJointMechanics(p: WeldedJointMechanicsProps) {
               <g>
                 <line x1={X(p.px)} y1={Y(p.py)} x2={X(p.px) + Math.cos(a) * L} y2={Y(p.py) - Math.sin(a) * L} stroke={LOAD} strokeWidth={2.2} markerEnd="url(#wjm-l)" />
                 <circle cx={X(p.px)} cy={Y(p.py)} r={3} fill={LOAD} />
-                <text x={X(p.px) + Math.cos(a) * L + 6} y={Y(p.py) - Math.sin(a) * L} fontSize={10} fill={LOAD} fontWeight={700}>{p.Plabel} {p.P.toFixed(0)} kN</text>
+                {/* past the arrowhead, which scales with the 2.2 stroke (≈ 16 px) */}
+                <text x={X(p.px) + Math.cos(a) * L + 12} y={Y(p.py) - Math.sin(a) * L + 4} fontSize={10} fill={LOAD} fontWeight={700} {...HALO}>{p.Plabel} {p.P.toFixed(0)} kN</text>
                 <circle cx={X(r.Cx)} cy={Y(r.Cy)} r={5} fill="none" stroke={CENT} strokeWidth={1.4} />
                 <line x1={X(r.Cx) - 8} y1={Y(r.Cy)} x2={X(r.Cx) + 8} y2={Y(r.Cy)} stroke={CENT} strokeWidth={1} />
                 <line x1={X(r.Cx)} y1={Y(r.Cy) - 8} x2={X(r.Cx)} y2={Y(r.Cy) + 8} stroke={CENT} strokeWidth={1} />
                 <text x={X(r.Cx) + 7} y={Y(r.Cy) - 8} fontSize={10} fill={CENT} fontWeight={700}>C</text>
                 <line x1={X(r.Cx)} y1={Y(r.Cy)} x2={X(p.px)} y2={Y(r.Cy)} stroke={CENT} strokeWidth={0.8} strokeDasharray="4 3" />
-                <text x={(X(r.Cx) + X(p.px)) / 2} y={Y(r.Cy) + 12} fontSize={9.5} fill={CENT} textAnchor="middle">ex {r.ex.toFixed(0)}</text>
+                <text x={(X(r.Cx) + X(p.px)) / 2} y={Y(r.Cy) + 12} fontSize={9.5} fill={CENT} textAnchor="middle" {...HALO}>ex {r.ex.toFixed(0)}</text>
                 {Math.abs(r.ey) > 1 && <>
                   <line x1={X(p.px)} y1={Y(r.Cy)} x2={X(p.px)} y2={Y(p.py)} stroke={CENT} strokeWidth={0.8} strokeDasharray="4 3" />
-                  <text x={X(p.px) + 4} y={(Y(r.Cy) + Y(p.py)) / 2} fontSize={9.5} fill={CENT}>ey {r.ey.toFixed(0)}</text>
+                  <text x={X(p.px) + 4} y={(Y(r.Cy) + Y(p.py)) / 2} fontSize={9.5} fill={CENT} {...HALO}>ey {r.ey.toFixed(0)}</text>
                 </>}
                 {Math.abs(T) > 1e-6 && (() => {
                   const ccw = T > 0
@@ -194,7 +198,7 @@ export function WeldedJointMechanics(p: WeldedJointMechanicsProps) {
                   const P1 = [X(r.Cx) + rC * Math.cos(a1), Y(r.Cy) - rC * Math.sin(a1)]
                   return <>
                     <path d={`M${P0[0]} ${P0[1]} A${rC} ${rC} 0 1 ${ccw ? 0 : 1} ${P1[0]} ${P1[1]}`} fill="none" stroke={CENT} strokeWidth={1.3} markerEnd="url(#wjm-t)" />
-                    <text x={X(r.Cx) - rC - 4} y={Y(r.Cy) - rC} fontSize={9.5} fill={CENT} textAnchor="end">T {(T / 1000).toFixed(1)} kN·m</text>
+                    <text x={X(r.Cx) - rC - 4} y={Y(r.Cy) - rC} fontSize={9.5} fill={CENT} textAnchor="end" {...HALO}>T {(T / 1000).toFixed(1)} kN·m</text>
                   </>
                 })()}
               </g>
