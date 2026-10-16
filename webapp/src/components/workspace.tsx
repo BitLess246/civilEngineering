@@ -24,7 +24,21 @@ import type { LetterheadState } from './calc'
 // ── Layout ──────────────────────────────────────────────────────────────────
 
 /** The three-column page. Children are slots, so the DOM order (inputs →
- *  checks → document) is the reading order on a phone. */
+ *  checks → document) is the reading order on a phone.
+ *
+ *  THE THIRD COLUMN WAITS UNTIL 1680 px. It used to open at `xl` (1280),
+ *  which left the document — the drawing sheet — 494–520 px at 1440, and a
+ *  sweep of every calculator measured what that cost: 99 drawings on 88 pages
+ *  held at their legibility floor (`DrawingFrame`, 555–680 px for most, 879
+ *  at most) and cut by the column. Below 1680 the page keeps the two-column
+ *  layout `lg` already uses — inputs | checks above the document — where the
+ *  document gets ~846 px at 1440 and 97 of the 99 fit; from 1680 the checks
+ *  move beside it and it still gets ~760.
+ *
+ *  Written `min-[105rem]`, not `min-[1680px]`: Tailwind orders width variants
+ *  by value, and a px bound cannot be ordered against the theme's rem
+ *  breakpoints — `lg:` was emitted after it and won, so the third column
+ *  never opened. */
 export function Workspace({ title, badges, intro, actions, inputs, checks, document }: {
   title: string
   badges?: string[]
@@ -45,16 +59,19 @@ export function Workspace({ title, badges, intro, actions, inputs, checks, docum
         {actions && <div className="ml-auto self-center">{actions}</div>}
         {intro && <p className="basis-full max-w-4xl text-[13px] text-muted">{intro}</p>}
       </div>
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)_310px]">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[300px_minmax(0,1fr)] min-[105rem]:grid-cols-[300px_minmax(0,1fr)_310px]">
         <aside aria-label="Inputs"
-          className="no-print lg:sticky lg:top-3 lg:row-span-2 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto lg:overscroll-contain xl:row-span-1">
+          className="no-print lg:sticky lg:top-3 lg:row-span-2 lg:max-h-[calc(100vh-1.5rem)] lg:overflow-y-auto lg:overscroll-contain min-[105rem]:row-span-1">
           {inputs}
         </aside>
         <aside aria-label="Checks"
-          className="no-print grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-start-2 lg:row-start-1 xl:col-start-3 xl:sticky xl:top-3 xl:max-h-[calc(100vh-1.5rem)] xl:grid-cols-1 xl:overflow-y-auto xl:overscroll-contain">
-          <div data-pdf-detail="Check cards">{checks}</div>
+          className="no-print lg:col-start-2 lg:row-start-1 min-[105rem]:col-start-3 min-[105rem]:sticky min-[105rem]:top-3 min-[105rem]:max-h-[calc(100vh-1.5rem)] min-[105rem]:overflow-y-auto min-[105rem]:overscroll-contain">
+          {/* The grid is on the cards' own wrapper: on the aside it had one
+              item — this div — so "two columns" put every card in the left
+              half and left the right half empty. */}
+          <div data-pdf-detail="Check cards" className="grid grid-cols-1 gap-3 sm:grid-cols-2 min-[105rem]:grid-cols-1">{checks}</div>
         </aside>
-        <div className="min-w-0 lg:col-start-2 lg:row-start-2 xl:row-start-1">{document}</div>
+        <div className="min-w-0 lg:col-start-2 lg:row-start-2 min-[105rem]:row-start-1">{document}</div>
       </div>
     </div>
   )
