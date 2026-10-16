@@ -78,7 +78,7 @@ function SCurve({ curve, duration, actualPct, dataOffset }: { curve: { t: number
       <svg width={W} height={H} className="min-w-[520px]">
         {[0, 25, 50, 75, 100].map((g) => (
           <g key={g}>
-            <line x1={pad} y1={y(g)} x2={W - pad} y2={y(g)} stroke="#f1efe8" />
+            <line x1={pad} y1={y(g)} x2={W - pad} y2={y(g)} stroke="#eceef1" />
             <text x={pad - 6} y={y(g) + 3} textAnchor="end" style={{ fontSize: 9, fontFamily: 'monospace', fill: '#a39d8d' }}>{g}</text>
           </g>
         ))}

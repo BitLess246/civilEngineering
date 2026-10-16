@@ -120,7 +120,7 @@ function GanttChart({ project, solve, zoom, baselineId }: {
   }, [project, solve, rowY, scale])
 
   const gridLines = ticks.map((t, i) => (
-    <line key={i} x1={t.x} y1={0} x2={t.x} y2={bodyHeight} stroke={t.major ? '#e3e1da' : '#f1efe8'} strokeWidth={1} />
+    <line key={i} x1={t.x} y1={0} x2={t.x} y2={bodyHeight} stroke={t.major ? '#e1e3e7' : '#eceef1'} strokeWidth={1} />
   ))
 
   return (
