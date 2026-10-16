@@ -10,7 +10,7 @@
 // at the point of use, as they were before.
 // ─────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { SceneText } from '../../components/SceneText'
 import { Edges, Grid } from '@react-three/drei'
 import { surfaceKey, surfaceMaterial, WIRE_OPACITY, type SurfaceStyle } from './viewMode'
@@ -43,6 +43,17 @@ import { SEL, COMPLIANCE_COLOR, LOAD_COLOR, levelDrop, memberColor, DIAG_COLOR, 
  * drawing the triangulation diagonal across every face, which is what a raw
  * `wireframe: true` material would have given.
  */
+/** Ctrl, ⌘ or Shift held on a pick — STAAD's "add to the selection". */
+const additiveClick = (e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }) => e.ctrlKey || e.metaKey || e.shiftKey
+
+/** Hands the live camera out of the Canvas, so a DOM overlay (the selection
+ *  box) can project the model into screen space. */
+export function CameraProbe({ camRef }: { camRef: { current: THREE.Camera | null } }) {
+  const camera = useThree((st) => st.camera)
+  useEffect(() => { camRef.current = camera }, [camera, camRef])
+  return null
+}
+
 function WireEdges({ style, color }: { style: SurfaceStyle; color: string }) {
   if (style !== 'wire') return null
   return <Edges threshold={15} color={color} />
@@ -75,7 +86,7 @@ const STICK_PICK = 0.14
 export function MemberStick3D({ a, b, role, selected, material, onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
   material?: string
-  onPick: () => void
+  onPick: (additive?: boolean) => void
 }) {
   const { line, mid, quat, len } = useMemo(() => {
     const dir = new THREE.Vector3().subVectors(b, a)
@@ -96,7 +107,7 @@ export function MemberStick3D({ a, b, role, selected, material, onPick }: {
       </lineSegments>
       {/* The pick target. Invisible rather than absent: a line this thin is
           almost unclickable, and selection has to keep working in wireframe. */}
-      <mesh position={mid} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>
+      <mesh position={mid} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick(additiveClick(e)) }}>
         <boxGeometry args={[len, STICK_PICK, STICK_PICK]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />
       </mesh>
@@ -162,7 +173,7 @@ export function Member3D({ a, b, role, selected, sec, axisRotation, style = 'sol
   /** Solid concrete, ghosted (a cage is being read through it) or wireframe —
    *  see `viewMode`, which decides which of the three this is. */
   style?: SurfaceStyle
-  onPick: () => void
+  onPick: (additive?: boolean) => void
 }) {
   const { mid, quat, len } = useMemo(() => {
     const len = a.distanceTo(b)
@@ -176,7 +187,7 @@ export function Member3D({ a, b, role, selected, sec, axisRotation, style = 'sol
   const color = memberColor(role, selected, 0, sec?.material)
   return (
     <mesh position={[mid.x, mid.y - drop, mid.z]} quaternion={quat}
-      onClick={(e) => { e.stopPropagation(); onPick() }}>
+      onClick={(e) => { e.stopPropagation(); onPick(additiveClick(e)) }}>
       <boxGeometry args={[len, ty, tz]} />
       {/* See-through while the cages are shown, and again in wireframe — solid
           concrete hides the steel inside it, which made "show reinforcement
@@ -282,7 +293,7 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, axisRotation, s
   /** See `viewMode`. A steel section wireframes to its own profile outline,
    *  which is the one drawing where the shape is still readable end-on. */
   style?: SurfaceStyle
-  onPick: () => void
+  onPick: (additive?: boolean) => void
 }) {
   const { shapes, quat, pos, len } = useMemo(() => {
     const shape = shapeByName(shapeName)
@@ -307,7 +318,7 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, axisRotation, s
     return <Member3D a={a} b={b} role={role} axisRotation={axisRotation} selected={selected} style={style} onPick={onPick} />
   }
   return (
-    <group position={pos} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>
+    <group position={pos} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick(additiveClick(e)) }}>
       {shapes.map((sh, i) => (
         <mesh key={i}>
           <extrudeGeometry args={[sh, { depth: len, bevelEnabled: false, steps: 1 }]} />
@@ -338,7 +349,7 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
    *  every branch — solid, meshed shell and timber deck — because a verdict
    *  has to read the same whatever the panel is drawn as. */
   tint?: string
-  onPick: () => void
+  onPick: (additive?: boolean) => void
 }) {
   // The node line of a floor is the TOP of the beams framing into it — see
   // `levelDrop` — so it is the top of the SLAB too: a floor is one surface, and
@@ -420,7 +431,7 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
 
   if (shellGeo) {
     return (
-      <group onClick={(e) => { e.stopPropagation(); onPick() }}>
+      <group onClick={(e) => { e.stopPropagation(); onPick(additiveClick(e)) }}>
         <mesh geometry={shellGeo.fill}>
           <meshStandardMaterial color={selected ? SEL : (tint ?? '#14b8a6')} transparent opacity={selected ? 0.75 : 0.4}
             side={THREE.DoubleSide} depthWrite={false} />
@@ -438,7 +449,7 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
         </lineSegments>
         {/* Same invisible pick target as a member's — the outline is too thin
             to click, and a panel has to stay selectable in wireframe. */}
-        {prism && <mesh geometry={prism} onClick={(e) => { e.stopPropagation(); onPick() }}>
+        {prism && <mesh geometry={prism} onClick={(e) => { e.stopPropagation(); onPick(additiveClick(e)) }}>
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>}
       </group>
@@ -448,7 +459,7 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
   if (deckGeo) {
     const board = selected ? SEL : (tint ?? '#c9a26b'), timber = selected ? SEL : (tint ?? '#9c6b3a')
     return (
-      <group onClick={(e) => { e.stopPropagation(); onPick() }}>
+      <group onClick={(e) => { e.stopPropagation(); onPick(additiveClick(e)) }}>
         <mesh geometry={deckGeo.deck}>
           <meshStandardMaterial key={surfaceKey(style)} color={board} roughness={0.85} {...surfaceMaterial(style)} />
         </mesh>
@@ -465,7 +476,7 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
   if (!prism) return null
   return (
     <mesh geometry={prism}
-      onClick={(e) => { e.stopPropagation(); onPick() }}>
+      onClick={(e) => { e.stopPropagation(); onPick(additiveClick(e)) }}>
       <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : (tint ?? color ?? '#7ba6d4')}
         transparent opacity={selected ? 0.85 : 0.45} depthWrite={style === 'solid'} />
     </mesh>
@@ -720,7 +731,7 @@ export function Wall3D({ tA, tB, bA, bB, shear, solid, thicknessM, selected, onP
   /** Wall thickness in m — required by the solid look, ignored by the ghost. */
   thicknessM?: number
   selected?: boolean
-  onPick?: () => void
+  onPick?: (additive?: boolean) => void
 }) {
   const ghost = useMemo(() => {
     const pos = [bA, bB, tB, bA, tB, tA].flatMap((p) => [p.x, p.y, p.z])
@@ -759,7 +770,7 @@ export function Wall3D({ tA, tB, bA, bB, shear, solid, thicknessM, selected, onP
     const face = selected ? SEL : shear ? '#c4b5fd' : '#d6d3d1'
     return (
       <group>
-        <mesh geometry={solidGeo.fill} onClick={(e) => { if (onPick) { e.stopPropagation(); onPick() } }}>
+        <mesh geometry={solidGeo.fill} onClick={(e) => { if (onPick) { e.stopPropagation(); onPick(additiveClick(e)) } }}>
           <meshStandardMaterial color={face} roughness={0.9} metalness={0} side={THREE.DoubleSide} />
         </mesh>
         <lineSegments geometry={solidGeo.edges}>
