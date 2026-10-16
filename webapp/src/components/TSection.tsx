@@ -1,4 +1,5 @@
 import { DimBelow, DimSide } from './dims'
+import { sideLabelReach } from './dimLabel'
 import { sectionFrame } from './sectionLayout'
 import { DrawingFrame } from './DrawingFrame'
 
@@ -24,8 +25,11 @@ export function TSection({ bf, bw, h, hf, a = 0, aReq = 0, bars = 0, barDia = 0,
   // Frame arithmetic lives in `sectionLayout` so it can be tested — the
   // complaint that started this ("too small, area not fully used") is a
   // statement about these numbers and nothing else.
-  const { scale: S, W, HT, x0, y0, w, ht } = sectionFrame(bf, h, bars)
+  const { scale: S, W: W0, HT, x0, y0, w, ht } = sectionFrame(bf, h, bars)
   const wf = bw * S, hff = hf * S, A = Math.min(a, h) * S
+  // a thin flange sets its hf label level, which needs more room on the right than the frame leaves
+  const hfLabel = `hf = ${Math.round(hf)}`
+  const W = Math.max(W0, x0 + w + 16 + sideLabelReach(y0, y0 + hff, hfLabel) + 4)
   // Overhang split: symmetric for an interior/isolated T, all on one side for an
   // L. Everything downstream reads `xw`, so the two shapes share one drawing.
   const xw = x0 + (edge ? 0 : (w - wf) / 2)
@@ -80,7 +84,7 @@ export function TSection({ bf, bw, h, hf, a = 0, aReq = 0, bars = 0, barDia = 0,
               {reqRule && (
                 <g opacity="0.85">
                   <line x1={x0 - 6} y1={y0 + Ar} x2={x0 + w + 6} y2={y0 + Ar} stroke="#0f4c92" strokeWidth="0.9" strokeDasharray="2 3" />
-                  <text x={lx} y={y0 + Math.max(Ar, 10) - 4} fontSize="8" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92"
+                  <text x={lx} y={y0 + Math.max(Ar, 10) - 4} fontSize="8" fill="#0f4c92"
                     textAnchor={anchor} paintOrder="stroke" stroke="#fff" strokeWidth="2.4">a req = {aReq.toFixed(0)}</text>
                 </g>
               )}
@@ -89,7 +93,7 @@ export function TSection({ bf, bw, h, hf, a = 0, aReq = 0, bars = 0, barDia = 0,
                   slab to a dozen units) puts the label in the clear instead. The
                   required depth rides along in the text whenever the separate rule
                   is too close to draw, so a,req is never off the drawing. */}
-              <text x={lx} y={aLabelY} fontSize="8.5" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92"
+              <text x={lx} y={aLabelY} fontSize="8.5" fill="#0f4c92"
                 textAnchor={anchor} paintOrder="stroke" stroke="#fff" strokeWidth="2.6">
                 a = {a.toFixed(0)}{suffix}
               </text>
@@ -161,7 +165,7 @@ export function TSection({ bf, bw, h, hf, a = 0, aReq = 0, bars = 0, barDia = 0,
         <DimBelow xA={x0} xB={x0 + w} featY={y0} dY={y0 - 18} label={`bf = ${Math.round(bf)} mm`} />
         <DimBelow xA={xw} xB={xw + wf} featY={y0 + ht + (bars > 0 ? 18 : 4)} dY={y0 + ht + (bars > 0 ? 34 : 20)} label={`bw = ${Math.round(bw)} mm`} flipNarrow />
         <DimSide yA={y0} yB={y0 + ht} featX={x0 > 40 ? xw : x0} dX={Math.min(x0, xw) - 16} label={`h = ${Math.round(h)} mm`} side="left" />
-        <DimSide yA={y0} yB={y0 + hff} featX={x0 + w} dX={x0 + w + 16} label={`hf = ${Math.round(hf)}`} side="right" />
+        <DimSide yA={y0} yB={y0 + hff} featX={x0 + w} dX={x0 + w + 16} label={hfLabel} side="right" />
       </svg>
     </DrawingFrame>
   )
