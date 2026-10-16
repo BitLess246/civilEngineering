@@ -161,7 +161,8 @@ export function StairFlight({ span, t, R, G, cover, barDia, distDia, mainSpacing
             <g fontSize={8.5}>
               <Leader x={X(mid[0])} y={Y(mid[1])} tx={X(mid[0]) + 26} ty={Y(mid[1]) + 34} fontSize={8.5} color={MAIN}
                 text={`main ⌀${barDia} @ ${Math.round(mainSpacing)} — bottom, into both landings`} />
-              {dm && <Leader x={X(dm[0])} y={Y(dm[1])} tx={X(dm[0]) - 32} ty={Y(dm[1]) - 33} fontSize={8.5} color={DIST}
+              {/* down through the soffit into the open space under the flight — above it is the R dimension */}
+              {dm && <Leader x={X(dm[0])} y={Y(dm[1])} tx={X(dm[0]) - 18} ty={Y(dm[1]) + 44} fontSize={8.5} color={DIST} side="left"
                 text={`dist ⌀${distDia} @ ${Math.round(distSpacing)}`} />}
               {/* straight above their bars: the leader slides each label just clear so its leg drops square */}
               <Leader x={X(ub[0] - 160)} y={Y(ub[1])} tx={X(ub[0] - 160) + 3} ty={Y(g.zTop) - 15} fontSize={8.5} color={MAIN} side="right"
