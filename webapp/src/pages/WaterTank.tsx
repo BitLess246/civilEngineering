@@ -26,7 +26,7 @@ export default function WaterTank() {
 
   const report = {
     docCode: 'S-WT',
-    ok: r.thicknessOK && r.freeboardOK,
+    ok: r.thicknessOK && r.freeboardOK && r.steelFits,
     governing: `Hoop tension T = ${f2(r.T)} kN/m at base · concrete tensile stress ${f2(r.fct)} MPa`,
     stats: [
       { label: 'Hoop steel', value: `⌀${barDia} @${f0(r.hoopSpacing)}`, unit: 'mm' },
@@ -48,7 +48,7 @@ export default function WaterTank() {
       ['Permissible concrete tension σct', `${sigmaCt} MPa`],
       ['Cover / bar ⌀', `${cover} / ${barDia} mm`],
       ['Effective depth d', `${f0(r.d)} mm`],
-      ['Base moment M', `${f2(r.M)} kN·m/m`],
+      ['Base moment M0 (shell)', `${f2(r.M)} kN·m/m — free cantilever ${f2(r.Mcantilever)}`],
       ['Hoop As', `${f0(r.hoopAs)} mm²/m`],
       ['Vertical As', `${f0(r.vertAs)} mm²/m`],
       ['Concrete tensile stress fct', `${f2(r.fct)} MPa`],
@@ -59,7 +59,7 @@ export default function WaterTank() {
   const fctRatio = sigmaCt > 0 ? r.fct / sigmaCt : undefined
   return (
     <WorkspacePage title="Circular Water Tank" badges={['Concrete', 'IS 3370 · ACI 350']}
-      intro="Working-stress design of a circular liquid-retaining wall, following the crack-control approach of IS 3370 and ACI 350. Ring tension sets the horizontal steel, the base cantilever moment the vertical steel, and the wall is checked so that uncracked concrete can carry the ring tension."
+      intro="Working-stress design of a circular liquid-retaining wall, following the crack-control approach of IS 3370 and ACI 350. Ring tension sets the horizontal steel, the base moment of the wall as a cylindrical shell the vertical steel, and the wall is checked so that uncracked concrete can carry the ring tension."
       report={report}
       inputs={<>
         <InputGroup title="Geometry">
@@ -83,9 +83,9 @@ export default function WaterTank() {
         <CheckCard title="Ring steel" basis="As = T / σst" status="info"
           value={`⌀${barDia} @ ${f0(r.hoopSpacing)}`} unit="mm"
           pairs={[{ label: 'As', value: `${f0(r.hoopAs)} mm²/m` }, { label: 'Placed', value: 'total, both faces' }]} />
-        <CheckCard title="Vertical steel" basis="As = M / (σst·j·d)" status="info"
+        <CheckCard title="Vertical steel" basis="As = M0 / (σst·j·d), M0 from the shell" status={r.steelFits ? 'info' : 'fail'}
           value={`⌀${barDia} @ ${f0(r.vertSpacing)}`} unit="mm"
-          pairs={[{ label: 'M at base', value: `${f2(r.M)} kN·m/m` }, { label: 'As', value: `${f0(r.vertAs)} mm²/m` }]} />
+          pairs={[{ label: 'M0 at base', value: `${f2(r.M)} kN·m/m` }, { label: 'As', value: `${f0(r.vertAs)} mm²/m` }]} />
         <CheckCard title="Freeboard" basis="≥ 300 mm" status={r.freeboardOK ? 'pass' : 'warn'}
           value={f2(freeboard)} unit="m" />
       </>}
@@ -101,13 +101,14 @@ export default function WaterTank() {
       </div> }}
       resultsCaption={[
         ...r.inputNotes,
+        ...(r.inputNotes.length || r.steelFits ? [] : [`⌀${barDia} cannot supply the steel at the 50 mm minimum spacing — use a larger bar or a thicker wall.`]),
         'The ring-steel spacing carries the WHOLE As = T/σst; split between the two faces, each face is at twice that spacing. Ring steel may be reduced up the wall as T = γw·z·D/2 falls. The base slab, roof and wall–base joint are designed separately.',
       ].join(' ')}
       results={[
         { check: 'Ring tension at base', basis: 'T = γw·H·D/2', demand: `${f2(r.T)} kN/m`, status: 'info' as const },
         { check: 'Ring steel', basis: `T/σst · ⌀${barDia}`, demand: `${f0(r.hoopAs)} mm²/m`, limit: `@ ${f0(r.hoopSpacing)} mm total`, status: 'info' as const },
-        { check: 'Base cantilever moment', basis: 'M = γw·H³/6', demand: `${f2(r.M)} kN·m/m`, status: 'info' as const },
-        { check: 'Vertical steel', basis: `M/(σst·j·d), d ${f0(r.d)} mm`, demand: `${f0(r.vertAs)} mm²/m`, limit: `@ ${f0(r.vertSpacing)} mm`, status: 'info' as const },
+        { check: 'Base moment', basis: `shell, H²/Dt ${f2(r.shell.shape)}: ${r.shell.coefM0 ? Math.abs(r.shell.coefM0).toFixed(4) : '—'}·γw·H³`, demand: `${f2(r.M)} kN·m/m`, limit: `cantilever ${f2(r.Mcantilever)}`, status: 'info' as const },
+        { check: 'Vertical steel', basis: `M0/(σst·j·d), d ${f0(r.d)} mm`, demand: `${f0(r.vertAs)} mm²/m`, limit: `@ ${f0(r.vertSpacing)} mm`, status: r.steelFits ? 'info' as const : 'fail' as const },
         { check: 'Concrete tension', basis: 'uncracked ring', demand: `${f2(r.fct)} MPa`, limit: `${f2(sigmaCt)} MPa`, ratio: fctRatio, status: r.thicknessOK ? 'pass' as const : 'fail' as const },
         { check: 'Freeboard', basis: '≥ 0.30 m', demand: `${f2(freeboard)} m`, limit: '0.30 m', status: r.freeboardOK ? 'pass' as const : 'warn' as const },
       ]}
@@ -115,6 +116,7 @@ export default function WaterTank() {
       references={[
         { topic: 'Liquid-retaining structures', basis: 'working stress, crack control', source: 'IS 3370-2 · ACI 350' },
         { topic: 'Ring tension', basis: 'membrane hoop force γw·z·D/2', source: 'Timoshenko, Theory of Plates and Shells' },
+        { topic: 'Base moment', basis: 'cylindrical shell, fixed base, free top (§117)', source: 'Timoshenko · PCA Circular Concrete Tanks, Table A-7' },
       ]}
     />
   )

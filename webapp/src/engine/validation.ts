@@ -52,6 +52,7 @@ import { designBeamColumnJoint } from './beamColumnJoint'
 import { velocity, hazenWilliamsHead, gpmToLps } from './waterSupply'
 import { designDrainage } from './drainage'
 import { designSepticTank } from './septicTank'
+import { cylinderWallFixedBase } from './waterTank'
 import { cyclicStressRatio, crr75 } from './soils/liquefaction'
 import { nGamma, generalBearingCapacity } from './bearingGeneral'
 import { coulombKa, mononobeOkabe } from './coulomb'
@@ -403,6 +404,19 @@ const tBeamGross = (() => {
   const Itop = (bf * hf ** 3) / 12 + Af * yf ** 2 + (b * hw ** 3) / 12 + Aw * yw ** 2
   const yBar = (Af * yf + Aw * yw) / A
   return { manual: (Itop - A * yBar ** 2) / 1e6, software: tSectionGross({ b, h, bf, hf }).Ig / 1e6 }
+})()
+
+// ── 12b′. Circular tank wall — base moment of a fixed-base cylinder ─────────
+// The engine solves the full 4×4 boundary-value problem (fixed base AND free
+// top); the reference is Timoshenko's closed form for a wall tall enough that
+// the top no longer reaches the base, M0 = (1 − 1/βH)·γw·a·H·t/√(12(1−ν²)).
+// Two different solutions of one equation: they can only agree where βH is
+// large, which a 6 m wall on ⌀10 m × 250 mm (βH ≈ 7) is.
+const tankBaseMoment = (() => {
+  const H = 6, D = 10, t = 250, nu = 0.2, g = 9.81, a = D / 2
+  const beta = Math.pow(3 * (1 - nu * nu), 0.25) / Math.sqrt(a * t / 1000)
+  const manual = (1 - 1 / (beta * H)) * g * a * H * (t / 1000) / Math.sqrt(12 * (1 - nu * nu))
+  return { manual, software: Math.abs(cylinderWallFixedBase(H, D, t, nu, g).M0) }
 })()
 
 // ── 12c. Over-reinforced T-beam — the steel that does not reach fy ──────────
@@ -1157,6 +1171,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     reference: 'Parallel-axis theorem (NSCP 424.2 / ACI 318-14 §24.2)',
     formula: 'I_c = Σ(I_i + A_i·y_i²) − A·ȳ²,  300×600 web + 1000×120 flange',
     manual: tBeamGross.manual, software: tBeamGross.software, unit: '×10⁶ mm⁴', tol: 1e-9,
+  },
+  {
+    id: 'tank-base-moment', category: 'RC', title: 'Circular tank wall base moment (fixed base, ⌀10 m × 6 m × 250)',
+    reference: 'Timoshenko & Woinowsky-Krieger §117 · PCA Circular Tanks Table A-7', formula: 'M0 = (1 − 1/βH)·γw·a·H·t/√(12(1−ν²)),  β⁴ = 3(1−ν²)/(a·t)²',
+    manual: tankBaseMoment.manual, software: tankBaseMoment.software, unit: 'kN·m/m', tol: 1e-4,
   },
   {
     id: 'arc-length-collapse', category: 'Analysis', title: 'Arc-length peak load — cantilever mechanism',
