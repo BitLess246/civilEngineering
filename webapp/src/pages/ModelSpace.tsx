@@ -133,7 +133,9 @@ import { UpgradeNotice } from '../components/UpgradeNotice'
 import { downloadText } from '../lib/downloadSvg'
 import { ExchangeMenu } from '../components/modelSpace/ExchangeMenu'
 import type { SolverKind } from '../lib/featureGate'
-import { BaseHardware3D, ComplianceHalo3D, Footing3D, GridBubbles3D, HorizonGrid, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
+import { BoxSelectOverlay } from '../components/modelSpace/BoxSelectOverlay'
+import { EMPTY_SELECTION, clickSelect, selectMany, type ScreenSegment, type Selection } from '../lib/selection'
+import { BaseHardware3D, CameraProbe, ComplianceHalo3D, Footing3D, GridBubbles3D, HorizonGrid, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
 import { COMPLIANCE_COLOR, DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/modelSpace/sceneTokens'
 import { ActionBtn, DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
@@ -412,6 +414,22 @@ export default function ModelSpace() {
   // screen is actually made of it; restored inputs alone do not bring it back.
   const material = isOfferedFrameMaterial(materialPick) || modelIsMadeOf(model, materialPick) ? materialPick : 'concrete'
   const [selected, setSelected] = useState<string | null>(null)
+  /**
+   * The MULTI-selection (lib/selection) — STAAD's grammar: Ctrl/⌘/Shift + click
+   * adds or removes, a box takes many. `selected` stays the PRIMARY, the one
+   * the single-member panels speak about. Every older `setSelected(x)` call
+   * still collapses the group to one, because `selIds` honours `multi` only
+   * while its primary is the element on screen.
+   */
+  const [multi, setMulti] = useState<Selection>(EMPTY_SELECTION)
+  const selIds = useMemo<ReadonlySet<string>>(() => (selected === null ? EMPTY_SELECTION.ids
+    : multi.primary === selected && multi.ids.has(selected) ? multi.ids : new Set([selected])), [selected, multi])
+  const applySel = (s: Selection) => { setMulti(s); setSelected(s.primary) }
+  const pick = (id: string, add = false) => applySel(clickSelect({ primary: selected, ids: selIds }, id, add))
+  /** Box mode: the left drag draws a selection box instead of orbiting. */
+  const [boxOn, setBoxOn] = useState(false)
+  const camRef = useRef<THREE.Camera | null>(null)
+  const [bulkB, setBulkB] = useState(''); const [bulkH, setBulkH] = useState('')
   const [analysis, setAnalysis] = useState<F3Analysis | null>(null)
   /** Per-combo active set (tension/compression-only members); null when none. */
   const [axialSets, setAxialSets] = useState<ActiveSetAnalysis['axial'] | null>(null)
@@ -816,6 +834,22 @@ export default function ModelSpace() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [undo, redo])
+
+  // Esc clears the selection and leaves Box mode; ⌘A / ⌃A selects every member.
+  // Not while typing, where both keys belong to the field.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) return
+      if (e.key === 'Escape') { setBoxOn(false); setSelected(null) }
+      else if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'a' && model?.members.length) {
+        e.preventDefault()
+        const s = selectMany(EMPTY_SELECTION, model.members.map((m) => m.id), false)
+        setMulti(s); setSelected(s.primary)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [model])
 
   /** save() for node-load-only edits (E/W case generation): mass and stiffness
    *  are untouched, so the modal result — which Method B and the RSA E-cases
@@ -2027,6 +2061,35 @@ export default function ModelSpace() {
         : model?.nodes.some((nn) => nn.id === selected) ? { kind: 'node', id: selected }
           : { kind: 'element', id: selected }
 
+  /** Every member's node-to-node line in screen px of a `w` × `h` layer over
+   *  the canvas — what the selection box tests against. Ends behind the camera
+   *  drop the member: it cannot be inside a box drawn on the screen. */
+  const projectMembers = (w: number, h: number): ScreenSegment[] => {
+    const cam = camRef.current
+    if (!cam || !model) return []
+    cam.updateMatrixWorld()
+    const v = new THREE.Vector3()
+    const px = (p: THREE.Vector3): [number, number] | null => {
+      v.copy(p).project(cam)
+      return v.z < -1 || v.z > 1 ? null : [((v.x + 1) / 2) * w, ((1 - v.y) / 2) * h]
+    }
+    const out: ScreenSegment[] = []
+    for (const m of model.members) {
+      const a = nodePos.get(m.i), b = nodePos.get(m.j)
+      const pa = a && px(a), pb = b && px(b)
+      if (pa && pb) out.push({ id: m.id, a: pa, b: pb })
+    }
+    return out
+  }
+  // the group, as the model has it now (a deleted id simply drops out)
+  const groupMembers = model && selIds.size > 1 ? model.members.filter((m) => selIds.has(m.id)) : []
+  const groupPlates = model && selIds.size > 1 ? model.plates.filter((p) => selIds.has(p.id)) : []
+  /** One edit over every member of the group — one undo step. */
+  const updGroup = (patch: (m: Member) => Partial<Member>) => {
+    if (!model) return
+    save({ ...model, members: model.members.map((m) => (selIds.has(m.id) ? { ...m, ...patch(m) } : m)) })
+  }
+
   const plateInfo = useMemo(() => {
     if (!selPlate || !model) return null
     const c = selPlate.corners.map((id) => nodePos.get(id)!)
@@ -2310,7 +2373,9 @@ export default function ModelSpace() {
           <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-hairline bg-rail lg:h-full lg:min-h-0"
             style={EMBED ? { pointerEvents: 'auto' } : undefined}>
             {model ? (
-              <Canvas camera={{ position: [14, 11, 14], fov: 45 }} gl={{ preserveDrawingBuffer: true }} onPointerMissed={() => setSelected(null)}>
+              <Canvas camera={{ position: [14, 11, 14], fov: 45 }} gl={{ preserveDrawingBuffer: true }}
+                onPointerMissed={(e) => { if (!(e.ctrlKey || e.metaKey || e.shiftKey)) setSelected(null) }}>
+                <CameraProbe camRef={camRef} />
                 {/* Outer net only: it stops ANY suspension in here from bubbling
                     to the route-level <Suspense> and blanking the whole page.
                     Text is NOT what it catches — <SceneText> carries its own
@@ -2390,12 +2455,12 @@ export default function ModelSpace() {
                   // stiffness matrix is assembled from.
                   const memberEl = skeleton
                     ? <MemberStick3D a={a} b={bb} role={m.role} material={sec?.material}
-                        selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                        selected={selIds.has(m.id)} onPick={(add) => pick(m.id, add)} />
                     : sec?.material === 'steel' && sec.shape
                       ? <MemberSteel3D a={aV} b={bV} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
-                          style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                          style={surface} selected={selIds.has(m.id)} onPick={(add) => pick(m.id, add)} />
                       : <Member3D a={aV} b={bV} role={m.role} axisRotation={m.axisRotation}
-                          sec={sec} style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                          sec={sec} style={surface} selected={selIds.has(m.id)} onPick={(add) => pick(m.id, add)} />
                   return (
                     <group key={m.id}>
                       {memberEl}
@@ -2420,7 +2485,7 @@ export default function ModelSpace() {
                   if (cs.some((c) => !c)) return null
                   return <Slab3D key={p.id} corners={cs as THREE.Vector3[]} shell={model.shellElements} deck={p.deck}
                     thickness={p.thickness / 1000} style={surface} tint={complianceTint.get(p.id)}
-                    selected={p.id === selected} onPick={() => setSelected(p.id)} />
+                    selected={selIds.has(p.id)} onPick={(add) => pick(p.id, add)} />
                 })}
                 {model.supports.map((s) => {
                   const p = nodePos.get(s.node)
@@ -2548,7 +2613,7 @@ export default function ModelSpace() {
                     amp={modeAmp}
                   />
                 )}
-                <OrbitControls ref={controlsRef} makeDefault enablePan target={[6, 3, 2.5]}
+                <OrbitControls ref={controlsRef} makeDefault enablePan enabled={!boxOn} target={[6, 3, 2.5]}
                   autoRotate={idleOrbit} autoRotateSpeed={0.8}
                   onStart={() => { setNavHintDone(true); orbitWake() }} />
                 </Suspense>
@@ -2571,14 +2636,42 @@ export default function ModelSpace() {
                 </span>
               )}
             </div>
-            {model && selInfo && (
+            {model && boxOn && (
+              <BoxSelectOverlay project={projectMembers}
+                onBox={(ids, add) => applySel(selectMany({ primary: selected, ids: selIds }, ids, add))}
+                onClickPick={(id, add) => { if (id) pick(id, add); else if (!add) setSelected(null) }} />
+            )}
+            {/* Selection tools, STAAD-style: a box, and whole families at once. */}
+            {model && (
+              <div className="no-print absolute right-3 top-3 z-[2] flex items-center gap-0.5 rounded-md border border-hairline bg-sheet/95 p-0.5 text-[11px] font-semibold shadow-sm backdrop-blur">
+                <button type="button" aria-pressed={boxOn} onClick={() => setBoxOn((v) => !v)}
+                  title="Box select — drag left→right for a window, right→left for a crossing (Esc to exit)"
+                  className={`rounded px-2 py-1 ${boxOn ? 'bg-brand text-on-solid' : 'text-ink-2 hover:bg-brand-tint'}`}>⬚ Box</button>
+                <span className="mx-0.5 h-4 w-px bg-hairline" />
+                {([['All', () => true], ['Beams', (m: Member) => m.role === 'beam' || m.role === 'girder'],
+                  ['Columns', (m: Member) => m.role === 'column'], ['Braces', (m: Member) => m.role === 'brace']] as const).map(([label, f]) => (
+                  <button key={label} type="button" title={`Select ${label === 'All' ? 'every member (⌘A)' : `all ${label.toLowerCase()}`} — ⌃/⇧-click a button to add`}
+                    onClick={(e) => applySel(selectMany({ primary: selected, ids: selIds },
+                      model.members.filter(f).map((m) => m.id), e.ctrlKey || e.metaKey || e.shiftKey))}
+                    className="rounded px-1.5 py-1 text-ink-2 hover:bg-brand-tint">{label}</button>
+                ))}
+              </div>
+            )}
+            {model && selIds.size > 1 && (
+              <div className="no-print absolute left-3 top-12 flex items-center gap-2 rounded-md border border-brand/30 bg-sheet/95 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
+                <span className="font-semibold text-brand">▣ {selIds.size} selected</span>
+                <span className="text-muted">last {selected}</span>
+                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-muted hover:text-fail" title="Clear selection (Esc)">✕</button>
+              </div>
+            )}
+            {model && selInfo && selIds.size <= 1 && (
               <div className="no-print absolute left-3 top-12 flex items-center gap-2 rounded-md border border-brand/30 bg-sheet/95 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
                 <span className="font-semibold text-brand">▣ {selInfo.kind} {selInfo.id}</span>
                 {selInfo.extra && <span className="text-muted">{selInfo.extra}</span>}
                 <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-muted hover:text-fail" title="Deselect">✕</button>
               </div>
             )}
-            {model && (
+            {model && !boxOn && (
               <div aria-hidden={navHintDone}
                 className={`no-print pointer-events-none absolute bottom-3 left-3 rounded border border-white/15 bg-rail/80 px-2 py-1 font-mono text-[10px] text-rail-muted transition-opacity duration-700 ${navHintDone ? 'opacity-0' : 'opacity-100'}`}>
                 orbit: drag · pan: ⇧drag · zoom: scroll
@@ -2599,7 +2692,114 @@ export default function ModelSpace() {
               scrolled past everything above it. Selection is not an analysis
               concern — it is a mode, and the panel should say what is in it.
               MOVED here rather than copied, so there is still only one of it. */}
-          {(selMember || selPlate) && (
+          {model && selIds.size > 1 && (() => {
+            const roles = new Map<string, number>()
+            for (const m of groupMembers) roles.set(m.role, (roles.get(m.role) ?? 0) + 1)
+            const roleOne = roles.size === 1 ? [...roles.keys()][0] : ''
+            const dofs = ['Fx', 'Fy', 'Fz', 'Mx', 'My', 'Mz'] as const
+            const relCount = (end: 'iEnd' | 'jEnd', d: typeof dofs[number]) => groupMembers.filter((m) => m.releases?.[end]?.[d]).length
+            const setRel = (end: 'iEnd' | 'jEnd', d: typeof dofs[number], on: boolean) =>
+              updGroup((m) => ({ releases: { ...m.releases, [end]: { ...m.releases?.[end], [d]: on } } }))
+            const steelIn = groupMembers.some((m) => sectionFor(m.id)?.material === 'steel')
+            const prim = selMember ? sectionFor(selMember.id) : undefined
+            const armKey = `group:${[...selIds].sort().join(',')}`
+            const ids = [...selIds]
+            return (
+              <div className="divide-y divide-hairline-2 border-b border-hairline-2 bg-sheet-2 px-4 py-1">
+                <Sec id="sel-group" grid={false} title={`Selection — ${selIds.size} elements`}>
+                  <Row label="Members" value={String(groupMembers.length)}
+                    sub={[...roles].map(([r, n]) => `${n} ${r}${n > 1 ? 's' : ''}`).join(' · ') || 'none'} />
+                  {groupPlates.length > 0 && <Row label="Slabs" value={String(groupPlates.length)} />}
+                  <p className="mt-1 break-words font-mono text-[10px] leading-relaxed text-muted">
+                    {ids.slice(0, 30).join(' ')}{ids.length > 30 ? ` … +${ids.length - 30}` : ''}
+                  </p>
+                  {groupMembers.length > 0 && <div className="mt-2 space-y-2 text-xs">
+                    <label className="flex items-center gap-2">
+                      <span className="w-16 font-medium text-muted">Role</span>
+                      <select value={roleOne} onChange={(e) => updGroup(() => ({ role: e.target.value as MemberRole }))}
+                        className="rounded border border-hairline px-1 py-0.5">
+                        {!roleOne && <option value="">— mixed —</option>}
+                        <option value="beam">beam</option><option value="girder">girder</option>
+                        <option value="column">column</option><option value="brace">brace</option>
+                      </select>
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="w-16 font-medium text-muted">Size, mm</span>
+                      <input type="number" step="50" value={bulkB} placeholder={prim ? String(prim.b) : 'b'} onChange={(e) => setBulkB(e.target.value)}
+                        className="w-16 rounded border border-hairline px-1 py-0.5" aria-label="b, mm" />
+                      <span className="text-muted">×</span>
+                      <input type="number" step="50" value={bulkH} placeholder={prim ? String(prim.h) : 'h'} onChange={(e) => setBulkH(e.target.value)}
+                        className="w-16 rounded border border-hairline px-1 py-0.5" aria-label="h, mm" />
+                      <button type="button" disabled={!(parseFloat(bulkB) > 0 || parseFloat(bulkH) > 0)}
+                        onClick={() => {
+                          const b = parseFloat(bulkB), h = parseFloat(bulkH)
+                          const secIds = new Set(groupMembers.map((m) => m.section))
+                          save({ ...model, sections: model.sections.map((sc) => {
+                            if (!secIds.has(sc.id) || sc.material === 'steel') return sc
+                            const nb = b > 0 ? b : sc.b, nh = h > 0 ? h : sc.h
+                            return { ...sc, b: nb, h: nh, name: `${nb}×${nh}` }
+                          }) })
+                          setBulkB(''); setBulkH('')
+                        }}
+                        className="rounded-md border border-field-line px-2 py-0.5 font-semibold text-brand hover:bg-brand-tint disabled:opacity-40">Apply</button>
+                    </div>
+                    {steelIn && <p className="text-[10px] text-muted">Steel members keep their rolled shape; the size applies to concrete and timber sections.</p>}
+                    <div>
+                      <p className="mb-1 font-medium text-muted">End releases — all {groupMembers.length}</p>
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="text-left text-[10px] uppercase tracking-wide text-muted">
+                            <th className="pr-2">End</th>
+                            {dofs.map((d) => <th key={d} className="pr-1 text-center">{d}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(['iEnd', 'jEnd'] as const).map((end) => (
+                            <tr key={end}>
+                              <td className="pr-2 font-medium text-ink-2">{end === 'iEnd' ? 'i' : 'j'}</td>
+                              {dofs.map((d) => {
+                                const n = relCount(end, d)
+                                return (
+                                  <td key={d} className="pr-1 text-center">
+                                    <input type="checkbox" checked={n === groupMembers.length}
+                                      ref={(el) => { if (el) el.indeterminate = n > 0 && n < groupMembers.length }}
+                                      title={`${n} of ${groupMembers.length} released`}
+                                      onChange={(e) => setRel(end, d, e.target.checked)} />
+                                  </td>
+                                )
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="mt-1 flex gap-2">
+                        <button type="button" onClick={() => updGroup((m) => ({ releases: {
+                          iEnd: { ...m.releases?.iEnd, My: true, Mz: true }, jEnd: { ...m.releases?.jEnd, My: true, Mz: true } } }))}
+                          className="text-[11px] font-semibold text-brand hover:underline">Pin both ends (My, Mz)</button>
+                        <button type="button" onClick={() => updGroup(() => ({ releases: undefined }))}
+                          className="text-[11px] font-semibold text-brand hover:underline">Fix both ends</button>
+                      </div>
+                    </div>
+                  </div>}
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {armDelete === armKey ? (<>
+                      <button type="button" onClick={() => { save(removeElements(model, new Set(selIds))); setSelected(null) }}
+                        className="rounded-lg bg-fail px-3 py-1.5 text-sm font-semibold text-on-solid hover:bg-fail-hover">Delete {selIds.size} — confirm</button>
+                      <button type="button" onClick={() => setArmDelete(null)}
+                        className="text-sm font-semibold text-muted hover:text-ink-2">Cancel</button>
+                    </>) : (
+                      <button type="button" onClick={() => setArmDelete(armKey)}
+                        className="rounded-lg border border-fail-line px-3 py-1.5 text-sm font-semibold text-fail hover:bg-fail-tint">Delete {selIds.size} elements</button>
+                    )}
+                    <button type="button" onClick={() => setSelected(null)}
+                      className="text-sm font-semibold text-muted hover:text-ink-2">Clear selection</button>
+                  </div>
+                  <p className="mt-2 text-[10px] text-muted">⌃/⇧-click adds or removes · ⬚ Box: drag → window, ← crossing · ⌘A all · Esc clears. The last one picked ({selected}) drives the single-member panels.</p>
+                </Sec>
+              </div>
+            )
+          })()}
+          {selIds.size <= 1 && (selMember || selPlate) && (
             <div className="divide-y divide-hairline-2 border-b border-hairline-2 bg-sheet-2 px-4 py-1">
             {selMember && model && (
               <Sec id="sel-member" grid={false} title={`Member — ${selMember.id}`}>
@@ -2802,8 +3002,9 @@ export default function ModelSpace() {
                           const Lc = Math.max(Lfull - (eI ? Math.hypot(...eI) : 0) - (eJ ? Math.hypot(...eJ) : 0), 0)
                           const trimmed = Lc < Lfull - 1e-6
                           return (
-                            <tr key={m.id} className={`border-t border-hairline-2 ${m.id === selected ? 'bg-warn-tint' : ''}`}>
-                              <td className="py-0.5 pr-2 font-medium cursor-pointer" onClick={() => setSelected(m.id)}>{m.id}</td>
+                            <tr key={m.id} className={`border-t border-hairline-2 ${selIds.has(m.id) ? 'bg-warn-tint' : ''}`}>
+                              <td className="py-0.5 pr-2 font-medium cursor-pointer" title="click to select · ⌃/⇧-click to add"
+                                onClick={(e) => pick(m.id, e.ctrlKey || e.metaKey || e.shiftKey)}>{m.id}</td>
                               <td className="py-0.5 pr-1">
                                 <select value={m.role} onChange={(e) => updMember(m.id, { role: e.target.value as MemberRole })}
                                   className="rounded border border-hairline px-1 py-0.5">
