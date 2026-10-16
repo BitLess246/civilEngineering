@@ -52,11 +52,30 @@ describe('one-way shear in 3-D — the plane and the strip are the provision\'s'
     for (const x of g.crossings) { expect(x.a[0]).toBe(g.section[0][0]); expect(x.b[0]).toBe(g.strip!.lo[0]) }
   })
 
+  it('B·aᵥ is the strip\'s UNDERSIDE — the face the soil bears on — and every arrow pushes up on it', () => {
+    const i = DEFAULT_FOOTING_SHEAR, g = footingShearIso(i)!, s = g.strip!
+    const b = g.bearing!
+    for (const q of b) expect(q[2]).toBe(0)                     // the bottom face, not the top (z = h)
+    const area = (b[1][0] - b[0][0]) * (b[2][1] - b[1][1])
+    expect(area).toBeCloseTo(i.B * 1000 * g.arm, 6)              // B × aᵥ
+    expect(i.qu * area / 1e6).toBeCloseTo(footingShearExample(i)!.Vu, 9)
+    expect(g.arrows).toHaveLength(9)                             // round(591 / 288) + 1 = 3 across aᵥ × 3 across B
+    for (const a of g.arrows) {
+      expect(a.to[2]).toBe(0); expect(a.from[2]).toBeLessThan(0)
+      expect(a.to[0]).toBeGreaterThan(s.lo[0]); expect(a.to[0]).toBeLessThan(s.hi[0])
+      expect(Math.abs(a.to[1])).toBeLessThan(i.B * 500)
+    }
+    // far rows first, so the near ones paint over them
+    const ys = g.arrows.map((a) => a.to[1])
+    for (let k = 1; k < ys.length; k++) expect(ys[k]).toBeLessThanOrEqual(ys[k - 1])
+  })
+
   it('no strip when the section falls past the edge; null for impossible geometry', () => {
     const g = footingShearIso({ ...DEFAULT_FOOTING_SHEAR, L: 1.2, B: 1.2, c: 600, d: 350, h: 450 })!
     expect(g.strip).toBeNull()
     expect(g.arm).toBe(0)
     expect(g.arrows).toHaveLength(0)
+    expect(g.bearing).toBeNull()
     expect(g.crossings).toHaveLength(0)
     expect(footingShearIso({ ...DEFAULT_FOOTING_SHEAR, d: 600, h: 500 })).toBeNull()
   })
