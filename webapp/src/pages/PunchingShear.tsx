@@ -6,6 +6,7 @@ import { WorkspacePage } from '../components/WorkspacePage'
 import { buildPunchingSolution } from '../lib/punchingSolution'
 import { f0, f1, f2 } from '../lib/format'
 import { PunchingPlan } from '../components/PunchingPlan'
+import { PunchingIso } from '../components/PunchingIso'
 import { codeLink, codeReferenceStep } from '../lib/codes/links'
 
 interface FormState {
@@ -136,6 +137,7 @@ export default function PunchingShear() {
       ]}
       drawing={r ? { title: 'Critical section', node: <div data-pdf-drawing>
         <PunchingPlan c1={f.c1} c2={f.c2} d={d} h={f.h} position={f.position} b0={r.b0} alphaS={r.alphaS} />
+        <PunchingIso c1={f.c1} c2={f.c2} d={d} h={f.h} position={f.position} alphaS={r.alphaS} />
       </div> } : undefined}
       resultsCaption={r && !r.ok ? 'φVc < Vu: increase the slab thickness or the column, or add headed studs or closed stirrups (§22.6.7–22.6.8).' : undefined}
       results={r ? [
