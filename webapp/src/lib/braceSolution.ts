@@ -38,7 +38,10 @@ export function braceRowSolution(b: SteelBraceScheduleRow): SolutionStep[] {
     pass: m.Tu <= t.phiPn,
     lines: [
       { tex: `\\text{yielding: } 0.9 F_y A_g = ${sn1(t.phiPnYield)}\\ \\text{kN}` },
-      { tex: `\\text{rupture at the slot: } A_n = A_g - 2t(t_g + 3) = ${Math.round(t.An)}\\ \\text{mm}^2,\\ U = ${sn2(t.U)} \\Rightarrow A_e = ${Math.round(t.Ae)}\\ \\text{mm}^2,\\ 0.75F_uA_e = ${sn1(t.phiPnRupture)}\\ \\text{kN}` },
+      b.truss
+        // a truss member is welded all round at its panel points: no slot
+        ? { tex: `\\text{rupture, welded all round (Table D3.1 case 1): } A_n = A_g = ${Math.round(t.An)}\\ \\text{mm}^2,\\ U = 1 \\Rightarrow 0.75F_uA_e = ${sn1(t.phiPnRupture)}\\ \\text{kN}` }
+        : { tex: `\\text{rupture at the slot: } A_n = A_g - 2t(t_g + 3) = ${Math.round(t.An)}\\ \\text{mm}^2,\\ U = ${sn2(t.U)} \\Rightarrow A_e = ${Math.round(t.Ae)}\\ \\text{mm}^2,\\ 0.75F_uA_e = ${sn1(t.phiPnRupture)}\\ \\text{kN}` },
       { tex: `\\phi P_n = ${sn1(t.phiPn)}\\ \\text{kN} \\ge T_u \\quad ${ok(m.Tu <= t.phiPn)};\\quad L/r = ${sn1(m.Lr)} \\le 300 \\quad ${ok(m.Lr <= 300)}` },
     ],
   })
@@ -64,7 +67,10 @@ export function braceRowSolution(b: SteelBraceScheduleRow): SolutionStep[] {
   }
   steps.push({
     title: 'Verdict',
-    lines: [{ text: b.ok
+    lines: [{ text: b.truss
+      ? (b.ok ? `${b.shape} roof-truss member — passes. Its ends are the truss's panel-point joints, detailed by the fabricator; no frame gusset is designed for them.`
+        : `Fails: member (${m.governs}).`)
+      : b.ok
       ? `${b.shape} brace with ${b.ends.map((e) => `PL ${e.design.tg} gusset at ${e.node}`).join(' and ')} — all checks pass.`
       : `Fails: ${[!m.ok && `member (${m.governs})`, ...b.ends.filter((e) => !e.design.ok).map((e) => `end ${e.node} (${e.design.governs})`)].filter(Boolean).join('; ')}.` }],
   })
