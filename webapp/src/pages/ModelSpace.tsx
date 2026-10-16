@@ -6946,6 +6946,7 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2 text-right">{b.member.KLr.toFixed(0)}</td>
                       <td className="py-1 pr-2 text-right">{(b.member.util * 100).toFixed(0)}% <span className="text-muted">({b.member.governs})</span></td>
                       <td className="py-1 pr-2">
+                        {b.truss && <span className="text-muted">roof truss — panel-point joints, detailed by the fabricator</span>}
                         {b.ends.map((e) => (
                           <div key={e.node} className={e.design.ok ? '' : 'text-fail'}>
                             {e.node}: PL {e.design.tg} · 4×{e.design.weld.w}×{e.design.weld.lw} · {Math.round(e.design.ufm.Lh)}{e.design.ufm.Lv > 0 ? `×${Math.round(e.design.ufm.Lv)}` : ''} · {(e.design.util * 100).toFixed(0)}% <span className="text-muted">({e.design.governs})</span>

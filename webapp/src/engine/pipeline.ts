@@ -49,6 +49,7 @@ import { designPedestal, pedestalSide, type PedestalResult } from './pedestal'
 import { designWoodSlab, woodSlabTimberSizes, type WoodSlabResult, type WoodSlabInput } from './woodSlab'
 import type { TimberSizeQty } from './takeoff'
 import { designBraceMember, type BraceMemberDesign } from './steelBrace'
+import { trussPart } from './roofTruss'
 import { designBraceEnd, braceEndSupported, braceEndFrameFor, type BraceEndDesign, type BraceEndFrame } from './braceConnection'
 import { designBasePlate, basePlateMoments, columnBaseWeld, type ColumnBaseWeld, adoptPlateThickness, ANCHOR_FU, ANCHOR_FY, type BasePlateResult, type BasePlateMomentCheck, type BaseCase } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
@@ -448,6 +449,10 @@ export interface SteelBraceScheduleRow {
   ends: { node: string; frame: BraceEndFrame; design: BraceEndDesign }[]
   ok: boolean
   gov?: string
+  /** A ROOF TRUSS member (engine/roofTruss): its ends are panel-point joints
+   *  of the truss, not gussets onto a beam–column frame, so `ends` is empty
+   *  and only the member is checked. */
+  truss?: boolean
 }
 
 export interface BasePlateScheduleRow {
@@ -1752,6 +1757,20 @@ function designFromRuns(
       }
       const na = model.nodes.find((n) => n.id === m.i)!, nb = model.nodes.find((n) => n.id === m.j)!
       const L = Math.hypot(nb.x - na.x, nb.y - na.y, nb.z - na.z)
+      // A ROOF TRUSS member's ends are the truss's own panel-point joints.
+      // The gusset design below is the Uniform Force Method for a brace
+      // meeting a beam–column corner, with θ taken from the VERTICAL — a
+      // horizontal bottom chord is θ = 90°, cos θ = 0, and the gusset
+      // geometry it solves divides by it. So a truss member gets the member
+      // check alone (§D2 yielding/rupture, §E3 buckling between panel points,
+      // K = 1), welded all round at its joints: §D3 Table D3.1 case 1, U = 1
+      // on the gross area. The joint itself is the fabricator's detail.
+      if (trussPart(m.id)) {
+        const Fy = sec.steelFy ?? 248, Fu = sec.steelFu ?? 400
+        const member = designBraceMember(shape, L, Pu, Tu, Fy, Fu, { An: shape.A, U: 1 })
+        steelBraces.push({ id: m.id, shape: shape.name, L, Fy, Fu, Pu, Tu, member, ends: [], gov, ok: member.ok, truss: true })
+        continue
+      }
       if (!braceEndSupported(shape)) {
         unchecked.push({ id: m.id, role: 'brace', shape: shape.name,
           reason: `${shape.family} brace: its end connection is designed for HSS and pipe braces slotted over a gusset — choose one, or detail this end` })

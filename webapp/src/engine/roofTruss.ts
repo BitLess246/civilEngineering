@@ -282,3 +282,17 @@ export function addRoofTrusses(model: StructuralModel, spec: RoofTrussSpec): Roo
 
 // The roofing's node loads live beside `buildGravityLoads`, which calls them.
 export { roofingLoads } from './modelBuilder'
+
+/**
+ * Which truss, and which part of it, a member id names — the ids
+ * `addRoofTrusses` gives (`rt{n}.bc{k}`, `rt{n}.tc{k}`, `rt{n}.w{k}`), read
+ * back here so the convention lives in one file. Null for anything else.
+ */
+export function trussPart(id: string): { truss: number; part: 'bottom' | 'top' | 'web' } | null {
+  const m = /^rt(\d+)\.(bc|tc|w)\d+/.exec(id)
+  if (!m) return null
+  return { truss: Number(m[1]), part: m[2] === 'bc' ? 'bottom' : m[2] === 'tc' ? 'top' : 'web' }
+}
+
+/** A purlin `addRoofTrusses` placed (`pu{n}.{k}`). */
+export const isPurlin = (id: string): boolean => /^pu\d+\.\d+/.test(id)

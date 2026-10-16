@@ -42,6 +42,8 @@ import { buildSteelSectionDetail } from '../engine/steelSection'
 import { buildConnectionDetail } from '../engine/steelConnectionDetail'
 import { buildSteelFrameElevation } from '../engine/steelElevation'
 import { steelElevationBundles } from './steelElevation'
+import { trussElevationBundles } from './trussElevations'
+import { buildTrussElevation } from '../engine/trussElevation'
 import { connectionMarks } from './steelMarks'
 import { steelScheduleDrawings, timberScheduleDrawings } from './frameSchedules'
 
@@ -49,7 +51,7 @@ export type SheetGroup =
   | 'General notes'
   | 'Plans' | 'Column details' | 'Footing details'
   | 'Slab opening details' | 'Wall standard details'
-  | 'Frame elevations'
+  | 'Frame elevations' | 'Roof truss elevations'
   | 'Steel schedules' | 'Steel sections' | 'Steel connections' | 'Timber schedules'
   | 'Bar cutting lists' | 'Bar bending schedules'
 
@@ -83,6 +85,7 @@ const REF: Record<SheetGroup, string> = {
   'Footing details': 'S-05',
   'Column details': 'S-06',
   'Frame elevations': 'S-04',
+  'Roof truss elevations': 'S-14',
   'Slab opening details': 'S-08',
   'Wall standard details': 'S-09',
   'Steel schedules': 'S-07',
@@ -222,6 +225,19 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
     })
   })
 
+  // ROOF TRUSSES — one elevation per truss (engine/roofTruss), after the
+  // frames they stand on and before the details: members to scale with the
+  // design's envelope forces, the panel chain, the rise and the purlins.
+  trussElevationBundles(model, design).forEach((b, i) => {
+    const drawing = buildTrussElevation(b.input, { detailNo: String(i + 1), sheetRef: ref('Roof truss elevations') })
+    const parts = b.input.members
+    out.push({
+      key: b.key, group: 'Roof truss elevations', title: `Grid ${b.line} — roof truss`,
+      subtitle: `${parts.length} members · span ${(Math.max(...b.input.nodes.map((n) => n.u)) - Math.min(...b.input.nodes.map((n) => n.u))).toFixed(2)} m`,
+      warnings: drawing.designNotes,
+      drawing,
+    })
+  })
 
   // ONE SHEET PER COLUMN, footing to top — not one per column TYPE.
   //
