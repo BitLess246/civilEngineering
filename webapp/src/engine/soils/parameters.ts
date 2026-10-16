@@ -339,7 +339,11 @@ const best = (list: SourcedValue[] | undefined): SourcedValue | undefined =>
 export function toLayerParameters(r: ParameterResolution): LayerParameters {
   const out: LayerParameters = { layerId: r.layerId, boreholeId: r.boreholeId }
   for (const p of r.resolved) {
-    (out as unknown as Record<string, SourcedValue>)[p.key] = p.value
+    // typed, not cast: every ParameterKey must name a LayerParameters field, and a
+    // key that drifted from the schema now fails to compile instead of writing a
+    // field the store never reads back
+    const k: Exclude<keyof LayerParameters, 'layerId' | 'boreholeId'> = p.key
+    out[k] = p.value
   }
   return out
 }
