@@ -100,7 +100,7 @@ export interface WalkStep { title: string; text: string; tex?: string; layers: B
 export interface CalculatorLink { to: string; label: string }
 
 /** Which kind of worked example — and so which inputs and diagrams — a provision uses. */
-export type ProvisionFamily = 'rc-beam' | 'steel' | 'loads' | 'punching' | 'footing-shear' | 'rc-column'
+export type ProvisionFamily = 'rc-beam' | 'steel' | 'loads' | 'punching' | 'footing-shear' | 'rc-column' | 'seismic'
 
 /** A rolled steel member checked under AISC 360-16 (NSCP 2015 Chapter 5). Units: mm, MPa, m, kN, kN·m. */
 export interface SteelExampleInput {
@@ -152,6 +152,22 @@ export interface ColumnExampleInput {
   Pu: number; Mu: number
 }
 
+/**
+ * The §208 static lateral-force inputs, as the Seismic Wizard takes them:
+ * the site and the building's system, its fundamental period T (s) and its
+ * seismic weight W (kN). `system` is the structural system's display name.
+ */
+export interface SeismicExampleInput {
+  zone: '2' | '4'
+  soil: 'SA' | 'SB' | 'SC' | 'SD' | 'SE'
+  source: 'A' | 'B' | 'C'
+  distance: number
+  occupancy: 'standard' | 'special' | 'essential' | 'hazardous'
+  system: string
+  T: number
+  W: number
+}
+
 /** Service load effects to be combined, in any one consistent unit. */
 export interface LoadExampleInput { D: number; L: number; Lr: number; W: number; E: number }
 
@@ -171,6 +187,7 @@ export type DiagramKind =
   | 'punching-perimeter'
   | 'footing-one-way'
   | 'column-pm'
+  | 'seismic-cs'
 
 interface ProvisionBase {
   id: string
@@ -217,7 +234,8 @@ export type LoadsProvision = ProvisionOf<'loads', LoadExampleInput>
 export type PunchingProvision = ProvisionOf<'punching', PunchingExampleInput>
 export type FootingShearProvision = ProvisionOf<'footing-shear', FootingShearInput>
 export type ColumnProvision = ProvisionOf<'rc-column', ColumnExampleInput>
-export type Provision = RcBeamProvision | SteelProvision | LoadsProvision | PunchingProvision | FootingShearProvision | ColumnProvision
+export type SeismicProvision = ProvisionOf<'seismic', SeismicExampleInput>
+export type Provision = RcBeamProvision | SteelProvision | LoadsProvision | PunchingProvision | FootingShearProvision | ColumnProvision | SeismicProvision
 
 // The provision's own input type travels with it, but a caller holding the
 // UNION cannot name it. These run a provision on an input the page built from

@@ -6,6 +6,8 @@ import {
 } from '../engine/nscpSeismic'
 import { PageHeader, CalcBody } from '../components/calc'
 import { ResultCard } from '../components/qty'
+import { Link } from 'react-router-dom'
+import { codeLink } from '../lib/codes/links'
 
 const f3 = (n: number) => (Number.isFinite(n) ? n.toFixed(3) : '—')
 
@@ -177,6 +179,13 @@ export default function SeismicWizard() {
             Governing: <b>{cs.governs}</b> · basic {f3(cs.Csraw)} · cap 2.5Ca·I/R {f3(cs.Csmax)} ·
             floor 0.11Ca·I {f3(cs.Csmin)}{params.Z >= 0.4 ? ` · Zone-4 0.8Z·Nv·I/R ${f3(cs.Cszone4)}` : ''}
           </p>
+          {/* The Code Library page runs these same calls on this building. */}
+          <Link to={codeLink('nscp-static-base-shear', {
+            zone: String(zone), soil, source, distance, occupancy,
+            system: STRUCTURAL_SYSTEMS.find((s) => s.id === systemId)!.name, T,
+          }, { route: '/seismic-wizard', label: 'Seismic Wizard' })}
+            target="_blank" rel="noopener" data-pdf-skip
+            className="mt-1.5 inline-block text-[11.5px] font-semibold text-brand hover:underline">Explain this calculation ↗</Link>
         </div>
         <p className="mt-2 text-[10px] text-muted">
           V = Cs·W (§208.5.2.1). Feed Ca, Cv, I, R into the 3D model space seismic generator for the
