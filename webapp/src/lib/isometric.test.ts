@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { SE, NE, isoRaw, isoDepth, faceVisible, boxFaces, boxEdges, edgeVisible, sortFaces, fitIso, isoPath, type IsoView, type Vec3 } from './isometric'
+import { SE, NE, isoRaw, isoDepth, faceVisible, boxFaces, boxEdges, edgeVisible, sortFaces, fitIso, isoPath, extrudeFaces, type IsoView, type Vec3 } from './isometric'
 
 const VIEWS: IsoView[] = [SE, NE, { sx: -1, sy: 1 }, { sx: -1, sy: -1 }]
 const len = ([u, v]: readonly [number, number]) => Math.hypot(u, v)
@@ -89,5 +89,28 @@ describe('fitting to the sheet', () => {
   it('writes a closed path', () => {
     expect(isoPath([[0, 0], [10, 0], [10, 5]])).toBe('M0.0 0.0 L10.0 0.0 L10.0 5.0 Z')
     expect(isoPath([[0, 0], [1, 1]], false)).toBe('M0.0 0.0 L1.0 1.0')
+  })
+})
+
+describe('extruded outlines', () => {
+  it('an anticlockwise L gives outward side normals, and a notch face looking into the notch', () => {
+    // a 100 × 200 tab with its bottom-right corner torn out up to z = 120 from x = 60
+    const L = [{ x: 0, y: 0 }, { x: 60, y: 0 }, { x: 60, y: 120 }, { x: 100, y: 120 }, { x: 100, y: 200 }, { x: 0, y: 200 }]
+    const f = extrudeFaces(L, 0, 10)
+    expect(f).toHaveLength(8)
+    const n = Object.fromEntries(f.map((x) => [x.key, x.n.map((v) => Math.round(v) + 0)]))
+    expect(n.s0).toEqual([0, 0, -1])      // bottom
+    expect(n.s1).toEqual([1, 0, 0])       // the notch's shear face, looking +x
+    expect(n.s2).toEqual([0, 0, -1])      // the notch's roof
+    expect(n.s3).toEqual([1, 0, 0])       // free edge
+    expect(n.s5).toEqual([-1, 0, 0])      // welded edge
+    // from SE the front cap, the top, and both +x faces show
+    expect(f.filter((x) => faceVisible(x.n, SE)).map((x) => x.key).sort()).toEqual(['front', 's1', 's3', 's4'])
+  })
+
+  it('shifts the whole body', () => {
+    const f = extrudeFaces([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }], 0, 2, [5, 0, -3])
+    expect(f[0].pts[0]).toEqual([5, 0, -3])
+    expect(f[1].pts[2]).toEqual([6, 2, -2])
   })
 })
