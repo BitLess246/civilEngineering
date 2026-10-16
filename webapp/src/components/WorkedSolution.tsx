@@ -30,13 +30,23 @@ export function WorkedSolution({ steps, title = 'Calculation report — worked s
           // clause margin out over the border with it. `min-w-0` says the same
           // thing to the child, which is what actually lets `overflow-x-auto`
           // below take effect.
-          <li key={i} className="print-avoid-break grid grid-cols-[minmax(0,1fr)_120px] gap-4 border-b border-hairline-2 px-3 py-3 last:border-0">
+          //
+          // On a phone the 120 px margin column left the equations ~200 px and cut
+          // the clause off at the card edge, so below `sm` the step is ONE column:
+          // the chip and clause ride under the title, and the lines take the width.
+          <li key={i} className="print-avoid-break grid grid-cols-1 gap-x-4 border-b border-hairline-2 px-2 py-3 last:border-0 sm:grid-cols-[minmax(0,1fr)_120px] sm:px-3">
             <div className="min-w-0">
               <h3 className="text-[12.5px] font-bold text-ink">
                 <span className="mr-1.5 font-mono font-semibold text-faint">{i + 1}</span>{s.title}
               </h3>
+              {(s.pass !== undefined || s.clause) && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-4 sm:hidden">
+                  {s.pass !== undefined && <PassChip pass={s.pass} />}
+                  {s.clause && <span className="text-[10.5px] leading-snug text-faint">{s.clause}</span>}
+                </div>
+              )}
               {mode === 'worked' && (
-                <div className="mt-1.5 space-y-1.5 pl-4">
+                <div className="mt-1.5 space-y-1.5 pl-0 sm:pl-4">
                   {s.lines.map((ln, j) => (
                     'text' in ln
                       ? <p key={j} className="text-[12px] leading-relaxed text-muted">{ln.text}</p>
@@ -49,19 +59,23 @@ export function WorkedSolution({ steps, title = 'Calculation report — worked s
                   ))}
                 </div>
               )}
-              {s.note && <p className="mt-1.5 pl-4 text-[10.5px] text-faint">{s.note}</p>}
+              {s.note && <p className="mt-1.5 pl-0 text-[10.5px] text-faint sm:pl-4">{s.note}</p>}
             </div>
-            <div className="pt-0.5">
-              {s.pass !== undefined && (
-                <span className={`inline-block rounded px-1.5 py-px font-mono text-[10px] font-semibold ${s.pass ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
-                  {s.pass ? 'PASS' : 'FAIL'}
-                </span>
-              )}
+            <div className="hidden pt-0.5 sm:block">
+              {s.pass !== undefined && <PassChip pass={s.pass} />}
               {s.clause && <p className="mt-1.5 text-[10.5px] leading-snug text-faint">{s.clause}</p>}
             </div>
           </li>
         ))}
       </ol>
     </div>
+  )
+}
+
+function PassChip({ pass }: { pass: boolean }) {
+  return (
+    <span className={`inline-block rounded px-1.5 py-px font-mono text-[10px] font-semibold ${pass ? 'bg-ok-tint text-ok' : 'bg-fail-tint text-fail'}`}>
+      {pass ? 'PASS' : 'FAIL'}
+    </span>
   )
 }
