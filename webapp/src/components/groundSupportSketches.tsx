@@ -129,7 +129,11 @@ export function FacingDrawing({ SH, SV, hc, cover, d, plate }: { SH: number; SV:
       <line x1={heads[0].x - bpx / 2 - 4} x2={heads[0].x - 60} y1={heads[0].y} y2={heads[0].y} stroke={MUTED} strokeWidth="0.7" />
       <line x1={heads[2].x - bpx / 2 - 4} x2={heads[2].x - 60} y1={heads[2].y} y2={heads[2].y} stroke={MUTED} strokeWidth="0.7" />
       <VDim x={heads[0].x - 54} a={heads[0].y} b={heads[2].y} label={`SV ${f2(SV)} m`} color={INK} side="left" />
-      <text x={heads[1].x - bpx / 2} y={heads[1].y - bpx / 2 - 8} fontSize="9.5" fill={INK} fontFamily={mono} {...halo}>plate {f2(plate * 1000)} mm</text>
+      {/* named by a leader to the plate it sizes, not floated above the panel */}
+      <g fontFamily={mono}>
+        <Leader x={heads[1].x + bpx / 2} y={heads[1].y - bpx / 2} tx={heads[1].x + bpx / 2 + 14} ty={heads[1].y - bpx / 2 - 22} fontSize={9.5} color={INK}
+          text={`plate ${f2(plate * 1000)} mm`} />
+      </g>
 
       {/* the facing in section as built: a vertical skin, exposed face left, soil behind */}
       <text x={sx + (hc * ks) / 2 + 20} y={30} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono}>SECTION</text>
