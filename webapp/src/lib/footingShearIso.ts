@@ -27,10 +27,16 @@ export interface FootingShearIso {
   cover: Vec3[]
   /** The bottom mat's level, z mm (= h − d). */
   zs: number
-  /** The main bars (along L) where they cross the section — on the B·d face's lower edge. */
+  /** Bar diameter and spacing drawn, mm, and whether they are the design's or a schematic stand-in. */
+  db: number
+  spacing: number
+  schematic: boolean
+  /** The main bars (along L) cut by the section: their ends on the pad's section face, at d. */
   cuts: Vec3[]
-  /** The same bars bridging the pulled-apart cut, section → strip. */
-  crossings: { a: Vec3; b: Vec3 }[]
+  /** The same bars inside the pulled-off strip — from ITS cut face to the end cover; nothing spans the gap. */
+  stripBars: { a: Vec3; b: Vec3 }[]
+  /** The cross bars in the strip (along B), sitting on the main bars. */
+  crossBars: { a: Vec3; b: Vec3 }[]
   /** aᵥ, mm (0 when the section falls outside), and B·d, mm². */
   arm: number
   Bd: number
@@ -40,11 +46,16 @@ export interface FootingShearIso {
   arrows: { from: Vec3; to: Vec3 }[]
 }
 
-/** Main-bar spacing drawn, mm — schematic: the provision carries d, not a bar layout. */
-const BAR_SPACING = 200
-const SIDE_COVER = 75
+/** Bars drawn when the caller has no layout, mm — the provision carries d, not a bar schedule. */
+const SCHEMATIC = { db: 16, spacing: 200 }
+const COVER = 75
 
-export function footingShearIso(i: FootingShearInput): FootingShearIso | null {
+/**
+ * The pad split at the one-way shear section. `bars` is the design's bottom
+ * mat in the shear direction (⌀ and spacing, mm) when the caller has one —
+ * the Foundation Design page does; the Code Library draws a schematic mat.
+ */
+export function footingShearIso(i: FootingShearInput, bars?: { db: number; spacing: number }): FootingShearIso | null {
   if (!(i.d > 0) || i.d >= i.h || !(i.B > 0) || !(i.L > 0) || !(i.c > 0) || i.c / 1000 >= i.L) return null
   const L = i.L * 1000, B = i.B * 1000, hx = L / 2, hy = B / 2
   const xs = Math.min(hx, i.c / 2 + i.d)                  // the section, from the column's centre
@@ -65,13 +76,24 @@ export function footingShearIso(i: FootingShearInput): FootingShearIso | null {
   }
   const bearing: Vec3[] | null = strip
     ? [[strip.lo[0], -hy, 0], [strip.hi[0], -hy, 0], [strip.hi[0], hy, 0], [strip.lo[0], hy, 0]] : null
-  // bars along L on a grid through the column's axis, inside the side cover
+  // bars along L on a grid through the column's axis, inside the side cover —
+  // cut by the section, so each piece ends at its own cut face: the pad shows
+  // the ends on its section face, the strip carries its pieces from its cut
+  // face to the end cover. Nothing spans the gap: it is a cut, not a hinge.
+  const { db, spacing } = bars && bars.db > 0 && bars.spacing > 0 ? bars : SCHEMATIC
   const ys: number[] = []
-  for (let k = Math.ceil((-hy + SIDE_COVER) / BAR_SPACING); k * BAR_SPACING <= hy - SIDE_COVER; k++) ys.push(k * BAR_SPACING)
+  for (let k = Math.ceil((-hy + COVER) / spacing); k * spacing <= hy - COVER; k++) ys.push(k * spacing)
   const cuts = ys.map((y): Vec3 => [xs, y, zSteel])
-  const crossings = strip ? ys.map((y) => ({ a: [xs, y, zSteel] as Vec3, b: [xs + gap, y, zSteel] as Vec3 })) : []
+  const stripBars = strip ? ys.map((y) => ({ a: [strip.lo[0], y, zSteel] as Vec3, b: [strip.hi[0] - COVER, y, zSteel] as Vec3 })) : []
+  const crossBars: FootingShearIso['crossBars'] = []
+  if (strip) {
+    // the cross bars on the same module, measured from the strip's far edge, on top of the main bars
+    for (let x = strip.hi[0] - COVER; x > strip.lo[0] + db; x -= spacing) {
+      crossBars.push({ a: [x, -hy + COVER, zSteel + db], b: [x, hy - COVER, zSteel + db] })
+    }
+  }
   return {
-    zs: zSteel, cuts, crossings,
+    zs: zSteel, cuts, stripBars, crossBars, db, spacing, schematic: !(bars && bars.db > 0 && bars.spacing > 0),
     cover: [[xs, -hy, 0], [xs, hy, 0], [xs, hy, zSteel], [xs, -hy, zSteel]],
     pad: { lo: [-hx, -hy, 0], hi: [xs, hy, i.h] },
     column: { lo: [-i.c / 2, -i.c / 2, i.h], hi: [i.c / 2, i.c / 2, i.h + colH] },

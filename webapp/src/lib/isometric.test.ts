@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AXO, ISO_SE, viewAxes, isoRaw, isoDepth, faceVisible, boxFaces, boxEdges, edgeVisible, sortFaces, fitIso, isoPath, extrudeFaces, type IsoView, type Vec3 } from './isometric'
+import { AXO, ISO_SE, ring, viewAxes, isoRaw, isoDepth, faceVisible, boxFaces, boxEdges, edgeVisible, sortFaces, fitIso, isoPath, extrudeFaces, type IsoView, type Vec3 } from './isometric'
 
 // one generic view per plan quadrant, and the true isometric
 const VIEWS: IsoView[] = [AXO, { az: 55, el: 28 }, { az: 145, el: 30 }, { az: -125, el: 22 }, ISO_SE]
@@ -138,5 +138,17 @@ describe('extruded outlines', () => {
     const f = extrudeFaces([{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }], 0, 2, [5, 0, -3])
     expect(f[0].pts[0]).toEqual([5, 0, -3])
     expect(f[1].pts[2]).toEqual([6, 2, -2])
+  })
+})
+
+describe('rings — a bar\'s cut end', () => {
+  it('lies in the plane square to its axis, at radius r', () => {
+    for (const axis of ['x', 'y', 'z'] as const) {
+      const k = { x: 0, y: 1, z: 2 }[axis]
+      for (const q of ring([10, 20, 30], axis, 5)) {
+        expect(q[k]).toBe([10, 20, 30][k])
+        expect(Math.hypot(q[0] - 10, q[1] - 20, q[2] - 30)).toBeCloseTo(5, 12)
+      }
+    }
   })
 })

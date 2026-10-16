@@ -147,3 +147,14 @@ export function extrudeFaces(outline: readonly { x: number; y: number }[], y0: n
     ...sides,
   ]
 }
+
+/**
+ * A circle of radius `r` around `c` in the plane square to `axis` — a bar's
+ * cut end, so it projects as the ellipse the face it lies in would show.
+ */
+export function ring(c: Vec3, axis: 'x' | 'y' | 'z', r: number, n = 18): Vec3[] {
+  return Array.from({ length: n }, (_, k) => {
+    const a = (2 * Math.PI * k) / n, u = r * Math.cos(a), v = r * Math.sin(a)
+    return axis === 'x' ? [c[0], c[1] + u, c[2] + v] : axis === 'y' ? [c[0] + u, c[1], c[2] + v] : [c[0] + u, c[1] + v, c[2]]
+  })
+}
