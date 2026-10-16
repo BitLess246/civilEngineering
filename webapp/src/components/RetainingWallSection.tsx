@@ -29,6 +29,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { DrawingFrame } from './DrawingFrame'
+import { Leader } from './Leader'
 
 const INK = '#37526e'
 const CONC = '#eef3f8'
@@ -387,8 +388,9 @@ function HDim({ y, x1, x2, label, lift = 0 }: {
     <g>
       <line x1={x1} y1={y} x2={x2} y2={y} strokeWidth={0.9} />
       {[x1, x2].map((x) => <line key={x} x1={x - 3} y1={y + 4} x2={x + 3} y2={y - 4} strokeWidth={1.2} />)}
-      {lift > 0 && <line x1={mid} y1={y - 2} x2={mid} y2={y - lift + 2} strokeWidth={0.6} />}
-      <text x={mid} y={y - 4 - lift} fontSize={7.5} textAnchor="middle" stroke="none">{label}</text>
+      {lift > 0
+        ? <Leader x={mid} y={y - 2} tx={mid} ty={y - 4 - lift} fontSize={7.5} color={INK} side="right" text={label} />
+        : <text x={mid} y={y - 4} fontSize={7.5} textAnchor="middle" stroke="none">{label}</text>}
     </g>
   )
 }

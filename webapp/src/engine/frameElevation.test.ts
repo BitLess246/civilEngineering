@@ -391,14 +391,14 @@ describe('buildFrameElevation — a column that steps in', () => {
 })
 
 describe('angledLeader — the leg runs at 45°', () => {
-  /** The inclined leg — now the last segment of the leader's single stroke,
-   *  which runs label-gap → knee → back of the arrowhead. */
+  /** The inclined leg — the last segment of the leader's single stroke,
+   *  which runs glyph → landing → knee (index 6) → back of the arrowhead (7). */
   const stroke = (prims: ReturnType<typeof angledLeader>) =>
     prims.find((p): p is Extract<PlanPrimitive, { kind: 'path' }> =>
-      p.kind === 'path' && p.fill === 'none' && p.cmds.length === 3)!
+      p.kind === 'path' && p.fill === 'none' && p.cmds.length === 8)!
   const leg = (prims: ReturnType<typeof angledLeader>) => {
     const c = stroke(prims).cmds
-    return { dx: c[2]!.x - c[1]!.x, dy: c[2]!.y - c[1]!.y }
+    return { dx: c[7]!.x - c[6]!.x, dy: c[7]!.y - c[6]!.y }
   }
 
   it('makes the leg 45° whatever the label says', () => {
@@ -429,7 +429,7 @@ describe('angledLeader — the leg runs at 45°', () => {
       const c = stroke(p).cmds
       const t = p.find((q) => q.kind === 'text') as { x: number }
       // out from the text anchor to the knee, then ON in the same direction
-      expect(Math.sign(c[1]!.x - t.x)).toBe(Math.sign(c[2]!.x - c[1]!.x))
+      expect(Math.sign(c[6]!.x - t.x)).toBe(Math.sign(c[7]!.x - c[6]!.x))
     }
   })
 

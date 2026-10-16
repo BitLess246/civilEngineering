@@ -17,6 +17,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive } from './planRenderer'
 import { extensionLines } from './planRenderer'
+import { leaderKneeDistance, leaderShape } from './leaderShape'
 
 const INK = '#1e293b'
 const NOTE = '#475569'
@@ -222,91 +223,59 @@ export const leaderLines = (o: { text: string; text2?: string; lines?: string[] 
 
 /**
  * Horizontal distance from a leader's TEXT ANCHOR to its knee — where the
- * landing ends and the inclined leg begins.
+ * landing ends and the inclined leg begins, at the default landing.
  *
  * Exported because the angle of that leg is a drafting decision the caller
  * makes, not the leader: to set a leg at 45° you have to know where the knee
- * will be before you choose where the text goes. Derived here, once, so a
- * caller cannot compute it from stale proportions.
+ * will be before you choose where the text goes. Derived from the one shape
+ * (`leaderShape`), so a caller cannot compute it from stale proportions.
  */
-export const leaderKnee = (size: number, landing?: number) =>
-  size * LEADER_GAP + (landing ?? size * 2.2)
-
-/** Text height to the start of the landing — the gap that keeps a landing off
- *  the last letter of its label. */
-const LEADER_GAP = 0.42
+export const leaderKnee = (size: number, landing?: number) => leaderKneeDistance(size, landing)
 
 /**
- * The house leader: filled arrowhead, one inclined leg, a horizontal landing,
- * and the label sitting on the landing.
+ * The house leader: filled arrowhead, one inclined leg, a level landing (the
+ * dogleg), the glyph that closes it, and the label beside the glyph. The
+ * geometry is `leaderShape`, shared with the on-screen figures.
  *
  * Every sheet used to draw its own — a bare hairline from somewhere near the
  * text to somewhere near the target, with no arrowhead and no landing, so at
  * a glance you could not tell a leader from a dimension extension or from a
  * bar. This is the one shape they all use now.
  *
- * TWO THINGS IT USED TO GET WRONG, both visible at a glance on any sheet:
+ * WHAT IT HAS GOT WRONG BEFORE, so it is not got wrong again:
  *
- * The landing ended on a GLYPH — a stroke that ran up, across, down, across
- * and part-way back up, meant to separate the leader from its label. At sheet
- * scale it printed as a small closed tick that reads as neither text nor
- * steel: a smudge between the words and the line. A gap does that job, which
- * is what every drafting standard uses.
- *
- * And the landing ran to whichever side `side` named, even when the target
- * was the other way — so the leg left the knee, doubled back UNDER the label
- * and crossed it on the way to what it points at. 56 of the 134 leaders in
- * the sheet set were drawn that way. The landing now always runs TOWARDS the
- * target; `side` is honoured only where the target is near enough to straight
- * above or below the label for either side to be a real choice.
+ * · The landing ran to whichever side `side` named, even when the target was
+ *   the other way — the leg doubled back under the label and crossed it. The
+ *   landing now always runs TOWARDS the target.
+ * · The leg could still fold back under its own landing when the target sat
+ *   nearly below the label: an acute angle at the knee, which a drafted
+ *   leader never has. The knee now stops at the target, and a target too
+ *   nearly under its label slides the label along its line until the leg can
+ *   drop square — the angle between leg and landing is never under 90°.
+ * · The end glyph was once dropped as a smudge at sheet scale; it is back,
+ *   proportioned to the text (`leaderShape`), because a landing that simply
+ *   stops near some words does not read as the end of a leader.
  */
 export function leader(o: LeaderOpts): PlanPrimitive[] {
   const ink = NOTE                        // the leader itself, always
   const color = o.color ?? NOTE           // the label
-  const gap = o.size * LEADER_GAP         // label to landing
-  const knee = leaderKnee(o.size, o.landing)
-  // Which way the landing runs. The target decides, because a landing pointing
-  // away from what it names is not a leader; the caller's preference only
-  // breaks the tie when the target is roughly above or below the label.
-  const toward: 'left' | 'right' = o.x <= o.tx ? 'left' : 'right'
-  const straightUp = Math.abs(o.x - o.tx) <= knee
-  const side = straightUp ? (o.side ?? toward) : toward
-  const s = side === 'left' ? -1 : 1      // away from the label
-
-  const gEnd = o.tx + s * gap             // where the landing starts
-  const kneeX = o.tx + s * knee
-
-  // The leg stops at the back of the arrowhead so the two do not overprint.
-  const dx = o.x - kneeX, dy = o.y - o.ty
-  const len = Math.hypot(dx, dy) || 1
-  const ux = dx / len, uy = dy / len
-  const a = Math.min(o.arrow ?? o.size * 0.285, len * 0.6)
-  const bx = o.x - ux * a, by = o.y - uy * a
-  const hw = a * 0.2
-
+  const sh = leaderShape({ x: o.x, y: o.y, tx: o.tx, ty: o.ty, size: o.size, side: o.side, landing: o.landing, arrow: o.arrow })
+  const [tip, b1, b2] = sh.head
   return [
     {
       kind: 'path', closed: true, fill: ink, stroke: ink, width: 0.3, join: 'miter',
-      cmds: [
-        { c: 'M', x: o.x, y: o.y },
-        { c: 'L', x: bx - uy * hw, y: by + ux * hw },
-        { c: 'L', x: bx + uy * hw, y: by - ux * hw },
-      ],
+      cmds: [{ c: 'M', x: tip[0], y: tip[1] }, { c: 'L', x: b1[0], y: b1[1] }, { c: 'L', x: b2[0], y: b2[1] }],
     },
-    // Landing and leg as ONE stroke: drawn as two primitives they met at the
-    // knee only as closely as two round caps allow, and at print weight that
-    // shows as a nick in the corner.
+    // Glyph, landing and leg as ONE stroke: drawn as separate primitives they
+    // met at each corner only as closely as two round caps allow, and at print
+    // weight that shows as a nick.
     {
       kind: 'path', stroke: ink, width: 0.7, fill: 'none', cap: 'round', join: 'round',
-      cmds: [
-        { c: 'M', x: gEnd, y: o.ty },
-        { c: 'L', x: kneeX, y: o.ty },
-        { c: 'L', x: bx, y: by },
-      ],
+      cmds: sh.line.map(([x, y], k) => ({ c: k ? 'L' as const : 'M' as const, x, y })),
     },
-    ...leaderLines(o).map((text, k): PlanPrimitive => ({
-      kind: 'text', x: o.tx, y: o.ty + o.size * 1.25 * k, text, size: o.size,
-      anchor: side === 'left' ? 'start' : 'end', color, weight: o.weight ?? 600,
+    ...leaderLines(o).filter((t) => t !== '').map((text, k): PlanPrimitive => ({
+      kind: 'text', x: sh.tx, y: o.ty + o.size * 1.25 * k, text, size: o.size,
+      anchor: sh.anchor, color, weight: o.weight ?? 600,
     })),
   ]
 }

@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { DimBelow, DimSide, Tick } from './dims'
 import { DrawingFrame } from './DrawingFrame'
+import { Leader } from './Leader'
 
 const INK = '#37526e'
 const STEEL = '#dfe6ee'
@@ -41,10 +42,8 @@ export function WShapeSection({ name, d, bf, tf, tw }: { name: string; d: number
         <DimBelow xA={x0} xB={x0 + B} featY={y0 + H} dY={y0 + H + 20} label={`bf = ${Math.round(bf)}`} />
         <DimSide yA={y0} yB={y0 + H} featX={x0} dX={x0 - 18} label={`d = ${Math.round(d)}`} side="left" />
         {/* tf and tw, with leaders landing on the plate they name */}
-        <line x1={x0 + B - 6} y1={y0 + TF / 2} x2={x0 + B + 14} y2={y0 - 6} stroke={INK} strokeWidth={0.7} />
-        <text x={x0 + B + 16} y={y0 - 4} fontSize={8} fill={INK} {...HALO}>tf {tf}</text>
-        <line x1={xc + TW / 2} y1={y0 + H / 2} x2={x0 + B + 14} y2={y0 + H / 2} stroke={INK} strokeWidth={0.7} />
-        <text x={x0 + B + 16} y={y0 + H / 2 + 3} fontSize={8} fill={INK} {...HALO}>tw {tw}</text>
+        <Leader x={x0 + B - 6} y={y0 + TF / 2} tx={x0 + B + 16} ty={y0 - 4} fontSize={8} color={INK} text={`tf ${tf}`} />
+        <Leader x={xc + TW / 2} y={y0 + H / 2} tx={x0 + B + 16} ty={y0 + H / 2 + 3} fontSize={8} color={INK} text={`tw ${tw}`} />
         <text x={W / 2} y={HT - 4} fontSize={7} fill={FAINT} textAnchor="middle">section to its own scale · fillets not drawn · mm</text>
       </svg>
     </DrawingFrame>

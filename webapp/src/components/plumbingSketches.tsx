@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { DimBelow, DimSide } from './dims'
 import { DrawingFrame } from './DrawingFrame'
+import { Leader } from './Leader'
 import { SurfaceMark } from './hydraulicsSketches'
 
 const INK = '#37526e'
@@ -144,10 +145,8 @@ export function DwvDiagram({ drainMm, ventMm, slopePct, dfu, wcCount }: DwvDiagr
 
         {/* callouts */}
         <g fontSize={9}>
-          <line x1={sx} y1={roof - 12} x2={sx + 24} y2={roof - 24} stroke={MUTED} strokeWidth={0.7} />
-          <text x={sx + 27} y={roof - 25} fill={PIPE} {...HALO}>vent ⌀{Math.round(ventMm)}</text>
-          <line x1={sx} y1={(floor1 + drainY0) / 2} x2={sx - 24} y2={(floor1 + drainY0) / 2 + 8} stroke={MUTED} strokeWidth={0.7} />
-          <text x={sx - 27} y={(floor1 + drainY0) / 2 + 12} fill={PIPE} textAnchor="end" {...HALO}>stack ⌀{Math.round(drainMm)}</text>
+          <Leader x={sx} y={roof - 12} tx={sx + 27} ty={roof - 25} fontSize={9} color={PIPE} ink={MUTED} text={`vent ⌀${Math.round(ventMm)}`} />
+          <Leader x={sx} y={(floor1 + drainY0) / 2} tx={sx - 27} ty={(floor1 + drainY0) / 2 + 12} fontSize={9} color={PIPE} ink={MUTED} text={`stack ⌀${Math.round(drainMm)}`} />
           <text x={(sx + drainX1) / 2} y={drainY0 + fall + 20} fill={PIPE} textAnchor="middle" {...HALO}>
             building drain ⌀{Math.round(drainMm)} at {slopePct}%
           </text>
