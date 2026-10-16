@@ -134,7 +134,7 @@ export function DrawingFrame({
       className={`w-full overflow-x-auto ${className}`}
       {...(scrolls ? { tabIndex: 0, role: 'region', 'aria-label': label } : {})}
     >
-      <div style={box.min ? { minWidth: box.min, maxWidth: box.max || undefined } : undefined}>
+      <div data-drawing-body="" style={box.min ? { minWidth: box.min, maxWidth: box.max || undefined } : undefined}>
         {children}
       </div>
     </div>

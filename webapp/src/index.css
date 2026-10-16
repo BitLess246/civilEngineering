@@ -8,6 +8,7 @@
    Drawing-sheet workbench theme (docs/design/uiux-2026-07): warm paper,
    ink navy, drafting blue; Archivo for UI, IBM Plex Mono for numbers. */
 @import "./styles/themes.css";
+@import "./styles/motion.css";
 
 @theme {
   --font-sans: 'Archivo', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;

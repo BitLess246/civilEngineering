@@ -1,0 +1,121 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   MOTION — what moves, and why.
+
+   A calculator page changes when its inputs change, and until now it did so
+   by swapping text in place: the eye could not tell that a utilisation went
+   from 0.82 to 0.95. Motion here is FEEDBACK first and polish second:
+
+     · results    — the check cards' numbers count, their bars grow, and a
+                    status pill pops when its verdict changes (Motion.tsx);
+     · arrival    — a page fades up on navigation, the check cards come in
+                    one after another, a drawing fades in, a tab's panel
+                    rises in when you switch to it;
+     · touch      — cards lift under the pointer, buttons press, colours
+                    ease instead of snapping;
+     · the front  — the landing hero comes in line by line, and each section
+                    rises the first time it scrolls into view.
+
+   One curve throughout, an exponential ease-out (fast away, long settle),
+   and short times: nothing here should make anyone wait for it.
+
+   RULES. Everything that MOVES is inside `prefers-reduced-motion:
+   no-preference`, so a viewer who asked for less gets the static app. Print
+   and the PDF never animate. Entrances start from an already-legible state
+   where they can (opacity ≥ 0, a few px of travel), so a dropped frame or a
+   disabled animation shows a finished page, never an empty one. Drawings
+   fade WITHOUT a transform: `DrawingFrame` measures its own text, and a
+   transform in flight would be measured with it.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 140ms;
+  --dur: 260ms;
+  --dur-slow: 560ms;
+}
+
+@keyframes m-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes m-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes m-pop {
+  0%   { transform: scale(0.82); }
+  60%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+@keyframes m-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@keyframes m-dialog {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── touch: colours ease, buttons press ─────────────────────────────────
+   In the BASE layer so any component's own `transition-*` utility still wins. */
+@layer base {
+  a, button, [role="tab"], summary {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--ease-out);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* ── arrival: the page ── `main#content`'s child is remounted per route
+     (the ErrorBoundary is keyed on the path), so this plays on navigation. */
+  #content > * { animation: m-rise var(--dur) var(--ease-out) backwards; }
+
+  /* ── arrival: check cards, one after another ── */
+  .stagger > * { animation: m-rise 420ms var(--ease-out) backwards; }
+  .stagger > :nth-child(2) { animation-delay: 45ms; }
+  .stagger > :nth-child(3) { animation-delay: 90ms; }
+  .stagger > :nth-child(4) { animation-delay: 135ms; }
+  .stagger > :nth-child(5) { animation-delay: 180ms; }
+  .stagger > :nth-child(6) { animation-delay: 225ms; }
+  .stagger > :nth-child(n+7) { animation-delay: 270ms; }
+
+  /* ── arrival: a drawing (opacity only — see the header) and a tab panel ── */
+  [data-drawing-body] { animation: m-fade 420ms var(--ease-out) backwards; }
+  .tab-enter { animation: m-rise var(--dur) var(--ease-out) backwards; }
+
+  /* ── results: bars grow from the left, then follow every change ── */
+  .util-bar {
+    transform-origin: left center;
+    animation: m-grow 700ms var(--ease-out) backwards;
+    transition: width 520ms var(--ease-out), background-color var(--dur) ease;
+  }
+  .pill-pop { animation: m-pop 360ms var(--ease-spring); }
+
+  /* ── touch ── */
+  .card-lift { transition: box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out), border-color var(--dur) ease; }
+  .card-lift:hover { transform: translateY(-2px); box-shadow: 0 6px 18px -8px rgb(15 27 42 / 0.22); border-color: var(--t-brand-line); }
+  button:not(:disabled):active, [role="button"]:active { transform: scale(0.97); }
+
+  /* the report tabs' underline slides to the tab you pick */
+  .tab-indicator { transition: transform 320ms var(--ease-out), width 320ms var(--ease-out); }
+
+  /* ── dialogs: the scrim fades, the panel rises ── */
+  .fixed.inset-0[aria-modal="true"] { animation: m-fade var(--dur-fast) ease backwards; }
+  .fixed.inset-0[aria-modal="true"] > :first-child { animation: m-dialog var(--dur) var(--ease-out) backwards; }
+
+  /* ── the front: hero line by line, sections on first view ── */
+  .hero-seq > * { animation: m-rise 640ms var(--ease-out) backwards; }
+  .hero-seq > :nth-child(2) { animation-delay: 80ms; }
+  .hero-seq > :nth-child(3) { animation-delay: 160ms; }
+  .hero-seq > :nth-child(4) { animation-delay: 240ms; }
+  .hero-seq > :nth-child(n+5) { animation-delay: 320ms; }
+  .reveal { transition: opacity 620ms var(--ease-out), transform 720ms var(--ease-out); }
+  .reveal:not([data-revealed]) { opacity: 0; transform: translateY(18px); }
+}
+
+@media print {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .reveal { opacity: 1 !important; transform: none !important; }
+}
