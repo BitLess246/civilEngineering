@@ -61,8 +61,9 @@ export function BlockShearIso({ bolts, W, H, t, dh, cases, avail, R }: BlockShea
   // shear line, a quarter at the far bolt where the tension plane cuts too.
   // A whole hole: its front outline filled with the bore wall and the opening
   // seen through it left empty. A piece on a cut edge is a NOTCH: its bore,
-  // swept through the thickness, shaded, and only the front arc edged — the
-  // outline stays on the steel, never across the gap or the cut planes.
+  // swept through the thickness, shaded where it can be seen. No hole is
+  // outlined — a hole is where the steel is not; the face around it is what
+  // gives it its edge.
   const xL = g.shear.strips[0]?.[0][0] ?? W
   const hole = (pc: (typeof g.holePieces)[number], i: number) => {
     const shift = pc.body === 'block' ? g.block.shift : [0, 0, 0] as Vec3
@@ -75,8 +76,7 @@ export function BlockShearIso({ bolts, W, H, t, dh, cases, avail, R }: BlockShea
     if (!whole) {
       // a NOTCH in the cut edge. Its bore is the arc swept through the thickness, but only what
       // can be SEEN of it is shaded: through the front opening, and through the strip of a cut
-      // face the hole took away, where that face is in view. The only line is the front arc —
-      // the steel's own edge.
+      // face the hole took away, where that face is in view. No line: the steel around it is its edge.
       const f = arc(0), b = arc(g.tDraw)
       const at = (a: number, y: number): Vec3 => [pc.c.x + r * Math.cos(a) + shift[0], y + shift[1], pc.c.y + r * Math.sin(a) + shift[2]]
       const ctr = (y: number): Vec3 => [pc.c.x + shift[0], y + shift[1], pc.c.y + shift[2]]
@@ -97,7 +97,6 @@ export function BlockShearIso({ bolts, W, H, t, dh, cases, avail, R }: BlockShea
             <path key={k} d={P([q, f[k + 1], b[k + 1], b[k]])} fill={BORE} stroke={BORE} strokeWidth={0.4} strokeLinejoin="round" />
           ))}
         </g>
-        <path d={isoPath(f.map(p), false)} fill="none" stroke={INK} strokeWidth={0.7} />
       </g>
     }
     const id = `${uid}-h${i}`
@@ -105,7 +104,6 @@ export function BlockShearIso({ bolts, W, H, t, dh, cases, avail, R }: BlockShea
       <clipPath id={id}><path d={P(sector(0))} /></clipPath>
       <path d={P(sector(0))} fill={BORE} stroke="none" />
       <path d={P(sector(g.tDraw))} fill="var(--sheet, #fff)" stroke="none" clipPath={`url(#${id})`} />
-      <path d={isoPath(arc(0).map(p), true)} fill="none" stroke={INK} strokeWidth={0.6} />
     </g>
   }
   const plateHoles = g.holePieces.map((pc, i) => pc.body === 'plate' ? hole(pc, i) : null)
