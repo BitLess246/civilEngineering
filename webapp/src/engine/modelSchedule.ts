@@ -128,7 +128,12 @@ export function buildModelActivities(model: StructuralModel, design: StructureDe
     const mem = model.members.find((x) => x.id === memberId)
     return mem ? secById.get(mem.section) : undefined
   }
-  const levels = uniqSorted(model.nodes.map((n) => n.y))
+  // Levels are the base plus the model's STOREYS where it has them: a roof
+  // truss's panel points sit at a dozen heights above the roof, and counting
+  // each as a storey split the take-off into storeys that do not exist.
+  const levels = model.storeys.length
+    ? uniqSorted([Math.min(...model.nodes.map((n) => n.y)), ...model.storeys.map((st) => st.elevation)])
+    : uniqSorted(model.nodes.map((n) => n.y))
   const nStoreys = Math.max(1, levels.length - 1)
   const levelIndex = (y: number): number => {
     let bi = 0, bd = Infinity

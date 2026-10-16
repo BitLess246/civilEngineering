@@ -134,6 +134,8 @@ import { downloadText } from '../lib/downloadSvg'
 import { ExchangeMenu } from '../components/modelSpace/ExchangeMenu'
 import type { SolverKind } from '../lib/featureGate'
 import { BoxSelectOverlay } from '../components/modelSpace/BoxSelectOverlay'
+import { planGridLines } from '../engine/planGrid'
+import { addRoofTrusses, type TrussProfile, type TrussWeb } from '../engine/roofTruss'
 import { EMPTY_SELECTION, clickSelect, selectMany, type ScreenSegment, type Selection } from '../lib/selection'
 import { BaseHardware3D, CameraProbe, ComplianceHalo3D, Footing3D, GridBubbles3D, HorizonGrid, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
 import { COMPLIANCE_COLOR, DIAG_COLOR, DIAG_LABEL, LOAD_COLOR, levelDrop } from '../components/modelSpace/sceneTokens'
@@ -605,6 +607,15 @@ export default function ModelSpace() {
   // belongs to ONE of them: put it on both and the same slab is in the model
   // twice.
   const [stLandLo, setStLandLo] = useState(0); const [stLandHi, setStLandHi] = useState(0)
+  // Roof trusses (engine/roofTruss) — the panel's inputs and its last outcome.
+  const [rtSpan, setRtSpan] = useState<'x' | 'z' | 'auto'>('auto')
+  const [rtProfile, setRtProfile] = useState<TrussProfile>('gable')
+  const [rtWeb, setRtWeb] = useState<TrussWeb>('howe')
+  const [rtRise, setRtRise] = useState(1.5); const [rtPanel, setRtPanel] = useState(1.5)
+  const [rtChord, setRtChord] = useState('HSS89x89x6.4'); const [rtWebShape, setRtWebShape] = useState('HSS64x64x4.8')
+  const [rtPurlin, setRtPurlin] = useState('C150x12.2')
+  const [rtQD, setRtQD] = useState(0.5); const [rtQLr, setRtQLr] = useState(0.6)
+  const [rtMsg, setRtMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
   // ?embed=1 — the preview idles into a slow orbit, so a scroll-past on the
   // landing page still shows a live model rather than a frozen one, and hands
@@ -1606,6 +1617,38 @@ export default function ModelSpace() {
     const m2 = { ...model, stairs }
     save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
   }
+  /** The plan axis a truss spans when the panel says "auto": the shorter side
+   *  of the roof, which is the span a truss is for. */
+  const rtAutoSpan = (): 'x' | 'z' => {
+    if (!model?.nodes.length) return 'x'
+    const xs = model.nodes.map((n) => n.x), zs = model.nodes.map((n) => n.z)
+    return Math.max(...xs) - Math.min(...xs) <= Math.max(...zs) - Math.min(...zs) ? 'x' : 'z'
+  }
+  const addTrusses = () => {
+    if (!model) return
+    const r = addRoofTrusses(model, {
+      spanAlong: rtSpan === 'auto' ? rtAutoSpan() : rtSpan, profile: rtProfile, web: rtWeb,
+      rise: rtRise, panel: rtPanel, chordShape: rtChord, webShape: rtWebShape,
+      purlinShape: rtPurlin || undefined, steelFy: steelFy, steelFu: steelFu, qD: rtQD, qLr: rtQLr,
+    })
+    if (r.reason) { setRtMsg({ ok: false, text: `Not added: ${r.reason}.` }); return }
+    save({ ...r.model, loads: buildGravityLoads(r.model, qD, qL, gammaC) })
+    setSelected(null)
+    const slabs = r.removed.filter((id) => !model.members.some((m) => m.id === id)).length
+    setRtMsg({ ok: true, text: `Added ${r.lines.length} truss${r.lines.length > 1 ? 'es' : ''} (${r.added.members.length} members). Replaced ${r.removed.length - slabs} roof beam(s) with bottom chords${slabs ? ` and removed ${slabs} roof slab(s)` : ''}. ⌘Z undoes it.` })
+  }
+  const hasTrusses = !!model?.roofing || !!model?.members.some((m) => /^(rt\d|pu\d)/.test(m.id))
+  const removeTrusses = () => {
+    if (!model) return
+    const ids = new Set(model.members.filter((m) => /^(rt\d|pu\d)/.test(m.id)).map((m) => m.id))
+    const used = new Set(model.members.filter((m) => !ids.has(m.id)).flatMap((m) => [m.i, m.j]))
+    const pruned = removeElements(model, ids)
+    const m2 = { ...pruned, roofing: undefined,
+      nodes: pruned.nodes.filter((n) => !/^rt\d/.test(n.id) || used.has(n.id)),
+      sections: pruned.sections.filter((sc) => !ids.has(sc.id)) }
+    save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
+    setRtMsg({ ok: true, text: 'Trusses removed. The roof beams and slabs they replaced come back with ⌘Z, not here.' })
+  }
   const removeStair = (id: string) => {
     if (!model) return
     const m2 = { ...model, stairs: (model.stairs ?? []).filter((x) => x.id !== id) }
@@ -2157,7 +2200,7 @@ export default function ModelSpace() {
    * place and a row of vertical space nothing else could use.
    */
   const modelName = model
-    ? `${globalThis.Math.max(1, [...new Set(model.nodes.map((n) => n.x))].length - 1)}×${globalThis.Math.max(1, [...new Set(model.nodes.map((n) => n.z))].length - 1)} Bay · ${[...new Set(model.storeys.map((q) => q.elevation))].length} Storey${[...new Set(model.storeys.map((q) => q.elevation))].length === 1 ? '' : 's'}`
+    ? `${globalThis.Math.max(1, planGridLines(model).xs.length - 1)}×${globalThis.Math.max(1, planGridLines(model).zs.length - 1)} Bay · ${[...new Set(model.storeys.map((q) => q.elevation))].length} Storey${[...new Set(model.storeys.map((q) => q.elevation))].length === 1 ? '' : 's'}`
     : '3D Model Space'
 
   /**
@@ -3434,6 +3477,62 @@ export default function ModelSpace() {
                     })()}
                   </div>
                   <p className="mt-1 text-[11px] text-muted">A flight is placed by the two beams it bears on: the rise and run come from where they are, and R = rise/risers, G = run/risers, so the risers are equal by construction. A <strong>half-landing</strong> at either end is part of the same one-way slab, so it eats into the run and the flight climbs the same rise over what is left — and the beam at that end is the <strong>landing beam</strong> the stair breaks on. Between floors that is two flights meeting on a beam at mid height, with the landing given to ONE of them: modelled on both, the same slab is in the frame twice. Its weight reaches the frame as reactions on those two beams — the flight itself is NOT meshed, so it adds no stiffness. That is conservative for the frame and not for the stair, which in reality braces the storey it climbs.</p>
+                </Sec>
+                <Sec id="roof-trusses" title="Roof trusses" hint="steel · on the top level" grid={false}>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex items-center gap-1">span along
+                        <select value={rtSpan} onChange={(e) => setRtSpan(e.target.value as 'x' | 'z' | 'auto')} className="rounded border border-hairline px-1 py-0.5">
+                          <option value="auto">auto (shorter side · {rtAutoSpan().toUpperCase()})</option><option value="x">X</option><option value="z">Z</option>
+                        </select>
+                      </label>
+                      <label className="inline-flex items-center gap-1">profile
+                        <select value={rtProfile} onChange={(e) => setRtProfile(e.target.value as TrussProfile)} className="rounded border border-hairline px-1 py-0.5">
+                          <option value="gable">gable (pitched)</option><option value="flat">flat (parallel chord)</option>
+                        </select>
+                      </label>
+                      <label className="inline-flex items-center gap-1">web
+                        <select value={rtWeb} onChange={(e) => setRtWeb(e.target.value as TrussWeb)} className="rounded border border-hairline px-1 py-0.5">
+                          <option value="howe">Howe</option><option value="pratt">Pratt</option><option value="warren">Warren</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex items-center gap-1" title={rtProfile === 'gable' ? 'Apex height above the bearing, m' : 'Truss depth, m'}>
+                        {rtProfile === 'gable' ? 'rise' : 'depth'} <input type="number" step="0.1" min="0.3" value={rtRise} onChange={(e) => setRtRise(parseFloat(e.target.value) || 0)} className="w-[4.5rem] rounded border border-hairline px-1 py-0.5 text-right tabular-nums" /> m
+                      </label>
+                      <label className="inline-flex items-center gap-1" title="Target panel length on plan; each bay is split into equal panels no longer than this">
+                        panel ≤ <input type="number" step="0.25" min="0.5" value={rtPanel} onChange={(e) => setRtPanel(parseFloat(e.target.value) || 0)} className="w-[4.5rem] rounded border border-hairline px-1 py-0.5 text-right tabular-nums" /> m
+                      </label>
+                      <label className="inline-flex items-center gap-1" title="Roofing dead load on plan — sheeting, purlins' share of fixings, ceiling — kPa">
+                        roofing D <input type="number" step="0.1" min="0" value={rtQD} onChange={(e) => setRtQD(Math.max(0, parseFloat(e.target.value) || 0))} className="w-[4.5rem] rounded border border-hairline px-1 py-0.5 text-right tabular-nums" /> kPa
+                      </label>
+                      <label className="inline-flex items-center gap-1" title="Roof live load Lr on plan, kPa — NSCP Table 205-3">
+                        Lr <input type="number" step="0.1" min="0" value={rtQLr} onChange={(e) => setRtQLr(Math.max(0, parseFloat(e.target.value) || 0))} className="w-[4.5rem] rounded border border-hairline px-1 py-0.5 text-right tabular-nums" /> kPa
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {([['chord', rtChord, setRtChord, 'HSS'], ['web', rtWebShape, setRtWebShape, 'HSS'], ['purlin', rtPurlin, setRtPurlin, 'C']] as const).map(([lbl, val, set, fam]) => (
+                        <label key={lbl} className="inline-flex items-center gap-1">{lbl}
+                          <select value={val} onChange={(e) => set(e.target.value)} className="max-w-[9rem] rounded border border-hairline px-1 py-0.5">
+                            {lbl === 'purlin' && <option value="">none</option>}
+                            {shapesOf(fam).map((sh) => <option key={sh.name} value={sh.name}>{sh.name}</option>)}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button type="button" onClick={addTrusses} data-testid="add-roof-trusses" disabled={hasTrusses}
+                        title={hasTrusses ? 'The roof already carries trusses — remove them to place a different set' : undefined}
+                        className="rounded-md border border-field-line px-2 py-1 font-semibold text-brand hover:border-brand-hover hover:bg-brand-tint disabled:opacity-40">
+                        + Add roof trusses
+                      </button>
+                      {hasTrusses && <button type="button" onClick={removeTrusses}
+                        className="rounded-md border border-fail-line px-2 py-1 font-semibold text-fail hover:bg-fail-tint">Remove trusses</button>}
+                    </div>
+                    {rtMsg && <p className={`text-[11px] ${rtMsg.ok ? 'text-ink-2' : 'text-fail'}`}>{rtMsg.text}</p>}
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted">One steel truss stands on every roof grid line across the span, bearing on each column top it crosses: the roof beams on those lines become its <strong>bottom chord</strong>, and the roof slabs go — a trussed roof is sheeting on purlins. Chords run continuous through the joints, webs are pinned, and the seats on the columns are pins. The roofing D and Lr reach the truss as loads at its top-chord panel points, from each point's tributary plan area, and are rebuilt with every other load. The members are designed as axial steel (§E3 / §D2) in the brace schedule; purlins are channels designed in bending.</p>
                 </Sec>
               </>)}
             </div>

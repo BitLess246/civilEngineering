@@ -747,6 +747,25 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
     }
   }
 
+  // ── roofing on trusses (engine/roofTruss) ─────────────────────────────
+  // Its loads are generated from these points, so a point on a deleted node
+  // is roof the analysis silently stops carrying, and a negative area or
+  // pressure would lift the roof instead of loading it.
+  if (model.roofing) {
+    const r = model.roofing
+    if (!(r.qD >= 0) || !(r.qLr >= 0))
+      issues.push({ severity: 'error', code: 'ROOFING_BAD_LOAD', refs: [],
+        message: `roofing loads must be ≥ 0 kPa (D ${r.qD}, Lr ${r.qLr})` })
+    const lost = r.points.filter((pt) => !nodeById.has(pt.node))
+    if (lost.length)
+      issues.push({ severity: 'warning', code: 'ROOFING_POINT_MISSING', refs: lost.map((pt) => pt.node),
+        message: `${lost.length} roof panel point(s) no longer exist — their share of the roofing load (${lost.reduce((a, pt) => a + pt.area, 0).toFixed(2)} m²) is not applied; re-add the trusses` })
+    const bad = r.points.filter((pt) => !(pt.area >= 0))
+    if (bad.length)
+      issues.push({ severity: 'error', code: 'ROOFING_BAD_AREA', refs: bad.map((pt) => pt.node),
+        message: `roof panel point tributary areas must be ≥ 0 m²` })
+  }
+
   return issues
 }
 
