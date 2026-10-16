@@ -31,6 +31,39 @@ describe('punching shear in 3-D — the planes are the engine\'s b₀', () => {
     expect(g.area / 1e6).toBeCloseTo(0.4025, 9)
   })
 
+  it('a footing has its column on top: planes run from the top down to the bottom mat, cover below', () => {
+    const d = 400, h = 500
+    const g = punchingIsoGeometry(450, 450, d, h, 'interior', { column: 'above' })!
+    expect(g.column.lo[2]).toBe(h)                       // on the pad, not under it
+    expect([g.zc, g.zs]).toEqual([h, h - d])
+    for (const p of g.planes) {
+      const zs = p.pts.map((q) => q[2]), zc = p.cover.map((q) => q[2])
+      expect([Math.min(...zs), Math.max(...zs)]).toEqual([h - d, h])
+      expect([Math.min(...zc), Math.max(...zc)]).toEqual([0, h - d])   // the cover zone, not counted
+    }
+    for (const c of g.cone) { expect(c.from[2]).toBe(h); expect(c.to[2]).toBe(h - d) }
+    expect(punchingIsoGeometry(450, 450, d, h, 'interior')!.column.hi[2]).toBe(0)   // a slab: under it
+  })
+
+  it('the tension bars sit at the steel, and every bar square to a plane is cut ON its steel edge', () => {
+    for (const column of ['above', 'below'] as const) {
+      const g = punchingIsoGeometry(400, 400, 175, 220, 'interior', { column, barSpacing: 150 })!
+      for (const b of g.bars) { expect(b.a[2]).toBe(g.zs); expect(b.b[2]).toBe(g.zs) }
+      for (const p of g.planes) {
+        expect(p.cuts.length).toBeGreaterThan(0)
+        const edge = p.pts.filter((q) => q[2] === g.zs)
+        for (const c of p.cuts) {
+          expect(c[2]).toBe(g.zs)
+          // on the segment between the plane's two steel corners
+          const [a, b] = edge, t = Math.hypot(c[0] - a[0], c[1] - a[1]) + Math.hypot(b[0] - c[0], b[1] - c[1])
+          expect(t).toBeCloseTo(p.len, 9)
+        }
+      }
+      // a 575 plane at 150 crossings: −150, 0, 150 fall inside ±287.5
+      expect(g.planes.find((p) => p.side === 'south')!.cuts.map((c) => c[0])).toEqual([-150, 0, 150])
+    }
+  })
+
   it('every plane stands d/2 off its column face, d tall, facing out', () => {
     const c1 = 500, c2 = 300, d = 200
     const g = punchingIsoGeometry(c1, c2, d, 260, 'interior')!

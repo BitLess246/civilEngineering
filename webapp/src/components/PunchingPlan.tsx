@@ -43,9 +43,12 @@ export interface PunchingPlanProps {
   /** From the engine, labelled rather than recomputed. */
   b0: number
   alphaS: number
+  /** Under a suspended slab (default), or on top of a footing — the section flips with it. */
+  column?: 'below' | 'above'
 }
 
-export function PunchingPlan({ c1, c2, d, h, position, b0, alphaS }: PunchingPlanProps) {
+export function PunchingPlan({ c1, c2, d, h, position, b0, alphaS, column = 'below' }: PunchingPlanProps) {
+  const above = column === 'above'
   const ML = 54, MR = 64, MT = 40
   const PLAN = 190
   // Slab shown around the column with room for the perimeter and the offset.
@@ -81,7 +84,7 @@ export function PunchingPlan({ c1, c2, d, h, position, b0, alphaS }: PunchingPla
   const b0Num = position === 'interior' ? `2(${Math.round(lenX)}) + 2(${Math.round(lenY)})`
     : position === 'edge' ? `${Math.round(lenX)} + 2(${Math.round(lenY)})` : `${Math.round(lenX)} + ${Math.round(lenY)}`
 
-  const sy = MT + PLAN + 44, sh = Math.max(14, h * s), dd = Math.min(sh - 2, d * s)
+  const sy = MT + PLAN + (above ? 58 : 44), sh = Math.max(14, h * s), dd = Math.min(sh - 2, d * s)
   const HT = sy + sh + 16 + 72
   const halo = { paintOrder: 'stroke' as const, stroke: 'var(--sheet, #fff)', strokeWidth: 2.6 }
 
@@ -135,28 +138,30 @@ export function PunchingPlan({ c1, c2, d, h, position, b0, alphaS }: PunchingPla
         })()}
 
         {/* ── the failure cone, in section under the plan, at the plan's scale.
-            The column is BELOW the slab, as it is in the building: the top
+            Under a slab the column is BELOW it, as in the building: the top
             steel is the tension steel, d runs from the soffit up to it, and
-            the cone rises at ~45° from the column face, crossing the critical
-            section at d/2. ─────────────────────────────────────────────────── */}
+            the cone rises at ~45° from the column face. On a footing it is
+            the other way up: column on top, d down to the bottom mat. Either
+            way the cone crosses the critical section at d/2. ─────────────── */}
         {(() => {
           const half = cw / 2
-          const ySteel = sy + sh - dd
+          const ySteel = above ? sy + dd : sy + sh - dd
+          const yComp = above ? sy : sy + sh
           const slabL = ML
           return (
             <g>
-              <text x={ML} y={sy - 8} fontSize={9} fontWeight={700} fill={INK}>SECTION — failure cone</text>
+              <text x={ML} y={sy - (above ? 22 : 8)} fontSize={9} fontWeight={700} fill={INK}>SECTION — failure cone</text>
               <rect x={slabL} y={sy} width={PLAN} height={sh} fill={CONC} stroke={INK} strokeWidth={1.2} />
-              <rect x={cx - half} y={sy + sh} width={cw} height={16} fill={COL} opacity={0.85} />
+              <rect x={cx - half} y={above ? sy - 16 : sy + sh} width={cw} height={16} fill={COL} opacity={0.85} />
               <line x1={slabL + 3} y1={ySteel} x2={ML + PLAN - 3} y2={ySteel} stroke={INK} strokeWidth={1} strokeDasharray="2 2" />
               {(openLeft ? [1] : [-1, 1]).map((k) => (
                 <g key={k}>
-                  <line x1={cx + k * half} y1={sy + sh} x2={cx + k * (half + dd)} y2={ySteel} stroke={CRIT} strokeWidth={1.8} strokeDasharray="6 3" />
+                  <line x1={cx + k * half} y1={yComp} x2={cx + k * (half + dd)} y2={ySteel} stroke={CRIT} strokeWidth={1.8} strokeDasharray="6 3" />
                   <line x1={cx + k * (half + off)} y1={sy} x2={cx + k * (half + off)} y2={sy + sh} stroke={CRIT} strokeWidth={0.8} />
                 </g>
               ))}
-              <text x={cx + half + dd + 4} y={ySteel + 9} fontSize={7.5} fill={CRIT}>≈45°</text>
-              <DimSide yA={ySteel} yB={sy + sh} featX={ML + PLAN} dX={ML + PLAN + 14} label={`d = ${Math.round(d)}`} side="right" />
+              <text x={cx + half + dd + 4} y={ySteel + (above ? -3 : 9)} fontSize={7.5} fill={CRIT}>≈45°</text>
+              <DimSide yA={Math.min(ySteel, yComp)} yB={Math.max(ySteel, yComp)} featX={ML + PLAN} dX={ML + PLAN + 14} label={`d = ${Math.round(d)}`} side="right" />
             </g>
           )
         })()}
