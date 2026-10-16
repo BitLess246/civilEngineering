@@ -8,7 +8,7 @@
 import type { ReactNode } from 'react'
 import { DrawingFrame } from './DrawingFrame'
 import { HDim, VDim, SurfaceMark, WATER } from './hydraulicsSketches'
-import { INK, MUTED, f2 } from '../lib/influenceStyle'
+import { INK, MUTED, f2, hdimLabelUnder } from '../lib/influenceStyle'
 import { niceStep, tickLabel } from '../lib/chartScale'
 
 const mono = 'var(--font-mono, monospace)'
@@ -199,12 +199,16 @@ export function MicropileDrawing({ barDia, groutDia, casing, casingOD, casingID,
           { d: casing ? Math.min(casingID, groutDia) : groutDia, label: `grout ⌀${f2(groutDia)}` },
           ...(casing ? [{ d: casingOD, label: `casing ${f2(casingOD)}/${f2(casingID)}` }] : []),
         ]
+        // each row 26 below the last, and 14 more under a row whose label went under its line
+        let yy = sy + (outer / 2) * ks
         return rows.map((r, i) => {
-          const yy = sy + (outer / 2) * ks + 26 + i * 26, a = sx - (r.d / 2) * ks, b = sx + (r.d / 2) * ks
+          const a = sx - (r.d / 2) * ks, b = sx + (r.d / 2) * ks, label = `${r.label} mm`
+          const prev = rows[i - 1]
+          yy += 26 + (prev && hdimLabelUnder(`${prev.label} mm`, sx - (prev.d / 2) * ks, sx + (prev.d / 2) * ks) ? 14 : 0)
           return <g key={i}>
             <line x1={a} x2={a} y1={sy} y2={yy + 4} stroke={MUTED} strokeWidth="0.6" strokeDasharray="2 2" />
             <line x1={b} x2={b} y1={sy} y2={yy + 4} stroke={MUTED} strokeWidth="0.6" strokeDasharray="2 2" />
-            <HDim y={yy} a={a} b={b} label={`${r.label} mm`} />
+            <HDim y={yy} a={a} b={b} label={label} />
           </g>
         })
       })()}

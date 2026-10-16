@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { ReactNode } from 'react'
 import { DrawingFrame } from './DrawingFrame'
+import { Leader } from './Leader'
 import { HDim, VDim } from './hydraulicsSketches'
 import { INK, MUTED, f2 } from '../lib/influenceStyle'
 
@@ -67,7 +68,10 @@ export function SoilNailDrawing({ z, Sh, Sv, bondLength, drillDia, Ka, gamma, q,
       <line x1={ex - Sh * ke - 6} x2={ex - Sh * ke - 34} y1={ey} y2={ey} stroke={MUTED} strokeWidth="0.7" />
       <line x1={ex - Sh * ke - 6} x2={ex - Sh * ke - 34} y1={ey - Sv * ke} y2={ey - Sv * ke} stroke={MUTED} strokeWidth="0.7" />
       <VDim x={ex - Sh * ke - 28} a={ey - Sv * ke} b={ey} label={`Sv ${f2(Sv)} m`} color={INK} side="left" />
-      <text x={ex} y={ey - Sv * ke - 26} textAnchor="middle" fontSize="9.5" fill={RED} fontFamily={mono} {...halo}>tributary Sh × Sv</text>
+      {/* named by a leader to the box it means, rather than floating a row of nails above it */}
+      <g fontFamily={mono}>
+        <Leader x={ex + (Sh / 2) * ke} y={ey - (Sv / 2) * ke} tx={ex + Sh * ke + 12} ty={ey - Sv * ke - 14} fontSize={9.5} color={RED} text="tributary Sh × Sv" />
+      </g>
 
       <text x={wallX + 120} y={26} textAnchor="middle" fontSize="10" fontWeight="700" fill={INK} fontFamily={mono}>SECTION AT THE NAIL</text>
       <rect x={wallX} y={top} width={W - 30 - wallX} height={depthSpan * k} fill={SOIL} />
@@ -79,7 +83,9 @@ export function SoilNailDrawing({ z, Sh, Sv, bondLength, drillDia, Ka, gamma, q,
       <line x1={wallX - 14} x2={nailEnd} y1={yn} y2={yn} stroke={INK} strokeWidth="2" />
       <rect x={wallX - 18} y={yn - 8} width={6} height={16} fill={INK} />
       <path d={`M ${bondStart - 6} ${top} Q ${bondStart - 20} ${yn} ${wallX + 10} ${top + depthSpan * k}`} fill="none" stroke={RED} strokeWidth="1" strokeDasharray="6 4" />
-      <text x={bondStart - 26} y={top + 16} textAnchor="end" fontSize="9" fill={RED} fontFamily={mono} {...halo}>slip surface (schematic)</text>
+      {/* on the soil side of where the curve leaves the ground: anchored to its left, a
+          short bond length ran the label back across the facing and the z dimension */}
+      <text x={bondStart - 2} y={top + 16} fontSize="9" fill={RED} fontFamily={mono} {...halo}>slip surface (schematic)</text>
       {/* depth to the nail, and the bond length */}
       <line x1={wallX - 18} x2={wallX - 52} y1={yn} y2={yn} stroke={MUTED} strokeWidth="0.8" />
       <VDim x={wallX - 46} a={top} b={yn} label={`z ${f2(z)} m`} color={INK} side="left" />

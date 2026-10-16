@@ -7,7 +7,7 @@
 import type { ReactNode } from 'react'
 import { DrawingFrame } from './DrawingFrame'
 import type { PipeResult } from '../engine/pipeFlow'
-import { INK, MUTED, HAIR, f2, f3 } from '../lib/influenceStyle'
+import { INK, MUTED, HAIR, f2, f3, hdimLabelUnder } from '../lib/influenceStyle'
 
 const mono = 'var(--font-mono, monospace)'
 export const WATER = '#0f4c92'
@@ -102,12 +102,14 @@ export type WeirKind = 'rectSuppressed' | 'rectContracted' | 'cipolletti' | 'vno
 
 /** A horizontal dimension between two screen x's, oblique ticks, label above. */
 export function HDim({ y, a, b, label, color = INK }: { y: number; a: number; b: number; label: ReactNode; color?: string }) {
+  // a label wider than its span goes under the line, clear of the extension lines coming down to it
+  const under = hdimLabelUnder(label, a, b)
   return (
     <g>
       <line x1={a} x2={b} y1={y} y2={y} stroke={color} strokeWidth="1" />
       <line x1={a - 4} x2={a + 4} y1={y + 4} y2={y - 4} stroke={color} strokeWidth="1.2" />
       <line x1={b - 4} x2={b + 4} y1={y + 4} y2={y - 4} stroke={color} strokeWidth="1.2" />
-      <text x={(a + b) / 2} y={y - 5} textAnchor="middle" fontSize="10" fill={color} fontFamily={mono} {...halo}>{label}</text>
+      <text x={(a + b) / 2} y={under ? y + 14 : y - 5} textAnchor="middle" fontSize="10" fill={color} fontFamily={mono} {...halo}>{label}</text>
     </g>
   )
 }
