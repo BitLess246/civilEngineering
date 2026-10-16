@@ -173,6 +173,10 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
           const c = 7
           const xEarth = xStemR - c, xFront = xStemL + c
           const yTopBase = yBase + c, yBotBase = yBot - c
+          // everything set off a base face is held to the base's own depth, so a
+          // thin base cannot push a hook, a cut bar or a mark out of the concrete
+          const inner = Math.max(yBotBase - yTopBase, 0)
+          const hook = Math.min(24, inner), dist = Math.min(9, inner * 0.3), mark = Math.min(15, inner / 2)
           return (
             <g>
               {/* ① STEM main steel — EARTH face, carried down into the base and
@@ -182,7 +186,7 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
               <path d={`M${xEarth} ${yTop + 10} L${xEarth} ${yBotBase} L${Math.max(x0 + c, xEarth - 40)} ${yBotBase}`}
                 fill="none" stroke={BAR} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
               {/* minimum vertical steel on the front face — §11.6.1 ρl */}
-              <line x1={xFront} y1={yTop + 10} x2={xFront} y2={yBase + 14}
+              <line x1={xFront} y1={yTop + 10} x2={xFront} y2={Math.min(yBase + 14, yBotBase - 2)}
                 stroke={BAR} strokeWidth={1.3} strokeDasharray="5 3" strokeLinecap="round" />
               {/* ② stem horizontal steel, cut end-on */}
               {[0.16, 0.38, 0.6, 0.82].map((f) => (
@@ -190,24 +194,24 @@ export function RetainingWallSection(p: RetainingWallSectionProps) {
               ))}
 
               {/* ③ TOE steel — BOTTOM face, because the toe bends UP */}
-              <path d={`M${xStemR - 4} ${yBotBase} L${x0 + c} ${yBotBase} L${x0 + c} ${yBotBase - 24}`}
+              <path d={`M${xStemR - 4} ${yBotBase} L${x0 + c} ${yBotBase} L${x0 + c} ${yBotBase - hook}`}
                 fill="none" stroke={BAR} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
               {/* ④ HEEL steel — TOP face, because the heel bends DOWN */}
-              <path d={`M${xStemL + 4} ${yTopBase} L${xHeel - c} ${yTopBase} L${xHeel - c} ${yTopBase + 24}`}
+              <path d={`M${xStemL + 4} ${yTopBase} L${xHeel - c} ${yTopBase} L${xHeel - c} ${yTopBase + hook}`}
                 fill="none" stroke={BAR} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
               {/* ⑤ distribution steel in the base, cut end-on */}
               {[0.28, 0.5, 0.72].map((f) => (
                 <g key={f}>
-                  <circle cx={x0 + bw * f} cy={yTopBase + 9} r={1.5} fill={BAR} opacity={0.75} />
-                  <circle cx={x0 + bw * f} cy={yBotBase - 9} r={1.5} fill={BAR} opacity={0.75} />
+                  <circle cx={x0 + bw * f} cy={yTopBase + dist} r={1.5} fill={BAR} opacity={0.75} />
+                  <circle cx={x0 + bw * f} cy={yBotBase - dist} r={1.5} fill={BAR} opacity={0.75} />
                 </g>
               ))}
 
               {/* marks, set just clear of the steel they name */}
               <Mark n="1" x={xEarth + 13} y={yTop + 46} />
               <Mark n="2" x={xEarth - 22} y={yTop + (yBase - yTop) * 0.38} />
-              <Mark n="3" x={x0 + 22} y={yBotBase - 15} />
-              <Mark n="4" x={xHeel - 24} y={yTopBase + 15} />
+              <Mark n="3" x={x0 + 22} y={yBotBase - mark} />
+              <Mark n="4" x={xHeel - 24} y={yTopBase + mark} />
               <Mark n="5" x={x0 + bw * 0.5} y={(yTopBase + yBotBase) / 2} />
             </g>
           )
