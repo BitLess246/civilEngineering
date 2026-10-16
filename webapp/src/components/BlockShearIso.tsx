@@ -12,8 +12,10 @@ import { DrawingFrame } from './DrawingFrame'
 import type { BlockShearCase } from '../engine/steelDesign'
 import { blockShearIso } from '../lib/blockShearIso'
 import type { Pt } from '../lib/connectionMechanics'
-import { SE, extrudeFaces, faceVisible, fitIso, isoPath, sortFaces, type Face, type Vec3 } from '../lib/isometric'
+import { extrudeFaces, faceVisible, fitIso, isoPath, sortFaces, type Face, type IsoView, type Vec3 } from '../lib/isometric'
 
+/** Turned toward the plate's face so its holes and the cut faces both read. */
+const BLOCK_VIEW: IsoView = { az: -58, el: 24 }
 const INK = '#37526e', CRIT = '#c2402a', TENS = '#b45309', FAINT = '#8a8f98'
 const STEEL: Record<string, string> = { front: '#dfe6ee', side: '#b9c6d4', top: '#ced8e3' }
 const halo = { paintOrder: 'stroke' as const, stroke: 'var(--sheet, #fff)', strokeWidth: 2.6, strokeLinejoin: 'round' as const }
@@ -38,7 +40,7 @@ export function BlockShearIso({ bolts, W, H, t, dh, cases, avail, R }: BlockShea
   const which = k === 0 ? 'A' : 'B'
   const g = blockShearIso(bolts, W, H, t, dh, which)
   const bc = cases[k]
-  const view = SE
+  const view = BLOCK_VIEW
   const SW = 380
   const plateF = extrudeFaces(g.plate.outline, 0, g.tDraw)
   const blockF = extrudeFaces(g.block.outline, 0, g.tDraw, g.block.shift)

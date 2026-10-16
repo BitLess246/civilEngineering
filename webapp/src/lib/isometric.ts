@@ -1,5 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────────
 // ISOMETRIC — one projection for every 3-D figure on a 2-D sheet.
+// (Strictly axonometric; the file keeps the name the drawings use for it.)
 //
 // A plan and a section are two pictures of one solid, and the reader has to
 // fuse them. A punching cone, a footing's shear plane and a bolt group's
@@ -7,39 +8,54 @@
 // line. An isometric shows the surface as a surface.
 //
 // CONVENTION. World axes x east, y north, z up, in whatever unit the caller
-// uses. Screen u right, v DOWN (SVG). This is an isometric DRAWING, not a true
-// projection: each axis keeps full length (the 0.816 true foreshortening is
-// a uniform scale, so it is folded into the fit). The viewer stands above one
-// plan quadrant, `{ sx, sy }` — `SE` = south-east, looking north-west.
+// uses. Screen u right, v DOWN (SVG). An orthographic AXONOMETRIC: the viewer
+// stands at plan azimuth `az` (degrees from +x, anticlockwise) and looks down
+// at elevation `el`. A TRUE isometric (`ISO_SE`: az −45°, el 35.26°) looks
+// straight down every 45° diagonal, so a punching cone's corner edges — which
+// rise at exactly 45° — collapse to points, and box edges line up with each
+// other. The drawings use `AXO`, a dimetric turned 10° off the diagonal and
+// lowered a little, so no edge of interest runs along the line of sight.
 //
 // Pure geometry. No React, no SVG strings beyond a path helper.
 // ─────────────────────────────────────────────────────────────────────────
 
 export type Vec3 = readonly [number, number, number]
 export type Pt = readonly [number, number]
-/** The plan quadrant the viewer stands over: +1/−1 along x and y. */
-export interface IsoView { sx: 1 | -1; sy: 1 | -1 }
+/** Where the viewer stands: plan azimuth and elevation, degrees. */
+export interface IsoView { az: number; el: number }
 
-export const SE: IsoView = { sx: 1, sy: -1 }
-export const NE: IsoView = { sx: 1, sy: 1 }
+/** The true isometric from the south-east — equal foreshortening, edges in line. */
+export const ISO_SE: IsoView = { az: -45, el: (Math.asin(1 / Math.sqrt(3)) * 180) / Math.PI }
+/** The default drawing view: south-east, 10° off the diagonal toward the east face, a little lower. */
+export const AXO: IsoView = { az: -35, el: 28 }
 
-const C30 = Math.sqrt(3) / 2
+const RAD = Math.PI / 180
+/** The unit vector toward the viewer, and the sheet's right and up directions. */
+export function viewAxes(view: IsoView = AXO): { toward: Vec3; right: Vec3; up: Vec3 } {
+  const a = view.az * RAD, e = view.el * RAD
+  return {
+    toward: [Math.cos(e) * Math.cos(a), Math.cos(e) * Math.sin(a), Math.sin(e)],
+    right: [-Math.sin(a), Math.cos(a), 0],
+    up: [-Math.sin(e) * Math.cos(a), -Math.sin(e) * Math.sin(a), Math.cos(e)],
+  }
+}
 
-/** Unit-scale projection: world → screen (v down). Each axis maps to a unit vector. */
-export function isoRaw([x, y, z]: Vec3, view: IsoView = SE): Pt {
-  const u = (-view.sy * x + view.sx * y) * C30
-  const up = z - (view.sx * x + view.sy * y) * 0.5
-  return [u, -up]
+const dot = (p: Vec3, q: Vec3) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2]
+
+/** Unit-scale projection: world → sheet (v down). */
+export function isoRaw(q: Vec3, view: IsoView = AXO): Pt {
+  const { right, up } = viewAxes(view)
+  return [dot(q, right), -dot(q, up)]
 }
 
 /** Nearness to the viewer: larger is in front. Paint ascending. */
-export function isoDepth([x, y, z]: Vec3, view: IsoView = SE): number {
-  return view.sx * x + view.sy * y + z
+export function isoDepth(q: Vec3, view: IsoView = AXO): number {
+  return dot(q, viewAxes(view).toward)
 }
 
 /** A face whose OUTWARD normal points at the viewer is seen from outside. */
-export function faceVisible(n: Vec3, view: IsoView = SE): boolean {
-  return n[0] * view.sx + n[1] * view.sy + n[2] > 1e-12
+export function faceVisible(n: Vec3, view: IsoView = AXO): boolean {
+  return dot(n, viewAxes(view).toward) > 1e-12
 }
 
 export interface Face { pts: Vec3[]; n: Vec3; key: string }
@@ -50,7 +66,7 @@ const centroid = (pts: readonly Vec3[]): Vec3 => {
 }
 
 /** Back to front, by the depth of each face's centroid — painter's order. */
-export function sortFaces<F extends { pts: readonly Vec3[] }>(faces: F[], view: IsoView = SE): F[] {
+export function sortFaces<F extends { pts: readonly Vec3[] }>(faces: F[], view: IsoView = AXO): F[] {
   return [...faces].sort((a, b) => isoDepth(centroid(a.pts), view) - isoDepth(centroid(b.pts), view))
 }
 
@@ -83,7 +99,7 @@ export function boxEdges(lo: Vec3, hi: Vec3): Edge[] {
 }
 
 /** An edge is on the visible side when either face it bounds is. */
-export const edgeVisible = (e: Edge, view: IsoView = SE): boolean => faceVisible(e.n[0], view) || faceVisible(e.n[1], view)
+export const edgeVisible = (e: Edge, view: IsoView = AXO): boolean => faceVisible(e.n[0], view) || faceVisible(e.n[1], view)
 
 export interface IsoFit {
   /** World → sheet coordinates. */
@@ -95,7 +111,7 @@ export interface IsoFit {
 }
 
 /** Scale and place `pts` to fit inside (x, y, w, h) at one scale, centred across, top-aligned. */
-export function fitIso(pts: readonly Vec3[], x: number, y: number, w: number, h: number, view: IsoView = SE): IsoFit {
+export function fitIso(pts: readonly Vec3[], x: number, y: number, w: number, h: number, view: IsoView = AXO): IsoFit {
   const raw = pts.map((q) => isoRaw(q, view))
   const us = raw.map((q) => q[0]), vs = raw.map((q) => q[1])
   const u0 = Math.min(...us), u1 = Math.max(...us), v0 = Math.min(...vs), v1 = Math.max(...vs)

@@ -6,10 +6,10 @@
 import type { FootingShearInput } from '../../lib/codes'
 import { footingShearExample } from '../../lib/codes/footingShear'
 import { footingShearIso } from '../../lib/footingShearIso'
-import { SE, boxFaces, faceVisible, fitIso, isoPath, sortFaces, type Face, type Vec3 } from '../../lib/isometric'
+import { AXO, boxFaces, faceVisible, fitIso, isoPath, sortFaces, type Face, type Vec3 } from '../../lib/isometric'
 import { DrawingFrame } from '../DrawingFrame'
 
-const INK = 'var(--color-ink, #1f2937)', EDGE = '#37526e', CRIT = '#c2402a', LOAD = '#d4512b', DIM = '#1f77b4', HL = '#f59e0b', FAINT = '#8a8f98'
+const INK = 'var(--color-ink, #1f2937)', EDGE = '#37526e', BAR = '#3f4a59', CRIT = '#c2402a', LOAD = '#d4512b', DIM = '#1f77b4', HL = '#f59e0b', FAINT = '#8a8f98'
 const CONC: Record<string, string> = { '+z': '#eef3f8', '-y': '#dbe4ee', '+x': '#c9d5e2' }
 const COL: Record<string, string> = { '+z': '#5f7894', '-y': '#37526e', '+x': '#2b4259' }
 const halo = { paintOrder: 'stroke' as const, stroke: 'var(--sheet, #fff)', strokeWidth: 2.6, strokeLinejoin: 'round' as const }
@@ -18,7 +18,7 @@ export function FootingShearIso({ i, hl }: { i: FootingShearInput; hl: string | 
   const g = footingShearIso(i), r = footingShearExample(i)
   if (!g || !r) return null
   const lit = (k: string) => hl === k
-  const W = 380, view = SE
+  const W = 380, view = AXO
   const box = (b: { lo: Vec3; hi: Vec3 }) => boxFaces(b.lo, b.hi)
   const all = [...box(g.pad), ...box(g.column), ...(g.strip ? box(g.strip) : [])].flatMap((f) => f.pts)
   const fit = fitIso([...all, ...g.arrows.map((a) => a.from)], 16, 62, W - 32, 220, view)
@@ -46,13 +46,18 @@ export function FootingShearIso({ i, hl }: { i: FootingShearInput; hl: string | 
         {seen(box(g.pad)).map((f) => <path key={f.key} d={P(f.pts)} fill={CONC[f.key]} stroke={EDGE} strokeWidth={0.9} strokeLinejoin="round" />)}
         {!r.inside && <>
         <path d={P(sec)} fill={CRIT} fillOpacity={lit('d') ? 0.5 : 0.35} stroke={CRIT} strokeWidth={1.4} strokeLinejoin="round" />
-        <path d={isoPath([p(sec[0]), p(sec[1])], false)} stroke={FAINT} strokeWidth={0.8} strokeDasharray="4 3" />
+        <path d={P(g.cover)} fill={FAINT} fillOpacity={0.14} stroke={FAINT} strokeWidth={0.8} strokeDasharray="3 2" strokeLinejoin="round" />
+        {/* the main bars, bridging the cut where the strip was pulled off, and cut on the section's B·d edge */}
+        {g.crossings.map((c, k) => <path key={`x${k}`} d={isoPath([p(c.a), p(c.b)], false)} stroke={BAR} strokeWidth={1.6} strokeLinecap="round" />)}
+        {g.cuts.map((c, k) => { const [x, y] = p(c); return <circle key={`k${k}`} cx={x} cy={y} r={2.6} fill={BAR} stroke="var(--sheet, #fff)" strokeWidth={0.7} /> })}
         </>}
         {seen(box(g.column)).map((f) => <path key={`c${f.key}`} d={P(f.pts)} fill={COL[f.key]} stroke={EDGE} strokeWidth={0.7} />)}
 
         {/* the strip beyond it, pulled clear, the soil pushing it up */}
-        {g.strip && seen(box(g.strip)).map((f) => <path key={`s${f.key}`} d={P(f.pts)} fill={f.key === '+z' ? LOAD : CONC[f.key]}
-          fillOpacity={f.key === '+z' ? (lit('arm') || lit('qu') ? 0.4 : 0.22) : 1} stroke={EDGE} strokeWidth={0.9} strokeLinejoin="round" />)}
+        {g.strip && seen(box(g.strip)).map((f) => <g key={`s${f.key}`}>
+          <path d={P(f.pts)} fill={CONC[f.key]} stroke="none" />
+          <path d={P(f.pts)} fill={f.key === '+z' ? LOAD : 'none'} fillOpacity={lit('arm') || lit('qu') ? 0.4 : 0.22} stroke={EDGE} strokeWidth={0.9} strokeLinejoin="round" />
+        </g>)}
         {g.arrows.map((a, k) => {
           const [x0, y0] = p(a.from), [x1, y1] = p(a.to)
           return <g key={k} stroke={qColor} fill={qColor}>
@@ -75,6 +80,7 @@ export function FootingShearIso({ i, hl }: { i: FootingShearInput; hl: string | 
         <text x={W - 16} y={53} fontSize={11} fill={CRIT} textAnchor="end">Vc on B·d = {i.B} × {(i.d / 1000).toFixed(3)} = {(g.Bd / 1e6).toFixed(3)} m²</text>
         </>}
 
+        {!r.inside && (() => { const [, y] = p(g.cover[0]); return <text x={fx - 17} y={(y + fyBot) / 2 + 4} fontSize={10} fill={FAINT} textAnchor="end" {...halo}>cover — not in B·d</text> })()}
         {stripTop && <text x={stripTop[0]} y={stripTop[1] + 4} fontSize={11} fill={lit('arm') ? HL : LOAD} textAnchor="middle" {...halo}>B × aᵥ</text>}
         {arrowFoot && <text x={arrowFoot[0]} y={arrowFoot[1] + 14} fontSize={11} fill={qColor} textAnchor="middle" {...halo}>qu = {i.qu} kPa</text>}
 
@@ -83,7 +89,7 @@ export function FootingShearIso({ i, hl }: { i: FootingShearInput; hl: string | 
             : `Vu = qu·B·aᵥ = ${i.qu} × ${i.B} × ${r.arm.toFixed(3)} = ${r.Vu.toFixed(1)} kN · φVc = ${r.phiVc.toFixed(1)} kN`}
         </text>
         <text x={W / 2} y={yText + 14} fontSize={10} fill={FAINT} textAnchor="middle">
-          The section runs the full width B, d from the column face (§422.5).
+          d runs from the top to the bottom bars (●); B·d stops at them (§422.5).
         </text>
       </svg>
     </DrawingFrame>

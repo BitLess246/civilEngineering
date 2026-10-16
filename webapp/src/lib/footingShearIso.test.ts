@@ -35,11 +35,29 @@ describe('one-way shear in 3-D — the plane and the strip are the provision\'s'
     }
   })
 
+  it('the bars set d: B·d runs from the top to the bottom mat, the cover under it is apart', () => {
+    const i = DEFAULT_FOOTING_SHEAR, g = footingShearIso(i)!
+    expect(g.zs).toBe(i.h - i.d)
+    const z = (q: readonly (readonly number[])[]) => q.map((p) => p[2])
+    expect([Math.min(...z(g.shearArea)), Math.max(...z(g.shearArea))]).toEqual([i.h - i.d, i.h])
+    expect([Math.min(...z(g.cover)), Math.max(...z(g.cover))]).toEqual([0, i.h - i.d])
+    // every main bar crosses the section ON the B·d face's lower edge, inside the side cover
+    expect(g.cuts.length).toBe(11)                      // 2.4 m wide, 200 apart, 75 cover: −1000 … 1000
+    for (const c of g.cuts) {
+      expect(c[0]).toBe(g.section[0][0]); expect(c[2]).toBe(g.zs)
+      expect(Math.abs(c[1])).toBeLessThanOrEqual(1200 - 75)
+    }
+    // and bridges the pulled-apart cut to the strip
+    expect(g.crossings).toHaveLength(g.cuts.length)
+    for (const x of g.crossings) { expect(x.a[0]).toBe(g.section[0][0]); expect(x.b[0]).toBe(g.strip!.lo[0]) }
+  })
+
   it('no strip when the section falls past the edge; null for impossible geometry', () => {
     const g = footingShearIso({ ...DEFAULT_FOOTING_SHEAR, L: 1.2, B: 1.2, c: 600, d: 350, h: 450 })!
     expect(g.strip).toBeNull()
     expect(g.arm).toBe(0)
     expect(g.arrows).toHaveLength(0)
+    expect(g.crossings).toHaveLength(0)
     expect(footingShearIso({ ...DEFAULT_FOOTING_SHEAR, d: 600, h: 500 })).toBeNull()
   })
 })
