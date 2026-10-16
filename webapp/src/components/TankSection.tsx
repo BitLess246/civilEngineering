@@ -9,6 +9,12 @@
 //  up the wall. A page that only prints T at the base invites uniform rings
 //  the whole way up.
 //
+//  MOMENT: why the vertical steel is where it is. A closed ring cannot bow
+//  out without stretching its hoops, so only the zone near the fixed base
+//  bends — hard, with the WATER face in tension at the foot — and a small
+//  reversal above it puts the outer face in tension. Drawn on the tension
+//  side, from the shell solution the engine already ran.
+//
 //  PLAN: what the hoop steel actually is. Rings are a closed loop resisting
 //  T = γw·H·D/2 by pure tension; in section they are cut end-on and draw as
 //  dots, which is exactly why a section alone cannot show them.
@@ -19,6 +25,7 @@
 import { DrawingFrame } from './DrawingFrame'
 import { SurfaceMark } from './hydraulicsSketches'
 import { Tick } from './dims'
+import type { CylinderWall } from '../engine/waterTank'
 
 const INK = '#37526e'
 const CONC = '#eef3f8'
@@ -43,6 +50,8 @@ export interface TankSectionProps {
   T: number
   hoopBars?: string
   vertBars?: string
+  /** The shell solution — its moment profile is drawn beside the wall. */
+  shell?: Pick<CylinderWall, 'M0' | 'Mspan' | 'xSpan' | 'at'>
 }
 
 /** Horizontal arrow from (x1,y) to (x2,y) with a filled head at x2. */
@@ -56,13 +65,13 @@ function HArrow({ x1, x2, y, color }: { x1: number; x2: number; y: number; color
   )
 }
 
-export function TankSection({ H, D, t, freeboard, T, hoopBars, vertBars }: TankSectionProps) {
+export function TankSection({ H, D, t, freeboard, T, hoopBars, vertBars, shell }: TankSectionProps) {
   const fb = Math.max(0, freeboard)
   const wallH = H + fb
   // Left margin carries, from the outside in: the H / freeboard chain and its
   // rotated label, then the stored water with the pressure wedge inside it.
   const DIM_X = 26, WATER_W = 96
-  const ML = DIM_X + 22 + WATER_W, MR = 210, MT = 40, MB = 66
+  const ML = DIM_X + 22 + WATER_W, MR = 210, MT = 40, MB = 77
   const WALL_H = 210
   const s = WALL_H / Math.max(wallH, 1e-9)        // m → units, ONE scale for the section
   const tw = Math.max(5, (t / 1000) * s)          // wall thickness at that scale
@@ -71,7 +80,20 @@ export function TankSection({ H, D, t, freeboard, T, hoopBars, vertBars }: TankS
   const yWater = yTop + fb * s
   const xWall = ML                                // inner (water) face of the wall
   const xIn = xWall - WATER_W                     // where the cut of the water ends
-  const W = ML + 40 + MR, HT = MT + WALL_H + MB
+  // Moment profile, right of the wall on the section's height scale: M on its
+  // TENSION side — water face (left of the axis) negative, outer face right.
+  const mMax = shell ? Math.max(Math.abs(shell.M0), Math.abs(shell.Mspan), 1e-9) : 1
+  const mS = 44 / mMax
+  const mLeft = shell ? Math.max(0, -shell.M0) * mS : 0
+  const mRight = shell ? Math.max(0, shell.Mspan) * mS : 0
+  const xAx = xWall + tw + 42 + mLeft            // clear of the base slab's end
+  // what lies right of the wall's water face before the plan begins
+  const RW = shell ? tw + 42 + mLeft + Math.max(mRight + 74, 112) : 40
+  const W = ML + RW + MR, HT = MT + WALL_H + MB
+  const mPts = shell ? Array.from({ length: 61 }, (_, i) => {
+    const x = (H * i) / 60
+    return `${(xAx + shell.at(x).M * mS).toFixed(2)},${(yBase - x * s).toFixed(2)}`
+  }) : []
 
   // Triangular hydrostatic pressure, inside the tank, its arrows landing ON
   // the wall's water face.
@@ -79,7 +101,7 @@ export function TankSection({ H, D, t, freeboard, T, hoopBars, vertBars }: TankS
   const xP = xWall
 
   // Plan: the ring at the base, to the right of the section (its own scale).
-  const cx = ML + 40 + MR / 2, cy = MT + WALL_H / 2 - 6
+  const cx = ML + RW + MR / 2, cy = MT + WALL_H / 2 - 6
   const rOut = 58, rIn = rOut * (1 - Math.min(0.35, (t / 1000) / Math.max(D / 2 + t / 1000, 1e-9)))
   const rMid = (rOut + rIn) / 2
 
@@ -150,6 +172,21 @@ export function TankSection({ H, D, t, freeboard, T, hoopBars, vertBars }: TankS
         <Tick x={xWall} y={yTop - 10} /><Tick x={xWall + tw} y={yTop - 10} />
         <text x={xWall + tw + 9} y={yTop - 7} fontSize={7.5} fill={DIM} {...HALO}>t = {t} mm</text>
 
+        {/* ── MOMENT ──────────────────────────────────────────────────────── */}
+        {shell && <g>
+          <text x={xAx - mLeft} y={MT - 24} fontSize={9} fontWeight={700} fill={INK}>MOMENT — shell</text>
+          <polygon points={[`${xAx},${yBase}`, ...mPts, `${xAx},${yBase - H * s}`].join(' ')}
+            fill={VERT} opacity={0.12} />
+          <polyline points={mPts.join(' ')} fill="none" stroke={VERT} strokeWidth={1.3} />
+          <line x1={xAx} y1={yTop} x2={xAx} y2={yBase} stroke={INK} strokeWidth={0.8} />
+          <text x={xAx + 5} y={yBase - 4} fontSize={7.5} fill={VERT} {...HALO}>
+            M₀ = {Math.abs(shell.M0).toFixed(2)} kN·m/m · water face
+          </text>
+          {shell.Mspan > 1e-6 && <text x={xAx + mRight + 5} y={yBase - shell.xSpan * s + 3} fontSize={7.5} fill={VERT} {...HALO}>
+            {shell.Mspan.toFixed(2)} @ {shell.xSpan.toFixed(2)} m
+          </text>}
+        </g>}
+
         {/* ── PLAN ────────────────────────────────────────────────────────── */}
         <text x={cx - rOut} y={cy - rOut - 22} fontSize={9} fontWeight={700} fill={INK}>PLAN — ring at base</text>
         <circle cx={cx} cy={cy} r={rOut} fill={CONC} stroke={INK} strokeWidth={1.4} />
@@ -177,9 +214,12 @@ export function TankSection({ H, D, t, freeboard, T, hoopBars, vertBars }: TankS
           <text x={cx - rOut + 8} y={cy + rOut + 51} fill={VERT}>vertical {vertBars ?? ''}</text>
         </g>
 
-        <text x={W / 2} y={HT - 18} fontSize={7.5} fill={FAINT} textAnchor="middle">
+        <text x={W / 2} y={HT - 29} fontSize={7.5} fill={FAINT} textAnchor="middle">
           Section to one scale; plan to its own. Pressure is triangular: T peaks at the base and falls as γw·z·D/2.
         </text>
+        {shell && <text x={W / 2} y={HT - 18} fontSize={7.5} fill={FAINT} textAnchor="middle">
+          M is drawn on its tension face: the fixed base bends the water face; the rings carry the rest of the pressure.
+        </text>}
         <text x={W / 2} y={HT - 7} fontSize={7.5} fill={FAINT} textAnchor="middle">
           Ring steel may be reduced with height — rings are drawn closer together near the base for that reason.
         </text>
