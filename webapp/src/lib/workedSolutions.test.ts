@@ -339,3 +339,29 @@ describe('degenerate inputs do not produce a broken sheet', () => {
     expect(bromsClay({ L: 12, d: 0.6, cu: 40, My: 1e7, e: 0.5, head: 'free' }).mode).toBe('short')
   })
 })
+
+describe('micropile sheet prints the areas the capacity used', () => {
+  const tex = (steps: ReturnType<typeof buildMicropileSolution>) => steps.flatMap((s) => s.lines.map((l) => ('tex' in l ? l.tex : ''))).join('\n')
+  it('A_grout is the annulus π/4·Dg² − A_bar, not 0 (the cast once read a field that does not exist)', () => {
+    const r = designMicropile({ section: mpSection, ...mpIn })
+    const out = tex(buildMicropileSolution(mpIn, r))
+    expect(r.areas.Agrout).toBeGreaterThan(30000)                               // π/4·200² − 804 = 30612
+    expect(out).toContain(String.raw`= ${r.areas.Agrout.toFixed(1)}\ \text{mm}^2`)
+    expect(out).not.toMatch(/A_\{grout\} = 0\\ /)
+  })
+  it('the structural line substitutes numbers that reproduce the capacity — compression and tension, with a casing', () => {
+    for (const mode of ['compression', 'tension'] as const) {
+      const sec = { ...mpSection, casingOD: 140, casingID: 120, fyCasing: 552 }
+      const inp = { ...mpIn, mode, casing: true, casingOD: 140, casingID: 120, fyCasing: 552 }
+      const r = designMicropile({ section: sec, ...inp })
+      const { Abar, Acasing, Agrout } = r.areas
+      const steel = 517 * Abar + 552 * Acasing
+      const P = mode === 'compression' ? (0.40 * 28 * Agrout + 0.47 * steel) / 1000 : 0.55 * steel / 1000
+      expect(P).toBeCloseTo(r.structural, 9)
+      const out = tex(buildMicropileSolution(inp, r))
+      expect(out).toContain(mode === 'compression' ? 'P_{c,allow}' : 'P_{t,allow}')
+      expect(Acasing).toBeGreaterThan(0)
+      expect(out).toContain('A_{casing} =')
+    }
+  })
+})

@@ -96,7 +96,11 @@ export interface MicropileSolutionInput {
 export function buildMicropileSolution(i: MicropileSolutionInput, r: MicropileResult): SolutionStep[] {
   const FS = i.FS ?? 2.0
   const bondArea = Math.PI * i.bondDia * i.bondLength
-  const a = r.areas as unknown as Record<string, number>
+  // the engine's own areas, typed: a cast here once read `a.grout` off an object whose field is
+  // `Agrout`, and every sheet printed A_grout = 0 beside a capacity that had counted it
+  const { Abar, Acasing, Agrout } = r.areas
+  const fyCas = i.fyCasing
+  const steel = i.fyBar * Abar + (i.casing ? fyCas * Acasing : 0)
 
   return [
     {
@@ -105,7 +109,8 @@ export function buildMicropileSolution(i: MicropileSolutionInput, r: MicropileRe
       lines: [
         txt(`A micropile carries load through a steel bar, the grout annulus, and — where fitted — a permanent casing. In ${i.mode} the contributions differ: grout is counted in compression but not in tension, where the steel alone carries the load.`),
         eq(String.raw`\text{bar } \varnothing${sn0(i.barDia)}:\ A_{bar} = \tfrac{\pi}{4}(${sn0(i.barDia)})^2 = ${sn1((Math.PI / 4) * i.barDia ** 2)}\ \text{mm}^2`),
-        eq(String.raw`\text{grout } \varnothing${sn0(i.groutDia)}:\ A_{grout} = ${sn0(a.grout ?? 0)}\ \text{mm}^2${i.casing ? String.raw`,\quad \text{casing } ${sn0(i.casingOD)}/${sn0(i.casingID)}:\ A_{casing} = ${sn0(a.casing ?? 0)}\ \text{mm}^2` : ''}`),
+        ...(i.casing ? [eq(String.raw`\text{casing } ${sn0(i.casingOD)}/${sn0(i.casingID)}:\ A_{casing} = \tfrac{\pi}{4}(${sn0(i.casingOD)}^2 - ${sn0(i.casingID)}^2) = ${sn1(Acasing)}\ \text{mm}^2`)] : []),
+        eq(String.raw`\text{grout } \varnothing${sn0(i.groutDia)}:\ A_{grout} = \tfrac{\pi}{4}(${sn0(i.groutDia)})^2 - A_{bar}${i.casing ? ' - A_{casing}' : ''} = ${sn1((Math.PI / 4) * i.groutDia ** 2)} - ${sn1(Abar)}${i.casing ? ` - ${sn1(Acasing)}` : ''} = ${sn1(Agrout)}\ \text{mm}^2`),
       ],
     },
     {
@@ -115,7 +120,12 @@ export function buildMicropileSolution(i: MicropileSolutionInput, r: MicropileRe
         txt(i.mode === 'compression'
           ? 'In compression the allowable load combines the grout at 0.4f′c with the steel at 0.47fy — the low factors are what keeps a micropile serviceable rather than merely un-failed.'
           : 'In tension the grout is assumed cracked and contributes nothing; the steel alone carries the load at 0.55fy.'),
-        eq(String.raw`P_{c,allow} = ${sn2(r.structural)}\ \text{kN}\quad(\text{${i.mode}})`),
+        // the formula, then the numbers on their own line — one line ran off a phone screen
+        ...(i.mode === 'compression'
+          ? [eq(String.raw`P_{c,allow} = 0.40 f'_c A_{grout} + 0.47 (f_y A_{bar}${i.casing ? ' + f_{y,cas} A_{casing}' : ''})`),
+             eq(String.raw`= \frac{0.40(${sn0(i.fcGrout)})(${sn0(Agrout)}) + 0.47(${sn0(steel)})}{1000} = ${sn2(r.structural)}\ \text{kN}`)]
+          : [eq(String.raw`P_{t,allow} = 0.55 (f_y A_{bar}${i.casing ? ' + f_{y,cas} A_{casing}' : ''})`),
+             eq(String.raw`= \frac{0.55(${sn0(steel)})}{1000} = ${sn2(r.structural)}\ \text{kN}`)]),
       ],
     },
     {
