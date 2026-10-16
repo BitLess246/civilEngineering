@@ -125,7 +125,7 @@ export function WeldedJointMechanics(p: WeldedJointMechanicsProps) {
           {tips && <>
             <line x1={X(cX0)} y1={Y(plY1)} x2={X(cX0)} y2={Y(plY0)} stroke={INK} strokeWidth={0.9} strokeDasharray="5 3" />
             <line x1={X(cX1)} y1={Y(plY1)} x2={X(cX1)} y2={Y(plY0)} stroke={INK} strokeWidth={0.9} strokeDasharray="5 3" />
-            <text x={X(cMid)} y={Y(plY1) - 6} fontSize={9} fill={NOTE} textAnchor="middle">flange tips {Math.round(cbf)} apart (behind the plate)</text>
+            <text x={X(cMid)} y={Y(plY1) - 6} fontSize={9.5} fill={NOTE} textAnchor="middle">flange tips {Math.round(cbf)} apart (behind the plate)</text>
           </>}
           <text x={X(plX1) - 4} y={Y(plY0) - 6} fontSize={9.5} fill={NOTE} textAnchor="end">PL {Math.round(plX1 - plX0)}×{Math.round(plY1 - plY0)}×{p.tPlate}</text>
 
@@ -209,8 +209,8 @@ export function WeldedJointMechanics(p: WeldedJointMechanicsProps) {
                 {Array.from({ length: 24 }, (_, k) => (
                   <rect key={k} x={kx} y={ky0 + kh - ((k + 1) / 24) * kh} width={10} height={kh / 24 + 0.5} fill={stressColor((k + 0.5) / 24, false)} />
                 ))}
-                <text x={kx - 3} y={ky0 + 4} fontSize={8.5} fill={NOTE} textAnchor="end">{r.capacityPerLen.toFixed(0)} N/mm (available)</text>
-                <text x={kx - 3} y={ky0 + kh} fontSize={8.5} fill={NOTE} textAnchor="end">0</text>
+                <text x={kx - 3} y={ky0 + 4} fontSize={9.5} fill={NOTE} textAnchor="end">{r.capacityPerLen.toFixed(0)} N/mm (available)</text>
+                <text x={kx - 3} y={ky0 + kh} fontSize={9.5} fill={NOTE} textAnchor="end">0</text>
               </g>
             )
           })()}
@@ -230,16 +230,16 @@ export function WeldedJointMechanics(p: WeldedJointMechanicsProps) {
             return (
               <g>
                 <text x={IX} y={20} fontSize={11} fontWeight={700} fill={INK}>SECTION THROUGH A FILLET</text>
-                <text x={IX} y={33} fontSize={9} fill={NOTE}>across a weld line · enlarged</text>
+                <text x={IX} y={33} fontSize={9.5} fill={NOTE}>across a weld line · enlarged</text>
                 <rect x={PX(-span)} y={PY(0)} width={2 * span * k} height={tFace * k} fill={tips ? PLATE : STEEL_FILL} stroke={INK} strokeWidth={0.9} />
-                <text x={PX(span) - 3} y={PY(-tFace) - 3} fontSize={8.5} fill={NOTE} textAnchor="end">{faceLabel} {Math.round(tFace)}</text>
+                <text x={PX(span) - 3} y={PY(-tFace) - 3} fontSize={9.5} fill={NOTE} textAnchor="end">{faceLabel} {Math.round(tFace)}</text>
                 <rect x={PX(0)} y={PY(tEdge)} width={span * k} height={tEdge * k} fill={tips ? STEEL_FILL : PLATE} stroke={INK} strokeWidth={0.9} />
-                <text x={PX(span) - 3} y={PY(tEdge) - 4} fontSize={8.5} fill={NOTE} textAnchor="end">{edgeLabel} {Math.round(tEdge)}</text>
+                <text x={PX(span) - 3} y={PY(tEdge) - 4} fontSize={9.5} fill={NOTE} textAnchor="end">{edgeLabel} {Math.round(tEdge)}</text>
                 <polygon points={`${PX(0)},${PY(0)} ${PX(-leg)},${PY(0)} ${PX(0)},${PY(leg)}`} fill={WELD} fillOpacity={0.85} stroke={INK} strokeWidth={0.8} />
                 <line x1={PX(0)} y1={PY(0)} x2={PX(-leg / 2)} y2={PY(leg / 2)} stroke={SHEAR} strokeWidth={2.4} strokeDasharray="4 2" />
                 <text x={PX(-leg / 2) - 6} y={PY(leg / 2) - 6} fontSize={9.5} fill={SHEAR} fontWeight={700} textAnchor="end">throat {th.toFixed(2)}</text>
-                <text x={PX(-leg / 2)} y={PY(0) + 12} fontSize={9} fill={NOTE} textAnchor="middle">w {p.size}</text>
-                <text x={PX(0) + 4} y={PY(leg / 2) + 3} fontSize={9} fill={NOTE}>w</text>
+                <text x={PX(-leg / 2)} y={PY(0) + 12} fontSize={9.5} fill={NOTE} textAnchor="middle">w {p.size}</text>
+                <text x={PX(0) + 4} y={PY(leg / 2) + 3} fontSize={9.5} fill={NOTE}>w</text>
                 <text x={IX} y={PY(-(tips ? tp : tf)) + 26} fontSize={9.5} fill={SHEAR}>shear plane: 0.707w × 1 mm per mm of weld</text>
                 <text x={IX} y={PY(-(tips ? tp : tf)) + 40} fontSize={9.5} fill={SHEAR}>Rn = 0.60·F_EXX·0.707w = {(0.6 * p.FEXX * 0.7071 * p.size).toFixed(0)} N/mm</text>
               </g>

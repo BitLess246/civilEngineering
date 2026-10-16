@@ -114,14 +114,14 @@ function StraightPanel({ ld, db }: { ld: number; db: number }) {
           panel means off the drawing. */}
       <line x1={xCrit} y1={50} x2={xCrit} y2={120} stroke={CRIT} strokeWidth={1.6} strokeDasharray="5 3" />
       <text x={xCrit + 4} y={40} fontSize={7} fill={CRIT}>critical section</text>
-      <text x={xCrit + 4} y={49} fontSize={6.5} fill={FAINT}>bar stressed to fy here</text>
+      <text x={xCrit + 4} y={49} fontSize={7} fill={FAINT}>bar stressed to fy here</text>
 
       {/* the bar, running through the critical section and beyond */}
       <line x1={x0 - 24} y1={yb} x2={xEnd} y2={yb} stroke={BAR} strokeWidth={3} strokeLinecap="round" />
 
       {/* ld, dimensioned between the two things it is actually measured between */}
       <Dim x1={xCrit} x2={xEnd} y={128} from2={yb} label={`ℓd = ${Math.round(ld)} mm`} />
-      <text x={(xCrit + xEnd) / 2} y={144} fontSize={6.5} fill={FAINT} textAnchor="middle">
+      <text x={(xCrit + xEnd) / 2} y={144} fontSize={7} fill={FAINT} textAnchor="middle">
         = {(ld / db).toFixed(0)} db · NOT measured from the support face
       </text>
 
@@ -135,7 +135,7 @@ function StraightPanel({ ld, db }: { ld: number; db: number }) {
           </g>
         )
       })}
-      <text x={xEnd} y={yb - 13} fontSize={6.5} fill={FAINT} textAnchor="end">bond over the full length</text>
+      <text x={xEnd} y={yb - 13} fontSize={7} fill={FAINT} textAnchor="end">bond over the full length</text>
     </g>
   )
 }
@@ -179,7 +179,7 @@ function HookPanel({ ldh, db, tail, bend }: { ldh: number; db: number; tail: num
           12db = {Math.round(tail)}
         </text>
       </g>
-      <text x={20} y={PH - 4} fontSize={6.5} fill={FAINT}>
+      <text x={20} y={PH - 4} fontSize={7} fill={FAINT}>
         min inside bend ⌀ {Math.round(bend)} mm ({db <= 25 ? '6db' : '8db'}, §25.3.1) · ℓdh ≥ max(8db, 150)
       </text>
     </g>
@@ -205,10 +205,10 @@ function SplicePanel({ ls, db, cls }: { ls: number; db: number; cls: 'A' | 'B' }
       {/* the overlap runs from where the second bar STARTS to where the
           first one ENDS — each end's extension line drops off that bar end */}
       <Dim x1={xLapL} x2={xLapR} y={120} from1={yB} from2={yA} label={`ℓst = ${Math.round(ls)} mm`} />
-      <text x={PW / 2} y={136} fontSize={6.5} fill={FAINT} textAnchor="middle">
+      <text x={PW / 2} y={136} fontSize={7} fill={FAINT} textAnchor="middle">
         = {(ls / db).toFixed(0)} db · Class B = 1.3 × ℓd; Class A only if ≤50% spliced and As,prov ≥ 2As,req
       </text>
-      <text x={PW / 2} y={146} fontSize={6.5} fill={CRIT} textAnchor="middle">
+      <text x={PW / 2} y={146} fontSize={7} fill={CRIT} textAnchor="middle">
         Stagger the splices — this is the overlap, not the bar length.
       </text>
     </g>
@@ -255,14 +255,14 @@ function ConfinePanel({ db }: { db: number }) {
               </g>
             ))}
             <line x1={bars[0]} y1={yd} x2={bars[1]} y2={yd} stroke={DIM} strokeWidth={0.9} />
-            <text x={(bars[0] + bars[1]) / 2} y={yd + 11} fontSize={6.5} fill={DIM} textAnchor="middle">s · cb ≤ s/2</text>
+            <text x={(bars[0] + bars[1]) / 2} y={yd + 11} fontSize={7} fill={DIM} textAnchor="middle">s · cb ≤ s/2</text>
           </g>
         )
       })()}
       <text x={l + bw + 6} y={t + 14} fontSize={7} fill={TIE}>tie → Ktr</text>
-      <text x={l + bw + 6} y={t + 24} fontSize={6.5} fill={FAINT}>40Atr/(s·n)</text>
+      <text x={l + bw + 6} y={t + 24} fontSize={7} fill={FAINT}>40Atr/(s·n)</text>
 
-      <text x={l - 16} y={PH - 4} fontSize={6.5} fill={FAINT}>
+      <text x={l - 16} y={PH - 4} fontSize={7} fill={FAINT}>
         cb = min(cover to CENTRE, s/2) · db = {db} mm · (cb + Ktr)/db ≤ 2.5
       </text>
     </g>

@@ -58,7 +58,7 @@ export function LevelProfile({ res, startElev }: { res: LevelResult; startElev: 
           p.ifs.map((z, k) => (
             <g key={`ifs${i}-${k}`}>
               <circle cx={x(i)} cy={y(z)} r="2.6" fill={BRAND} />
-              <text x={x(i) + 5} y={y(z) - 4} fontSize="9" fill={MUTED} fontFamily="var(--font-mono, monospace)">{f2(z)}</text>
+              <text x={x(i) + 5} y={y(z) - 4} fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">{f2(z)}</text>
             </g>
           )),
         )}
@@ -68,8 +68,8 @@ export function LevelProfile({ res, startElev }: { res: LevelResult; startElev: 
           <g key={`st${i}`}>
             <line x1={x(i)} x2={x(i)} y1={y(p.elev) - 4} y2={y(p.elev) + 4} stroke={INK} strokeWidth="1.5" />
             <circle cx={x(i)} cy={y(p.elev)} r="2.5" fill={INK} />
-            <text x={x(i)} y={H - padB + 14} textAnchor="middle" fontSize="9.5" fill={INK} fontFamily="var(--font-mono, monospace)">{p.sta}</text>
-            <text x={x(i)} y={y(p.elev) + 16} textAnchor="middle" fontSize="9.5" fill={MUTED} fontFamily="var(--font-mono, monospace)">{f2(p.adj)}</text>
+            <text x={x(i)} y={H - padB + 17} textAnchor="middle" fontSize="10" fill={INK} fontFamily="var(--font-mono, monospace)">{p.sta}</text>
+            <text x={x(i)} y={y(p.elev) + 16} textAnchor="middle" fontSize="10" fill={MUTED} fontFamily="var(--font-mono, monospace)">{f2(p.adj)}</text>
           </g>
         ))}
 
