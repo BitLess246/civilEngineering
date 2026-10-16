@@ -286,22 +286,27 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   const ext = Math.max(0.6, Math.max(x1 - x0, z1 - z0, 1) * 0.04)   // grid-line overrun / bubble radius
   const r = ext
   const dimTextH = r * 0.8   // dimension text height (world m)
-  // stand the bubbles off from the plan by three dimension-text-heights so the
-  // (enlarged) chained dimensions clear the bubble ring
-  const bubbleShift = 3 * dimTextH
+  // Stand the bubbles off from the plan by three dimension-text-heights so the
+  // (enlarged) chained dimensions clear the bubble ring. A side with more than
+  // one bay also carries an OVERALL dimension — first grid line to last, the
+  // setting-out total read without adding up the chain — one tier further out,
+  // so its bubbles stand off by that tier too.
+  const tier = dimTextH * 2.2
+  const shiftTop = 3 * dimTextH + (xs.length > 2 ? tier : 0)
+  const shiftLeft = 3 * dimTextH + (zs.length > 2 ? tier : 0)
 
   // ── grid lines (column lines ‖ Y at each x, rows ‖ X at each z) ──
   // top/left ends run out to meet the shifted bubbles
-  for (const x of xs) P.push({ kind: 'line', x1: x, y1: z0 - ext - bubbleShift, x2: x, y2: z1 + ext, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
-  for (const z of zs) P.push({ kind: 'line', x1: x0 - ext - bubbleShift, y1: z, x2: x1 + ext, y2: z, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
+  for (const x of xs) P.push({ kind: 'line', x1: x, y1: z0 - ext - shiftTop, x2: x, y2: z1 + ext, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
+  for (const z of zs) P.push({ kind: 'line', x1: x0 - ext - shiftLeft, y1: z, x2: x1 + ext, y2: z, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
   // bubbles: letters across the top, numbers down the left
   xs.forEach((x, i) => {
-    const cy = z0 - ext - r - bubbleShift
+    const cy = z0 - ext - r - shiftTop
     P.push({ kind: 'circle', cx: x, cy, r, stroke: INK, fill: '#fff', width: 0.6 })
     P.push({ kind: 'text', x, y: cy, text: gridLabel(i), size: r * 1.1, anchor: 'middle', color: INK, weight: 700 })
   })
   zs.forEach((z, i) => {
-    const cx = x0 - ext - r - bubbleShift
+    const cx = x0 - ext - r - shiftLeft
     P.push({ kind: 'circle', cx, cy: z, r, stroke: INK, fill: '#fff', width: 0.6 })
     P.push({ kind: 'text', x: cx, y: z, text: String(i + 1), size: r * 1.1, anchor: 'middle', color: INK, weight: 700 })
   })
@@ -556,6 +561,11 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   const dimOffLeft = x0 - ext * 0.75 - dimTextH * 1.5
   for (let i = 0; i < zs.length - 1; i++)
     P.push({ kind: 'dim', x1: dimOffLeft, y1: zs[i], x2: dimOffLeft, y2: zs[i + 1], text: `${Math.round((zs[i + 1] - zs[i]) * 1000)} mm`, off: 0, size: dimTextH })
+  // the overall tier, one step further out, on the end grid lines
+  if (xs.length > 2)
+    P.push({ kind: 'dim', x1: xs[0], y1: dimOffTop - tier, x2: xs[xs.length - 1], y2: dimOffTop - tier, text: `${Math.round((xs[xs.length - 1] - xs[0]) * 1000)} mm`, off: 0, size: dimTextH })
+  if (zs.length > 2)
+    P.push({ kind: 'dim', x1: dimOffLeft - tier, y1: zs[0], x2: dimOffLeft - tier, y2: zs[zs.length - 1], text: `${Math.round((zs[zs.length - 1] - zs[0]) * 1000)} mm`, off: 0, size: dimTextH })
 
   // ── title block (detail tag) + beam schedule, below the plan ──
   const detailNo = opts.detailNo ?? '1', sheetRef = opts.sheetRef ?? 'S-1', scale = opts.scale ?? 'NTS'

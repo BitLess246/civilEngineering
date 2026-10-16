@@ -236,6 +236,31 @@ describe('planRenderer — foundation plan with designed footings', () => {
   })
 })
 
+describe('planRenderer — the overall dimension tier', () => {
+  type Dim = Extract<PlanPrimitive, { kind: 'dim' }>
+  const dims = (ps: PlanPrimitive[]) => ps.filter((p): p is Dim => p.kind === 'dim')
+  const circles = (ps: PlanPrimitive[]) => ps.filter((p): p is Extract<PlanPrimitive, { kind: 'circle' }> => p.kind === 'circle')
+
+  it('adds first-to-last-line totals outside the bay chain, only in a direction with more than one bay', () => {
+    // 6 + 6 m across, one 5 m bay down: a 12000 total on top, none on the left
+    const d = buildPlan(generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section, slabThickness: 150 }))!
+    const top = dims(d.primitives).filter((p) => p.y1 === p.y2)
+    const left = dims(d.primitives).filter((p) => p.x1 === p.x2)
+    expect(top.map((p) => p.text)).toEqual(['6000 mm', '6000 mm', '12000 mm'])
+    expect(left.map((p) => p.text)).toEqual(['5000 mm'])
+    const [chain, total] = [top[0], top[2]]
+    expect(total.y1).toBeLessThan(chain.y1)                 // further out
+    // and the bubble ring clears the total's text (≈ 1.2 text heights above its line)
+    const bubbleBottom = Math.max(...circles(d.primitives).filter((c) => c.cy < 0).map((c) => c.cy + c.r))
+    expect(bubbleBottom).toBeLessThan(total.y1 - 1.2 * total.size)
+  })
+
+  it('leaves a single-bay plan as it was: no tier, and the bubbles where they were', () => {
+    const d = buildPlan(generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: 150 }))!
+    expect(dims(d.primitives).map((p) => p.text)).toEqual(['6000 mm', '5000 mm'])
+  })
+})
+
 describe('wrapText', () => {
   it('breaks on words within the width and keeps every word', () => {
     const t = 'ONE TWO THREE FOUR FIVE SIX'
