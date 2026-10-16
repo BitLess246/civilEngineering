@@ -22,6 +22,7 @@ import { dashSpans } from '../../engine/dashPattern'
 import { planGridLines } from '../../engine/planGrid'
 import { memberFrame, frameBasis } from '../../lib/memberFrame'
 import { slabPrism } from '../../lib/slabPrism'
+import { woodDeckLayout } from '../../lib/woodDeckGeometry'
 import { memberDiagramRibbon, type DiagramComp } from '../../engine/memberDiagram3d'
 import { footingPrism } from '../../engine/footingLayout'
 import { shapeByName, effectiveSection } from '../../engine/aiscSections'
@@ -359,30 +360,24 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
     return g
   }, [corners, thick])
 
-  // Timber deck: joist lines spanning the shorter edge, repeated at the joist
-  // spacing along the longer edge (matching the woodSlab design), drawn just
-  // UNDER the faint wood-tinted deck panel — which is where a joist is, and the
-  // only place it stays visible now the panel hangs below the node line.
+  // Timber deck: the floor that was designed (`woodDeckLayout`) — boards
+  // `deckThickness` deep with their joints on top, and the joists as b × d
+  // timbers under them at the design's count, spanning the shorter side. It was
+  // a faint box at the plate's thickness with the joists as hairlines.
   const deckGeo = useMemo(() => {
     if (!deck || shell || corners.length < 4) return null
-    const [c0, c1, , c3] = corners
-    const eA = c1.clone().sub(c0), eB = c3.clone().sub(c0)
-    const spanVec = eA.length() <= eB.length() ? eA : eB     // joists span the shorter edge
-    const repVec = eA.length() <= eB.length() ? eB : eA      // repeat along the longer edge
-    const repLen = repVec.length()
-    const spacing = Math.max(0.05, deck.joistSpacing / 1000)
-    const n = Math.max(2, Math.floor(repLen / spacing) + 1)
-    const pts: number[] = []
-    for (let i = 0; i < n; i++) {
-      const t = Math.min(1, (i * spacing) / repLen)
-      const b = c0.clone().add(repVec.clone().multiplyScalar(t))
-      const e = b.clone().add(spanVec)
-      pts.push(b.x, b.y - thick - 0.01, b.z, e.x, e.y - thick - 0.01, e.z)
+    const g = woodDeckLayout(corners.slice(0, 4).map((c) => [c.x, c.y, c.z] as const), deck)
+    const buf = (q: { positions: number[]; index: number[] }) => {
+      const b = new THREE.BufferGeometry()
+      b.setAttribute('position', new THREE.Float32BufferAttribute(q.positions, 3))
+      b.setIndex(q.index)
+      b.computeVertexNormals()
+      return b
     }
-    const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
-    return g
-  }, [deck, shell, corners, thick])
+    const seams = new THREE.BufferGeometry()
+    seams.setAttribute('position', new THREE.Float32BufferAttribute(g.seams, 3))
+    return { deck: buf(g.deck), joists: buf(g.joists), seams }
+  }, [deck, shell, corners])
 
   // Shell mode: draw the real triangulated panel (two triangles on the c0–c2
   // diagonal, the exact mesh the solver assembles) — works for any orientation,
@@ -451,15 +446,18 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
   }
 
   if (deckGeo) {
+    const board = selected ? SEL : (tint ?? '#c9a26b'), timber = selected ? SEL : (tint ?? '#9c6b3a')
     return (
       <group onClick={(e) => { e.stopPropagation(); onPick() }}>
-        <mesh geometry={prism ?? undefined}>
-          <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : (tint ?? '#c8a06a')}
-            transparent opacity={selected ? 0.6 : 0.3} depthWrite={style === 'solid'} />
+        <mesh geometry={deckGeo.deck}>
+          <meshStandardMaterial key={surfaceKey(style)} color={board} roughness={0.85} {...surfaceMaterial(style)} />
         </mesh>
-        <lineSegments geometry={deckGeo}>
-          <lineBasicMaterial color={selected ? SEL : '#7a4a1e'} />
-        </lineSegments>
+        <mesh geometry={deckGeo.joists}>
+          <meshStandardMaterial key={surfaceKey(style)} color={timber} roughness={0.8} {...surfaceMaterial(style)} />
+        </mesh>
+        {style === 'solid' && <lineSegments geometry={deckGeo.seams}>
+          <lineBasicMaterial color="#7a5128" transparent opacity={0.55} />
+        </lineSegments>}
       </group>
     )
   }
