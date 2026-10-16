@@ -36,3 +36,10 @@ const minus = (s: string) => s.replace('-', '−')
 export const f2 = (v: number) => (Number.isFinite(v) ? minus(v.toFixed(2)) : '—')
 export const f3 = (v: number) => (Number.isFinite(v) ? minus(v.toFixed(3)) : '—')
 export const signed = (v: number) => `${Number.isFinite(v) ? (v >= 0 ? '+' : '−') : ''}${f2(Math.abs(v))}`
+
+/** Whether an `HDim` label goes UNDER its line. Extension lines come down to the
+ *  line from the feature above; a label wider than its span (a bar ⌀, a nail
+ *  spacing) would sit across them. 10 px mono ≈ 6 px a character. Shared so a
+ *  sketch stacking several dimensions can leave the room an under-label takes. */
+export const hdimLabelUnder = (label: unknown, a: number, b: number) =>
+  typeof label === 'string' && label.length * 6 + 8 > Math.abs(b - a)
