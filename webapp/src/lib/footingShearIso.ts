@@ -3,8 +3,11 @@
 //
 // The section is a vertical plane across the full width B, d from the column
 // face; Vc acts on B·d of it (§422.5.5.1), and Vu is the soil pressure on the
-// strip beyond it, B·aᵥ (§413.2.7.2 — the section at d for a footing). Drawn
-// with that strip pulled clear, the plane is a face and the strip is a block.
+// strip beyond it (§413.2.7.2 — the section at d for a footing). That pressure
+// bears on the strip's UNDERSIDE, so B·aᵥ is the bottom face, not the top:
+// Vu = qu·B·aᵥ is the soil pushing up on it. Drawn with the strip pulled
+// clear, the plane is a face and the strip is a block with its bearing face
+// shaded from below.
 //
 // World for `lib/isometric`: x along L (the shear direction), y along B, z up
 // from the underside, mm, the column centred on the origin.
@@ -31,7 +34,9 @@ export interface FootingShearIso {
   /** aᵥ, mm (0 when the section falls outside), and B·d, mm². */
   arm: number
   Bd: number
-  /** Upward pressure arrows: foot (below the strip) → head (its underside). */
+  /** The strip's underside — the bearing face B·aᵥ the soil pressure acts on; null with no strip. */
+  bearing: Vec3[] | null
+  /** Upward pressure arrows on a grid under the bearing face, far rows first: foot (below) → head (on the underside). */
   arrows: { from: Vec3; to: Vec3 }[]
 }
 
@@ -51,12 +56,15 @@ export function footingShearIso(i: FootingShearInput): FootingShearIso | null {
   const zSteel = i.h - i.d
   const arrows: FootingShearIso['arrows'] = []
   if (strip) {
-    const rise = 0.55 * i.h, n = Math.max(2, Math.min(5, Math.round(arm / (0.12 * L)) + 1))
-    for (let k = 0; k < n; k++) {
-      const x = strip.lo[0] + ((k + 0.5) / n) * arm
-      arrows.push({ from: [x, -hy, -rise], to: [x, -hy, 0] })
+    // spread over the whole bearing face: a few across aᵥ, three across B, the far row painted first
+    const rise = 0.55 * i.h, nx = Math.max(2, Math.min(5, Math.round(arm / (0.12 * L)) + 1)), ny = 3
+    for (let j = ny - 1; j >= 0; j--) for (let k = 0; k < nx; k++) {
+      const x = strip.lo[0] + ((k + 0.5) / nx) * arm, y = -hy + ((j + 0.5) / ny) * B
+      arrows.push({ from: [x, y, -rise], to: [x, y, 0] })
     }
   }
+  const bearing: Vec3[] | null = strip
+    ? [[strip.lo[0], -hy, 0], [strip.hi[0], -hy, 0], [strip.hi[0], hy, 0], [strip.lo[0], hy, 0]] : null
   // bars along L on a grid through the column's axis, inside the side cover
   const ys: number[] = []
   for (let k = Math.ceil((-hy + SIDE_COVER) / BAR_SPACING); k * BAR_SPACING <= hy - SIDE_COVER; k++) ys.push(k * BAR_SPACING)
@@ -70,6 +78,6 @@ export function footingShearIso(i: FootingShearInput): FootingShearIso | null {
     strip,
     section: [[xs, -hy, 0], [xs, hy, 0], [xs, hy, i.h], [xs, -hy, i.h]],
     shearArea: [[xs, -hy, zSteel], [xs, hy, zSteel], [xs, hy, i.h], [xs, -hy, i.h]],
-    arm, Bd: B * i.d, arrows,
+    arm, Bd: B * i.d, arrows, bearing,
   }
 }

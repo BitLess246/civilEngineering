@@ -30,9 +30,10 @@ export function FootingShearIso({ i, hl }: { i: FootingShearInput; hl: string | 
   const sec = g.shearArea
   const [fx, fyTop] = p(sec[3]), [, fyBot] = p(sec[0])      // the section's front edge, top and at the bottom mat
   const secTop = p(ctr([sec[2], sec[3]]))
-  const stripTop = g.strip ? p(ctr(box(g.strip).find((f) => f.key === '+z')!.pts)) : null
-  const arrowFoot = g.arrows.length ? p(g.arrows[Math.floor(g.arrows.length / 2)].from) : null
-  const yText = fit.box.y + fit.box.h + 30
+  // the label hangs under the front row of arrows, at its middle
+  const front = g.arrows.filter((a) => a.to[1] === Math.min(...g.arrows.map((q) => q.to[1])))
+  const arrowFoot = front.length ? p(front[Math.floor(front.length / 2)].from) : null
+  const yText = fit.box.y + fit.box.h + 44
   const H = yText + 30
   const dColor = lit('d') ? HL : DIM, qColor = lit('qu') ? HL : LOAD
 
@@ -53,11 +54,9 @@ export function FootingShearIso({ i, hl }: { i: FootingShearInput; hl: string | 
         </>}
         {seen(box(g.column)).map((f) => <path key={`c${f.key}`} d={P(f.pts)} fill={COL[f.key]} stroke={EDGE} strokeWidth={0.7} />)}
 
-        {/* the strip beyond it, pulled clear, the soil pushing it up */}
-        {g.strip && seen(box(g.strip)).map((f) => <g key={`s${f.key}`}>
-          <path d={P(f.pts)} fill={CONC[f.key]} stroke="none" />
-          <path d={P(f.pts)} fill={f.key === '+z' ? LOAD : 'none'} fillOpacity={lit('arm') || lit('qu') ? 0.4 : 0.22} stroke={EDGE} strokeWidth={0.9} strokeLinejoin="round" />
-        </g>)}
+        {/* the strip beyond it, pulled clear. The soil bears on its UNDERSIDE — B·aᵥ is
+            that face, shaded under a see-through strip, with the pressure pushing up on it */}
+        {g.bearing && <path d={P(g.bearing)} fill={LOAD} fillOpacity={lit('arm') || lit('qu') ? 0.5 : 0.32} stroke="none" />}
         {g.arrows.map((a, k) => {
           const [x0, y0] = p(a.from), [x1, y1] = p(a.to)
           return <g key={k} stroke={qColor} fill={qColor}>
@@ -65,6 +64,9 @@ export function FootingShearIso({ i, hl }: { i: FootingShearInput; hl: string | 
             <path d={`M${x1 - 3.5} ${y1 + 7} L${x1} ${y1} L${x1 + 3.5} ${y1 + 7} Z`} stroke="none" />
           </g>
         })}
+        {g.strip && seen(box(g.strip)).map((f) => <path key={`s${f.key}`} d={P(f.pts)} fill={CONC[f.key]} fillOpacity={0.6}
+          stroke={EDGE} strokeWidth={0.9} strokeLinejoin="round" />)}
+        {g.bearing && <path d={P(g.bearing)} fill="none" stroke={lit('arm') ? HL : LOAD} strokeWidth={1.3} strokeDasharray="5 3" strokeLinejoin="round" />}
 
         {/* d down the section's front edge, left of it on the pad face; the section called out above the strip */}
         {!r.inside && <>
@@ -81,8 +83,8 @@ export function FootingShearIso({ i, hl }: { i: FootingShearInput; hl: string | 
         </>}
 
         {!r.inside && (() => { const [, y] = p(g.cover[0]); return <text x={fx - 17} y={(y + fyBot) / 2 + 4} fontSize={10} fill={FAINT} textAnchor="end" {...halo}>cover — not in B·d</text> })()}
-        {stripTop && <text x={stripTop[0]} y={stripTop[1] + 4} fontSize={11} fill={lit('arm') ? HL : LOAD} textAnchor="middle" {...halo}>B × aᵥ</text>}
-        {arrowFoot && <text x={arrowFoot[0]} y={arrowFoot[1] + 14} fontSize={11} fill={qColor} textAnchor="middle" {...halo}>qu = {i.qu} kPa</text>}
+        {arrowFoot && <text x={arrowFoot[0]} y={arrowFoot[1] + 14} fontSize={11} fill={qColor} textAnchor="middle" {...halo}>qu = {i.qu} kPa on B × aᵥ</text>}
+        {arrowFoot && <text x={arrowFoot[0]} y={arrowFoot[1] + 27} fontSize={10} fill={lit('arm') ? HL : LOAD} textAnchor="middle" {...halo}>the bearing underside, {i.B} × {r.arm.toFixed(3)} m</text>}
 
         <text x={W / 2} y={yText} fontSize={11} fill={INK} textAnchor="middle">
           {r.inside ? 'The section at d falls past the edge: no strip, Vu = 0.'
