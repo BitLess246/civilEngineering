@@ -56,12 +56,13 @@ export function BlockShearIso({ bolts, W, H, t, dh, cases, avail, R }: BlockShea
   const cap = (fs: Face[]) => fs.find((f) => f.key === 'front')!
   const ctr = (pts: readonly Vec3[]): Vec3 => pts.reduce<Vec3>((s, q) => [s[0] + q[0] / pts.length, s[1] + q[1] / pts.length, s[2] + q[2] / pts.length], [0, 0, 0])
 
-  // A hole is a BORE through the plate, not a white disc on it: its front
-  // outline filled with the bore wall, and the opening seen through it (the
-  // same outline at the back face, clipped to the front) left empty. Each body
+  // A hole is a BORE through the plate, not a white disc on it. Each body
   // draws only the piece of each hole it keeps (`holePieces`) — a half on the
-  // shear line, a quarter at the far bolt where the tension plane cuts too —
-  // and only the ARC is edged: a cut edge is the plane, already drawn.
+  // shear line, a quarter at the far bolt where the tension plane cuts too.
+  // A whole hole: its front outline filled with the bore wall and the opening
+  // seen through it left empty. A piece on a cut edge is a NOTCH: its bore,
+  // swept through the thickness, shaded, and only the front arc edged — the
+  // outline stays on the steel, never across the gap or the cut planes.
   const xL = g.shear.strips[0]?.[0][0] ?? W
   const hole = (pc: (typeof g.holePieces)[number], i: number) => {
     const shift = pc.body === 'block' ? g.block.shift : [0, 0, 0] as Vec3
@@ -71,12 +72,40 @@ export function BlockShearIso({ bolts, W, H, t, dh, cases, avail, R }: BlockShea
       return [pc.c.x + r * Math.cos(a) + shift[0], y + shift[1], pc.c.y + r * Math.sin(a) + shift[2]]
     })
     const sector = (y: number): Vec3[] => whole ? arc(y) : [[pc.c.x + shift[0], y + shift[1], pc.c.y + shift[2]], ...arc(y)]
+    if (!whole) {
+      // a NOTCH in the cut edge. Its bore is the arc swept through the thickness, but only what
+      // can be SEEN of it is shaded: through the front opening, and through the strip of a cut
+      // face the hole took away, where that face is in view. The only line is the front arc —
+      // the steel's own edge.
+      const f = arc(0), b = arc(g.tDraw)
+      const at = (a: number, y: number): Vec3 => [pc.c.x + r * Math.cos(a) + shift[0], y + shift[1], pc.c.y + r * Math.sin(a) + shift[2]]
+      const ctr = (y: number): Vec3 => [pc.c.x + shift[0], y + shift[1], pc.c.y + shift[2]]
+      // each straight edge lies on a cut face; its outward normal points away from the piece
+      const cutFaces = ([[pc.a0, [Math.sin(pc.a0), -Math.cos(pc.a0)]], [pc.a1, [-Math.sin(pc.a1), Math.cos(pc.a1)]]] as const)
+        .filter(([, n]) => faceVisible([n[0], 0, n[1]], view))
+        .map(([a]) => [ctr(0), at(a, 0), at(a, g.tDraw), ctr(g.tDraw)])
+      const id = `${uid}-n${i}`
+      return <g key={id}>
+        <clipPath id={id}>
+          <path d={P(sector(0))} />
+          {cutFaces.map((q, k) => <path key={k} d={P(q)} />)}
+        </clipPath>
+        {/* the notch is open: what is not bore wall is the space through it */}
+        <path d={P(sector(0))} fill="var(--sheet, #fff)" stroke="none" />
+        <g clipPath={`url(#${id})`}>
+          {f.slice(0, -1).map((q, k) => (
+            <path key={k} d={P([q, f[k + 1], b[k + 1], b[k]])} fill={BORE} stroke={BORE} strokeWidth={0.4} strokeLinejoin="round" />
+          ))}
+        </g>
+        <path d={isoPath(f.map(p), false)} fill="none" stroke={INK} strokeWidth={0.7} />
+      </g>
+    }
     const id = `${uid}-h${i}`
     return <g key={id}>
       <clipPath id={id}><path d={P(sector(0))} /></clipPath>
       <path d={P(sector(0))} fill={BORE} stroke="none" />
       <path d={P(sector(g.tDraw))} fill="var(--sheet, #fff)" stroke="none" clipPath={`url(#${id})`} />
-      <path d={isoPath(arc(0).map(p), whole)} fill="none" stroke={INK} strokeWidth={0.6} />
+      <path d={isoPath(arc(0).map(p), true)} fill="none" stroke={INK} strokeWidth={0.6} />
     </g>
   }
   const plateHoles = g.holePieces.map((pc, i) => pc.body === 'plate' ? hole(pc, i) : null)
