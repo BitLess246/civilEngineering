@@ -50,6 +50,13 @@ describe('docs — the catalogue is well formed', () => {
     }
   })
 
+  it('has no two controls of the same kind and name in one section (they are its table\'s row keys)', () => {
+    for (const t of DOC_TOOLS) for (const s of t.sections) {
+      const keys = (s.controls ?? []).map((c) => `${c.kind ?? 'field'}:${c.name}`)
+      expect(new Set(keys).size, `${t.id}/${s.id} repeats a control`).toBe(keys.length)
+    }
+  })
+
   it('uses only declared groups', () => {
     for (const t of DOC_TOOLS) expect(DOC_GROUPS).toContain(t.group)
   })

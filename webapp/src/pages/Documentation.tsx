@@ -28,7 +28,7 @@ function ControlTable({ controls }: { controls: DocControl[] }) {
           {controls.map((c) => {
             const tag = KIND_TAG[c.kind ?? 'field']
             return (
-              <tr key={c.name} className="border-t border-hairline-2 align-top">
+              <tr key={`${c.kind ?? 'field'}:${c.name}`} className="border-t border-hairline-2 align-top">
                 <td className="py-1.5 pr-2">
                   <span className={`rounded px-1 py-px text-[9px] font-semibold uppercase ${tag.cls}`}>{tag.label}</span>
                 </td>

@@ -342,8 +342,8 @@ export function ResultsTable({ rows, caption }: { rows: ResultRow[]; caption?: R
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.check} className="border-t border-hairline-2">
+            {rows.map((r, i) => (
+              <tr key={`${i}|${r.check}`} className="border-t border-hairline-2">
                 <td className="px-2.5 py-1.5 text-ink">{r.check}</td>
                 <td className="px-2.5 py-1.5 text-muted">{r.basis}</td>
                 <td className="px-2.5 py-1.5 text-right font-mono text-ink">{r.demand}</td>
