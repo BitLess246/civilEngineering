@@ -13,9 +13,10 @@
 // cards above the document; below that everything stacks — inputs, checks,
 // document — so on a phone the answer comes straight after the inputs.
 // ─────────────────────────────────────────────────────────────────────────
-import { useRef, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { EdgeFades } from './ScrollEdges'
 import { useScrollEdges } from '../lib/scrollEdges'
+import { AnimatedNumber } from './Motion'
 import { Link } from 'react-router-dom'
 import { ExportPdfButton } from './ExportPdfButton'
 import type { CalcReportData } from './ReportControls'
@@ -69,7 +70,7 @@ export function Workspace({ title, badges, intro, actions, inputs, checks, docum
           {/* The grid is on the cards' own wrapper: on the aside it had one
               item — this div — so "two columns" put every card in the left
               half and left the right half empty. */}
-          <div data-pdf-detail="Check cards" className="grid grid-cols-1 gap-3 sm:grid-cols-2 min-[105rem]:grid-cols-1">{checks}</div>
+          <div data-pdf-detail="Check cards" className="stagger grid grid-cols-1 gap-3 sm:grid-cols-2 min-[105rem]:grid-cols-1">{checks}</div>
         </aside>
         <div className="min-w-0 lg:col-start-2 lg:row-start-2 min-[105rem]:row-start-1">{document}</div>
       </div>
@@ -150,7 +151,8 @@ const STATUS: Record<CheckStatus, { label: string; cls: string }> = {
 
 export function StatusPill({ status, label }: { status: CheckStatus; label?: string }) {
   const s = STATUS[status]
-  return <span className={`inline-flex flex-none items-center rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide ${s.cls}`}>{label ?? s.label}</span>
+  // `pill-pop` plays on mount; a card keys its pill on the verdict, so it pops again when that changes
+  return <span className={`pill-pop inline-flex flex-none items-center rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide ${s.cls}`}>{label ?? s.label}</span>
 }
 
 /** Same thresholds as `UtilBar` in calc.tsx: amber from 0.95, red past 1. */
@@ -183,7 +185,7 @@ export function CheckCard({ title, basis, status, value, unit, formula, ratio, r
   return (
     // data-pdf-card-*: the PDF export prints each card as one table row
     // (lib/pdfCapture) — its visible text would otherwise run together.
-    <section className="rail-card rounded-lg border border-hairline bg-sheet p-4"
+    <section className="rail-card card-lift rounded-lg border border-hairline bg-sheet p-4"
       data-pdf-card="" data-pdf-card-title={title} data-pdf-card-basis={basis ?? ''}
       data-pdf-card-value={unit ? `${value} ${unit}` : value}
       data-pdf-card-ratio={ratio !== undefined && Number.isFinite(ratio) ? `${(ratio * 100).toFixed(1)}%` : '—'}
@@ -194,20 +196,20 @@ export function CheckCard({ title, basis, status, value, unit, formula, ratio, r
           <h3 className="text-[13px] font-bold text-ink">{title}</h3>
           {basis && <p className="mt-0.5 truncate text-[11px] text-faint">{basis}</p>}
         </div>
-        <StatusPill status={status} label={pillLabel} />
+        <StatusPill key={`${status}|${pillLabel ?? ''}`} status={status} label={pillLabel} />
       </div>
       <p className="mt-2.5 font-mono text-[24px] font-bold leading-none text-brand">
-        {value}{unit && <span className="ml-1 text-[11.5px] font-semibold text-faint">{unit}</span>}
+        <AnimatedNumber text={value} />{unit && <span className="ml-1 text-[11.5px] font-semibold text-faint">{unit}</span>}
       </p>
       {formula && <p data-pdf-card-note="" className="mt-1.5 text-[11px] text-muted">{formula}</p>}
       {ratio !== undefined && Number.isFinite(ratio) && (
         <div className="mt-3">
           <div className="flex items-baseline justify-between text-[11px]">
             <span className="text-muted">{ratioLabel}</span>
-            <span className="font-mono font-semibold" style={{ color: barColor(ratio) }}>{(ratio * 100).toFixed(1)}%</span>
+            <span className="font-mono font-semibold" style={{ color: barColor(ratio) }}><AnimatedNumber text={`${(ratio * 100).toFixed(1)}%`} /></span>
           </div>
           <div className="mt-1 h-[5px] overflow-hidden rounded-[3px] bg-hairline">
-            <div className="h-full rounded-[3px]" style={{ background: barColor(ratio), width: `${Math.min(100, Math.max(0, ratio * 100))}%` }} />
+            <div className="util-bar h-full rounded-[3px]" style={{ background: barColor(ratio), width: `${Math.min(100, Math.max(0, ratio * 100))}%` }} />
           </div>
         </div>
       )}
@@ -243,22 +245,39 @@ export interface DocTab { id: string; label: string; content: ReactNode }
 export function DocPanel({ tabs, initial }: { tabs: DocTab[]; initial?: string }) {
   const [active, setActive] = useState(initial ?? tabs[0]?.id)
   const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  // One underline that slides to the picked tab. Until it has measured a tab
+  // (first paint, or no layout at all as in tests) the active tab keeps its
+  // own border, so there is always exactly one underline.
+  const btns = useRef(new Map<string, HTMLButtonElement>())
+  const [ind, setInd] = useState<{ x: number; w: number } | null>(null)
+  useLayoutEffect(() => {
+    const measure = () => {
+      const b = active ? btns.current.get(active) : undefined
+      setInd(b && b.offsetWidth > 0 ? { x: b.offsetLeft, w: b.offsetWidth } : null)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [active, tabs.length])
   return (
     <div className="flex flex-col gap-4">
-      <div className="no-print flex items-center gap-1 overflow-x-auto rounded-lg border border-hairline bg-sheet px-3" role="tablist" aria-label="Report">
+      <div className="no-print relative flex items-center gap-1 overflow-x-auto rounded-lg border border-hairline bg-sheet px-3" role="tablist" aria-label="Report">
         {tabs.map((t) => (
           <button key={t.id} type="button" role="tab" id={`tab-${t.id}`} aria-selected={active === t.id} aria-controls={`panel-${t.id}`}
+            ref={(el) => { if (el) btns.current.set(t.id, el); else btns.current.delete(t.id) }}
             onClick={() => setActive(t.id)}
             className={`-mb-px whitespace-nowrap border-b-2 px-3 py-3 text-[11.5px] font-bold uppercase tracking-[.08em] ${
-              active === t.id ? 'border-brand text-brand' : 'border-transparent text-muted hover:text-ink'}`}>
+              active === t.id ? `${ind ? 'border-transparent' : 'border-brand'} text-brand` : 'border-transparent text-muted hover:text-ink'}`}>
             {t.label}
           </button>
         ))}
+        {ind && <span aria-hidden className="tab-indicator pointer-events-none absolute bottom-0 left-0 h-[2px] rounded-full bg-brand"
+          style={{ width: ind.w, transform: `translateX(${ind.x}px)` }} />}
         <span className="ml-auto whitespace-nowrap pl-3 font-mono text-[10px] text-faint">Live · {stamp}</span>
       </div>
       {tabs.map((t) => (
         <div key={t.id} role="tabpanel" id={`panel-${t.id}`} aria-labelledby={`tab-${t.id}`}
-          className={active === t.id ? 'flex flex-col gap-4' : 'hidden print:flex print:flex-col print:gap-4'}>
+          className={active === t.id ? 'tab-enter flex flex-col gap-4' : 'hidden print:flex print:flex-col print:gap-4'}>
           {t.content}
         </div>
       ))}

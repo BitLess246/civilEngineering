@@ -5,6 +5,7 @@ import type { SolutionStep } from '../lib/solution'
 import { Math as KTex } from '../lib/math'
 import { BRAND_TAIL, COMPUTED_BY, docLabel } from '../lib/brand'
 import { ZetaLogo } from './BrandMark'
+import { AnimatedNumber } from './Motion'
 
 // Calculator-template building blocks (docs/design/uiux-2026-07, Foundation /
 // Beam mockups): numbered input sections on the left, a sticky verdict panel
@@ -107,10 +108,10 @@ export function UtilBar({ c }: { c: VerdictCheck }) {
     <div>
       <div className="flex items-baseline justify-between">
         <span className="text-[11.5px] font-semibold text-ink-2">{c.name}</span>
-        <span className="font-mono text-[11px]" style={{ color }}>{c.ratio.toFixed(2)}</span>
+        <span className="font-mono text-[11px]" style={{ color }}><AnimatedNumber text={c.ratio.toFixed(2)} /></span>
       </div>
       <div className="mt-1 h-[5px] overflow-hidden rounded-[3px] bg-hairline">
-        <div className="h-full rounded-[3px]" style={{ background: color, width: `${Math.min(100, c.ratio * 100)}%` }} />
+        <div className="util-bar h-full rounded-[3px]" style={{ background: color, width: `${Math.min(100, c.ratio * 100)}%` }} />
       </div>
     </div>
   )

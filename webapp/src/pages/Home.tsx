@@ -16,6 +16,7 @@ import { ModelSpacePreview } from '../components/ModelSpacePreview'
 import { useToolPrefs } from '../lib/useToolPrefs'
 import { visibleGroups } from '../lib/toolPrefs'
 import { useAuth } from '../lib/auth/authContext'
+import { Reveal } from '../components/Motion'
 
 // Home — search-first tool directory on the drawing-sheet workbench theme
 // (docs/design/uiux-2026-07/Redesign - Home): dark hero with drafting grid,
@@ -122,7 +123,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       <main id="content">
       {/* Hero on a drafting grid */}
       <section className="border-b border-hairline bg-rail [background-image:linear-gradient(rgba(255,255,255,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.045)_1px,transparent_1px)] [background-size:32px_32px]">
-        <div className="mx-auto max-w-[1200px] px-6 pb-14 pt-16">
+        <div className="hero-seq mx-auto max-w-[1200px] px-6 pb-14 pt-16">
           <p className="font-mono text-[11px] font-medium tracking-[.2em] text-rail-accent">NSCP 2015 · ACI 318-14 · AISC 360-16</p>
           <h1 className="mt-3.5 max-w-[720px] text-4xl font-extrabold leading-[1.04] tracking-tight text-rail-ink sm:text-[52px]">The structural workbench for Philippine practice.</h1>
           <p className="mt-4 max-w-[600px] text-base leading-relaxed text-rail-muted">{calcCount} code-checked calculators, 3D analysis and quantity take-off on a typed engine — every result traced to its clause, every report ready to sign.</p>
@@ -161,7 +162,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           diagram, the claim it made became a real worked solution, and the
           "watch me use it" became an invitation to use it. Under 10 KB, no
           playback, and it reads on mobile data. */}
-      <section className="mx-auto max-w-[1200px] px-6 pt-9">
+      <Reveal as="section" className="mx-auto max-w-[1200px] px-6 pt-9">
         <h2 className="text-[19px] font-extrabold tracking-tight">Model to signed report, in one place</h2>
         <p className="mt-1.5 max-w-[760px] text-[13.5px] leading-relaxed text-muted">
           Generate the geometry, build the NSCP §208 seismic and §207B wind cases, analyse,
@@ -171,9 +172,9 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         <div className="mt-5">
           <PipelineDiagram />
         </div>
-      </section>
+      </Reveal>
 
-      <section className="mx-auto max-w-[1200px] px-6 pt-10">
+      <Reveal as="section" className="mx-auto max-w-[1200px] px-6 pt-10">
         {/* Single column: a mono label sharing a row with its heading is the
             templated-editorial tell (hallmark gate 54). Caption under the
             heading, same column — it reads as the heading’s own subtitle
@@ -183,9 +184,9 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           <span className="font-mono text-[11px] text-faint">one schedule row, opened</span>
         </div>
         <WorkedSolutionPreview />
-      </section>
+      </Reveal>
 
-      <section className="mx-auto max-w-[1200px] px-6 pt-10">
+      <Reveal as="section" className="mx-auto max-w-[1200px] px-6 pt-10">
         {/* Single column: a mono label sharing a row with its heading is the
             templated-editorial tell (hallmark gate 54). Caption under the
             heading, same column — it reads as the heading’s own subtitle
@@ -195,9 +196,9 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           <span className="font-mono text-[11px] text-faint">real output · not mockups</span>
         </div>
         <Storyboard />
-      </section>
+      </Reveal>
 
-      <section className="mx-auto max-w-[1200px] px-6 pt-10">
+      <Reveal as="section" className="mx-auto max-w-[1200px] px-6 pt-10">
         {/* Single column: a mono label sharing a row with its heading is the
             templated-editorial tell (hallmark gate 54). Caption under the
             heading, same column — it reads as the heading’s own subtitle
@@ -207,7 +208,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           <span className="font-mono text-[11px] text-faint">the same report, twice</span>
         </div>
         <ReportComparison />
-      </section>
+      </Reveal>
 
       {/* ── Rather than watch a demo, run one ───────────────────────────────
           The card used to ADVERTISE the walkthrough with a button; it now
@@ -217,7 +218,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           button in its ribbon) and the 3D viewport — so the CTA that used to
           live here is gone: the section no longer asks you to go run it, it
           IS running, and going is one click on the viewport's Guide. */}
-      <section className="mx-auto max-w-[1200px] px-6 pt-10">
+      <Reveal as="section" className="mx-auto max-w-[1200px] px-6 pt-10">
         {/* NO OUTER CARD. `ModelSpacePreview` already draws itself as a framed
             object (rounded-lg + border-hairline), so wrapping it in a second
             card of the same border token nested one frame inside another for
@@ -249,7 +250,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           </div>
           <ModelSpacePreview />
         </div>
-      </section>
+      </Reveal>
 
       {/* Sample cards — A LEAD AND TWO, NOT THREE EQUAL THIRDS.
           Three equal cards across the full width is the most-emitted feature
@@ -258,7 +259,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           It takes the wide column and carries its description; the other two
           stack beside it as a shorter list. Same three destinations, a
           hierarchy instead of a row. */}
-      <section className="mx-auto max-w-[1200px] px-6 pb-2 pt-9">
+      <Reveal as="section" className="mx-auto max-w-[1200px] px-6 pb-2 pt-9">
         <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
           <Link to={SAMPLES[0].to}
             className="flex flex-col rounded-lg border border-hairline bg-sheet p-5 transition-[border-color,box-shadow] hover:border-brand-hover hover:shadow-[0_2px_10px_rgba(15,27,42,.07)] sm:p-6">
@@ -284,7 +285,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
             ))}
           </div>
         </div>
-      </section>
+      </Reveal>
 
       {/* Tool directory with sticky rail */}
       <section id="tools" className="mx-auto max-w-[1200px] px-6 pb-16 pt-9">
@@ -331,7 +332,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
                 <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                   {g.tools.map((t) => (
                     <Link key={t.to + t.name} to={t.to}
-                      className="flex flex-col rounded-lg border border-hairline bg-sheet px-4 py-3.5 transition-colors hover:border-brand-hover">
+                      className="card-lift flex flex-col rounded-lg border border-hairline bg-sheet px-4 py-3.5 transition-colors hover:border-brand-hover">
                       <span className="flex items-center gap-2 text-[13.5px] font-bold text-ink">{t.name}
                         {isGatedRoute(t.to) && (
                           <span className="rounded border border-hairline px-1 py-px font-mono text-[9px] font-semibold uppercase tracking-wider text-muted"
