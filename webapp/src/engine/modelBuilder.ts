@@ -6,7 +6,7 @@
 // Coordinates: x = plan east, z = plan north, y = elevation (up) — matching
 // the three.js viewport.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel, RectSection, Node, Member, Plate, NodeSupport, MemberRole } from './model'
+import type { StructuralModel, RectSection, Node, Member, Plate, NodeSupport, MemberRole, ModelLoad } from './model'
 import { sdlTotal } from './deadLoads'
 import { shapeByName } from './aiscSections'
 import { woodRefOf, woodUnitWeight, getWoodRef } from './woodDesign'
@@ -239,7 +239,9 @@ export function plateSelfWeightKpa(model: Pick<StructuralModel, 'nodes'>, p: Pla
  */
 export function buildGravityLoads(model: StructuralModel, sdl: number, ll: number, gammaC = GAMMA_C): StructuralModel['loads'] {
   const secMap = new Map(model.sections.map((s) => [s.id, s]))
-  const kept = model.loads.filter((l) => l.cat !== 'D' && l.cat !== 'L')
+  // generated roofing loads are rebuilt below from `model.roofing`, so the old
+  // ones go whatever their category (an Lr one would otherwise be doubled)
+  const kept = model.loads.filter((l) => l.cat !== 'D' && l.cat !== 'L' && !(l.kind === 'node' && l.roof))
   // member self-weight from each member's OWN section
   const memberSW: StructuralModel['loads'] = model.members
     .map((m) => {
@@ -270,7 +272,27 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
   // stored, so a flight that moves or changes cannot leave a stale load behind
   // — `kept` has already dropped every D and L load before this runs.
   const stairSW = allStairFrameLoads(model, gammaC)
-  return [...memberSW, ...wallSW, ...plateLoads, ...stairSW, ...kept]
+  // Roofing on trusses — panel-point loads from the stored tributary areas.
+  const roofSW = roofingLoads(model)
+  return [...memberSW, ...wallSW, ...plateLoads, ...stairSW, ...roofSW, ...kept]
+}
+
+/**
+ * The roofing's node loads — what `buildGravityLoads` adds on every rebuild.
+ * Marked `roof` so the next rebuild replaces them instead of keeping (Lr) or
+ * losing (D) them. Points whose node has since been deleted are skipped.
+ */
+export function roofingLoads(model: Pick<StructuralModel, 'nodes' | 'roofing'>): ModelLoad[] {
+  const r = model.roofing
+  if (!r) return []
+  const live = new Set(model.nodes.map((n) => n.id))
+  const out: ModelLoad[] = []
+  for (const p of r.points) {
+    if (!live.has(p.node) || !(p.area > 0)) continue
+    if (r.qD > 0) out.push({ kind: 'node', node: p.node, Fy: -r.qD * p.area, cat: 'D', roof: true })
+    if (r.qLr > 0) out.push({ kind: 'node', node: p.node, Fy: -r.qLr * p.area, cat: 'Lr', roof: true })
+  }
+  return out
 }
 
 /**

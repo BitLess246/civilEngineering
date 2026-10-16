@@ -214,7 +214,9 @@ export interface NodeSupport {
 }
 
 export type ModelLoad =
-  | { kind: 'node'; node: string; Fx?: number; Fy?: number; Fz?: number; cat: LoadCategory }
+  /** `roof` marks a GENERATED roofing load (`roofingLoads`, from
+   *  `StructuralModel.roofing`), so a load rebuild replaces it. Absent on user loads. */
+  | { kind: 'node'; node: string; Fx?: number; Fy?: number; Fz?: number; cat: LoadCategory; roof?: boolean }
   | { kind: 'member-point'; member: string; t: number /* 0–1 along i→j */; P: number; cat: LoadCategory }
   /** `sw` marks a GENERATED self-weight line load (member or wall gravity, from
    *  buildGravityLoads) so refreshSelfWeight can rebuild exactly those and leave
@@ -227,6 +229,19 @@ export type ModelLoad =
   | { kind: 'member-thermal'; member: string; deltaT: number; alpha: number; cat: LoadCategory }
 
 export interface Storey { id: string; name: string; elevation: number /* m */ }
+
+/**
+ * Roof cladding carried by trusses (engine/roofTruss): the roofing dead load
+ * and roof live load, kPa on plan, and each top-chord panel point's tributary
+ * plan area, m². Stored as DATA and turned into node loads by
+ * `buildGravityLoads` on every rebuild — like stair reactions, a generated
+ * load cannot then go stale or be counted twice.
+ */
+export interface RoofingLoads {
+  qD: number
+  qLr: number
+  points: { node: string; area: number }[]
+}
 
 /**
  * A straight stair flight bearing on two members at different levels.
@@ -309,6 +324,8 @@ export interface StructuralModel {
   walls?: Wall[]
   /** Stair flights bearing on the frame. Absent means none. */
   stairs?: Stair[]
+  /** Roofing on trusses — see `RoofingLoads`. Absent means none. */
+  roofing?: RoofingLoads
   supports: NodeSupport[]
   loads: ModelLoad[]
   storeys: Storey[]

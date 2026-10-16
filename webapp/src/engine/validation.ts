@@ -53,6 +53,7 @@ import { velocity, hazenWilliamsHead, gpmToLps } from './waterSupply'
 import { designDrainage } from './drainage'
 import { designSepticTank } from './septicTank'
 import { cylinderWallFixedBase } from './waterTank'
+import { addRoofTrusses, roofingLoads } from './roofTruss'
 import { cyclicStressRatio, crr75 } from './soils/liquefaction'
 import { nGamma, generalBearingCapacity } from './bearingGeneral'
 import { coulombKa, mononobeOkabe } from './coulomb'
@@ -417,6 +418,27 @@ const tankBaseMoment = (() => {
   const beta = Math.pow(3 * (1 - nu * nu), 0.25) / Math.sqrt(a * t / 1000)
   const manual = (1 - 1 / (beta * H)) * g * a * H * (t / 1000) / Math.sqrt(12 * (1 - nu * nu))
   return { manual, software: Math.abs(cylinderWallFixedBase(H, D, t, nu, g).M0) }
+})()
+
+// ── 12b′. Roof truss roofing — the panel-point loads close on q·A ────────
+// The roofing on a trussed roof reaches the frame only as node loads at the
+// top-chord panel points, each the pressure times that point's tributary plan
+// area — half the panel either side along the truss, half the spacing to the
+// trusses either side. Those areas must tile the roof exactly, or roof is
+// lost (or counted twice) between trusses. A 2 × 1-bay roof (12 m × 5 m) with
+// panels that do not divide its bays evenly (1.7 m target) and 0.5 kPa.
+// (The truss's FORCES — bottom chord ≈ M/h less the column spread — are
+// checked by the method of sections in roofTruss.test.ts: a 3D frame with
+// continuous chords agrees to about 1 %, not to this table's 0.01 %.)
+const roofTrussRoofing = (() => {
+  const sec = { id: 's1', name: 'C1', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const m0 = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.2], section: sec })
+  const r = addRoofTrusses({ ...m0, loads: [] }, {
+    spanAlong: 'x', profile: 'gable', web: 'howe', rise: 1.5, panel: 1.7,
+    chordShape: 'HSS89x89x6.4', webShape: 'HSS64x64x4.8', qD: 0.5, qLr: 0,
+  })
+  const software = roofingLoads(r.model).reduce((t, l) => t + (l.kind === 'node' ? -(l.Fy ?? 0) : 0), 0)
+  return { manual: 0.5 * 12 * 5, software }
 })()
 
 // ── 12c. Over-reinforced T-beam — the steel that does not reach fy ──────────
@@ -1176,6 +1198,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'tank-base-moment', category: 'RC', title: 'Circular tank wall base moment (fixed base, ⌀10 m × 6 m × 250)',
     reference: 'Timoshenko & Woinowsky-Krieger §117 · PCA Circular Tanks Table A-7', formula: 'M0 = (1 − 1/βH)·γw·a·H·t/√(12(1−ν²)),  β⁴ = 3(1−ν²)/(a·t)²',
     manual: tankBaseMoment.manual, software: tankBaseMoment.software, unit: 'kN·m/m', tol: 1e-4,
+  },
+  {
+    id: 'roof-truss-roofing', category: 'Steel', title: 'Roof truss roofing — panel-point loads close on q·A (12 × 5 m, uneven panels)',
+    reference: 'Tributary-area statics', formula: 'Σ q·A_trib = q·L·B',
+    manual: roofTrussRoofing.manual, software: roofTrussRoofing.software, unit: 'kN', tol: 1e-9,
   },
   {
     id: 'arc-length-collapse', category: 'Analysis', title: 'Arc-length peak load — cantilever mechanism',
