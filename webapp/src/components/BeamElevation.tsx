@@ -21,7 +21,9 @@ export function BeamElevation({ L, supports, loads, spans }: {
   // Distributed loads that overlap along the span are STACKED, one tier per
   // load, each sitting on the one below — drawn at the same height, a live
   // UDL over the same span as the dead one vanished behind it.
-  const TIER = 40
+  // a tier is its arrows (26) + the gap and its label (≈ 15) + clear air — at 40
+  // the next tier's arrowheads landed ON the label below and struck it through
+  const TIER = 50
   const tierOf: number[] = []
   const placed: { a: number; b: number; t: number }[] = []
   loads.forEach((ld, i) => {
