@@ -63,7 +63,11 @@ export function FootingSection({ B, Df, dw, eB, incl, effectiveB, surcharge, str
       {/* soil, then the footing and column sitting in it */}
       <rect x={20} y={gy} width={W - 40} height={H - gy - 40} fill={SOIL} />
       <line x1={20} x2={W - 20} y1={gy} y2={gy} stroke={INK} strokeWidth="1.4" />
-      <text x={W - 24} y={gy - 8} textAnchor="end" fontSize="10" fill={INK} fontFamily={mono} {...halo}>ground · q = {f2(surcharge)} kPa at founding level</text>
+      <text x={W - 24} y={gy - 8} textAnchor="end" fontSize="10" fill={INK} fontFamily={mono} {...halo}>ground</text>
+      {/* q = γ·Df is the overburden AT the founding level — it was written on the ground
+          line, 1.5 m above where it acts; it sits on a founding-level line now */}
+      <line x1={bx1 + 6} x2={W - 20} y1={by} y2={by} stroke={MUTED} strokeWidth="0.8" strokeDasharray="5 3" />
+      <text x={W - 24} y={by - 6} textAnchor="end" fontSize="10" fill={INK} fontFamily={mono} {...halo}>founding level · q = {f2(surcharge)} kPa</text>
       <rect x={bx0} y={by - t} width={bx1 - bx0} height={t} fill={CONCRETE} stroke={INK} strokeWidth="1.3" />
       <rect x={cx - col / 2} y={gy - 34} width={col} height={by - t - gy + 34} fill={CONCRETE} stroke={INK} strokeWidth="1.3" />
       {/* the load, inclined β from vertical, at the eccentricity */}
