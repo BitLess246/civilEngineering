@@ -38,6 +38,8 @@ export interface BlockShearIso {
   tension: CutFace
   /** Hole circles on the front face: centre, and which body each half sits on. */
   holes: { c: Pt; split: boolean }[]
+  /** Every hole cut into the pieces each body keeps — angle ranges in the plate frame (radians, from +x, anticlockwise). */
+  holePieces: { c: Pt; body: 'plate' | 'block'; a0: number; a1: number }[]
   /** Drawn thickness: the real t, or thicker when t is under ~1/8 of the plate width. */
   tDraw: number
 }
@@ -92,7 +94,23 @@ export function blockShearIso(bolts: readonly Pt[], W: number, H: number, t: num
     strips: tPieces.map(([a, b]) => [[a + dx, 0, yT + dz], [b + dx, 0, yT + dz], [b + dx, tDraw, yT + dz], [a + dx, tDraw, yT + dz]]),
   }
   const onLine = (b: Pt) => Math.abs(b.x - xL) < 1e-6
+  // A hole on the bolt line is split by the shear plane through its centre:
+  // the block keeps the half on the free-edge side. The hole where the TENSION
+  // plane also passes (the far bolt — y = yT) is split twice, and the block
+  // keeps only the quarter inside both: below that line for case A, above it
+  // for B. The plate keeps the other three — it is not torn there.
+  const PI = Math.PI
+  const holePieces: BlockShearIso['holePieces'] = bolts.flatMap((c) => {
+    if (!onLine(c)) return [{ c, body: 'plate' as const, a0: 0, a1: 2 * PI }]
+    if (Math.abs(c.y - yT) < 1e-6) {
+      return which === 'A'
+        ? [{ c, body: 'block' as const, a0: -PI / 2, a1: 0 }, { c, body: 'plate' as const, a0: 0, a1: 1.5 * PI }]
+        : [{ c, body: 'block' as const, a0: 0, a1: PI / 2 }, { c, body: 'plate' as const, a0: PI / 2, a1: 2 * PI }]
+    }
+    return [{ c, body: 'block' as const, a0: -PI / 2, a1: PI / 2 }, { c, body: 'plate' as const, a0: PI / 2, a1: 1.5 * PI }]
+  })
   return {
+    holePieces,
     plate: { outline: plateOutline, shift: [0, 0, 0] },
     block: { outline: bp.polygon, shift },
     shear, tension, tDraw,
