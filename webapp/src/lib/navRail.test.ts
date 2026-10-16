@@ -7,7 +7,7 @@
  * blocked site data) must not take the navigation down with it.
  */
 import { describe, it, expect } from 'vitest'
-import { loadRailCollapsed, saveRailCollapsed, RAIL_W, FULL_W } from './navRail'
+import { loadRailCollapsed, saveRailCollapsed, RAIL_W, FULL_W, loadSidebarPinned, saveSidebarPinned, EDGE_ZONE_W } from './navRail'
 
 const mem = (initial: Record<string, string> = {}) => {
   const map = new Map(Object.entries(initial))
@@ -65,5 +65,25 @@ describe('widths', () => {
     // and makes every group a cramped target in use.
     expect(RAIL_W).toBeGreaterThanOrEqual(44 + 2 * 6)
     expect(RAIL_W).toBeLessThan(FULL_W / 2)
+  })
+})
+
+describe('the pinned preference — auto-hide is the default', () => {
+  it('reads unpinned when nothing, or nothing sensible, is stored', () => {
+    expect(loadSidebarPinned(mem())).toBe(false)
+    expect(loadSidebarPinned(mem({ 'civeng-nav-pinned': 'yes' }))).toBe(false)
+    expect(loadSidebarPinned(null)).toBe(false)
+  })
+  it('round-trips, and survives a store that throws', () => {
+    const s = mem()
+    saveSidebarPinned(true, s); expect(loadSidebarPinned(s)).toBe(true)
+    saveSidebarPinned(false, s); expect(loadSidebarPinned(s)).toBe(false)
+    const broken = { getItem: () => { throw new Error('blocked') }, setItem: () => { throw new Error('blocked') } }
+    expect(() => saveSidebarPinned(true, broken)).not.toThrow()
+    expect(loadSidebarPinned(broken)).toBe(false)
+  })
+  it('keeps the reveal zone landable but out of the page\'s way', () => {
+    expect(EDGE_ZONE_W).toBeGreaterThanOrEqual(6)
+    expect(EDGE_ZONE_W).toBeLessThanOrEqual(12)
   })
 })

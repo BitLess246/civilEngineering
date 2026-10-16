@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Link, useLocation } from 'react-router-dom'
 import { SIDEBAR_GROUPS, ALL_TOOLS, isGatedRoute } from '../lib/tools'
 import { loadCollapsed, saveCollapsed, toggleCollapsed } from '../lib/navCollapse'
-import { loadRailCollapsed, saveRailCollapsed, RAIL_W } from '../lib/navRail'
+import { loadRailCollapsed, saveRailCollapsed, RAIL_W, loadSidebarPinned, saveSidebarPinned, EDGE_ZONE_W, HIDE_DELAY_MS } from '../lib/navRail'
 import { iconFor, ICON_STROKE } from '../lib/toolGroupIcons'
 import { DrawnIcon } from './DrawnIcon'
 import { useToolPrefs } from '../lib/useToolPrefs'
@@ -265,8 +265,10 @@ function RailToggle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () 
  * then adding a header of your own paints the brand twice, which is what the
  * first cut of the drawer did.
  */
-function Sidebar({ onOpenPalette, onNavigate, className, trailing, railable = false }: {
+function Sidebar({ onOpenPalette, onNavigate, className, trailing, railable = false, pin }: {
   onOpenPalette: () => void; onNavigate?: () => void; className?: string; trailing?: ReactNode
+  /** The desktop instances carry the pin; the mobile drawer does not. */
+  pin?: { pinned: boolean; onToggle: () => void }
   /** May this instance collapse to the icon rail? The DESKTOP rail may; the
    *  mobile DRAWER may not — it is already an overlay you opened on purpose,
    *  and shrinking it to icons inside its own sheet buys nothing and costs the
@@ -342,7 +344,10 @@ function Sidebar({ onOpenPalette, onNavigate, className, trailing, railable = fa
           ))}
         </nav>
         <div className="w-full border-t border-white/10 py-2">
-          <div className="flex justify-center"><RailToggle collapsed onToggle={toggleRail} /></div>
+          <div className="flex flex-col items-center gap-1">
+            <RailToggle collapsed onToggle={toggleRail} />
+            {pin && <PinToggle pinned={pin.pinned} onToggle={pin.onToggle} />}
+          </div>
         </div>
       </aside>
     )
@@ -356,7 +361,10 @@ function Sidebar({ onOpenPalette, onNavigate, className, trailing, railable = fa
             <ZetaLogo height={26} />
             {BRAND_TAIL && <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-rail-muted">{BRAND_TAIL}</span>}
           </Link>
-          {railable && <RailToggle collapsed={false} onToggle={toggleRail} />}
+          <span className="flex flex-none items-center gap-0.5">
+            {railable && <RailToggle collapsed={false} onToggle={toggleRail} />}
+            {pin && <PinToggle pinned={pin.pinned} onToggle={pin.onToggle} />}
+          </span>
           {trailing}
         </div>
         <div className="mt-3"><SearchBox onOpen={onOpenPalette} compact /></div>
@@ -497,6 +505,79 @@ function NavDrawer({ open, onClose, onOpenPalette }: {
   )
 }
 
+/** Dock or release the sidebar. Labelled for what the click will DO, like
+ *  the rail toggle beside it. */
+function PinToggle({ pinned, onToggle }: { pinned: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" onClick={onToggle} aria-pressed={pinned}
+      aria-label={pinned ? 'Unpin the sidebar — hide it until the pointer reaches the left edge' : 'Pin the sidebar open'}
+      title={pinned ? 'Unpin — auto-hide at the left edge' : 'Pin the sidebar open'}
+      className={`flex h-8 w-8 flex-none items-center justify-center rounded-md hover:bg-sheet/10 hover:text-rail-ink ${pinned ? 'text-rail-ink' : 'text-rail-muted'}`}>
+      <svg viewBox="0 0 24 24" width="15" height="15" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor"
+        strokeWidth={ICON_STROKE} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {/* a drawing pin, head up */}
+        <path d="M9 3.5h6l-1 5 3 3.5H7l3-3.5z" />
+        <path d="M12 12v8.5" fill="none" />
+      </svg>
+    </button>
+  )
+}
+
+/**
+ * The desktop sidebar when it is NOT pinned: out of the page flow, so the page
+ * gets the whole width, and laid over it on demand.
+ *
+ * Revealed by the pointer touching the left edge (an `EDGE_ZONE_W` strip), by
+ * keyboard focus entering it (Tab from the skip link lands in it, so it can
+ * never be a trap the eye cannot see), or by the header's sidebar button —
+ * a touch-screen laptop has no hover. Hidden `HIDE_DELAY_MS` after the
+ * pointer leaves, on Esc, on a click outside it, and as soon as a tool is
+ * chosen. Below `lg` none of this renders; the drawer is the navigation there.
+ */
+function AutoHideSidebar({ open, setOpen, onOpenPalette, pin }: {
+  open: boolean; setOpen: (v: boolean) => void; onOpenPalette: () => void
+  pin: { pinned: boolean; onToggle: () => void }
+}) {
+  const panel = useRef<HTMLDivElement>(null)
+  const timer = useRef<number | undefined>(undefined)
+  const show = () => { window.clearTimeout(timer.current); setOpen(true) }
+  const hide = (delay = HIDE_DELAY_MS) => {
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setOpen(false), delay)
+  }
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node
+      // the header button toggles it itself; a flyout is portalled to <body>
+      if (panel.current?.contains(t) || (t as Element).closest?.('[data-sidebar-toggle], [data-rail-flyout]')) return
+      setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('pointerdown', onDown)
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('pointerdown', onDown) }
+  }, [open, setOpen])
+  return (
+    <>
+      {/* The reveal zone, with a hairline so the edge is discoverable. */}
+      <div aria-hidden="true" onMouseEnter={show} style={{ width: EDGE_ZONE_W }}
+        className="no-print fixed inset-y-0 left-0 z-[60] hidden lg:block">
+        <div className={`h-full w-[3px] bg-brand/25 transition-opacity ${open ? 'opacity-0' : 'opacity-100'}`} />
+      </div>
+      <div ref={panel} data-sidebar-panel
+        onMouseEnter={show} onMouseLeave={() => hide()} onFocus={show}
+        onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) hide(0) }}
+        className={`no-print fixed inset-y-0 left-0 z-[61] hidden transition-transform duration-200 ease-out motion-reduce:transition-none lg:block ${
+          open ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+        <Sidebar onOpenPalette={() => { setOpen(false); onOpenPalette() }} onNavigate={() => hide(0)} pin={pin}
+          className="flex h-screen w-[230px] flex-col overflow-y-auto bg-rail text-rail-ink" />
+      </div>
+    </>
+  )
+}
+
 /** Theme picker — five shipped themes, keyboard-native. Shared by the workbench
  *  header and the landing nav so theming is a user feature in both shells. */
 export function ThemeSwitch() {
@@ -519,6 +600,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { pathname, search } = useLocation()
   const [palette, setPalette] = useState(false)
   const [nav, setNav] = useState(false)
+  // The desktop sidebar: docked when pinned, else auto-hidden over the page.
+  const [pinned, setPinned] = useState(() => loadSidebarPinned())
+  const [peek, setPeek] = useState(false)
+  const togglePin = () => setPinned((v) => { saveSidebarPinned(!v); setPeek(false); return !v })
   /**
    * ?embed=1 — Model Space is being iframed into the landing page as a
    * scaled-down preview of itself. The page stays fully DRAWN (the preview is
@@ -560,7 +645,10 @@ export function AppShell({ children }: { children: ReactNode }) {
           control: a skip link nobody can see they have landed on is no better
           than none. */}
       <SkipLink />
-      <Sidebar onOpenPalette={() => setPalette(true)} railable />
+      {pinned
+        ? <Sidebar onOpenPalette={() => setPalette(true)} railable pin={{ pinned: true, onToggle: togglePin }} />
+        : <AutoHideSidebar open={peek} setOpen={setPeek} onOpenPalette={() => setPalette(true)}
+            pin={{ pinned: false, onToggle: togglePin }} />}
       {/* A COLUMN, so the footer can be pushed to the bottom.
           This div is stretched to the full height of a `min-h-screen` row, but
           its children stacked in normal block flow — so on any page shorter
@@ -579,6 +667,19 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="-ml-1.5 flex h-11 w-11 flex-none items-center justify-center rounded-md text-muted hover:bg-brand-tint hover:text-brand lg:hidden">
               <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></svg>
             </button>
+            {/* Desktop, sidebar unpinned: the same reveal for a pointer that
+                cannot hover (a touch-screen laptop) or a reader who never
+                finds the edge. */}
+            {!pinned && (
+              <button type="button" data-sidebar-toggle onClick={() => setPeek(!peek)}
+                aria-label={peek ? 'Hide the sidebar' : 'Show the sidebar'} aria-expanded={peek}
+                title="Tools — or move the pointer to the left edge"
+                className="-ml-1.5 hidden h-9 w-9 flex-none items-center justify-center rounded-md text-muted hover:bg-brand-tint hover:text-brand lg:flex">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M9 4.5v15" />
+                </svg>
+              </button>
+            )}
             <Link to="/" className="hidden min-h-[24px] items-center gap-1.5 text-ink sm:flex lg:hidden">
               <ZetaLogo height={22} />
             </Link>
