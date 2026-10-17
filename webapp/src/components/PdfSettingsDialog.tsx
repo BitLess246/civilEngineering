@@ -96,7 +96,7 @@ export function PdfSettingsDialog({ onClose }: { onClose: () => void }) {
 
         {/* the masthead as the PDF draws it */}
         <div className="border-b border-hairline-2 bg-sheet-2/60 px-5 py-4">
-          <div className="relative overflow-hidden rounded-md border border-hairline bg-white px-4 pb-3 pt-3 text-[#111827]" aria-label="Preview">
+          <div className="relative overflow-hidden rounded-md border border-hairline bg-white px-4 pb-3 pt-3 text-[#0f1b2a]" aria-label="Preview">
             <div className="absolute inset-x-0 top-0 h-1" style={{ background: s.accent }} />
             {mark && (
               <span aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-[20deg] select-none whitespace-nowrap font-black tracking-[0.2em] opacity-[0.08]"
@@ -107,13 +107,13 @@ export function PdfSettingsDialog({ onClose }: { onClose: () => void }) {
               <div className="min-w-0">
                 {/* blank, the PDF keeps the app's wordmark — so does the preview */}
                 <div className={`truncate text-[15px] font-bold tracking-wide ${s.firmName ? '' : 'uppercase tracking-[0.2em]'}`}>{s.firmName || BRAND_MARK}</div>
-                {s.firmTagline && <div className="truncate text-[10px] text-[#6b7280]">{s.firmTagline}</div>}
+                {s.firmTagline && <div className="truncate text-[10px] text-[#7a7568]">{s.firmTagline}</div>}
               </div>
             </div>
-            <div className="mt-2.5 flex items-baseline gap-1.5 border-b-2 border-[#111827] pb-0.5 text-[11px] font-bold uppercase tracking-wide">
+            <div className="mt-2.5 flex items-baseline gap-1.5 border-b-2 border-[#0f1b2a] pb-0.5 text-[11px] font-bold uppercase tracking-wide">
               <span style={{ color: s.accent }}>1 ·</span><span>Design summary</span>
             </div>
-            <div className="mt-2 flex justify-between gap-3 font-mono text-[9px] text-[#9ca3af]">
+            <div className="mt-2 flex justify-between gap-3 font-mono text-[9px] text-[#a39d8d]">
               <span className="truncate">S-01{s.revision ? ` · REV ${s.revision}` : ''} · {s.paper === 'letter' ? 'Letter' : 'A4'}</span>
               {s.footerNote && <span className="truncate">{s.footerNote}</span>}
               <span className="shrink-0">page 1 / 3</span>
