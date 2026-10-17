@@ -261,6 +261,122 @@ describe('slenderness — nonsway moment magnification (RC-06 conventions)', () 
   })
 })
 
+// ─────────────────────────────────────────────────────────────────────────
+// PUBLISHED EXAMPLE — StructurePoint, "Slenderness Effects for Columns in
+// Non-Sway Frame — Moment Magnification Method (ACI 318-14)" (Nov-14-2019),
+// after Wang et al., Reinforced Concrete Design 8th ed., Example 13.17.3,
+// with spColumn's results beside the hand solution. US units, converted.
+//   17 × 17 in tied, 10-#9 on two faces (Ise = 360 in⁴), f'c = 3 ksi,
+//   Ec = 57 000√f'c = 3122 ksi, Es = 29 000 ksi; lu = 12 ft − 24 in beam = 120 in;
+//   k = 0.959 (Fig. R6.2.5, ψA = 4.32, ψB = ∞); βdns = 0.40
+//   Pu = 525 kip, M2 = 105 kip·ft (top), M1 = 0
+// Published (hand | spColumn): kLu/r = 23.45 < 34 → slenderness may be
+// neglected; (EI)eff = 10.56×10⁶ | 10.57×10⁶ kip·in²; Pc = 7871 | 7850 kip;
+// Cm = 0.6; δns = 0.66 → 1.00; M2,min = 48.56 kip·ft; Mc = 105 kip·ft.
+// ─────────────────────────────────────────────────────────────────────────
+describe('StructurePoint / spColumn — non-sway slender column, ACI 318-14 (published)', () => {
+  const inch = 25.4, kip = 4.4482216, ksi = (kip * 1000) / (inch * inch)
+  const kipFt = kip * 0.3048                            // kN·m
+  const kipIn2 = kip * (inch / 1000) ** 2               // kN·m²
+  const r = momentMagnificationNonsway({
+    Pu: 525 * kip, M1: 0, M2: 105 * kipFt, k: 0.959, Lu: (120 * inch) / 1000, h: 17 * inch, b: 17 * inch,
+    shape: 'tied', r: 'exact', fc: 3 * ksi, Ec: 3122 * ksi, Es: 29_000 * ksi, Ise: 360 * inch ** 4, betaD: 0.4,
+  })
+
+  it('Ise = 360 in⁴ is ten #9 bars at 6.0 in from the axis', () => {
+    expect(10 * 1.0 * 6.0 ** 2).toBe(360)
+  })
+
+  it('kLu/r = 0.959·120/4.91 = 23.45 ≤ 34 − 12(0) — slenderness may be neglected (§6.2.5)', () => {
+    expect(r.r / inch).toBeCloseTo(4.91, 2)
+    expect(r.kLuOverR).toBeCloseTo(23.45, 2)
+    expect(r.limit).toBe(34)
+    expect(r.slender).toBe(false)
+  })
+
+  it('(EI)eff by §6.6.4.4.4(b) = 10.56×10⁶ kip·in² (spColumn 10.57×10⁶)', () => {
+    expect(r.EI / kipIn2 / 1e6).toBeCloseTo(10.56, 2)
+    expect(Math.abs(r.EI / kipIn2 / 10.57e6 - 1)).toBeLessThan(0.002)
+  })
+
+  it('Pc = π²(EI)eff/(klu)² = 7871 kip (spColumn 7850, with its k = 0.960)', () => {
+    expect(r.Pc / kip).toBeCloseTo(7871, 0)
+    expect(Math.abs(r.Pc / kip / 7850 - 1)).toBeLessThan(0.003)
+  })
+
+  it('Cm = 0.6, δns = 0.66 → 1.00, Mc = 105 kip·ft', () => {
+    expect(r.Cm).toBeCloseTo(0.6, 9)
+    expect(r.Cm / (1 - 525 / (0.75 * r.Pc / kip))).toBeCloseTo(0.66, 2)
+    expect(r.delta).toBe(1)
+    expect(r.Mc / kipFt).toBeCloseTo(105, 6)
+  })
+
+  it('M2,min = Pu(0.6 + 0.03h) = 48.56 kip·ft — SI’s 15 mm (= 0.591 in) reads 0.8 % lower', () => {
+    expect(Math.abs(r.M2min / kipFt / 48.56 - 1)).toBeLessThan(0.01)
+    expect(r.M2min / kipFt).toBeCloseTo(525 * (15 / inch + 0.03 * 17) / 12, 6)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// PUBLISHED EXAMPLE — StructurePoint, "Slenderness Effects Using spColumn —
+// Examples", Example 1 (after Pincheira et al., Reinforced Concrete Design
+// 9th ed., Example 13.17.5): the spColumn v10.30 report's own numbers.
+//   14 × 20 in tied, 6-#11 (two per 20 in face at the corners, one mid-side
+//   each 14 in face), clear cover 2.005 in; f'c = 4.5 ksi (Ec = 3823.68 ksi),
+//   Es = 29 000 ksi; lu = 22.5 ft, k = 1.00, nonsway; βdns = 0 (all live)
+//   Pu = 115 kip; My = 279 kip·ft top and bottom, single curvature; Mx = 0
+// Report: kLu/r 66.81 (X) | 46.77 (Y); 0.2EcIg + EsIse 6.83e6 | 2.16e7 kip·in²;
+//   Pc 924.39 | 2919.31 kip; Cm 1.000 | 1.000; δ 1.199 | 1.055;
+//   Mmin 9.78 | 11.50 kip·ft; Mc 11.72 | 294.47 kip·ft.
+// ─────────────────────────────────────────────────────────────────────────
+describe('spColumn report — slender nonsway column with δ > 1 (StructurePoint Example 1, published)', () => {
+  const inch = 25.4, kip = 4.4482216, ksi = (kip * 1000) / (inch * inch)
+  const kipFt = kip * 0.3048, kipIn2 = kip * (inch / 1000) ** 2
+  const As = 1.56                                        // #11, in²
+  const arm = (half: number) => half - 2.005 - 1.41 / 2  // bar centre from the axis, in
+  const common = { Pu: 115 * kip, k: 1, Lu: (270 * inch) / 1000, shape: 'tied' as const, r: 'exact' as const,
+    fc: 4.5 * ksi, Ec: (57 * Math.sqrt(4500)) * ksi, Es: 29_000 * ksi, betaD: 0 }
+  // Y axis: bending across the 20 in depth; all six bars at 7.29 in
+  const y = momentMagnificationNonsway({ ...common, M1: -279 * kipFt, M2: 279 * kipFt, h: 20 * inch, b: 14 * inch,
+    Ise: 6 * As * arm(10) ** 2 * inch ** 4 })
+  // X axis: across the 14 in depth; the four corner bars at 4.29 in, the mid-side two on the axis
+  const x = momentMagnificationNonsway({ ...common, M1: 0, M2: 0, h: 14 * inch, b: 20 * inch,
+    Ise: 4 * As * arm(7) ** 2 * inch ** 4 })
+
+  it('kLu/r = 66.81 (X) and 46.77 (Y) — both past 34 − 12(1) = 22, so slender', () => {
+    expect(x.kLuOverR).toBeCloseTo(66.81, 2)
+    expect(y.kLuOverR).toBeCloseTo(46.77, 2)
+    expect(y.limit).toBe(22)
+    expect(x.slender && y.slender).toBe(true)
+  })
+
+  it('(EI)eff = 0.2EcIg + EsIse with βdns = 0: 6.83e6 (X) and 2.16e7 (Y) kip·in²', () => {
+    expect(x.EI / kipIn2 / 1e6).toBeCloseTo(6.83, 2)
+    expect(y.EI / kipIn2 / 1e7).toBeCloseTo(2.16, 2)
+  })
+
+  it('Pc = 924.39 (X) and 2919.31 (Y) kip', () => {
+    expect(Math.abs(x.Pc / kip / 924.39 - 1)).toBeLessThan(1e-4)
+    expect(Math.abs(y.Pc / kip / 2919.31 - 1)).toBeLessThan(1e-4)
+  })
+
+  it('Cm = 1.000 both ways — single curvature (Y), and M2,min governing (X, §6.6.4.5.4)', () => {
+    expect(y.Cm).toBe(1)
+    expect(x.Cm).toBe(1)
+  })
+
+  it('δ = 1.199 (X) and 1.055 (Y)', () => {
+    expect(x.delta).toBeCloseTo(1.199, 3)
+    expect(y.delta).toBeCloseTo(1.055, 3)
+  })
+
+  it('Mc = δ·M2 = 294.47 kip·ft (Y); X magnifies M2,min — spColumn 11.72, SI’s 15 mm reads ~1 % lower', () => {
+    expect(y.Mc / kipFt).toBeCloseTo(294.47, 1)
+    expect(Math.abs(x.Mc / kipFt / 11.72 - 1)).toBeLessThan(0.012)
+    expect(x.Mc).toBeCloseTo(x.delta * x.M2min, 9)
+  })
+})
+
 // ── All-around bar distribution (multi-layer strain compatibility) ──────────
 describe('interaction — all-around bar layout', () => {
   const base = { b: 450, h: 450, cover: 40, barDia: 25, tieDia: 10, fc: 28, fy: 415 }

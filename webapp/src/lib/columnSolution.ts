@@ -249,7 +249,7 @@ export function slendernessSolution(i: SlendernessInput, r: SlendernessResult): 
       title: `Slenderness classification (nonsway) — ${r.slender ? 'LONG column' : 'SHORT column'}`,
       clause: 'ACI 318-14 §6.2.5',
       lines: [
-        txt('For compression members braced against sidesway, slenderness may be neglected when kLu/r ≤ 34 + 12(M1/M2) ≤ 40, with M1/M2 negative in single curvature (RC-06 / §406.2.5). r = 0.3h for rectangular sections.'),
+        txt(`For compression members braced against sidesway, slenderness may be neglected when kLu/r ≤ 34 + 12(M1/M2) ≤ 40, with M1/M2 negative in single curvature (RC-06 / §406.2.5). ${i.r === 'exact' && i.shape !== 'spiral' ? 'r = √(Ig/Ag) = h/√12 (§6.2.5.1(a)).' : 'r = 0.3h for rectangular sections.'}`),
         eq(String.raw`\dfrac{k L_u}{r} = \dfrac{${sn2(i.k)}\times ${sn2(i.Lu)}\times 1000}{${sn1(r.r)}} = ${sn1(r.kLuOverR)} \;${r.slender ? '>' : '\\le'}\; ${sn1(r.limit)}`),
       ],
       note: r.slender ? 'Slender — magnify the moment.' : 'Short — slenderness effects may be neglected (δ shown for reference).',
@@ -257,11 +257,13 @@ export function slendernessSolution(i: SlendernessInput, r: SlendernessResult): 
     {
       title: 'Moment magnification (§406.6.4)',
       lines: [
-        eq(String.raw`C_m = 0.6 - 0.4\,\tfrac{M_1}{M_2} = ${sn3(r.Cm)}`),
+        ...(Math.abs(i.M2) < r.M2min
+          ? [txt('M2,min = Pu(15 + 0.03h) exceeds M2, so Cm = 1.0 (§6.6.4.5.4).')]
+          : [eq(String.raw`C_m = 0.6 - 0.4\,\tfrac{M_1}{M_2} = ${sn3(r.Cm)}`)]),
         eq(String.raw`P_c = \dfrac{\pi^2 EI}{(k L_u)^2} = \dfrac{\pi^2 (${sn0(r.EI)})}{(${sn2(i.k * i.Lu)})^2} = ${sn1(r.Pc)}\ \text{kN}`),
         ...(r.stable ? [
           eq(String.raw`\delta = \dfrac{C_m}{1 - \tfrac{P_u}{0.75 P_c}} = ${sn3(r.delta)} \ge 1.0`),
-          eq(String.raw`M_{2,min} = P_u(15 + 0.03h) = ${sn2(r.M2min)}\ \text{kN·m},\qquad M_c = \delta\,M_2 = \mathbf{${sn2(r.Mc)}}\ \text{kN·m}`),
+          eq(String.raw`M_{2,min} = P_u(15 + 0.03h) = ${sn2(r.M2min)}\ \text{kN·m},\qquad M_c = \delta\,\max(M_2, M_{2,min}) = \mathbf{${sn2(r.Mc)}}\ \text{kN·m}`),
         ] : [
           eq(String.raw`P_u = ${sn1(i.Pu)}\ \text{kN} \;\ge\; 0.75P_c = ${sn1(0.75 * r.Pc)}\ \text{kN}`),
           txt('δ = Cm/(1 − Pu/0.75Pc) is undefined — the column is elastically unstable at this load (§406.6.4). Enlarge the section, raise f\'c, or reduce the effective length; magnified design cannot proceed.'),
