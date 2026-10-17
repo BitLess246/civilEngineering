@@ -50,6 +50,7 @@ import { designWoodSlab, woodSlabTimberSizes, type WoodSlabResult, type WoodSlab
 import type { TimberSizeQty } from './takeoff'
 import { designBraceMember, type BraceMemberDesign } from './steelBrace'
 import { trussPart } from './roofTruss'
+import { designTrussJoints, type TrussJointRow } from './trussJoints'
 import { designBraceEnd, braceEndSupported, braceEndFrameFor, type BraceEndDesign, type BraceEndFrame } from './braceConnection'
 import { designBasePlate, basePlateMoments, columnBaseWeld, type ColumnBaseWeld, adoptPlateThickness, ANCHOR_FU, ANCHOR_FY, type BasePlateResult, type BasePlateMomentCheck, type BaseCase } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
@@ -545,6 +546,8 @@ export interface StructureDesign {
   basePlates: BasePlateScheduleRow[]
   /** Steel braces with their gusset end connections — absent on older designs. */
   steelBraces?: SteelBraceScheduleRow[]
+  /** Roof-truss panel-point joints, AISC 360-16 §K3 — absent without trusses. */
+  trussJoints?: TrussJointRow[]
   /** RC pedestals under steel / timber columns — absent on older designs. */
   pedestals?: PedestalScheduleRow[]
   /** The designed post base under every timber column on a pedestal. */
@@ -611,6 +614,7 @@ export function sizingOK(d: StructureDesign): boolean {
     && d.woodBeams.every((b) => b.ok) && d.woodColumns.every((c) => c.ok)
     && d.basePlates.every((p) => p.ok) && (d.pedestals ?? []).every((p) => p.ok)
     && (d.postBases ?? []).every((p) => p.ok) && (d.steelBraces ?? []).every((b) => b.ok)
+    && (d.trussJoints ?? []).every((j) => j.result.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
     && d.slabs.every((s) => s.ok) && d.woodSlabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
     && d.stairs.every((s) => s.ok)
@@ -1847,6 +1851,11 @@ function designFromRuns(
     }
   }
 
+  // ── Roof-truss joints (AISC 360-16 §K3), every combination's own forces ──
+  const tj = designTrussJoints(model, runs)
+  const trussJoints = tj.rows
+  for (const nc of tj.notCovered) unchecked.push({ id: nc.node, role: 'truss joint', shape: nc.shape, reason: nc.reason })
+
   // ── Footings (base supports) ──
   //
   // Isolated by default. Two columns share a pad only when their own pads
@@ -2362,6 +2371,7 @@ function designFromRuns(
     system: opts.seismicSystem ?? 'gravity',
     cases: runs.map((r) => r.name),
     beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates, pedestals, postBases, steelBraces,
+    ...(trussJoints.length ? { trussJoints } : {}),
     joints: [] as SteelJoint[],
     beamJoints: [] as BeamBeamJoint[],
     slabs, woodSlabs, walls, stairs, footings, combined,
