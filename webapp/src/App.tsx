@@ -355,7 +355,9 @@ export default function App() {
         <Route path="/trigonometry" element={<Trigonometry />} />
         <Route path="/spherical-triangle" element={<SphericalTriangle />} />
         {/* drafting: 2D floor plans → 3D viewport → ModelSpace export */}
-        <Route path="/drafting3d" element={<Drafting3D />} />
+        <Route path="/floor-plan-3d" element={<Drafting3D />} />
+        {/* the page's old name — kept for bookmarks and shared links */}
+        <Route path="/drafting3d" element={<Navigate to="/floor-plan-3d" replace />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected
             without the lazy chunk being fetched at all. Inside, the import
             starts before the gate has an answer. */}

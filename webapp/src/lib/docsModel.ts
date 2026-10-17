@@ -52,6 +52,7 @@ export type DocGroup =
   | 'Concrete design'
   | 'Steel & timber'
   | 'Foundations & geotechnical'
+  | 'Drafting'
   | 'Surveying'
   | 'Transportation'
   | 'Water resources'
@@ -66,6 +67,7 @@ export const DOC_GROUPS: DocGroup[] = [
   'Concrete design',
   'Steel & timber',
   'Foundations & geotechnical',
+  'Drafting',
   'Surveying',
   'Transportation',
   'Water resources',

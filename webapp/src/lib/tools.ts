@@ -30,7 +30,6 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/dev-length',    name: 'Dev & Splice',       sub: 'ACI 318-14 §25.4–25.5',     group: 'Concrete' },
       { to: '/punching-shear', name: 'Punching Shear',    sub: 'Two-way §22.6 · ACI 318',   group: 'Concrete' },
       { to: '/model',         name: '3D Model Space',     sub: 'BIM-lite viewer',           group: 'Analysis & Modelling' },
-      { to: '/drafting3d',    name: 'Drafting3D',         sub: 'Floor plans → 3D → ModelSpace', group: 'Analysis & Modelling' },
       { to: '/frame',         name: 'Frame Analysis',     sub: '2D stiffness method',       group: 'Analysis & Modelling' },
       { to: '/beam-analysis', name: 'Beam Analysis',      sub: 'FEM multi-span',            group: 'Analysis & Modelling' },
       { to: '/truss',         name: 'Truss Space',        sub: 'Plane truss solver',        group: 'Analysis & Modelling' },
@@ -62,6 +61,14 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/load-combinations', name: 'Load Combinations', sub: 'NSCP 2015 §203.3 LRFD',  group: 'Seismic & Loads' },
       { to: '/wood-slab',        name: 'Wood Slab',        sub: 'Deck-on-joist · NDS §3 / NSCP §6', group: 'Timber' },
       { to: '/plumbing',         name: 'Plumbing Design',  sub: 'Water · DWV · septic · RNPCP', group: 'Plumbing & Sanitary' },
+    ],
+  },
+  {
+    // Drawing, not calculating: the floor-plan modeller that feeds Model Space,
+    // and the sheet maker that draws plans and details to the user's numbers.
+    label: 'Drafting',
+    tools: [
+      { to: '/floor-plan-3d', name: 'Floor Plan 3D', sub: 'Floor plans → 3D → Model Space' },
     ],
   },
   {
@@ -181,6 +188,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = (() => {
   const planning = TOOL_CATEGORIES.find((c) => c.label === 'Project Planning')!
   const takeoff = TOOL_CATEGORIES.find((c) => c.label === 'Quantity Take-Off')!
   const reference = TOOL_CATEGORIES.find((c) => c.label === 'Reference')!
+  const drafting = TOOL_CATEGORIES.find((c) => c.label === 'Drafting')!
   const surveying = TOOL_CATEGORIES.find((c) => c.label === 'Surveying')!
   const transportation = TOOL_CATEGORIES.find((c) => c.label === 'Transportation')!
   const water = TOOL_CATEGORIES.find((c) => c.label === 'Water Resources')!
@@ -192,6 +200,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = (() => {
   const groups = toolGroups(structural).map(({ group, tools }) => ({ label: short[group] ?? group, tools }))
   return [
     ...groups,
+    { label: 'Drafting', tools: drafting.tools },
     { label: 'Surveying', tools: surveying.tools },
     { label: 'Transportation', tools: transportation.tools },
     { label: 'Water', tools: water.tools },

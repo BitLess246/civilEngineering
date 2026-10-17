@@ -1,5 +1,5 @@
 /**
- * Drafting3D — 2D floor plan drafting with real-time 3D viewport.
+ * Floor Plan 3D (formerly Drafting3D) — 2D floor plan drafting with a real-time 3D viewport.
  * Exports to ModelSpace StructuralModel format.
  *
  * Revit-style modelling aids: wall-hosted doors & windows (tap a wall), finish
@@ -220,7 +220,7 @@ export default function Drafting3D() {
       <header className="bg-sheet border-b border-hairline shadow-sm z-10">
         <div className="mx-auto max-w-full px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-2">
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold text-ink">Drafting3D<sup className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-brand">beta</sup></h1>
+            <h1 className="text-lg font-bold text-ink">Floor Plan 3D<sup className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-brand">beta</sup></h1>
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap">

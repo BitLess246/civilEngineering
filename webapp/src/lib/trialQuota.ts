@@ -66,7 +66,7 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   // mathematics mini-calculators: statics resultant, triangle solver, spherical triangle
   '/method-of-joints', '/trigonometry', '/spherical-triangle',
   // drafting: 2D floor plans → 3D
-  '/drafting3d',
+  '/floor-plan-3d',
 ]
 
 /**
@@ -105,6 +105,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
   '/surveying', '/geometric-design',
   // the combined Engineering Economy page, now a stub landing on /interest-factors
   '/eng-economy',
+  // Drafting3D's old address, now a stub landing on /floor-plan-3d
+  '/drafting3d',
   '/signin', '/signup', '/forgot-password', '/reset-password',
   // Policy and contact pages. A customer must be able to read the terms and
   // find a way to complain WITHOUT an account — and a payment provider

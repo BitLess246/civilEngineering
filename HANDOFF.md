@@ -185,7 +185,7 @@ pages, Influence Lines, Soil Investigation).
   server started with `VITE_SUPABASE_URL= VITE_SUPABASE_ANON_KEY=` (the gate
   steps aside when Supabase is unconfigured).
 
-**Drafting3D (`/drafting3d`)** — audit #894, then #895/#896:
+**Drafting3D — now Floor Plan 3D (`/floor-plan-3d`, Drafting category; `/drafting3d` redirects; storage keys unchanged)** — audit #894, then #895/#896:
 - Fixed: one active section stamped a 400×400 column on slabs/walls (now per
   role, `DEFAULT_SECTION_FOR`; saved projects repaired by
   `normalizeDraftSections`); `addLevel` ignored the storey below's height;
