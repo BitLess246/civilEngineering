@@ -105,6 +105,29 @@ describe('import — a real STAAD.Pro 2023 deck (docs/benchmarks/staad-gridframe
     }
   })
 
+  it('beam-end forces at the columns, against STAAD\'s own MEMBER END FORCES (LOAD 101) — moments within 9 %, shears within 18 %, all on the high side', () => {
+    // STAAD .anl, members 13–26 — the first segment of each 2-bay beam, at its
+    // column joint: [MOM-Z, SHEAR-Y] at the start, local axes, kN·m / kN
+    const staad: Record<number, [number, number]> = {
+      13: [47.43, 44.38], 14: [58.43, 42.14], 15: [47.43, 44.38], 16: [58.43, 42.14], 17: [42.50, 52.25],
+      18: [85.37, 113.19], 19: [42.50, 52.25], 20: [37.99, 42.19], 21: [64.01, 46.53], 22: [37.99, 42.19],
+      23: [64.01, 46.53], 24: [34.22, 52.11], 25: [68.48, 109.58], 26: [34.22, 52.11],
+    }
+    const br = modelToFrame3D(m)
+    const res = solveFrame3D(br.nodes, br.members, br.supports, applyF3Combo(br.loads, { D: 1.4 }), undefined, br.shells)!
+    for (const [k, [Mz, Vy]] of Object.entries(staad)) {
+      const f = res.members.find((x) => x.id === `M${k}`)!.f
+      // The reactions agree to < 1 % (above), so this is not the frame: it is
+      // how the two programs' SHELLS share the slab's load between slab and
+      // beam near a column (DKT here vs STAAD's element, and G = E/2.4 vs its
+      // 9.28e6). Ours always routes MORE through the beam — the conservative side.
+      expect(f[5]).toBeGreaterThanOrEqual(Mz)
+      expect(f[1]).toBeGreaterThanOrEqual(Vy)
+      expect(f[5] / Mz - 1).toBeLessThan(0.09)
+      expect(f[1] / Vy - 1).toBeLessThan(0.18)
+    }
+  })
+
   it('reports what it did not import instead of dropping it silently', () => {
     expect(r.combos.map((c) => c.id)).toEqual([101, 102, 103, 104, 105])
     expect(r.combos[1].factors).toEqual({ 1: 1.2, 2: 1.6 })
