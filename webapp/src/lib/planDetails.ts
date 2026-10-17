@@ -475,7 +475,31 @@ export interface FrameElevationBundle {
   key: string
   line: string
   level: string
+  /** The grids a part of a long line runs between ("A–D"); absent when the
+   *  line is on one sheet. `input.line` carries it into the drawing title. */
+  part?: string
   input: FrameElevationInput
+}
+
+/**
+ * The most bays one frame elevation carries.
+ *
+ * The sheet is scaled to its line, and its text with it — so what a bay has
+ * room for is a SHARE of the sheet, not of the line's length. Each bay puts
+ * its mark and three leadered callouts over the beam and three cut sections
+ * under it. Measured on the studio's frames: at two bays every beam's callouts
+ * lay out with nothing touching; at three, none do — the top-bar label runs
+ * onto the column — and at six the labels, sections and stop dimensions all
+ * print through each other. A longer line is drawn in parts, broken at a
+ * column, which appears on both.
+ */
+export const MAX_BAYS_PER_ELEVATION = 2
+
+/** `n` beams in order, split into the fewest runs of at most `max`, as even
+ *  as they go — 6 → 2 + 2 + 2, 5 → 2 + 2 + 1. */
+export function elevationRuns(n: number, max = MAX_BAYS_PER_ELEVATION): number[] {
+  const parts = Math.max(1, Math.ceil(n / max))
+  return Array.from({ length: parts }, (_, k) => Math.floor(n / parts) + (k < n % parts ? 1 : 0))
 }
 
 /**
@@ -606,107 +630,126 @@ export function frameElevationBundles(
     const cols = model.members.filter((m) => m.role === 'column' && (onLine(m.i) || onLine(m.j)) && isRcSection(sec(m)))
 
     for (const y of levels) {
-      const beams = members.filter((m) => isBeam(m.role)
+      const level = members.filter((m) => isBeam(m.role)
         && Math.abs(pos(m.i)!.y - y) < 1e-6 && Math.abs(pos(m.j)!.y - y) < 1e-6)
-      if (!beams.length) continue
-
-      // The columns meeting this level, split into the one below and the one
-      // above at each grid position.
-      const touching = cols.filter((c) => {
-        const a = pos(c.i)!.y, b = pos(c.j)!.y
-        return Math.abs(a - y) < 1e-6 || Math.abs(b - y) < 1e-6
-      })
-      const hOf = (c: (typeof cols)[number]) => Math.abs(pos(c.j)!.y - pos(c.i)!.y)
-      const below = touching.filter((c) => Math.max(pos(c.i)!.y, pos(c.j)!.y) <= y + 1e-6)
-      const above = touching.filter((c) => Math.min(pos(c.i)!.y, pos(c.j)!.y) >= y - 1e-6)
-      const halfDown = below.length ? Math.max(...below.map(hOf)) / 2 : 0
-      const halfUp = above.length ? Math.max(...above.map(hOf)) / 2 : 0
-      const yLo = y - (halfDown || halfUp)
-      const yHi = y + (halfUp || halfDown)
-
-      const origin: Vec3 = g.axis === 'x' ? [0, 0, g.at] : [g.at, 0, 0]
-      const plane = elevationPlane(along, origin)
-
-      const bars = (id: string) => {
-        const b = design.beams.find((x) => x.id === id)
-        if (b) {
-          const top = Math.max(0, ...b.sections.filter((s) => s.hogging).map((s) => s.design.bars))
-          const bot = Math.max(0, ...b.sections.filter((s) => !s.hogging).map((s) => s.design.bars))
-          return `${top}-TOP / ${bot}-BOT`
+      if (!level.length) continue
+      const lo = (m: (typeof level)[number]) => Math.min(coord(m.i), coord(m.j))
+      const hi = (m: (typeof level)[number]) => Math.max(coord(m.i), coord(m.j))
+      level.sort((a, b) => lo(a) - lo(b))
+      const runs = elevationRuns(level.length)
+      let next = 0
+      for (const count of runs) {
+        const beams = level.slice(next, next + count)
+        next += count
+        // The run's own stretch of the line; a column standing at either end of
+        // it is the joint the part breaks at, drawn on both sheets.
+        const uFrom = Math.min(...beams.map(lo)), uTo = Math.max(...beams.map(hi))
+        const inRun = (c: (typeof cols)[number]) => {
+          const u = (coord(c.i) + coord(c.j)) / 2
+          return u > uFrom - 0.05 && u < uTo + 0.05
         }
-        const c = design.columns.find((x) => x.id === id)
-        return c ? `${c.bars}-⌀${sec(model.members.find((m) => m.id === id)!)?.barDia ?? 0}` : undefined
-      }
 
-      const elMembers: ElevationMember[] = []
-      for (const m of beams) {
-        const s = sec(m)
-        if (!s) continue
-        const u0 = Math.min(coord(m.i), coord(m.j)), u1 = Math.max(coord(m.i), coord(m.j))
-        // The node is the TOP of the beam, so it hangs below the level.
-        elMembers.push({
-          mark: m.id, role: 'beam', u0, u1, yBot: y - s.h / 1000, yTop: y,
-          bw: s.b, d: s.h, note: bars(m.id),
+        // The columns meeting this level, split into the one below and the one
+        // above at each grid position.
+        const touching = cols.filter((c) => {
+          const a = pos(c.i)!.y, b = pos(c.j)!.y
+          return (Math.abs(a - y) < 1e-6 || Math.abs(b - y) < 1e-6) && inRun(c)
+        })
+        const hOf = (c: (typeof cols)[number]) => Math.abs(pos(c.j)!.y - pos(c.i)!.y)
+        const below = touching.filter((c) => Math.max(pos(c.i)!.y, pos(c.j)!.y) <= y + 1e-6)
+        const above = touching.filter((c) => Math.min(pos(c.i)!.y, pos(c.j)!.y) >= y - 1e-6)
+        const halfDown = below.length ? Math.max(...below.map(hOf)) / 2 : 0
+        const halfUp = above.length ? Math.max(...above.map(hOf)) / 2 : 0
+        const yLo = y - (halfDown || halfUp)
+        const yHi = y + (halfUp || halfDown)
+
+        const origin: Vec3 = g.axis === 'x' ? [0, 0, g.at] : [g.at, 0, 0]
+        const plane = elevationPlane(along, origin)
+
+        const bars = (id: string) => {
+          const b = design.beams.find((x) => x.id === id)
+          if (b) {
+            const top = Math.max(0, ...b.sections.filter((s) => s.hogging).map((s) => s.design.bars))
+            const bot = Math.max(0, ...b.sections.filter((s) => !s.hogging).map((s) => s.design.bars))
+            return `${top}-TOP / ${bot}-BOT`
+          }
+          const c = design.columns.find((x) => x.id === id)
+          return c ? `${c.bars}-⌀${sec(model.members.find((m) => m.id === id)!)?.barDia ?? 0}` : undefined
+        }
+
+        const elMembers: ElevationMember[] = []
+        for (const m of beams) {
+          const s = sec(m)
+          if (!s) continue
+          const u0 = Math.min(coord(m.i), coord(m.j)), u1 = Math.max(coord(m.i), coord(m.j))
+          // The node is the TOP of the beam, so it hangs below the level.
+          elMembers.push({
+            mark: m.id, role: 'beam', u0, u1, yBot: y - s.h / 1000, yTop: y,
+            bw: s.b, d: s.h, note: bars(m.id),
+          })
+        }
+        for (const c of touching) {
+          const s = sec(c)
+          if (!s) continue
+          const lo = Math.min(pos(c.i)!.y, pos(c.j)!.y), hi = Math.max(pos(c.i)!.y, pos(c.j)!.y)
+          // The centreline where it crosses THIS level, and how it rakes in the
+          // plane of the sheet (du per metre up). Plumb columns: slope 0.
+          const [bot, top] = pos(c.i)!.y <= pos(c.j)!.y ? [c.i, c.j] : [c.j, c.i]
+          const slope = hi - lo > 1e-9 ? (coord(top) - coord(bot)) / (hi - lo) : 0
+          const cu = coord(bot) + slope * (y - lo)
+          // WHICH SECTION DIMENSION IS IN VIEW.
+          //
+          // `columnCage` lays its bars out as [along h, across b] and puts the
+          // first on global X, so a column's h runs east–west and its b
+          // north–south. An elevation along x therefore sees h and one along z
+          // sees b. Drawn as b either way, a 300×500 column on a lettered line
+          // came out 300 wide with its bars spread 410 — the steel outside its
+          // own concrete, which is what the sheet was showing.
+          const face = g.axis === 'x' ? (s.h ?? s.b) : s.b
+          elMembers.push({
+            mark: c.id, role: 'column',
+            u0: cu - face / 2000, u1: cu + face / 2000,
+            yBot: Math.max(lo, yLo), yTop: Math.min(hi, yHi),
+            bw: s.b, d: s.h ?? s.b, note: bars(c.id),
+            ...(Math.abs(slope) > 1e-9 ? { lean: { yRef: y, slope } } : {}),
+          })
+        }
+        if (!elMembers.length) continue
+
+        const ids = new Set([...beams, ...touching].map((m) => m.id))
+        // Bubbles at the plan's grid lines crossing this one, labelled by their
+        // index on the PLAN — not by their order among this sheet's columns,
+        // which renumbered a line that has columns on only some of the grids.
+        const crossing = g.axis === 'x' ? planXs : planZs
+        const grids = [...new Set(touching.map((c) => {
+          const [bot] = pos(c.i)!.y <= pos(c.j)!.y ? [c.i] : [c.j]
+          return Math.round(coord(bot) * 1e6) / 1e6
+        }))]
+          .sort((a, b) => a - b)
+          .map((u) => {
+            const k = crossing.findIndex((v) => Math.abs(v - u) < 0.05)
+            const label = k < 0 ? '' : g.axis === 'x' ? String.fromCharCode(65 + k) : String(k + 1)
+            return { u, label }
+          })
+
+        const part = runs.length > 1 && grids.length
+          ? `${grids[0].label}–${grids[grids.length - 1].label}` : undefined
+        out.push({
+          // The key is also the SVG download stem, so it is slugged here rather
+          // than carrying a letter and a decimal point into a filename.
+          key: `frame-${g.label}-${y.toFixed(2)}${part ? `-${part}` : ''}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          line: g.label,
+          level: `EL ${y.toFixed(2)}`,
+          ...(part ? { part } : {}),
+          input: {
+            line: part ? `${g.label} (${part})` : g.label, y, yLo, yHi, plane,
+            members: elMembers,
+            grids,
+            cages: cages.filter((c) => ids.has(c.member)),
+            subject: new Set(beams.map((m) => m.id)),
+          },
         })
       }
-      for (const c of touching) {
-        const s = sec(c)
-        if (!s) continue
-        const lo = Math.min(pos(c.i)!.y, pos(c.j)!.y), hi = Math.max(pos(c.i)!.y, pos(c.j)!.y)
-        // The centreline where it crosses THIS level, and how it rakes in the
-        // plane of the sheet (du per metre up). Plumb columns: slope 0.
-        const [bot, top] = pos(c.i)!.y <= pos(c.j)!.y ? [c.i, c.j] : [c.j, c.i]
-        const slope = hi - lo > 1e-9 ? (coord(top) - coord(bot)) / (hi - lo) : 0
-        const cu = coord(bot) + slope * (y - lo)
-        // WHICH SECTION DIMENSION IS IN VIEW.
-        //
-        // `columnCage` lays its bars out as [along h, across b] and puts the
-        // first on global X, so a column's h runs east–west and its b
-        // north–south. An elevation along x therefore sees h and one along z
-        // sees b. Drawn as b either way, a 300×500 column on a lettered line
-        // came out 300 wide with its bars spread 410 — the steel outside its
-        // own concrete, which is what the sheet was showing.
-        const face = g.axis === 'x' ? (s.h ?? s.b) : s.b
-        elMembers.push({
-          mark: c.id, role: 'column',
-          u0: cu - face / 2000, u1: cu + face / 2000,
-          yBot: Math.max(lo, yLo), yTop: Math.min(hi, yHi),
-          bw: s.b, d: s.h ?? s.b, note: bars(c.id),
-          ...(Math.abs(slope) > 1e-9 ? { lean: { yRef: y, slope } } : {}),
-        })
-      }
-      if (!elMembers.length) continue
-
-      const ids = new Set([...beams, ...touching].map((m) => m.id))
-      // Bubbles at the plan's grid lines crossing this one, labelled by their
-      // index on the PLAN — not by their order among this sheet's columns,
-      // which renumbered a line that has columns on only some of the grids.
-      const crossing = g.axis === 'x' ? planXs : planZs
-      const grids = [...new Set(touching.map((c) => {
-        const [bot] = pos(c.i)!.y <= pos(c.j)!.y ? [c.i] : [c.j]
-        return Math.round(coord(bot) * 1e6) / 1e6
-      }))]
-        .sort((a, b) => a - b)
-        .map((u) => {
-          const k = crossing.findIndex((v) => Math.abs(v - u) < 0.05)
-          const label = k < 0 ? '' : g.axis === 'x' ? String.fromCharCode(65 + k) : String(k + 1)
-          return { u, label }
-        })
-
-      out.push({
-        // The key is also the SVG download stem, so it is slugged here rather
-        // than carrying a letter and a decimal point into a filename.
-        key: `frame-${g.label}-${y.toFixed(2)}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        line: g.label,
-        level: `EL ${y.toFixed(2)}`,
-        input: {
-          line: g.label, y, yLo, yHi, plane,
-          members: elMembers,
-          grids,
-          cages: cages.filter((c) => ids.has(c.member)),
-          subject: new Set(beams.map((m) => m.id)),
-        },
-      })
     }
   }
   return out

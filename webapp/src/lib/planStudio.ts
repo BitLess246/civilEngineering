@@ -180,10 +180,48 @@ export function studioModel(i: StudioInput): StructuralModel {
     baysX: i.baysX, baysZ: i.baysZ, storeyH: i.storeyH,
     column, beam, girder: beam, slabThickness: i.slab,
   }, 'Plan Studio frame')
+  markStudioMembers(m, i.storeyH.length)
   // ordinary gravity loads, only so the design has something to carry — the
   // studio overwrites every bar it chose
   m.loads = buildGravityLoads(m, 2.4, 2.4)
   return m
+}
+
+const gridLetter = (i: number) => String.fromCharCode(65 + i)
+
+/**
+ * The generator's ids — `bx0.0.1`, `c1.0.0` — are array indices, and every
+ * label, cutting-list mark and schedule row is built from the id. A drafted
+ * set names a member by where it is, so they are replaced by grid marks:
+ *
+ *   `1C-A1`     the first-storey column on A1
+ *   `2B-A1-B1`  the second-floor beam from A1 to B1 (`RB-…` at the roof)
+ *   `2S-A1-B2`  the second-floor slab panel A1 to B2
+ *
+ * Section ids follow, since the generator gives each member its own section
+ * under the member's id.
+ */
+export function markStudioMembers(m: StructuralModel, framed: number): void {
+  const floor = (k: number) => (k >= framed ? 'R' : String(k + 1))
+  const at = (i: number, j: number) => `${gridLetter(i)}${j + 1}`
+  const rename = new Map<string, string>()
+  for (const mem of m.members) {
+    const g = /^(c|bx|bz)(\d+)\.(\d+)\.(\d+)$/.exec(mem.id)
+    if (!g) continue
+    const [i, j, k] = [Number(g[2]), Number(g[3]), Number(g[4])]
+    rename.set(mem.id, g[1] === 'c' ? `${k + 1}C-${at(i, j)}`
+      : g[1] === 'bx' ? `${floor(k)}B-${at(i, j)}-${at(i + 1, j)}`
+        : `${floor(k)}B-${at(i, j)}-${at(i, j + 1)}`)
+  }
+  for (const mem of m.members) {
+    mem.id = rename.get(mem.id) ?? mem.id
+    mem.section = rename.get(mem.section) ?? mem.section
+  }
+  for (const s of m.sections) s.id = rename.get(s.id) ?? s.id
+  for (const p of m.plates ?? []) {
+    const g = /^s(\d+)\.(\d+)\.(\d+)$/.exec(p.id)
+    if (g) p.id = `${floor(Number(g[3]))}S-${at(Number(g[1]), Number(g[2]))}-${at(Number(g[1]) + 1, Number(g[2]) + 1)}`
+  }
 }
 
 /**
@@ -283,7 +321,7 @@ export function buildStudio(raw: StudioInput): StudioResult & { error?: string }
   const { model, designed } = lastDesign
   if (!designed) return { sheets: [], notes, error: 'The frame could not be built from these dimensions.' }
   const design = applyStudioRebar(designed, i, notes)
-  const sheets = buildSheetSet(model, design, soil)
+  const sheets = buildSheetSet(model, design, soil, { drafted: true })
   return { sheets, notes }
 }
 

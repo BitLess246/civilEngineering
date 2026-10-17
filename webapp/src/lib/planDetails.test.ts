@@ -4,6 +4,7 @@ import { designStructure } from '../engine/pipeline'
 import {
   footingsForPlan, footingDetailBundles, slabOpeningBundles, wallDetailBundles,
   elevationBundleByMember, beamSectionZones, modelGrid,
+  elevationRuns, MAX_BAYS_PER_ELEVATION,
 } from './planDetails'
 import { buildStructureCages } from '../engine/cageBuilder'
 import { buildPlan } from '../engine/planRenderer'
@@ -284,5 +285,17 @@ describe('modelGrid — the plan bubbles\' naming', () => {
     const plan = buildPlan(model, { kind: 'foundation' })!
     const bubbles = plan.primitives.flatMap((p) => (p.kind === 'text' && p.weight === 700 && /^[A-Z]$|^\d$/.test(p.text) ? [p.text] : []))
     expect(new Set(bubbles)).toEqual(new Set(['A', 'B', 'C', '1', '2']))
+  })
+})
+
+describe('a long grid line is drawn in parts', () => {
+  it('the fewest parts of at most two bays, as even as they go', () => {
+    expect(MAX_BAYS_PER_ELEVATION).toBe(2)
+    expect(elevationRuns(1)).toEqual([1])
+    expect(elevationRuns(2)).toEqual([2])
+    expect(elevationRuns(3)).toEqual([2, 1])
+    expect(elevationRuns(5)).toEqual([2, 2, 1])
+    expect(elevationRuns(6)).toEqual([2, 2, 2])
+    expect(elevationRuns(7, 3)).toEqual([3, 2, 2])
   })
 })

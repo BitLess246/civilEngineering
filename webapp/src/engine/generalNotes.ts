@@ -76,6 +76,9 @@ export interface GeneralNotesInput {
   cover: { beam: number; column: number; slab: number; footing: number }
   /** Special moment frame detailing applies (§418). */
   seismic?: boolean
+  /** Sizes and steel are as ENTERED, not designed (Plan Studio): the first
+   *  note says detailing, and that nothing on the set was checked. */
+  drafted?: boolean
   /** Commercial stock length, m. Defaults to the model's own. */
   stock?: number
   /** What the frame's MEMBERS are made of. Absent means an all-RC frame, the
@@ -398,7 +401,9 @@ export function generalNoteSections(i: GeneralNotesInput): NoteSection[] {
     {
       head: 'GENERAL',
       lines: [
-        fr.steel || fr.timber ? `DESIGN AND DETAILING TO ${codes.join(', ')}.` : 'DESIGN AND DETAILING TO NSCP 2015 (ACI 318-14).',
+        ...(i.drafted
+          ? ['DETAILING TO NSCP 2015 (ACI 318-14). MEMBER SIZES AND REINFORCEMENT ARE AS ENTERED AND HAVE NOT BEEN CHECKED AGAINST LOADS — THE ENGINEER OF RECORD DESIGNS THEM.']
+          : [fr.steel || fr.timber ? `DESIGN AND DETAILING TO ${codes.join(', ')}.` : 'DESIGN AND DETAILING TO NSCP 2015 (ACI 318-14).']),
         ...(i.seismic && fr.rc ? ['SPECIAL MOMENT FRAME DETAILING PER §418 APPLIES THROUGHOUT.'] : []),
         'ALL DIMENSIONS IN MILLIMETRES, ALL LEVELS IN METRES. DO NOT SCALE — WORK TO FIGURED DIMENSIONS.',
         'THESE NOTES APPLY TO EVERY SHEET IN THE SET. WHERE A DETAIL SHEET DISAGREES WITH THIS SHEET, THE DETAIL SHEET GOVERNS FOR THAT MEMBER; REPORT THE DISCREPANCY BEFORE PROCEEDING.',
@@ -863,7 +868,7 @@ export function buildGeneralNotes(i: GeneralNotesInput, opts: GeneralNotesOption
   P.push({
     kind: 'text', x: 0, y: u * 3.7, size: size * 1.02, anchor: 'start', color: NOTE, weight: 600,
     text: (i.frame?.rc ?? true)
-      ? 'EVERY BEAM IS DRAWN ON ITS OWN FRAME ELEVATION — ONE SHEET PER GRID LINE PER FLOOR. THERE IS NO TYPICAL BEAM SHEET.'
+      ? 'EVERY BEAM IS DRAWN ON ITS OWN FRAME ELEVATION — ONE SHEET PER GRID LINE PER FLOOR, A LONG LINE IN PARTS OF AT MOST TWO BAYS. THERE IS NO TYPICAL BEAM SHEET.'
       : 'MEMBERS ARE SCHEDULED ON THE FRAMING PLANS BY MARK; CONNECTIONS AND BASE PLATES BY THEIR SCHEDULES.',
   })
 

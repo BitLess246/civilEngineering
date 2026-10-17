@@ -4,6 +4,8 @@ import {
   barsPerRow, layersFor, matSpacing, minClearSpacing, sheetsOf, type StudioInput,
 } from './planStudio'
 import { designStructure } from '../engine/pipeline'
+import { calloutClashes } from '../engine/frameElevation'
+import type { PlanPrimitive } from '../engine/planRenderer'
 import { buildStructureCages, FOOTING_COVER } from '../engine/cageBuilder'
 import type { RebarCage } from '../engine/rebarModel'
 
@@ -56,7 +58,7 @@ describe('the user\'s steel reaches the cages', () => {
     footing: { ...DEFAULT_STUDIO.footing, B: 1.8, Dc: 400, bars: 11, barDia: 16 },
   }
   const { cages } = placed(custom)
-  const beam = cages.find((c) => c.member === 'bx0.0.1')!
+  const beam = cages.find((c) => c.member === '2B-A1-B1')!
 
   it('beam: the top count over the support, the bottom count at midspan', () => {
     expect(barsAcross(beam, 'top', 0.4)).toBe(4)
@@ -76,7 +78,7 @@ describe('the user\'s steel reaches the cages', () => {
   })
 
   it('column: every vertical bar the user asked for', () => {
-    const col = cages.find((c) => c.member === 'c0.0.0')!
+    const col = cages.find((c) => c.member === '1C-A1')!
     // the bars are lapped in staggered pieces; mid-storey, clear of every lap,
     // each bar is one piece
     const across = col.runs.filter((r) => r.role === 'vertical')
@@ -132,6 +134,62 @@ describe('the sheet set', () => {
     expect(svgText(six.sheets)).toMatch(/5-⌀20 T/)
     const wide = buildStudio({ ...DEFAULT_STUDIO, beam: { ...DEFAULT_STUDIO.beam, top: 5 }, baysX: [4, 4, 4] })
     expect(sheetsOf(wide.sheets, 'plans')[0].drawing.primitives.some((p) => p.kind === 'text' && (p as { text: string }).text === 'D')).toBe(true)
+  })
+
+  it('names members by grid, not by array index', () => {
+    const marks = (sheets: typeof r.sheets) => sheetsOf(sheets, 'elevations').flatMap((s) => s.drawing.primitives)
+      .filter((p) => p.kind === 'text').map((p) => (p as { text: string }).text)
+    const t = marks(r.sheets)
+    expect(t.some((x) => /^2B-A1-B1 {2}300×500$/.test(x))).toBe(true)
+    expect(t.some((x) => /^RB-A1-B1 {2}300×500$/.test(x))).toBe(true)
+    expect(t.some((x) => /^1C-A1 {2}400×400$/.test(x))).toBe(true)
+    expect(t.some((x) => /\b(bx|bz|c)\d+\.\d+\.\d+\b/.test(x))).toBe(false)
+  })
+
+  it('says the extras at each end, and no callout runs into another', () => {
+    for (const sh of sheetsOf(r.sheets, 'elevations')) {
+      const ps = sh.drawing.primitives
+      expect(ps.some((p) => p.kind === 'text' && /2-⌀20 TOP THRU \+ 1 EXTRA EACH END/.test(p.text)), sh.title).toBe(true)
+      // a leader is an arrowhead, its stroke and the text after it
+      const callouts: PlanPrimitive[][] = []
+      ps.forEach((p, k) => {
+        if (p.kind !== 'path' || !p.closed || ps[k + 1]?.kind !== 'path') return
+        const c: PlanPrimitive[] = [ps[k + 1]]
+        for (let j = k + 2; ps[j]?.kind === 'text'; j++) c.push(ps[j])
+        callouts.push(c)
+      })
+      const marks = ps.filter((p) => p.kind === 'text' && /^[R\d]B-/.test(p.text)).map((p) => [p])
+      const all = [...callouts, ...marks]
+      expect(callouts.length, sh.title).toBe(3 * marks.length)          // top, bottom, stirrups
+      for (let a = 0; a < all.length; a++)
+        for (let b = a + 1; b < all.length; b++)
+          expect(calloutClashes(all[a], all[b]), `${sh.title}: ${a} × ${b}`).toBe(0)
+    }
+  })
+
+  it('a long line is drawn in parts of two bays, broken at a column both parts show', () => {
+    const long = buildStudio({ ...DEFAULT_STUDIO, baysX: [6, 6, 6, 6, 6], storeyH: [3.5] })
+    const g1 = sheetsOf(long.sheets, 'elevations').filter((s) => /^Grid 1 /.test(s.title)).map((s) => s.title)
+    expect(g1).toEqual(['Grid 1 (A–C) — EL 3.50', 'Grid 1 (C–E) — EL 3.50', 'Grid 1 (E–F) — EL 3.50'])
+    const cut = sheetsOf(long.sheets, 'cutting').filter((s) => /^Grid 1 /.test(s.title)).map((s) => s.title)
+    expect(cut).toEqual(g1)
+    // the break column is drawn on both parts
+    const cols = (t: string) => sheetsOf(long.sheets, 'elevations').find((s) => s.title === t)!.drawing.primitives
+      .filter((p) => p.kind === 'text' && /^1C-/.test(p.text)).map((p) => (p as { text: string }).text.split(' ')[0])
+    expect(cols('Grid 1 (A–C) — EL 3.50')).toEqual(['1C-A1', '1C-B1', '1C-C1'])
+    expect(cols('Grid 1 (C–E) — EL 3.50')).toEqual(['1C-C1', '1C-D1', '1C-E1'])
+    // a line that fits keeps its plain title
+    expect(sheetsOf(long.sheets, 'elevations').some((s) => s.title === 'Grid A — EL 3.50')).toBe(true)
+  })
+
+  it('the notes say the set is drafted, not designed', () => {
+    const notes = (k: 'plans' | 'notes') => sheetsOf(r.sheets, k)[0].drawing.primitives
+      .filter((p) => p.kind === 'text').map((p) => (p as { text: string }).text).join(' ')
+    expect(notes('plans')).toMatch(/DRAWN TO THE SIZES ENTERED AND ARE NOT CHECKED FOR BEARING/)
+    expect(notes('plans')).not.toMatch(/SIZED FOR AN ALLOWABLE SOIL BEARING PRESSURE/)
+    expect(notes('plans')).not.toMatch(/OF THE MODEL/)
+    expect(notes('notes')).toMatch(/HAVE NOT BEEN CHECKED AGAINST LOADS/)
+    expect(notes('notes')).not.toMatch(/SPECIAL MOMENT FRAME DETAILING/)
   })
 
   it('a nonsense input is drawn as the defaults, never thrown', () => {

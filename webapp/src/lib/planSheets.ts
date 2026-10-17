@@ -73,6 +73,12 @@ export interface SheetSetOptions {
   /** Width the drawings are laid out for, px — only affects nothing here, but
    *  keeps the caller's intent in one place. */
   sheetRefs?: Partial<Record<SheetGroup, string>>
+  /**
+   * The set is DRAFTED, not designed — member sizes and steel as someone
+   * entered them (Plan Studio). The notes then say so instead of claiming a
+   * bearing pressure the pads were sized for, or a §418 frame nothing checked.
+   */
+  drafted?: boolean
 }
 
 /** Framed-level ordinal (1 = first level above the base) → its name, given
@@ -107,9 +113,9 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
  * the grid, its footings noted as not yet sized; after it, the designed pads,
  * pedestals and schedules.
  */
-export function planSheets(model: StructuralModel, design: StructureDesign | null, soil: SoilInput = {}): PlanSheet[] {
+export function planSheets(model: StructuralModel, design: StructureDesign | null, soil: SoilInput = {}, drafted = false): PlanSheet[] {
   const out: PlanSheet[] = []
-  const foundation = foundationSheet(model, design, soil)
+  const foundation = foundationSheet(model, design, soil, drafted)
   if (foundation) out.push(foundation)
   const ys = [...new Set(model.nodes.map((n) => Math.round(n.y * 100) / 100))].sort((a, b) => a - b)
   const floors = ys.slice(1)                       // skip the base (foundation)
@@ -129,14 +135,14 @@ export function planSheets(model: StructuralModel, design: StructureDesign | nul
 }
 
 /** Sheet S-02: the foundation plan, its schedules and its notes. */
-function foundationSheet(model: StructuralModel, design: StructureDesign | null, soil: SoilInput): PlanSheet | null {
+function foundationSheet(model: StructuralModel, design: StructureDesign | null, soil: SoilInput, drafted = false): PlanSheet | null {
   const footings = design ? footingsForPlan(design) : []
   const H = soil.H != null ? Math.abs(soil.H) : undefined
   const yBase = Math.min(...model.nodes.map((n) => n.y))
   const nodeY = new Map(model.nodes.map((n) => [n.id, n.y]))
   const atBase = (id: string) => Math.abs((nodeY.get(id) ?? Infinity) - yBase) < 0.05
   const gradeBeams = model.members.some((m) => m.role !== 'column' && atBase(m.i) && atBase(m.j))
-  const notes = foundationNotes(soil, design != null, footings.length > 0, gradeBeams)
+  const notes = foundationNotes(soil, design != null, footings.length > 0, gradeBeams, drafted)
   const d = buildPlan(model, {
     kind: 'foundation', detailNo: '1', sheetRef: 'S-02', footings,
     foundingElev: H != null && design ? -H : undefined, notes,
@@ -170,24 +176,31 @@ function foundationSheet(model: StructuralModel, design: StructureDesign | null,
 /**
  * The notes a foundation plan carries: the bearing pressure the pads were
  * sized for and where it has to come from, the founding level, the cover, and
- * where the details are. Only what the design actually used is stated.
+ * where the details are. Only what the design actually used is stated — and a
+ * `drafted` set used none, so it says the pads are as entered instead.
  */
-export function foundationNotes(soil: SoilInput, designed: boolean, hasFootings: boolean, gradeBeams = false): string[] {
+export function foundationNotes(soil: SoilInput, designed: boolean, hasFootings: boolean, gradeBeams = false, drafted = false): string[] {
   if (!designed) return [
     'FOOTINGS ARE SIZED WHEN THE DESIGN RUNS. THIS SHEET SHOWS THE COLUMN LAYOUT ONLY.',
   ]
   const out: string[] = []
-  if (soil.qAllow != null)
+  if (drafted)
+    out.push('FOOTINGS ARE DRAWN TO THE SIZES ENTERED AND ARE NOT CHECKED FOR BEARING. SIZE THEM BY DESIGN ON THE ALLOWABLE BEARING PRESSURE FROM A GEOTECHNICAL INVESTIGATION BEFORE EXCAVATION.')
+  else if (soil.qAllow != null)
     out.push(`FOOTINGS ARE SIZED FOR AN ALLOWABLE SOIL BEARING PRESSURE qa = ${Math.round(soil.qAllow)} kPa. CONFIRM BY GEOTECHNICAL INVESTIGATION BEFORE EXCAVATION.`)
   if (soil.H != null)
-    out.push(`BOTTOM OF FOOTING AT EL ${(-Math.abs(soil.H)).toFixed(2)} m, ±0.00 BEING THE COLUMN BASE LEVEL OF THE MODEL. T.O.F. = TOP OF FOOTING.`)
+    out.push(`BOTTOM OF FOOTING AT EL ${(-Math.abs(soil.H)).toFixed(2)} m, ±0.00 BEING THE ${drafted ? 'GROUND FLOOR LEVEL' : 'COLUMN BASE LEVEL OF THE MODEL'}. T.O.F. = TOP OF FOOTING.`)
   if (hasFootings) {
     out.push(`CLEAR COVER TO FOOTING BARS ${FOOTING_COVER} mm, CAST AGAINST EARTH (§420.6.1.3.1).`)
     out.push(`FOR FOOTING DETAILS SEE ${REF['Footing details']}; FOR COLUMN DETAILS SEE ${REF['Column details']}.`)
   }
-  if (!gradeBeams) out.push('NO TIE OR GRADE BEAMS ARE MODELLED, SO NONE ARE DESIGNED OR SHOWN. ADD THEM AT THE BASE LEVEL OF THE MODEL TO HAVE THEM DESIGNED.')
+  if (!gradeBeams) out.push(drafted
+    ? 'NO TIE OR GRADE BEAMS ARE SHOWN.'
+    : 'NO TIE OR GRADE BEAMS ARE MODELLED, SO NONE ARE DESIGNED OR SHOWN. ADD THEM AT THE BASE LEVEL OF THE MODEL TO HAVE THEM DESIGNED.')
   return out
 }
+
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
 
 /** Every detail sheet, in the order the tab lists them. */
 export function detailSheets(model: StructuralModel, design: StructureDesign, soil: SoilInput = {}, opts: SheetSetOptions = {}): PlanSheet[] {
@@ -207,8 +220,8 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
     })
     out.push({
       key: b.key, group: 'Frame elevations',
-      title: `Grid ${b.line} — ${b.level}`,
-      subtitle: `${b.input.members.filter((m) => m.role === 'beam').length} beams, ${b.input.grids.length} columns`,
+      title: `Grid ${b.input.line} — ${b.level}`,
+      subtitle: plural(b.input.members.filter((m) => m.role === 'beam').length, 'beam') + ', ' + plural(b.input.grids.length, 'column'),
       warnings: drawing.designNotes,
       drawing,
     })
@@ -341,7 +354,7 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
     if (n === 0) return
     fab.push({
       key: `${b.key}-cutting`, group: 'Bar cutting lists',
-      title: `Grid ${b.line} — ${b.level}`, subtitle: `${n} bar marks, exploded`,
+      title: `Grid ${b.input.line} — ${b.level}`, subtitle: `${n} bar marks, exploded`,
       warnings: [], drawing,
     })
   })
@@ -389,7 +402,7 @@ export function frameMaterials(model: StructuralModel): FrameMaterials {
   }
 }
 
-export function generalNotesSheet(model: StructuralModel, design?: StructureDesign | null): PlanSheet {
+export function generalNotesSheet(model: StructuralModel, design?: StructureDesign | null, drafted = false): PlanSheet {
   const frame = frameMaterials(model)
   // Only REINFORCED CONCRETE sections carry bars. A steel or timber section
   // still holds the concrete defaults it was generated with, and quoting them
@@ -415,7 +428,7 @@ export function generalNotesSheet(model: StructuralModel, design?: StructureDesi
     fc: frame.rc ? num((s) => s.fc) : [...new Set(concrete)],
     fy: frame.rc ? num((s) => s.fy) : [...new Set(rebarFy)],
     barDias: [...new Set([...num((s) => s.barDia), ...footBars])], tieDias: num((s) => s.tieDia),
-    cover, seismic: true, frame,
+    cover, seismic: !drafted, drafted, frame,
   }
   return {
     key: 'general-notes', group: 'General notes', title: 'General structural notes',
@@ -431,8 +444,8 @@ export function generalNotesSheet(model: StructuralModel, design?: StructureDesi
 /** Notes, then plans, then details — the whole set, in sheet order. */
 export function buildSheetSet(model: StructuralModel, design: StructureDesign | null, soil: SoilInput = {}, opts: SheetSetOptions = {}): PlanSheet[] {
   return [
-    generalNotesSheet(model, design),
-    ...planSheets(model, design, soil),
+    generalNotesSheet(model, design, opts.drafted),
+    ...planSheets(model, design, soil, opts.drafted),
     ...(design ? detailSheets(model, design, soil, opts) : []),
   ]
 }

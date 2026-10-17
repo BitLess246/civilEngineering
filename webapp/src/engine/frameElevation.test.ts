@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildFrameElevation, clipToBand, runInk, pitchRuns, pitchNote, angledLeader, wrapPitch,
+  buildFrameElevation, clipToBand, runInk, pitchRuns, pitchNote, angledLeader, wrapPitch, extraText, calloutClashes, placeClear,
   type FrameElevationInput, type ElevationMember,
 } from './frameElevation'
 import { elevationPlane, type RebarCage, type RebarRun } from './rebarModel'
@@ -638,5 +638,51 @@ describe('buildFrameElevation — a raking column', () => {
     const xs = p.cmds.map((c) => +c.x.toFixed(6)).sort((a, b) => a - b)
     // at the level (y 3): 0.35, 0.85; at the band bottom (y 1.5): 0.05, 0.55
     expect(xs).toEqual([0.05, 0.35, 0.55, 0.85])
+  })
+})
+
+describe('extra bars are said where they are', () => {
+  it('one at each support reads EACH END — not "+ 2 EXTRA", which reads as two at one support', () => {
+    expect(extraText({ left: 1, right: 1, mid: 0 })).toBe('+ 1 EXTRA EACH END')
+  })
+  it('an end-span beam names the end that has them', () => {
+    expect(extraText({ left: 2, right: 0, mid: 0 })).toBe('+ 2 EXTRA LEFT END')
+    expect(extraText({ left: 1, right: 2, mid: 0 })).toBe('+ 1 EXTRA LEFT END, 2 EXTRA RIGHT END')
+  })
+  it('a bottom bar stopped short of both supports stays a plain EXTRA', () => {
+    expect(extraText({ left: 0, right: 0, mid: 1 })).toBe('+ 1 EXTRA')
+  })
+})
+
+describe('callouts never run into each other', () => {
+  const text = (x: number, y: number, t: string): PlanPrimitive => ({ kind: 'text', x, y, text: t, size: 0.1, anchor: 'start' })
+  const leg = (x1: number, y1: number, x2: number, y2: number): PlanPrimitive =>
+    ({ kind: 'path', stroke: '#000', width: 0.7, fill: 'none', cmds: [{ c: 'M', x: x1, y: y1 }, { c: 'L', x: x2, y: y2 }] })
+
+  it('counts a leader through a label, a label over a label, two leaders crossing', () => {
+    const label = [text(0, 0, 'TOP THRU')]                       // ≈ 0.5 wide at 0.1
+    expect(calloutClashes([leg(0.1, -1, 0.2, 1)], label)).toBe(1)
+    expect(calloutClashes([text(0.2, 0.02, 'BOT')], label)).toBe(1)
+    expect(calloutClashes([leg(0, 1, 1, 2)], [leg(0, 2, 1, 1)])).toBe(1)
+    expect(calloutClashes([leg(2, -1, 2.2, 1)], label)).toBe(0)
+  })
+
+  it('chooses the callouts TOGETHER: the clean pair a one-at-a-time pick misses', () => {
+    // the first group's favourite blocks every place the second could go;
+    // its second choice leaves the second group's favourite clear
+    const wide = [text(0, 0, 'X'.repeat(40))], narrow = [text(5, 0, 'X')]
+    const second = [[leg(0.5, -1, 0.5, 1)], [leg(1, -1, 1, 1)]]
+    const [a, b] = placeClear([], [[() => wide, () => narrow], second.map((c) => () => c)])
+    expect(a).toBe(narrow)
+    expect(b).toBe(second[0])
+  })
+
+  it('keeps the preferred layout when it is already clean', () => {
+    const one = [text(0, 0, 'A')], two = [text(0, 5, 'B')]
+    let built = 0
+    const make = (c: PlanPrimitive[]) => () => { built++; return c }
+    const [a, b] = placeClear([], [[make(one), make(two)], [make(two), make(one)]])
+    expect(a).toBe(one); expect(b).toBe(two)
+    expect(built).toBe(2)                     // nothing past the clean layout is built
   })
 })

@@ -203,6 +203,22 @@ export interface FaceTally {
   extra: number
   /** Where the curtailed bars stop, m along u — nearest each end, deduplicated. */
   cuts: number[]
+  /** The curtailed bars by where they sit: off the left support, off the
+   *  right one, or clear of both (a bottom bar stopped short of each end).
+   *  `extra` is their sum. */
+  extraAt: { left: number; right: number; mid: number }
+}
+/** "+ 1 EXTRA EACH END", "+ 2 EXTRA LEFT END", "+ 1 EXTRA" — the curtailed
+ *  bars of one face, placed. */
+export function extraText(at: FaceTally['extraAt']): string {
+  const parts: string[] = []
+  if (at.left && at.left === at.right) parts.push(`${at.left} EXTRA EACH END`)
+  else {
+    if (at.left) parts.push(`${at.left} EXTRA LEFT END`)
+    if (at.right) parts.push(`${at.right} EXTRA RIGHT END`)
+  }
+  if (at.mid) parts.push(`${at.mid} EXTRA`)
+  return parts.length ? `+ ${parts.join(', ')}` : ''
 }
 export function faceTally(
   cages: RebarCage[], plane: ViewPlane, role: 'top' | 'bottom', u0: number, u1: number,
@@ -222,19 +238,22 @@ export function faceTally(
   }
   const span = u1 - u0
   let thru = 0, extra = 0, dia = 0
+  const extraAt = { left: 0, right: 0, mid: 0 }
   const cuts: number[] = []
   for (const b of whole.values()) {
     if (b.hi <= u0 + 1e-6 || b.lo >= u1 - 1e-6) continue    // another span's bar
     dia = Math.max(dia, b.dia)
     if (b.hi - b.lo >= span * 0.9) { thru++; continue }
     extra++
+    const atL = b.lo <= u0 + span * 0.02, atR = b.hi >= u1 - span * 0.02
+    extraAt[atL && !atR ? 'left' : atR && !atL ? 'right' : 'mid']++
     // the end of the bar that is inside the span, which is the cut
     for (const v of [b.lo, b.hi]) {
       if (v > u0 + span * 0.02 && v < u1 - span * 0.02) cuts.push(v)
     }
   }
   const uniq = [...new Set(cuts.map((v) => Math.round(v * 1000) / 1000))].sort((a, b) => a - b)
-  return { dia, thru, extra, cuts: uniq }
+  return { dia, thru, extra, cuts: uniq, extraAt }
 }
 
 /**
@@ -335,6 +354,122 @@ export function angledLeader(o: {
   const a = place(o.side), b = place(other)
   const side = a.over <= b.over ? o.side : other
   return leader({ ...o, side, tx: (side === o.side ? a : b).tx })
+}
+
+type Box = [number, number, number, number]     // x0, y0, x1, y1
+type Seg = [number, number, number, number]
+
+/** The ink a callout puts down that another must not cross: its text boxes
+ *  (centred on the baseline, as the SVG sets them), any rectangle (an
+ *  obstacle such as a column) and its stroked segments. Filled arrowheads are
+ *  left out — a leg that crosses one crosses its leg. */
+function calloutInk(ps: PlanPrimitive[]): { boxes: Box[]; segs: Seg[] } {
+  const boxes: Box[] = [], segs: Seg[] = []
+  for (const p of ps) {
+    if (p.kind === 'text') {
+      const w = textWidth(p.text, p.size)
+      const x0 = p.anchor === 'middle' ? p.x - w / 2 : p.anchor === 'end' ? p.x - w : p.x
+      boxes.push([x0, p.y - p.size * 0.55, x0 + w, p.y + p.size * 0.55])
+    } else if (p.kind === 'rect') boxes.push([p.x, p.y, p.x + p.w, p.y + p.h])
+    else if (p.kind === 'line') segs.push([p.x1, p.y1, p.x2, p.y2])
+    else if (p.kind === 'path' && !p.closed) {
+      const pts = p.cmds.filter((c) => c.c === 'M' || c.c === 'L') as { x: number; y: number }[]
+      for (let k = 1; k < pts.length; k++) segs.push([pts[k - 1].x, pts[k - 1].y, pts[k].x, pts[k].y])
+    }
+  }
+  return { boxes, segs }
+}
+
+const boxesMeet = (a: Box, b: Box) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
+const cross = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) =>
+  (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+function segsMeet(a: Seg, b: Seg): boolean {
+  const d1 = cross(b[0], b[1], b[2], b[3], a[0], a[1]), d2 = cross(b[0], b[1], b[2], b[3], a[2], a[3])
+  const d3 = cross(a[0], a[1], a[2], a[3], b[0], b[1]), d4 = cross(a[0], a[1], a[2], a[3], b[2], b[3])
+  return d1 * d2 < 0 && d3 * d4 < 0
+}
+function segMeetsBox(s: Seg, b: Box): boolean {
+  const inside = (x: number, y: number) => x > b[0] && x < b[2] && y > b[1] && y < b[3]
+  if (inside(s[0], s[1]) || inside(s[2], s[3])) return true
+  const edges: Seg[] = [[b[0], b[1], b[2], b[1]], [b[2], b[1], b[2], b[3]], [b[2], b[3], b[0], b[3]], [b[0], b[3], b[0], b[1]]]
+  return edges.some((e) => segsMeet(s, e))
+}
+
+/**
+ * How many times two callouts run into each other: a label over a label, a
+ * leader through a label, two leaders crossing. Zero is a pair a reader can
+ * take apart without tracing.
+ */
+export function calloutClashes(a: PlanPrimitive[], b: PlanPrimitive[]): number {
+  return inkClashes(calloutInk(a), calloutInk(b))
+}
+type Ink = ReturnType<typeof calloutInk>
+function inkClashes(A: Ink, B: Ink): number {
+  let n = 0
+  for (const x of A.boxes) for (const y of B.boxes) if (boxesMeet(x, y)) n++
+  for (const s of A.segs) for (const y of B.boxes) if (segMeetsBox(s, y)) n++
+  for (const s of B.segs) for (const y of A.boxes) if (segMeetsBox(s, y)) n++
+  for (const s of A.segs) for (const t of B.segs) if (segsMeet(s, t)) n++
+  return n
+}
+
+/**
+ * One candidate from each group, chosen TOGETHER: the first combination, in
+ * preference order, that clashes with nothing — nothing `fixed` and nothing
+ * else chosen — or, when every one does, the one that clashes least.
+ *
+ * Together, because one at a time cannot see the trap: a long first label
+ * placed where it is happiest can leave no clear place for the second, when
+ * moving the first a little would have left plenty. Each group is listed in
+ * preference order, so a layout that was already clean is the one kept.
+ *
+ * Candidates are built only when the search reaches them — the preferred
+ * layout is usually clean, and then nothing else is built at all — and the
+ * search stops after `budget` combinations with the best it has seen, so a
+ * band that has no clean layout costs a bounded amount, not the product of
+ * every group's length.
+ */
+export function placeClear(
+  fixed: PlanPrimitive[][], groups: (() => PlanPrimitive[])[][], budget = 4000,
+): PlanPrimitive[][] {
+  const live = groups.filter((g) => g.length)
+  const fixedInk = fixed.map(calloutInk)
+  const built = live.map((g) => g.map(() => null as null | { ps: PlanPrimitive[]; ink: Ink; own: number }))
+  const get = (a: number, i: number) => {
+    let c = built[a][i]
+    if (!c) {
+      const ps = live[a][i](), ink = calloutInk(ps)
+      c = built[a][i] = { ps, ink, own: fixedInk.reduce((k, q) => k + inkClashes(ink, q), 0) }
+    }
+    return c
+  }
+  const pair = new Map<string, number>()
+  const between = (a: number, i: number, b: number, j: number) => {
+    const key = `${a}.${i}|${b}.${j}`
+    let n = pair.get(key)
+    if (n == null) { n = inkClashes(get(a, i).ink, get(b, j).ink); pair.set(key, n) }
+    return n
+  }
+  // Two passes. The first looks only for a CLEAN layout, so any partial pick
+  // that already clashes is dropped on the spot — that prunes the tree to
+  // almost nothing. Only a band with no clean layout pays for the second,
+  // which ranks by clash count and stops at the budget.
+  let best: number[] = live.map(() => 0), least = Infinity, tried = 0
+  const pick: number[] = []
+  const walk = (a: number, sum: number, bound: number): boolean => {
+    if (sum >= bound || sum >= least) return false
+    if (a === live.length) { best = [...pick]; least = sum; return sum === 0 }
+    for (let i = 0; i < live[a].length; i++) {
+      if (++tried > budget && least < Infinity) return true
+      let n = sum + get(a, i).own
+      for (let b = 0; b < a && n < bound; b++) n += between(b, pick[b], a, i)
+      pick[a] = i
+      if (walk(a + 1, n, bound)) return true
+    }
+    return false
+  }
+  if (!walk(0, 0, 1)) { tried = 0; walk(0, 0, Infinity) }
+  return live.map((_, a) => get(a, best[a]).ps)
 }
 
 /**
@@ -577,8 +712,12 @@ export function buildFrameElevation(
     })
     // Counted off the cage, so "4-⌀20 TOP THRU" means four bars really do run
     // through on the sheet.
+    //
+    // Extras are said WHERE they are. "2 THRU + 2 EXTRA" over a support bar
+    // reads as four bars at the support when it is one at each end — three,
+    // which is what the section through the support shows.
     const face = (t: FaceTally, what: string) => t.thru || t.extra
-      ? [`${t.thru}-⌀${t.dia} ${what} THRU`, ...(t.extra ? [`+ ${t.extra} EXTRA`] : [])].join(' ')
+      ? [`${t.thru}-⌀${t.dia} ${what} THRU`, ...(t.extra ? [extraText(t.extraAt)] : [])].join(' ')
       : ''
     // A LEADER NAMES WHAT IT POINTS AT, and nothing else.
     //
@@ -602,11 +741,27 @@ export function buildFrameElevation(
       left.length ? Math.max(...left.map((c) => c.u1)) : m.u0,
       right.length ? Math.min(...right.map((c) => c.u0)) : m.u1,
     ]
-    P.push({
-      kind: 'text', x: (m.u0 + m.u1) / 2, y: Y(m.yTop) - u * 4.4,
-      text: `${m.mark}  ${m.bw}×${m.d}`, size: u * 0.9,
-      anchor: 'middle', color: SHEET_INK, weight: 700,
-    })
+    // The mark stays clear of the columns: centred if it can be, slid along
+    // the clear span if a callout needs the middle.
+    const markText = (f: number): PlanPrimitive[] => {
+      const w = textWidth(`${m.mark}  ${m.bw}×${m.d}`, u * 0.9)
+      const x = Math.min(Math.max(m.u0 + span * f, room[0] + w / 2), room[1] - w / 2)
+      return [{
+        kind: 'text', x, y: Y(m.yTop) - u * 4.4,
+        text: `${m.mark}  ${m.bw}×${m.d}`, size: u * 0.9,
+        anchor: 'middle', color: SHEET_INK, weight: 700,
+      }]
+    }
+    // NO LEADER THROUGH ANOTHER CALLOUT'S TEXT. The mark and the three
+    // callouts share the band over the beam, and a fixed anchor for each
+    // crossed them whenever a label ran long: the bottom-bar leg dropping
+    // through the top-bar label, the stirrup leg through the member mark. Each
+    // offers its preferred place first and then others along the span or on
+    // its other side, and `placeClear` takes the first set that touches
+    // nothing — the old layout, wherever the old layout was already clean.
+    const sides = (pref: 'left' | 'right'): ('left' | 'right')[] => [pref, pref === 'left' ? 'right' : 'left']
+    const groups: (() => PlanPrimitive[])[][] = [[0.5, 0.35, 0.65, 0.25, 0.75].map((f) => () => markText(f))]
+    const put = (cands: (() => PlanPrimitive[])[]) => { groups.push(cands) }
     // BOTH face callouts go ABOVE the beam. The space under it belongs to the
     // sections now, and a leader crossing them would name a bar in one drawing
     // while lying across another.
@@ -624,18 +779,18 @@ export function buildFrameElevation(
     const line = noteSize * 1.30                  // the glyph height `leader` sets
     const topLine = Y(m.yTop) - u * 1.9
     if (top.thru || top.extra) {
-      P.push(...angledLeader({
-        x: m.u0 + span * 0.3, y: Y(m.yTop) + depth * 0.12,
-        ty: topLine, side: 'right', within: room,
+      put([0.3, 0.2, 0.4, 0.15, 0.6, 0.7, 0.8].flatMap((f) => sides('right').map((side) => () => angledLeader({
+        x: m.u0 + span * f, y: Y(m.yTop) + depth * 0.12,
+        ty: topLine, side, within: room,
         text: face(top, 'TOP'), size: noteSize, color: SHEET_INK,
-      }))
+      }))))
     }
     if (bot.thru || bot.extra) {
-      P.push(...angledLeader({
-        x: m.u0 + span * 0.7, y: Y(m.yBot) - depth * 0.12,
-        ty: topLine - line, side: 'left', within: room,
+      put([0.7, 0.8, 0.6, 0.85, 0.5, 0.4, 0.3, 0.2, 0.15].flatMap((f) => sides('left').map((side) => () => angledLeader({
+        x: m.u0 + span * f, y: Y(m.yBot) - depth * 0.12,
+        ty: topLine - line, side, within: room,
         text: face(bot, 'BOT.'), size: noteSize, color: SHEET_INK,
-      }))
+      }))))
     }
 
     // The stirrup schedule, measured off the stirrups themselves.
@@ -650,17 +805,24 @@ export function buildFrameElevation(
       // callout said STIRRUPS while pointing at what looked like the bottom
       // bar. Halfway down the web the vertical legs stand alone, and an arrow
       // on one can only be pointing at a stirrup.
-      const mid = (m.u0 + m.u1) / 2
-      const at = stirrups.reduce((best, v) =>
-        Math.abs(v - mid) < Math.abs(best - mid) ? v : best)
-      P.push(...angledLeader({
-        x: at, y: (Y(m.yTop) + Y(m.yBot)) / 2,
-        ty: Y(m.yTop) - u * 6.6, side: 'right', within: room,
+      const near = (f: number) => {
+        const want = m.u0 + span * f
+        return stirrups.reduce((best, v) => Math.abs(v - want) < Math.abs(best - want) ? v : best)
+      }
+      const lines = wrapPitch(pitchNote(pitchRuns(stirrups)))
+      put([0.5, 0.4, 0.6, 0.3, 0.7].flatMap((f) => sides('right').map((side) => () => angledLeader({
+        x: near(f), y: (Y(m.yTop) + Y(m.yBot)) / 2,
+        ty: Y(m.yTop) - u * 6.6, side, within: room,
         text: `2L-⌀${dia} STIRRUPS, ${stirrups.length} No.`,
-        lines: wrapPitch(pitchNote(pitchRuns(stirrups))),
-        size: u * 0.8, color: SHEET_INK,
-      }))
+        lines, size: u * 0.8, color: SHEET_INK,
+      }))))
     }
+    // The columns at each end are obstacles too: a label lying across one
+    // names a member two bays away as far as the eye can tell.
+    const columns = [...left, ...right].map((c): PlanPrimitive[] => [{
+      kind: 'rect', x: c.u0, y: Y(c.yTop), w: c.u1 - c.u0, h: Y(c.yBot) - Y(c.yTop),
+    }])
+    for (const c of placeClear(columns, groups)) P.push(...c)
 
     // ── the three cuts, under the stations they were taken at ────────────
     //
