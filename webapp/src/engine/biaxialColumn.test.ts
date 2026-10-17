@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { biaxialPoint, biaxialPo, biaxialAtLoad, biaxialAtLoadAndDirection, biaxialAlongRay, type BiaxialSection } from './biaxialColumn'
-import { capacityAtEccentricity, breslerReciprocal, interaction, type InteractionInput } from './columnDesign'
+import { biaxialPoint, biaxialPo, biaxialAtLoad, biaxialAtLoadAndDirection, biaxialAlongRay, rectCageBars, type BiaxialSection } from './biaxialColumn'
+import { capacityAtEccentricity, breslerReciprocal, interaction, barLayers, type InteractionInput } from './columnDesign'
+import { pmCapacityBiaxial } from './pipeline'
+import { biaxialColumnSolution } from '../lib/columnSolution'
 
 // ─────────────────────────────────────────────────────────────────────────
 // PUBLISHED EXAMPLE — StructurePoint, "Manual Design Procedure for Columns
@@ -120,5 +122,54 @@ describe('Bresler reciprocal (the design check) against the exact surface', () =
     expect(exact.Pn / kip).toBeGreaterThan(0.1 * 5 * 24 * 24)
     expect(bres / exact.Pn).toBeGreaterThan(1.02)
     expect(bres / exact.Pn).toBeLessThan(1.05)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE DESIGN CHECK, CAPPED — `pmCapacityBiaxial` evaluates the column's own
+// cage along the demand's own ray and reports the smaller capacity.
+// 400 × 400, 8⌀20 all-around, f′c 28, fy 415.
+// ─────────────────────────────────────────────────────────────────────────
+describe('pmCapacityBiaxial — the exact surface caps the approximation', () => {
+  const rc = { id: 's', name: 'C', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const cage = { b: 400, h: 400, cover: 40, barDia: 20, tieDia: 10, fc: 28, fy: 415, numBars: 8, layout: 'all-around' as const }
+  const cap = 0.65 * interaction(cage).PnMax
+  const exactOf = (Pu: number, Mx: number, My: number) => {
+    const { nx, ny } = barLayers(cage)
+    return biaxialAlongRay({ b: 400, h: 400, fc: 28, fy: 415, bars: rectCageBars(cage, nx, ny) }, (Mx / Pu) * 1000, (My / Pu) * 1000)!
+  }
+
+  it('the cage helper places 8 bars: 3 per b-face and one mid-side each side', () => {
+    const { nx, ny } = barLayers(cage)
+    const bars = rectCageBars(cage, nx, ny)
+    expect(bars.length).toBe(8)
+    expect(new Set(bars.map((b) => b.y.toFixed(3))).size).toBe(3)        // top, middle, bottom rows
+  })
+
+  it('below the balanced load Bresler overestimates — the exact strength is reported, on the demand ray', () => {
+    const r = pmCapacityBiaxial(rc, 20, 8, 900, 160, 120, cap, 'all-around')
+    expect(r.method).toBe('exact')
+    expect(r.detail.approxMethod).toBe('bresler')
+    expect(r.detail.approxPhiPn!).toBeGreaterThan(r.phiPn)
+    const x = r.detail.exact!
+    expect(x.Mnx / x.Pn).toBeCloseTo(160 / 900, 6)
+    expect(x.Mny / x.Pn).toBeCloseTo(120 / 900, 6)
+    expect(r.phiPn).toBeCloseTo(Math.min(x.phi * x.Pn, cap), 9)
+    expect(r.util).toBeCloseTo(900 / r.phiPn, 12)
+  })
+
+  it('where Bresler is the smaller it stands — the exact surface only ever lowers a capacity', () => {
+    const r = pmCapacityBiaxial(rc, 20, 8, 1500, 150, 110, cap, 'all-around')
+    expect(r.method).toBe('bresler')
+    const x = exactOf(1500, 150, 110)
+    expect(Math.min(x.phi * x.Pn, cap)).toBeGreaterThanOrEqual(r.phiPn)
+  })
+
+  it('the worked solution says which governed, and cites §22.2', () => {
+    const r = pmCapacityBiaxial(rc, 20, 8, 900, 160, 120, cap, 'all-around')
+    const t = JSON.stringify(biaxialColumnSolution(900, 160, 120, r.phiPn, r.util, r.method, r.detail))
+    expect(t).toContain('exact strain compatibility')
+    expect(t).toContain('§22.2')
+    expect(t).toContain("Bresler's reciprocal load would allow")
   })
 })

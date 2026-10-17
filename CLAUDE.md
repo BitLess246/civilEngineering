@@ -176,9 +176,10 @@ All shipped.
    `docs/benchmarks/staad-gridframe-2026-08-19.anl`, total reaction agreeing to
    0.001%. Still open, and all of them procurement or authoring rather than
    engineering: **X001** ETABS needs a license and reference results checked
-   into `docs/benchmarks/`; **X003** spColumn is ◐ — slender (C004) and
-   uniaxial P–M (C002) reproduced from StructurePoint's PUBLISHED spColumn
-   reports, biaxial (C003) still needs a high-axial-load case; **X004** Excel
+   into `docs/benchmarks/`; **X003** spColumn is ✔ done — slender (C004),
+   uniaxial P–M (C002) and biaxial (C003) reproduced from PUBLISHED
+   StructurePoint/spColumn and PCA Notes results, and the biaxial design check
+   is now capped by the exact surface (`biaxialColumn.ts`); **X004** Excel
    verification sheets, which the `/validation` manual-vs-software tables can
    seed. The **Validation Manual** chapters (`docs/validation/`) are the same
    kind of work and gate the same release.

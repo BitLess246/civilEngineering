@@ -23,7 +23,8 @@ import { effectiveFlange } from './tbeam'
 import { designPrestressed, type PrestressedResult } from './prestressedBeam'
 import { minBeamThickness, type BeamSupport } from './beamDeflection'
 import { memberServiceDeflection, chordDeflection, type MemberDeflectionResult } from './memberDeflection'
-import { designAxialColumn, capacityAtEccentricity, interaction, breslerReciprocal, type BarLayout, type PMPoint } from './columnDesign'
+import { designAxialColumn, capacityAtEccentricity, interaction, breslerReciprocal, barLayers, type BarLayout, type PMPoint } from './columnDesign'
+import { biaxialAlongRay, rectCageBars, type BiaxialPoint } from './biaxialColumn'
 import { calcDevLength } from './devLength'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
@@ -1262,7 +1263,7 @@ function pmCapacity(
 }
 
 /** What the biaxial check did, so the schedule can say which rule governed. */
-export type BiaxialMethod = 'uniaxial-x' | 'uniaxial-y' | 'bresler' | 'load-contour'
+export type BiaxialMethod = 'uniaxial-x' | 'uniaxial-y' | 'bresler' | 'load-contour' | 'exact'
 
 export interface BiaxialCapacity {
   /** Effective φPn against the resultant demand, kN. */
@@ -1289,6 +1290,12 @@ export interface BiaxialCapacity {
     py?: PMPoint
     /** Squash load, kN — Bresler's third term. */
     Po?: number
+    /** The exact strain-compatibility point on the load ray (`biaxialColumn`)
+     *  and the approximate φPn it was held against — present when the exact
+     *  surface governs (method 'exact'). */
+    exact?: BiaxialPoint
+    approxPhiPn?: number
+    approxMethod?: 'bresler' | 'load-contour'
   }
 }
 
@@ -1360,13 +1367,37 @@ export function pmCapacityBiaxial(
   const Ag = sec.b * sec.h
   const compressionControlled = Pu >= 0.1 * sec.fc * Ag / 1000    // kN vs MPa·mm²
 
+  // THE EXACT SURFACE CAPS EITHER APPROXIMATION. Measured against strain
+  // compatibility about the inclined neutral axis (`biaxialColumn`, verified
+  // on StructurePoint / PCA Notes Ex. 7.8), Bresler's reciprocal load is
+  // conservative above the balanced load but OVERESTIMATES the capacity by
+  // ~3.5 % below it — and 0.1f′cAg, where it switches on, is below balance.
+  // So the column's own cage is evaluated along the demand's own ray and the
+  // smaller capacity is the one reported (§22.2: the strain-compatibility
+  // strength IS the nominal strength; the approximations stand in for it).
+  const PnMaxCap = 0.65 * interaction(strong).PnMax
+  const exactCap = (): { phiPn: number; pt: BiaxialPoint } | null => {
+    const { nx, ny } = barLayers(strong)
+    const bars = rectCageBars(strong, nx, ny)
+    const pt = biaxialAlongRay({ b: sec.b, h: sec.h, fc: sec.fc, fy: sec.fy, bars }, eX * 1000, eY * 1000)
+    return pt ? { phiPn: Math.min(pt.phi * pt.Pn, PnMaxCap), pt } : null
+  }
+  const capped = (approx: BiaxialCapacity): BiaxialCapacity => {
+    const ex = exactCap()
+    if (!ex || ex.phiPn <= 1e-9 || Pu / ex.phiPn <= approx.util + 1e-12) return approx
+    return {
+      phiPn: ex.phiPn, util: Pu / ex.phiPn, method: 'exact',
+      detail: { ...approx.detail, exact: ex.pt, approxPhiPn: approx.phiPn, approxMethod: approx.method as 'bresler' | 'load-contour' },
+    }
+  }
+
   if (compressionControlled) {
     const Po = interaction(strong).Po
     const Pn = breslerReciprocal(px.Pn, py.Pn, Po)
     // φ from the governing uniaxial point; both are compression-controlled here.
     const phi = Math.min(px.phi, py.phi)
-    const phiPn = Math.min(phi * Pn, 0.65 * interaction(strong).PnMax)
-    return { phiPn, util: phiPn > 1e-9 ? Pu / phiPn : Infinity, method: 'bresler', detail: { ...base, px, py, Po } }
+    const phiPn = Math.min(phi * Pn, PnMaxCap)
+    return capped({ phiPn, util: phiPn > 1e-9 ? Pu / phiPn : Infinity, method: 'bresler', detail: { ...base, px, py, Po } })
   }
 
   // Tension-controlled: a linear moment contour, which is the conservative
@@ -1374,7 +1405,7 @@ export function pmCapacityBiaxial(
   const phiMnx = px.phi * px.Mn
   const phiMny = py.phi * py.Mn
   const util = (phiMnx > 1e-9 ? Mux / phiMnx : Infinity) + (phiMny > 1e-9 ? Muy / phiMny : Infinity)
-  return { phiPn: util > 1e-9 ? Pu / util : Infinity, util, method: 'load-contour', detail: { ...base, px, py } }
+  return capped({ phiPn: util > 1e-9 ? Pu / util : Infinity, util, method: 'load-contour', detail: { ...base, px, py } })
 }
 
 /** Utilisation Pu/φPn for a given cage under P and M. */

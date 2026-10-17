@@ -123,35 +123,68 @@ export function biaxialAtLoadAndDirection(s: BiaxialSection, Pn: number, thetaDe
   return biaxialAtLoad(s, Pn, (lo + hi) / 2)
 }
 
+/** Illinois (modified regula falsi): the root of f on [lo, hi], f(lo) and
+ *  f(hi) of opposite sign — superlinear on the smooth stretches, and never
+ *  leaves the bracket, so a kink (a bar yielding, the block turning a corner)
+ *  costs a few steps, not the root. */
+function illinois(f: (x: number) => number, lo: number, hi: number, tol: number): number {
+  let a = lo, b = hi, fa = f(a), fb = f(b), side = 0
+  if (fa === 0) return a
+  if (fb === 0) return b
+  for (let k = 0; k < 100 && Math.abs(b - a) > tol; k++) {
+    const c = (a * fb - b * fa) / (fb - fa), fc = f(c)
+    if (fc === 0) return c
+    if (fc * fb > 0) { b = c; fb = fc; if (side === -1) fa /= 2; side = -1 }
+    else { a = c; fa = fc; if (side === 1) fb /= 2; side = 1 }
+  }
+  return (a + b) / 2
+}
+
 /** The nominal capacity along the load ray ex = Mnx/Pn, ey = Mny/Pn, mm (the
  *  convention `pmCapacityBiaxial` uses: eX = Mux/Pu): the surface point with
- *  that moment direction and that resultant eccentricity. Two nested
- *  bisections — for a trial α, the c at which the resultant eccentricity
- *  equals the ray's (it falls as c grows); then α turned until the moment
- *  points along the ray — about 3 000 section evaluations. */
+ *  that moment direction and that resultant eccentricity. Two nested root
+ *  finds — for a trial α, the c at which e·Pn = |Mn| (e·Pn − |Mn| rises with
+ *  c); then α turned until the moment points along the ray. Fast enough
+ *  (~10² section evaluations) to run inside the design check. */
 export function biaxialAlongRay(s: BiaxialSection, ex: number, ey: number): BiaxialPoint | null {
   const e = Math.hypot(ex, ey) / 1000                                        // m
   const theta = Math.atan2(ey, ex)
-  const span = 50 * Math.max(s.b, s.h)
+  const cLo = 1e-3 * Math.min(s.b, s.h), cHi = 50 * Math.max(s.b, s.h)
+  const g = (p: BiaxialPoint) => e * p.Pn - Math.hypot(p.Mnx, p.Mny)
   const onRay = (alpha: number): BiaxialPoint | null => {
-    let lo = 1e-3 * Math.min(s.b, s.h), hi = span
-    const ecc = (p: BiaxialPoint) => (p.Pn > 1e-9 ? Math.hypot(p.Mnx, p.Mny) / p.Pn : Infinity)
-    if (ecc(biaxialPoint(s, hi, alpha)) > e) return null
-    for (let k = 0; k < 60; k++) {
-      const mid = (lo + hi) / 2
-      if (ecc(biaxialPoint(s, mid, alpha)) > e) lo = mid
-      else hi = mid
-    }
-    return biaxialPoint(s, hi, alpha)
+    if (g(biaxialPoint(s, cHi, alpha)) < 0 || g(biaxialPoint(s, cLo, alpha)) > 0) return null
+    const c = illinois((c) => g(biaxialPoint(s, c, alpha)), cLo, cHi, 1e-7 * Math.max(s.b, s.h))
+    return biaxialPoint(s, c, alpha)
   }
-  let lo = 0, hi = 90
-  let best: BiaxialPoint | null = null
-  for (let k = 0; k < 50; k++) {
-    const mid = (lo + hi) / 2, p = onRay(mid)
-    if (!p) return best
-    best = p
-    if (Math.atan2(p.Mny, p.Mnx) < theta) lo = mid
-    else hi = mid
+  if (ey <= 1e-12) return onRay(0)
+  if (ex <= 1e-12) return onRay(90)
+  const dir = (alpha: number) => { const p = onRay(alpha); return p ? Math.atan2(p.Mny, p.Mnx) - theta : NaN }
+  const d0 = dir(0), d90 = dir(90)
+  if (!(d0 <= 0 && d90 >= 0)) return null
+  return onRay(illinois(dir, 0, 90, 1e-6))
+}
+
+/** A rectangular tied cage as bar points — the same arrangement `barLayers`
+ *  (columnDesign) strain-checks, so the exact surface and the uniaxial checks
+ *  see one physical cage. `two-face`: numBars/2 across each face ⟂ h;
+ *  `all-around`: nx per b-face and the intermediate rows of 2 up the sides. */
+export function rectCageBars(i: {
+  b: number; h: number; cover: number; tieDia: number; barDia: number
+  numBars: number; layout?: 'two-face' | 'all-around'
+}, nx?: number, ny?: number): BiaxialBar[] {
+  const dP = i.cover + i.tieDia + i.barDia / 2
+  const Ab = (Math.PI / 4) * i.barDia ** 2
+  const xs = (n: number) => Array.from({ length: n }, (_, k) => (n === 1 ? 0 : -i.b / 2 + dP + (k * (i.b - 2 * dP)) / (n - 1)))
+  const yT = i.h / 2 - dP
+  if ((i.layout ?? 'two-face') === 'two-face' || i.numBars < 4) {
+    const n = Math.max(1, Math.round(i.numBars / 2))
+    return [...xs(n).map((x) => ({ x, y: yT, As: Ab })), ...xs(n).map((x) => ({ x, y: -yT, As: Ab }))]
   }
-  return best
+  const NX = nx ?? 2, NY = ny ?? 2
+  const bars = [...xs(NX).map((x) => ({ x, y: yT, As: Ab })), ...xs(NX).map((x) => ({ x, y: -yT, As: Ab }))]
+  for (let k = 1; k <= NY - 2; k++) {
+    const y = yT - (k * 2 * yT) / (NY - 1)
+    bars.push({ x: -i.b / 2 + dP, y, As: Ab }, { x: i.b / 2 - dP, y, As: Ab })
+  }
+  return bars
 }
