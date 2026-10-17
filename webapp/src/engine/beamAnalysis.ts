@@ -126,6 +126,21 @@ export function nscpCombos(f1 = 1.0): Combo[] {
 /** Default combination set (f₁ = 1.0 — conservative for ordinary occupancies). */
 export const NSCP_COMBOS: Combo[] = nscpCombos(1.0)
 
+/**
+ * The loads exactly as entered: every category — and any support settlement —
+ * at 1.0, summed into one case. Service level, with no load factor anywhere;
+ * the basis a deflection limit like L/360 is properly checked on, and the one
+ * a hand calculation of "the beam under these loads" starts from.
+ */
+export const UNFACTORED_COMBO: Combo = {
+  name: 'Unfactored (loads as entered)',
+  f: { D: 1, L: 1, Lr: 1, S: 1, R: 1, W: 1, E: 1, T: 1 },
+}
+
+/** Which loads the beam is analysed for: the NSCP strength combinations, or the
+ *  loads as entered. */
+export type LoadBasis = 'factored' | 'unfactored'
+
 import { solveLinear } from './fem'
 
 const roundX = (x: number, dec = 8) => Math.round(x * 10 ** dec) / 10 ** dec
@@ -618,6 +633,7 @@ export const loadsOffBeam = (loads: readonly BeamLoad[], L: number): boolean =>
 export function analyzeBeam(
   supports: Support[], allLoads: BeamLoad[], L: number, E: number, I: number,
   segments?: readonly BeamSegment[],
+  basis: LoadBasis = 'factored',
 ): BeamAnalysisResult | null {
   const loads = clipToBeam(allLoads, L)
   const perCombo: ComboRun[] = []
@@ -626,7 +642,7 @@ export function analyzeBeam(
   // combination's T factor — 1.2 with the factored dead load, absent from the
   // 0.9D combinations so it is never credited against uplift.
   const settles = anySettlement(supports)
-  for (const combo of NSCP_COMBOS) {
+  for (const combo of basis === 'unfactored' ? [UNFACTORED_COMBO] : NSCP_COMBOS) {
     const factored = applyCombo(loads, combo.f)
     const settleFactor = settles ? (combo.f.T ?? 0) : 0
     if (factored.length === 0 && settleFactor === 0) { perCombo.push({ combo, result: null, factored, skipped: true, settleFactor }); continue }

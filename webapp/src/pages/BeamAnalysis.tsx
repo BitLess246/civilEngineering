@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  analyzeBeam, spansToSegments, loadsOffBeam, anySettlement, type Support, type SupportType, type BeamLoad, type LoadCategory,
+  analyzeBeam, spansToSegments, loadsOffBeam, anySettlement, type LoadBasis, type Support, type SupportType, type BeamLoad, type LoadCategory,
 } from '../engine/beamAnalysis'
 import { deriveBeam } from '../engine/beamDerivation'
 import { detectCriticalSections } from '../engine/beamSections'
@@ -83,6 +83,11 @@ export default function BeamAnalysis() {
   const [supports, setSupports] = useState<SupRow[]>(handoff?.supports ?? DEF_SUPPORTS)
   const [loads, setLoads] = useState<LoadRow[]>(handoff?.loads ?? DEF_LOADS)
   const [selIdx, setSelIdx] = useState<number | null>(null)
+  // Factored: the NSCP §203.3 strength combinations. Unfactored: the loads as
+  // entered, each at 1.0 — the service-level case.
+  const [basis, setBasisState] = useState<LoadBasis>('factored')
+  const setBasis = (b: LoadBasis) => { setBasisState(b); setSelIdx(null) }
+  const unfactored = basis === 'unfactored'
   const navigate = useNavigate()
 
   const setSpan = (id: number, patch: Partial<SpanRow>) =>
@@ -124,8 +129,8 @@ export default function BeamAnalysis() {
   const res = useMemo(() => {
     if (!valid) return null
     const total = segments[segments.length - 1].x1
-    try { return analyzeBeam(supports, loads, total, spans[0].E, spans[0].I, segments) } catch { return null }
-  }, [supports, loads, spans, segments, valid])
+    try { return analyzeBeam(supports, loads, total, spans[0].E, spans[0].I, segments, basis) } catch { return null }
+  }, [supports, loads, spans, segments, valid, basis])
 
   const shownIdx = selIdx !== null && res && res.perCombo[selIdx]?.result ? selIdx : res?.govIdx ?? 0
   const shown = res ? res.perCombo[shownIdx] : null
@@ -167,7 +172,10 @@ export default function BeamAnalysis() {
       ['Total length', `${f2(L)} m`],
       ...spans.map((s, k) => [multi ? `Span ${k + 1}` : 'Span', `L ${f2(s.L)} m · E ${s.E} MPa · I ${s.I.toExponential(3)} mm⁴`] as [string, string]),
       ['Supports', supports.map(supText).join(', ')],
-      ...(settles ? [['Settlement', 'imposed downward support movement, self-straining like T (NSCP §203.3.3): × the combination\'s T factor — 1.2 with 1.2D/1.4D, 0 in 0.9D; L/360 measured from the settled supports\' line'] as [string, string]] : []),
+      ['Load basis', unfactored ? 'Unfactored — every load and settlement at 1.0, as entered (service level)' : 'Factored — NSCP 2015 §203.3.1 strength combinations'],
+      ...(settles ? [['Settlement', unfactored
+        ? 'imposed downward support movement at its entered value; L/360 measured from the settled supports\' line'
+        : 'imposed downward support movement, self-straining like T (NSCP §203.3.3): × the combination\'s T factor — 1.2 with 1.2D/1.4D, 0 in 0.9D; L/360 measured from the settled supports\' line'] as [string, string]] : []),
       ...loads.map((ld) => [`${ld.type.toUpperCase()} (${ld.cat})`,
         ld.type === 'point' ? `${f2(ld.P)} kN @ ${f2(ld.x)} m`
           : ld.type === 'udl' ? `${f2(ld.w)} kN/m, ${f2(ld.x1)}–${f2(ld.x2)} m`
@@ -175,7 +183,15 @@ export default function BeamAnalysis() {
               : `${f2(ld.M)} kN·m @ ${f2(ld.x)} m`] as [string, string]),
     ] as [string, string][],
     steps: [
-      {
+      unfactored ? {
+        title: 'Unfactored loads',
+        lines: [
+          { text: 'Every load is taken at its entered value — no load factor and no combination — summed into one service-level case.' },
+          ...res.perCombo.filter((pc) => pc.result).map((pc) => ({
+            item: `${pc.combo.name}: Vmax ${f1(pc.result!.Vmax)} kN · Mmax ${f1(pc.result!.Mmax)} kN·m · δmax ${f2(pc.result!.Dmax)} mm`,
+          })),
+        ],
+      } : {
         title: 'Load combinations',
         lines: [
           ...res.perCombo.filter((pc) => pc.result).map((pc) => ({
@@ -249,6 +265,18 @@ export default function BeamAnalysis() {
         </InputGroup>
         <InputGroup title="Loads">
           <div className="col-span-2">
+            <div className="mb-3 max-w-md">
+              <Pick label="Load basis" value={basis} onChange={setBasis} options={[
+                ['factored', 'Factored (NSCP §203.3)'],
+                ['unfactored', 'Unfactored (as entered)'],
+              ]} />
+              {unfactored && (
+                <p className="mt-1 text-[11px] text-muted">
+                  Every load — and any settlement — at its entered value, summed into one service-level case.
+                  The basis for deflection; strength design needs the factored combinations.
+                </p>
+              )}
+            </div>
             {loadsOffBeam(loads, L) && (
               <p role="status" className="mb-3 rounded-md border border-warn-line bg-warn-tint px-3 py-2 text-xs text-warn">
                 A load reaches past the beam (0–{f2(L)} m) — only the part on the beam is analysed. Shortening a span leaves loads where they were; adjust their extents.
@@ -293,7 +321,7 @@ export default function BeamAnalysis() {
         </InputGroup>
       </>}
       checks={r && shown && res ? <>
-        <CheckCard title="Governing combination" basis="largest |M|" status="info" value={gov?.combo.name ?? '—'}
+        <CheckCard title={unfactored ? 'Load case' : 'Governing combination'} basis={unfactored ? 'loads as entered' : 'largest |M|'} status="info" value={gov?.combo.name ?? '—'}
           pairs={[{ label: 'Mmax', value: `${f1(gov?.result?.Mmax ?? NaN)} kN·m` }, { label: 'Vmax', value: `${f1(gov?.result?.Vmax ?? NaN)} kN` }]} />
         {govDefl && (
           <CheckCard title={multi ? `Deflection — ${spanName(govDefl.k)} governs` : 'Deflection'} basis={`L/360 · ${shown.combo.name}`} status={deflOK ? 'pass' : 'fail'}
@@ -394,7 +422,9 @@ export default function BeamAnalysis() {
       ] : []}
       steps={report?.steps ?? []}
       references={[
-        { topic: 'Load combinations', basis: 'categorised loads factored per combination', source: 'NSCP 2015 §203.3' },
+        unfactored
+          ? { topic: 'Load basis', basis: 'unfactored — the loads as entered, a service-level case', source: 'NSCP 2015 §424.2 (deflection under service loads)' }
+          : { topic: 'Load combinations', basis: 'categorised loads factored per combination', source: 'NSCP 2015 §203.3' },
         { topic: 'Analysis', basis: 'Hermite beam elements, EI per span; three-moment cross-check with Lᵢ/EIᵢ terms', source: 'Hibbeler, Structural Analysis' },
         { topic: 'Hand derivation', basis: 'statics; three-moment equation; force method by virtual work; double integration EI y″ = M', source: 'Hibbeler, Structural Analysis ch. 2, 8, 10, 12' },
         { topic: 'Deflection limit', basis: 'L/360 of each span', source: 'ACI 318-14 Table 24.2.2 · NSCP 2015 Table 424.2.2' },
