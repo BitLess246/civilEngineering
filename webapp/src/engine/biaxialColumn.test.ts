@@ -102,7 +102,7 @@ describe('Bresler reciprocal (the design check) against the exact surface', () =
     ['the paper’s demand, ex = 3.0 in, ey = 1.25 in', 3.0, 1.25],
     ['a diagonal ray, ex = ey = 2 in', 2, 2],
     ['a flatter ray, ex = 1 in, ey = 4 in', 1, 4],
-  ])('compression governing — %s: conservative, by under 7 %%', (_, exIn, eyIn) => {
+  ])('compression governing — %s: conservative, by under 7 per cent', (_, exIn, eyIn) => {
     const { ex, ey, bres, exact } = both(exIn, eyIn)
     expect(exact.Mnx / exact.Pn).toBeCloseTo(ex / 1000, 4)          // on the ray
     expect(exact.Mny / exact.Pn).toBeCloseTo(ey / 1000, 4)
@@ -114,7 +114,7 @@ describe('Bresler reciprocal (the design check) against the exact surface', () =
   it.each([
     ['ex = 8 in, ey = 6 in', 8, 6],
     ['ex = 12 in, ey = 3 in', 12, 3],
-  ])('below the balanced load — %s: UNCONSERVATIVE by ~3.5 %% though above 0.1f′cAg', (_, exIn, eyIn) => {
+  ])('below the balanced load — %s: UNCONSERVATIVE by about 3.5 per cent though above 0.1f′cAg', (_, exIn, eyIn) => {
     const { bres, exact } = both(exIn, eyIn)
     expect(exact.Pn / kip).toBeLessThan(1049.2)
     expect(exact.Pn / kip).toBeGreaterThan(0.1 * 5 * 24 * 24)

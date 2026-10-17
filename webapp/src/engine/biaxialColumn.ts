@@ -125,17 +125,32 @@ export function biaxialAtLoadAndDirection(s: BiaxialSection, Pn: number, thetaDe
 
 /** The nominal capacity along the load ray ex = Mnx/Pn, ey = Mny/Pn, mm (the
  *  convention `pmCapacityBiaxial` uses: eX = Mux/Pu): the surface point with
- *  that moment direction and that resultant eccentricity — bisection on Pn,
- *  the eccentricity falling as Pn rises. */
+ *  that moment direction and that resultant eccentricity. Two nested
+ *  bisections — for a trial α, the c at which the resultant eccentricity
+ *  equals the ray's (it falls as c grows); then α turned until the moment
+ *  points along the ray — about 3 000 section evaluations. */
 export function biaxialAlongRay(s: BiaxialSection, ex: number, ey: number): BiaxialPoint | null {
-  const theta = (Math.atan2(ey, ex) * 180) / Math.PI, e = Math.hypot(ex, ey) / 1000   // m
-  let lo = 0, hi = biaxialPo(s) * (1 - 1e-9)
+  const e = Math.hypot(ex, ey) / 1000                                        // m
+  const theta = Math.atan2(ey, ex)
+  const span = 50 * Math.max(s.b, s.h)
+  const onRay = (alpha: number): BiaxialPoint | null => {
+    let lo = 1e-3 * Math.min(s.b, s.h), hi = span
+    const ecc = (p: BiaxialPoint) => (p.Pn > 1e-9 ? Math.hypot(p.Mnx, p.Mny) / p.Pn : Infinity)
+    if (ecc(biaxialPoint(s, hi, alpha)) > e) return null
+    for (let k = 0; k < 60; k++) {
+      const mid = (lo + hi) / 2
+      if (ecc(biaxialPoint(s, mid, alpha)) > e) lo = mid
+      else hi = mid
+    }
+    return biaxialPoint(s, hi, alpha)
+  }
+  let lo = 0, hi = 90
   let best: BiaxialPoint | null = null
-  for (let k = 0; k < 80; k++) {
-    const mid = (lo + hi) / 2, p = biaxialAtLoadAndDirection(s, mid, theta)
-    if (!p) { hi = mid; continue }
+  for (let k = 0; k < 50; k++) {
+    const mid = (lo + hi) / 2, p = onRay(mid)
+    if (!p) return best
     best = p
-    if (Math.hypot(p.Mnx, p.Mny) / p.Pn > e) lo = mid
+    if (Math.atan2(p.Mny, p.Mnx) < theta) lo = mid
     else hi = mid
   }
   return best
