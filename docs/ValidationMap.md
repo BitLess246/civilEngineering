@@ -68,7 +68,7 @@ pass.
 | FR001 | Simply Supported Beam | Analytical | ✅ | `frame2d.test.ts` "regression vs the beam solver" (closed-form beam engine as oracle) |
 | FR002 | Cantilever Beam | Analytical | ✅ | same oracle; 3D twin also closed-form: `validation.ts` `cantilever-defl` / `-moment` / `-slope` |
 | FR003 | Portal Frame | Textbook | ✅ | `frame2d.test.ts` "portal frame"; independently cross-checked 2D↔3D in `frame3d.test.ts` (reactions + Mmax agree to 1e-3) |
-| FR004 | Continuous Beam | STAAD | 🔶 | `frame2d.test.ts` "NSCP combinations" + beam-solver regression; STAAD cross-check open |
+| FR004 | Continuous Beam | STAAD | 🔶 | Exact closed forms: the three-moment theorem in `beamAnalysis.test.ts` (two equal spans −wL²/8; unequal I, M_B = −wL²/(8(1 + I₁/I₂)); overhangs and a point load on a support), with FEM ≡ three-moment. Plus the NSCP combinations in `frame2d.test.ts`. **STAAD, measured honestly:** the X002 deck's 2-bay beams, member end forces at the columns against STAAD's MEMBER END FORCES (`interop/staad.test.ts`). Moments agree within 9 % and shears within 18 %, every one on the high side. That gap is the two programs' shell elements sharing the slab's load differently between slab and beam, not the beam solver (reactions agree < 1 %), so it is not a continuous-beam reference. A STAAD run of a plain continuous beam on knife-edge supports would close this row. |
 
 ---
 
@@ -78,7 +78,7 @@ pass.
 |----|--------|----------|---------|----------|
 | F3D001 | Cantilever Column | Analytical | ✅ | `frame3d.test.ts` closed forms in both bending planes (δ = PL³/3EI, M = PL, UDL wL⁴/8EI) incl. Timoshenko δ = PL³/3EI + PL/GAs; `validation.ts` rows |
 | F3D002 | Space Frame | ETABS | 🔶 | statics self-checks on the full bridge (ΣR = ΣP, fixed-end moments, shared-LU ≡ per-combo solve) in `frame3d.test.ts` / `modelBridge.test.ts`; ETABS cross-check open |
-| F3D003 | Multi-Bay Frame | STAAD | 🔶 | planar portal solved by frame3d ≡ frame2d (`frame3d.test.ts`); grid-model equilibrium in `pipeline.test.ts`; STAAD cross-check open |
+| F3D003 | Multi-Bay Frame | STAAD | ✅ | **STAAD cross-check done (X002):** a 2×1-bay, 2-storey frame with every input matched. Total reaction 2117.27 vs 2117.28 kN; support reactions within ±3 %. Solving STAAD's own deck through `interop/staad.ts`, FY agrees to ≤ 0.6 % and MX to ≤ 4 % (`interop/staad.test.ts`). Internal evidence also stands: the planar portal solved by frame3d ≡ frame2d (`frame3d.test.ts`) and grid-model equilibrium (`pipeline.test.ts`). |
 
 ---
 
