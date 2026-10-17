@@ -30,8 +30,16 @@
 // SLOPE: F = −p·A_plan·n/n_y with n the outward normal, so the vertical part is
 // −p·A_plan and a sloped half-panel also pushes (or pulls) horizontally.
 //
-// Only the uplift branch is generated: the positive windward Cp (θ ≳ 20°)
-// pushes down and is a separate case this module does not build.
+// TWO BRANCHES. The figure gives the windward slope two Cp values and both
+// must be checked:
+//   · 'uplift' (default) — the negative windward value with +GCpi: the roof
+//     sucked up, a light truss reversed;
+//   · 'downward' — the POSITIVE windward value with −GCpi (internal suction
+//     pulling the roof down too), wind normal to the ridge only. On a steep
+//     roof (θ ≳ 20°) the windward slope is pushed DOWN, which adds to the
+//     gravity compression in the top chord. Below that the "positive" value is
+//     −0.18 … 0, the case sits between dead-only and uplift, and governs
+//     nothing — `windwardCp` says which, so the caller can skip it.
 // Units: m, kPa, kN.
 // ─────────────────────────────────────────────────────────────────────────
 import type { ModelLoad, StructuralModel } from './model'
@@ -47,6 +55,8 @@ export interface RoofWindParams {
   /** Internal pressure, Table 207A.11-1; the + value is applied (uplift). */
   enclosure?: 'enclosed' | 'partially' | 'open'
   dir: WindDir
+  /** Which windward Cp the figure's pair to apply — see the header. */
+  branch?: 'uplift' | 'downward'
 }
 
 export interface RoofWindResult {
@@ -55,7 +65,10 @@ export interface RoofWindResult {
   /** Roof slope, degrees, and h/L for this direction. */
   theta: number; hL: number
   normalToRidge: boolean
+  /** The internal pressure applied, signed (+ pushes the roof up). */
   GCpi: number
+  /** The largest windward-slope Cp used (normal-to-ridge only; else NaN). */
+  windwardCp: number
   loads: ModelLoad[]
   /** Net vertical force on the roof, kN (+ up). */
   uplift: number
@@ -80,6 +93,14 @@ const WINDWARD_NEG: Record<number, readonly number[]> = {
   0.5: [-0.9, -0.7, -0.4, -0.3, -0.2, -0.2, 0.0],
   1.0: [-1.3, -1.0, -0.7, -0.5, -0.3, -0.2, 0.0],
 }
+/** Windward roof, normal to ridge — the POSITIVE (downward) branch. Where
+ *  the figure gives only one value at 10–20° for the steeper h/L columns it
+ *  is −0.18 (Fig. 207B.4-1). */
+const WINDWARD_POS: Record<number, readonly number[]> = {
+  0.25: [-0.18, 0.0, 0.2, 0.3, 0.3, 0.4, 0.4],
+  0.5: [-0.18, -0.18, 0.0, 0.2, 0.2, 0.3, 0.4],
+  1.0: [-0.18, -0.18, -0.18, 0.0, 0.2, 0.2, 0.3],
+}
 /** Leeward roof, normal to ridge (Fig. 207B.4-1): θ = 10, 15, ≥ 20. */
 const LEEWARD: Record<number, readonly number[]> = {
   0.25: [-0.3, -0.5, -0.6],
@@ -96,6 +117,10 @@ const byHL = (hL: number, f: (col: number) => number) => {
 /** Windward-slope Cp, uplift branch, wind normal to the ridge (θ ≥ 10°). */
 export function cpWindwardRoof(thetaDeg: number, hL: number): number {
   return byHL(hL, (col) => table(thetaDeg, TH, WINDWARD_NEG[col]))
+}
+/** Windward-slope Cp, DOWNWARD branch, wind normal to the ridge (θ ≥ 10°). */
+export function cpWindwardRoofPos(thetaDeg: number, hL: number): number {
+  return byHL(hL, (col) => table(thetaDeg, TH, WINDWARD_POS[col]))
 }
 /** Leeward-slope Cp, wind normal to the ridge (θ ≥ 10°). */
 export function cpLeewardRoof(thetaDeg: number, hL: number): number {
@@ -168,7 +193,9 @@ export function roofWindLoads(model: StructuralModel, p: RoofWindParams): RoofWi
   const h = theta <= 10 ? eave : (eave + ridge) / 2
   const qh = velocityPressure(h, p.V, p.exposure, p.Kzt ?? 1, p.Kd ?? 0.85)
   const G = p.G ?? 0.85
-  const GCpi = GCPI[p.enclosure ?? 'enclosed']
+  const down = p.branch === 'downward'
+  // + internal pressure lifts the roof (uplift branch); − pulls it down
+  const GCpi = (down ? -1 : 1) * GCPI[p.enclosure ?? 'enclosed']
 
   const axis = p.dir.includes('X') ? 'x' : 'z'
   const sgn = p.dir.startsWith('-') ? -1 : 1
@@ -179,15 +206,18 @@ export function roofWindLoads(model: StructuralModel, p: RoofWindParams): RoofWi
   const hL = h / L
   // the wind runs along the truss span: it meets the slopes — normal to the ridge
   const normalToRidge = axis === ridgeAxis && theta >= 10
+  // the downward branch exists only where the wind meets the slopes
+  if (down && !normalToRidge) return null
 
   const force = new Map<string, [number, number, number]>()
-  let uplift = 0
+  let uplift = 0, windwardCp = Number.NaN
   for (const q of pieces) {
     let cp: number
     if (normalToRidge) {
       // windward slope: its outward normal faces into the wind
       const faces = q.n[0] * w[0] + q.n[2] * w[2] < -1e-9
-      cp = faces ? cpWindwardRoof(q.theta, hL) : cpLeewardRoof(q.theta, hL)
+      cp = faces ? (down ? cpWindwardRoofPos(q.theta, hL) : cpWindwardRoof(q.theta, hL)) : cpLeewardRoof(q.theta, hL)
+      if (faces) windwardCp = Number.isNaN(windwardCp) ? cp : Math.max(windwardCp, cp)
     } else {
       const d = sgn > 0 ? (axis === 'x' ? q.cx : q.cz) - lo : hi - (axis === 'x' ? q.cx : q.cz)
       cp = cpRoofByDistance(Math.max(0, d), h, hL)
@@ -204,5 +234,5 @@ export function roofWindLoads(model: StructuralModel, p: RoofWindParams): RoofWi
     if (Math.hypot(Fx, Fy, Fz) < 1e-9) continue
     loads.push({ kind: 'node', node: id, Fx, Fy, Fz, cat: 'W' })
   }
-  return { h, qh, theta, hL, normalToRidge, GCpi, loads, uplift }
+  return { h, qh, theta, hL, normalToRidge, GCpi, windwardCp, loads, uplift }
 }

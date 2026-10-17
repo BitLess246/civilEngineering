@@ -327,6 +327,8 @@ export default function ModelSpace() {
   const [wind, setWind] = useState<WindResult | null>(null)
   /** Roof suction on trussed roofing for the primary W direction (engine/roofWind). */
   const [roofWind, setRoofWind] = useState<RoofWindResult | null>(null)
+  /** How many downward-branch roof cases (W±…↓) the last generation added. */
+  const [roofDownCases, setRoofDownCases] = useState(0)
   const [ccArea, setCcArea] = useState(1.0)   // C&C effective wind area, m²
   const [ccEncl, setCcEncl] = useState<WindEnclosure>('enclosed')
   const [cladding, setCladding] = useState<CladdingResult | null>(null)
@@ -1113,10 +1115,22 @@ export default function ModelSpace() {
       const rw = roof(d)
       return rw ? { ...c, loads: [...c.loads, ...rw.loads] } : c
     }
-    setWCases(wDirs.map((d) => {
+    // …and, on a steep roof, the figure's OTHER windward value: the slope
+    // pushed DOWN with internal suction (roofWind 'downward'). Its own case,
+    // only where that Cp is positive — below θ ≈ 20° it governs nothing.
+    const downCases: LateralCase[] = []
+    for (const d of wDirs) {
+      const dn = roofWindLoads(model, { V: Vw, exposure: expo, Kzt, enclosure: ccEncl, dir: d as WindDir, branch: 'downward' })
+      if (!dn || !(dn.windwardCp > 0)) continue
+      const base = (d.includes('X') ? rx : rz)?.loads ?? []
+      const lat = dirCase(base, 'W', d)
+      downCases.push({ ...lat, name: `${lat.name}↓`, loads: [...lat.loads, ...dn.loads] })
+    }
+    setRoofDownCases(downCases.length)
+    setWCases([...wDirs.map((d) => {
       const base = (d.includes('X') ? rx : rz)?.loads ?? []
       return withRoof(dirCase(base, 'W', d), d)
-    }))
+    }), ...downCases])
     const d0 = wDirs[0] ?? '+X'
     setRoofWind(roof(d0))
     const primary = withRoof(dirCase(primaryRes.loads, 'W', d0), d0)
@@ -4303,6 +4317,9 @@ export default function ModelSpace() {
                       Roof trusses (Fig. 207B.4-1, {wDirs[0] ?? '+X'}): h = {f2(roofWind.h)} m, qh = {f2(roofWind.qh)} kPa, θ = {f1(roofWind.theta)}°,
                       h/L = {f2(roofWind.hL)} · {roofWind.normalToRidge ? 'normal to the ridge — windward + leeward slopes' : 'zones from the windward edge'} ·
                       GCpi +{roofWind.GCpi} (enclosure, set under Components &amp; Cladding) — <strong>uplift {f1(roofWind.uplift)} kN</strong> at the panel points, in every W case.
+                      {roofDownCases > 0
+                        ? <> Steep roof: {roofDownCases} more case{roofDownCases === 1 ? '' : 's'} (W…↓) with the windward slope pushed DOWN and internal suction — the figure's positive windward Cp.</>
+                        : <> No downward case: the windward slope's positive Cp is ≤ 0 at this pitch, so it would govern nothing.</>}
                     </p>
                   )}
                 </div>
