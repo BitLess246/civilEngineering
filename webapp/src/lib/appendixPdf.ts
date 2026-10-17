@@ -58,6 +58,22 @@ export function paintStatusTable(sh: Sheet, status: StatusRow[], heading?: strin
   sh.y = (sh.lastY() ?? sh.y) + 5
 }
 
+const VERDICT_WORDS = new Set(['PASS', 'FAIL', 'NOT RUN', 'NOT CHECKED', 'COMPLETE', 'ADVISORY', 'OK', '—', ''])
+/** Columns whose every body cell is a verdict word — sized to their content. */
+export function verdictColumns(rows: readonly (readonly string[])[]): number[] {
+  if (!rows.length) return []
+  const n = Math.max(...rows.map((r) => r.length))
+  const out: number[] = []
+  for (let i = 0; i < n; i++) {
+    const vals = rows.map((r) => String(r[i] ?? '').trim())
+    if (vals.some((v) => v && v !== '—') && vals.every((v) => VERDICT_WORDS.has(v))) out.push(i)
+  }
+  return out
+}
+/** Lines a short paragraph keeps together — a paragraph of up to six lines
+ *  moves whole to the next page; a longer one may break. */
+export const keepWhole = (lines: number): number => (lines <= 6 ? lines : 2)
+
 function paintSection(sh: Sheet, s: AppendixSection): void {
   const { doc } = sh
   sh.rule(0, `Appendix ${s.letter} — ${s.title}`)
@@ -69,9 +85,10 @@ function paintSection(sh: Sheet, s: AppendixSection): void {
   }
   if (s.stats?.length) sh.statCards(s.stats)
   for (const n of s.notes ?? []) {
-    sh.ensure(10)
     sh.setF('sans', 'normal', 6.6, MUTED)
-    for (const w of doc.splitTextToSize(n, CONTENT_W)) { sh.ensure(3.4); doc.text(w, M, sh.y); sh.y += 3.2 }
+    const lines: string[] = doc.splitTextToSize(n, CONTENT_W)
+    sh.ensure(keepWhole(lines.length) * 3.2 + 1)
+    for (const w of lines) { sh.ensure(3.4); doc.text(w, M, sh.y); sh.y += 3.2 }
     sh.y += 2
   }
   for (const f of s.figures ?? []) {
@@ -97,17 +114,29 @@ function paintSection(sh: Sheet, s: AppendixSection): void {
     sh.setF('sans', 'bold', 8, INK)
     doc.text(t.title, M, sh.y)
     sh.y += 2.5
+    const theme = sh.tableTheme(t.right ?? [])
+    // A column of verdict words is sized to them: auto-widths squeezed the
+    // compliance matrix's Result column until "NOT RUN" broke over two lines.
+    const verdictCols = verdictColumns(t.rows)
     autoTable(doc, {
-      ...sh.tableTheme(t.right ?? []),
+      ...theme,
       startY: sh.y,
       head: [t.head],
       body: t.rows,
       rowPageBreak: 'avoid',
+      columnStyles: {
+        ...(theme.columnStyles as Record<number, object>),
+        ...Object.fromEntries(verdictCols.map((i) => [i, { ...((theme.columnStyles as Record<number, object>)[i] ?? {}), cellWidth: 'wrap' }])),
+      },
     })
     sh.y = (sh.lastY() ?? sh.y) + 2.5
     if (t.note) {
       sh.setF('sans', 'normal', 6.2, FAINT)
-      for (const w of doc.splitTextToSize(t.note, CONTENT_W)) { sh.ensure(3.2); doc.text(w, M, sh.y); sh.y += 3 }
+      // Kept whole when short: a two-line note split by the page break left
+      // "its Case column." alone at the head of the next page.
+      const lines: string[] = doc.splitTextToSize(t.note, CONTENT_W)
+      sh.ensure(keepWhole(lines.length) * 3)
+      for (const w of lines) { sh.ensure(3.2); doc.text(w, M, sh.y); sh.y += 3 }
     }
     sh.y += 3.5
   }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fitFigure, fitTitleSize, truncateToWidth, createSheet, CONTENT_W, TITLE_RESERVED_W, M, PAGE_H, FOOT_Y } from './pdfKit'
+import { fitFigure, fitTitleSize, truncateToWidth, createSheet, CONTENT_W, TITLE_RESERVED_W, M, PAGE_H, FOOT_Y, titleLayout, capsLabel, keepTogether, SIGNATURE_BLOCK_H } from './pdfKit'
 
 describe('fitFigure', () => {
   it('fills the column width when the image is short enough', () => {
@@ -108,5 +108,46 @@ describe('title fitting', () => {
     s.setF('sans', 'bold', 15.5, [0, 0, 0])
     const measure = (t: string) => s.doc.getTextWidth(t)
     expect(truncateToWidth(measure, SHORT, AVAIL)).toBe(SHORT)
+  })
+})
+
+// A fixed-pitch measure: 0.2 mm per character per point.
+const mono = (t: string, pt: number) => t.length * pt * 0.2
+
+describe('titleLayout — wrap before cutting', () => {
+  it('one line at the largest size that fits', () => {
+    expect(titleLayout(mono, 'Beam — Design Calculation', 110)).toEqual({ size: 15.5, lines: ['Beam — Design Calculation'] })
+  })
+  it('two whole lines rather than an ellipsis when one line would need to go below the floor', () => {
+    const t = 'Slender Reinforced Concrete Column (Non-sway) — Design Calculation'
+    const r = titleLayout(mono, t, 110)
+    expect(r.lines.length).toBe(2)
+    expect(r.lines.join(' ')).toBe(t)                       // nothing lost
+    expect(r.lines.every((l) => mono(l, r.size) <= 110)).toBe(true)
+  })
+  it('only a title too long for two lines at the floor is cut, on its second line', () => {
+    const t = 'Word '.repeat(60).trim()
+    const r = titleLayout(mono, t, 110)
+    expect(r.size).toBe(9.5)
+    expect(r.lines[1].endsWith('…')).toBe(true)
+  })
+})
+
+describe('capsLabel — uppercase unless it changes the meaning', () => {
+  it('words are uppercased', () => expect(capsLabel('Utilisation')).toBe('UTILISATION'))
+  it('δ stays δ — uppercased it is Δ, a displacement', () => expect(capsLabel('δ')).toBe('δ'))
+  it('short symbols keep their case: Mc, fy, Pu, Ast', () => {
+    for (const s of ['Mc', 'fy', 'Pu', 'Ast']) expect(capsLabel(s)).toBe(s)
+  })
+  it('acronyms already upper stay upper', () => expect(capsLabel('PGA')).toBe('PGA'))
+})
+
+describe('keepTogether', () => {
+  it('moves a block that fits on a fresh page but not here', () => {
+    expect(keepTogether(FOOT_Y - 20, SIGNATURE_BLOCK_H)).toBe(true)
+    expect(keepTogether(M + 30, SIGNATURE_BLOCK_H)).toBe(false)
+  })
+  it('never moves a block taller than a page — it breaks wherever it is', () => {
+    expect(keepTogether(FOOT_Y - 20, PAGE_H)).toBe(false)
   })
 })

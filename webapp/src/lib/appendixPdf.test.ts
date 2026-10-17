@@ -6,7 +6,7 @@ import { analyzeFrame3D } from '../engine/frame3d'
 import { buildModelReport } from './modelReport'
 import { buildModelPdf, ALL_REPORT_SECTIONS } from './modelPdf'
 import { buildAnalysisAppendix, analysisStatus } from './analysisAppendix'
-import { buildAnalysisAppendixPdf, buildCombinedPdf } from './appendixPdf'
+import { buildAnalysisAppendixPdf, buildCombinedPdf, verdictColumns, keepWhole } from './appendixPdf'
 import { buildModelPdfInto } from './modelPdf'
 import { createSheet } from './pdfKit'
 import { buildDesignSnapshot, snapshotStamp, shortId } from '../engine/designSnapshot'
@@ -96,5 +96,19 @@ describe('the design snapshot on the documents', () => {
     const withSnap = await buildModelPdf({ lh, report, modelImg: null, badges, sections: ['summary'], snapshot })
     const bare = await buildModelPdf({ lh, report, modelImg: null, badges, sections: ['summary'] })
     expect(withSnap.doc.getNumberOfPages()).toBeGreaterThanOrEqual(bare.doc.getNumberOfPages())
+  })
+})
+
+describe('appendix tables and notes keep their shape across pages', () => {
+  it('verdictColumns finds the columns of verdict words, and only those', () => {
+    const rows = [['Static equilibrium', 'PASS', '8 combinations'], ['Modal', 'NOT RUN', 'run the modal analysis'], ['Slab', 'FAIL', '4 panels']]
+    expect(verdictColumns(rows)).toEqual([1])
+    expect(verdictColumns([['—', '—']])).toEqual([])          // a column of dashes is not a verdict column
+    expect(verdictColumns([])).toEqual([])
+  })
+  it('keepWhole keeps a short paragraph whole, lets a long one break', () => {
+    expect(keepWhole(2)).toBe(2)
+    expect(keepWhole(6)).toBe(6)
+    expect(keepWhole(12)).toBe(2)
   })
 })

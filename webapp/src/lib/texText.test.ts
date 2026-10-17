@@ -36,7 +36,7 @@ describe('texToPlain', () => {
   })
 
   it('converts superscript exponents to unicode digits', () => {
-    expect(texToPlain(String.raw`180\times 10^6`)).toBe('180× 10⁶')
+    expect(texToPlain(String.raw`180\times 10^6`)).toBe('180 × 10⁶')
     expect(texToPlain(String.raw`q_u = P_u/B^2`)).toBe('qu = Pu/B²')
   })
 

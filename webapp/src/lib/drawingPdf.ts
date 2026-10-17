@@ -157,10 +157,19 @@ export function paintDrawing(doc: jsPDF, d: Drawing, box: PaintBox): PaintResult
         const size = L(p.size)
         // jsPDF sizes in points; the drawing is in mm of paper.
         doc.setFontSize(size * 2.834645)
-        doc.text(p.text, X(p.x), Y(p.y) + size * 0.36, {
-          align: p.anchor === 'middle' ? 'center' : p.anchor === 'end' ? 'right' : 'left',
+        const opts = {
+          align: (p.anchor === 'middle' ? 'center' : p.anchor === 'end' ? 'right' : 'left') as 'center' | 'right' | 'left',
           angle: p.rotate ? -p.rotate : undefined,
-        })
+        }
+        if (p.halo) {
+          // white outline first, then the glyphs over it — the SVG's
+          // paint-order="stroke"
+          doc.setDrawColor(255, 255, 255)
+          doc.setLineWidth(size * 0.28)
+          doc.setLineJoin('round')
+          doc.text(p.text, X(p.x), Y(p.y) + size * 0.36, { ...opts, renderingMode: 'stroke' })
+        }
+        doc.text(p.text, X(p.x), Y(p.y) + size * 0.36, opts)
         break
       }
       case 'dim': {
@@ -181,7 +190,15 @@ export function paintDrawing(doc: jsPDF, d: Drawing, box: PaintBox): PaintResult
         const hasFill = setFill(p.fill)
         const hasStroke = setStroke(p.stroke, p.width, p.dash)
         if (!hasFill && !hasStroke) break
+        // The SVG serialiser writes `opacity` on the element, so it fades the
+        // fill AND the stroke; the paper copy has to do the same through a
+        // graphics state. Ignored, the load diagram's 10 % area-load wash and
+        // the moment diagram's 20 % lobes printed SOLID — burying the frame,
+        // the arrows and the very kPa label drawn on top in the same ink.
+        const faded = p.opacity != null && p.opacity < 1
+        if (faded) setOpacity(doc, Math.max(0, p.opacity!))
         paintPath(doc, p.cmds, X, Y, hasFill && hasStroke ? 'FD' : hasFill ? 'F' : 'S', p.closed)
+        if (faded) setOpacity(doc, 1)
         break
       }
     }
@@ -189,6 +206,13 @@ export function paintDrawing(doc: jsPDF, d: Drawing, box: PaintBox): PaintResult
 
   doc.setLineDashPattern([], 0)
   return fit
+}
+
+type GStateCtor = new (p: { opacity?: number; 'stroke-opacity'?: number }) => unknown
+/** Fill and stroke opacity for what is painted next, 0–1. */
+export function setOpacity(doc: jsPDF, a: number): void {
+  const GState = (doc as unknown as { GState: GStateCtor }).GState
+  doc.setGState(new GState({ opacity: a, 'stroke-opacity': a }))
 }
 
 /**

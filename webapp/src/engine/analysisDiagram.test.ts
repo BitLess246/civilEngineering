@@ -7,7 +7,7 @@ import {
   projectView, fitView, supportSymbol, modelDiagram, loadDiagram, deflectedDiagram,
   forceDiagram, reactionDiagram, memberDeflectedCurve, displacedNodes, autoAmplification,
   signRuns, bestView, modeShapeDiagram, seriesDrawing, hingeDiagram, planeFrameDiagram,
-  DIAGRAM_W, DIAGRAM_H,
+  DIAGRAM_W, DIAGRAM_H, labelBox, boxesOverlap,
 } from './analysisDiagram'
 import { modalAnalysis } from './modal'
 
@@ -513,5 +513,45 @@ describe('planeFrameDiagram', () => {
     const d = planeFrameDiagram(f, [], { title: 'EQUIVALENT FRAME — NO HINGE YIELDED' })
     expect(texts(d)).toContain('EQUIVALENT FRAME — NO HINGE YIELDED')
     expect(filledCircles(d, '#b91c1c')).toHaveLength(0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// LOAD LABELS — legible on paper. A floor of identical line loads printed a
+// label per member, all overlapping; arrows painted later crossed the labels
+// painted earlier; and the 10 % area-load wash printed solid in the PDF.
+// ─────────────────────────────────────────────────────────────────────────
+describe('load diagram labels', () => {
+  const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.5, 3], section, slabThickness: 150 })
+  m.loads = buildGravityLoads(m, 4.8, 2.4)
+  const d = loadDiagram(m, 'D')!
+  type T = Extract<(typeof d.primitives)[number], { kind: 'text' }>
+  const loadText = d.primitives.filter((p): p is T => p.kind === 'text' && /^[\d.]+ (kN\/m|kPa|kN)$/.test(p.text))
+
+  it('no two load labels overlap', () => {
+    const boxes = loadText.map((t) => labelBox(t.x, t.y, t.text, t.size))
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) expect(boxesOverlap(boxes[i], boxes[j])).toBe(false)
+  })
+
+  it('every slab carries its kPa label — area labels are placed first, so they are never the ones dropped', () => {
+    const areas = m.loads.filter((l) => l.kind === 'area' && l.cat === 'D').length
+    expect(loadText.filter((t) => t.text.endsWith('kPa')).length).toBe(areas)
+  })
+
+  it('labels are painted after every arrow, with a halo', () => {
+    const lastArrow = d.primitives.map((p) => p.kind).lastIndexOf('path')
+    const firstLabel = d.primitives.indexOf(loadText[0])
+    expect(firstLabel).toBeGreaterThan(lastArrow - 1)
+    expect(loadText.every((t) => t.halo)).toBe(true)
+  })
+
+  it('the area wash is drawn translucent (the PDF painter honours it — drawingPdf.test.ts)', () => {
+    expect(d.primitives.some((p) => p.kind === 'path' && p.opacity === 0.1)).toBe(true)
+  })
+
+  it('labelBox / boxesOverlap: touching is not overlapping; a margin grows the box', () => {
+    const a = labelBox(0, 0, 'abcd', 2), b = labelBox(a.x1 - a.x0, 0, 'abcd', 2)
+    expect(boxesOverlap(a, b)).toBe(false)
+    expect(boxesOverlap(labelBox(0, 0, 'abcd', 2, 0.5), b)).toBe(true)
   })
 })

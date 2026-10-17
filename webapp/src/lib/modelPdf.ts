@@ -243,7 +243,9 @@ export async function buildModelPdfInto(
   }
 
   // ── Project & design data ──
-  if (want.has('project')) {
+  // No heading over nothing: a report built without project data printed
+  // "4 · PROJECT & DESIGN DATA" above an empty band.
+  if (want.has('project') && report.props.length > 0) {
   rule('Project & Design Data')
   {
     const half = Math.ceil(report.props.length / 2)

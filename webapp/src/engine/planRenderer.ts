@@ -26,7 +26,9 @@ export type PlanPrimitive =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; stroke: string; width?: number; dash?: number[] }
   | { kind: 'rect'; x: number; y: number; w: number; h: number; stroke?: string; fill?: string; width?: number; dash?: number[] }
   | { kind: 'circle'; cx: number; cy: number; r: number; stroke?: string; fill?: string; width?: number }
-  | { kind: 'text'; x: number; y: number; text: string; size: number; anchor?: 'start' | 'middle' | 'end'; rotate?: number; color?: string; weight?: number }
+  // `halo`: a white outline under the glyphs, so a label laid over linework
+  // (load arrows, a member) stays legible without a box hiding the drawing.
+  | { kind: 'text'; x: number; y: number; text: string; size: number; anchor?: 'start' | 'middle' | 'end'; rotate?: number; color?: string; weight?: number; halo?: boolean }
   // `ext` is where the FEATURE is, on the axis the dimension does not run
   // along: the extension lines are drawn from there out to the dimension line,
   // so the reader can see what is being measured rather than infer it.
@@ -727,7 +729,7 @@ export function planToSvg(d: Drawing, pxWidth = 1100): string {
     } else if (p.kind === 'text') {
       const px = X(p.x), py = Y(p.y)
       const rot = p.rotate ? ` transform="rotate(${p.rotate} ${px.toFixed(1)} ${py.toFixed(1)})"` : ''
-      out.push(`<text x="${px.toFixed(1)}" y="${py.toFixed(1)}" font-size="${L(p.size).toFixed(1)}" text-anchor="${p.anchor ?? 'start'}" dominant-baseline="middle" fill="${p.color ?? INK}" font-weight="${p.weight ?? 400}"${rot}>${esc(p.text)}</text>`)
+      out.push(`<text x="${px.toFixed(1)}" y="${py.toFixed(1)}" font-size="${L(p.size).toFixed(1)}" text-anchor="${p.anchor ?? 'start'}" dominant-baseline="middle" fill="${p.color ?? INK}" font-weight="${p.weight ?? 400}"${p.halo ? ` stroke="#ffffff" stroke-width="${(L(p.size) * 0.28).toFixed(2)}" stroke-linejoin="round" paint-order="stroke"` : ''}${rot}>${esc(p.text)}</text>`)
     } else if (p.kind === 'dim') {
       const x1 = X(p.x1), y1 = Y(p.y1), x2 = X(p.x2), y2 = Y(p.y2)
       const fs = L(p.size)

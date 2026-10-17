@@ -57,6 +57,19 @@ export const RULE_H = 11.6
 
 export interface StatCard { label: string; value: string; unit?: string }
 
+/** What `signatures` needs below it, mm — its 28 mm of ink plus the 12 the
+ *  disclaimer under it reserves (see `signatures`). */
+export const SIGNATURE_BLOCK_H = 40
+
+/**
+ * Should a block of height `h` that has to stay in one piece start a fresh
+ * page? Yes when it does not fit below `y` but does fit on an empty page —
+ * a block taller than a page breaks wherever it is, so moving it buys nothing.
+ */
+export function keepTogether(y: number, h: number): boolean {
+  return y + h > FOOT_Y && M + 6 + h <= FOOT_Y
+}
+
 /** Width in mm the verdict chip reserves at the top right, plus its gutter. */
 /** Width the verdict chip may take, mm — the title is fitted into what is
  *  left. Widened from 56 when the chip started carrying a status sentence
@@ -96,6 +109,53 @@ export function truncateToWidth(measure: (t: string) => number, text: string, av
     if (measure(text.slice(0, mid).trimEnd() + ell) <= avail) lo = mid; else hi = mid - 1
   }
   return lo > 0 ? text.slice(0, lo).trimEnd() + ell : ell
+}
+
+/**
+ * The title's size and lines: ONE line at the largest size that fits, down to
+ * `oneLineMin`; otherwise TWO lines at the largest size whose every line fits,
+ * down to `min`; only past that is the second line cut with an ellipsis.
+ *
+ * It used to shrink to 9.5 pt and then cut — "Slender Reinforced Concrete
+ * Column (Non-sway) — Desi…" — losing the words that say what the sheet IS,
+ * while the line under it had room for all of them.
+ */
+export function titleLayout(
+  measure: (text: string, size: number) => number, title: string, avail: number,
+  max = 15.5, oneLineMin = 11, min = 9.5, step = 0.5,
+): { size: number; lines: string[] } {
+  for (let size = max; size >= oneLineMin - 1e-9; size -= step) {
+    if (measure(title, size) <= avail) return { size, lines: [title] }
+  }
+  const words = title.split(/\s+/)
+  for (let size = Math.min(max, 13.5); size >= min - 1e-9; size -= step) {
+    // greedy fill of the first line, the rest on the second
+    let k = words.length
+    while (k > 1 && measure(words.slice(0, k).join(' '), size) > avail) k--
+    const a = words.slice(0, k).join(' '), b = words.slice(k).join(' ')
+    if (measure(a, size) <= avail && measure(b, size) <= avail) return { size, lines: b ? [a, b] : [a] }
+  }
+  let k = words.length
+  while (k > 1 && measure(words.slice(0, k).join(' '), min) > avail) k--
+  const rest = words.slice(k).join(' ')
+  return {
+    size: min,
+    lines: [words.slice(0, k).join(' '), ...(rest ? [truncateToWidth((t) => measure(t, min), rest, avail)] : [])],
+  }
+}
+
+/**
+ * A small-caps label as printed on a stat card or a letterhead cell —
+ * uppercased, EXCEPT where uppercasing changes what it says. "δ" uppercases
+ * to "Δ" (a displacement, not a magnifier) and "fy" to "FY" (the subscript
+ * gone): a label carrying a non-ASCII letter, or a symbol of three letters or
+ * fewer with a lowercase one, prints as written.
+ */
+export function capsLabel(label: string): string {
+  if (/[^ -~]/.test(label)) return label                               // any non-ASCII letter
+  const letters = label.replace(/[^A-Za-z]/g, '')
+  if (letters.length <= 3 && /[a-z]/.test(label)) return label          // fy, Mc, Pu, Ast
+  return label.toUpperCase()
 }
 
 /**
@@ -297,14 +357,17 @@ export function createSheet(): Sheet {
       // enough to have hidden this; 'Combined Footing — Design Calculation' is
       // not. Shrink to fit rather than clip, with a floor so a very long
       // element name goes small but stays legible.
+      let titleExtra: number
       {
         const avail = CONTENT_W - TITLE_RESERVED_W
-        const size = fitTitleSize((pt) => {
+        const { size, lines } = titleLayout((t, pt) => {
           s.setF('sans', 'bold', pt, INK)
-          return doc.getTextWidth(title)
-        }, avail)
+          return doc.getTextWidth(t)
+        }, title, avail)
         s.setF('sans', 'bold', size, INK)
-        doc.text(truncateToWidth((t) => doc.getTextWidth(t), title, avail), M, s.y)
+        const lead = size * 0.3528 * 1.15          // pt → mm, with leading
+        lines.forEach((ln, i) => doc.text(ln, M, s.y + i * lead))
+        titleExtra = (lines.length - 1) * lead
       }
       // verdict chip (top right)
       //
@@ -318,19 +381,23 @@ export function createSheet(): Sheet {
         const bg = tone === 'pass' ? OK_BG : tone === 'fail' ? FAIL_BG : [247, 247, 244] as RGB
         const edge = tone === 'pass' ? OK_EDGE : tone === 'fail' ? FAIL_EDGE : HAIR
         const label = verdictLabel ?? (tone === 'pass' ? 'DESIGN OK' : tone === 'fail' ? 'CHECK FAILED' : 'NOT ASSESSED')
-        s.setF('sans', 'bold', 8.4, fg)
-        const w = Math.min(TITLE_RESERVED_W - 4, Math.max(52, doc.getTextWidth(label) + 7))
+        // Measured WITH the letter-spacing it is drawn with (`spacedWidth`):
+        // measured without, "DESIGN STATUS — NOT ACCEPTABLE" read 6 mm short
+        // and ran out past the chip's right edge. Then fitted to the chip.
+        const labelW = (pt: number) => { s.setF('sans', 'bold', pt, fg); return spacedWidth(doc.getTextWidth(label), label, 0.2) }
+        const w = Math.min(TITLE_RESERVED_W - 4, Math.max(52, labelW(8.4) + 7))
+        const labelPt = fitTitleSize(labelW, w - 7, 8.4, 6, 0.2)
         const x = M + CONTENT_W - w, cy = s.y - 9
         doc.setFillColor(...bg)
         doc.setDrawColor(...edge)
         doc.setLineWidth(0.25)
         doc.roundedRect(x, cy, w, 14.6, 1.6, 1.6, 'FD')
-        s.setF('sans', 'bold', 8.4, fg)
-        doc.text(label, x + 3.5, cy + 5.4, { charSpace: 0.2 })
+        s.setF('sans', 'bold', labelPt, fg)
+        doc.text(labelW(labelPt) <= w - 7 ? label : truncateToWidth((t) => spacedWidth(doc.getTextWidth(t), t, 0.2), label, w - 7), x + 3.5, cy + 5.4, { charSpace: 0.2 })
         s.setF('sans', 'normal', 5.6, tone === 'pass' ? [77, 122, 95] : tone === 'fail' ? [169, 91, 71] : MUTED)
         doc.text(doc.splitTextToSize(governing, w - 7).slice(0, 3), x + 3.5, cy + 8.8)
       }
-      s.y += 4.5
+      s.y += 4.5 + titleExtra
       let bx = M
       for (const b of badges) {
         s.setF('mono', 'normal', 6.2, BRAND)
@@ -355,7 +422,10 @@ export function createSheet(): Sheet {
         s.setF('sans', 'bold', 5, FAINT)
         doc.text(k, cx + 2.5, cy + 3.4, { charSpace: 0.4 })
         s.setF(mono ? 'mono' : 'sans', mono ? 'normal' : 'bold', 6.8, INK)
-        doc.text(doc.splitTextToSize(v, cw - 5)[0] ?? '', cx + 2.5, cy + 7.2)
+        // Cut with an ellipsis: `splitTextToSize(…)[0]` dropped the rest of
+        // the value without a mark — "Slender Reinforced Concrete Column"
+        // for an element that is "(Non-sway)".
+        doc.text(truncateToWidth((t) => doc.getTextWidth(t), v, cw - 5), cx + 2.5, cy + 7.2)
       })
       s.y += ch * rows + 2
     },
@@ -368,7 +438,7 @@ export function createSheet(): Sheet {
         doc.setDrawColor(...HAIR); doc.setLineWidth(0.25)
         doc.roundedRect(cx, s.y, cw, ch, 1.4, 1.4, 'S')
         s.setF('sans', 'bold', 5, FAINT)
-        doc.text(st.label.toUpperCase(), cx + 2.5, s.y + 3.6, { charSpace: 0.35 })
+        doc.text(capsLabel(st.label), cx + 2.5, s.y + 3.6, { charSpace: 0.35 })
         s.setF('mono', 'bold', 8.4, INK)
         const shown = doc.splitTextToSize(st.value, cw - (st.unit ? 12 : 5))[0] ?? ''
         // Measure the VALUE while the value's font is set. The old line took
@@ -489,7 +559,7 @@ export function createSheet(): Sheet {
       // at the foot of the page and then pushed the disclaimer onto a page of
       // its OWN, taking the beam report from four sheets to five. Measured on
       // four reports — this is the largest reservation that adds no page.
-      const need = 40
+      const need = SIGNATURE_BLOCK_H
       if (s.y + need > FOOT_Y) {
         doc.addPage()
         s.y = FOOT_Y - need
