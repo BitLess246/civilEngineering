@@ -24,7 +24,8 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import type { SoilsReport, ReportSection } from '../engine/soils/report'
-import { createSheet, autoTable, MUTED, INK, BRAND, FAIL_FG, OK_FG, CONTENT_W, M, PAGE_W } from './pdfKit'
+import { loadPdfStyle, type PdfStyle } from './pdfStyle'
+import { createSheet, autoTable, MUTED, INK, BRAND, FAIL_FG, OK_FG, M } from './pdfKit'
 import { docLabel as brandDocLabel } from './brand'
 import { paintDrawing, paintedSize } from './drawingPdf'
 
@@ -35,8 +36,15 @@ const STATUS_LABEL = {
 } as const
 
 /** Build the report document. No I/O, so it can be exercised in Node. */
-export function buildSoilsReportPdf(r: SoilsReport): ReturnType<typeof createSheet>['doc'] {
-  return renderSoilsReport(createSheet(), r)
+export function buildSoilsReportPdf(r: SoilsReport, style: PdfStyle = loadPdfStyle()): ReturnType<typeof createSheet>['doc'] {
+  const s = createSheet(style)
+  if (style.coverPage) {
+    s.coverPage({
+      title: r.title, subtitle: r.projectName || undefined,
+      rows: [['Investigation', r.investigationNo], ['Location', r.location], ['Prepared by', r.preparedBy ?? ''], ['Date', r.reportDate]],
+    })
+  }
+  return renderSoilsReport(s, r)
 }
 
 /**
@@ -83,7 +91,7 @@ export function renderSoilsReport(
     s.setF('sans', 'normal', 8.6, FAIL_FG)
     for (const issue of r.blockingIssues) {
       s.ensure(8)
-      const lines = doc.splitTextToSize(`•  ${issue}`, CONTENT_W) as string[]
+      const lines = doc.splitTextToSize(`•  ${issue}`, s.contentW) as string[]
       doc.text(lines, M, s.y)
       s.y += lines.length * 4.2 + 1
     }
@@ -95,7 +103,7 @@ export function renderSoilsReport(
   s.setF('sans', 'normal', 8.6, MUTED)
   const intro = doc.splitTextToSize(
     'Every section below is present whether or not the investigation could support it. A section marked NOT ASSESSED states what would be required; it is not a finding that there is nothing to report. The gaps are listed here, before any conclusion, because a reader who reaches a recommendation without seeing them has been misled by omission.',
-    CONTENT_W,
+    s.contentW,
   ) as string[]
   doc.text(intro, M, s.y)
   s.y += intro.length * 4.2 + 3
@@ -146,7 +154,7 @@ function emitSection(s: ReturnType<typeof createSheet>, sec: ReportSection): voi
     s.y += 4.4
     if (sec.gap) {
       s.setF('sans', 'normal', 8.4, color)
-      const lines = doc.splitTextToSize(sec.gap, CONTENT_W) as string[]
+      const lines = doc.splitTextToSize(sec.gap, s.contentW) as string[]
       s.ensure(lines.length * 4.2 + 4)
       doc.text(lines, M, s.y)
       s.y += lines.length * 4.2 + 3
@@ -155,7 +163,7 @@ function emitSection(s: ReturnType<typeof createSheet>, sec: ReportSection): voi
 
   for (const p of sec.paragraphs) {
     s.setF('sans', 'normal', 8.8, INK)
-    const lines = doc.splitTextToSize(p, CONTENT_W) as string[]
+    const lines = doc.splitTextToSize(p, s.contentW) as string[]
     s.ensure(lines.length * 4.4 + 4)
     doc.text(lines, M, s.y)
     s.y += lines.length * 4.4 + 3
@@ -189,24 +197,24 @@ function emitSection(s: ReturnType<typeof createSheet>, sec: ReportSection): voi
   for (const n of sec.notes) {
     const isWarning = n.severity === 'warning'
     s.setF('sans', isWarning ? 'bold' : 'normal', 7.8, isWarning ? FAIL_FG : MUTED)
-    const lines = doc.splitTextToSize(`${isWarning ? '! ' : '— '}${n.text}`, CONTENT_W) as string[]
+    const lines = doc.splitTextToSize(`${isWarning ? '! ' : '— '}${n.text}`, s.contentW) as string[]
     s.ensure(lines.length * 3.8 + 3)
     doc.text(lines, M, s.y)
     s.y += lines.length * 3.8 + 2
   }
 
   for (const f of sec.figures) {
-    const box = { x: M, y: s.y + 4, w: Math.min(CONTENT_W, 150), maxH: 165 }
+    const box = { x: M, y: s.y + 4, w: Math.min(s.contentW, 150), maxH: 165 }
     const size = paintedSize(f.drawing, box)
     // Keep the caption with its figure rather than orphaning it at a page end.
     s.ensure(size.height + 12)
     const placed = { ...box, y: s.y + 4 }
     // Centre it on the page.
-    placed.x = (PAGE_W - size.width) / 2
+    placed.x = (s.pageW - size.width) / 2
     paintDrawing(doc, f.drawing, placed)
     s.y = placed.y + size.height + 4
     s.setF('sans', 'normal', 7.6, MUTED)
-    doc.text(f.caption, PAGE_W / 2, s.y, { align: 'center' })
+    doc.text(f.caption, s.pageW / 2, s.y, { align: 'center' })
     s.y += 6
   }
 }

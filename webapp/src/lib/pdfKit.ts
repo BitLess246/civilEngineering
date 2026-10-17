@@ -23,6 +23,8 @@ import type { SolutionStep } from './solution'
 import { texToPlain } from './texText'
 import { BRAND_NAME, BRAND_MARK, BRAND_TAIL } from './brand'
 import { SANS, SANS_BOLD, MONO, MONO_BOLD } from './pdfFonts'
+import { DEFAULT_PDF_STYLE, paperSize, hexToRgb, tint, watermarkLabel, type PdfStyle } from './pdfStyle'
+import { setOpacity } from './drawingPdf'
 
 export type RGB = [number, number, number]
 
@@ -66,8 +68,8 @@ export const SIGNATURE_BLOCK_H = 40
  * page? Yes when it does not fit below `y` but does fit on an empty page —
  * a block taller than a page breaks wherever it is, so moving it buys nothing.
  */
-export function keepTogether(y: number, h: number): boolean {
-  return y + h > FOOT_Y && M + 6 + h <= FOOT_Y
+export function keepTogether(y: number, h: number, footY = FOOT_Y): boolean {
+  return y + h > footY && M + 6 + h <= footY
 }
 
 /** Width in mm the verdict chip reserves at the top right, plus its gutter. */
@@ -166,12 +168,12 @@ export function capsLabel(label: string): string {
  * something nearly square. Returns the drawn size and the left offset that
  * centres it in the column.
  */
-export function fitFigure(w: number, h: number, maxH: number): { drawW: number; drawH: number; x: number } {
-  if (!(w > 0) || !(h > 0)) return { drawW: CONTENT_W, drawH: Math.min(CONTENT_W, maxH), x: M }
+export function fitFigure(w: number, h: number, maxH: number, cw = CONTENT_W): { drawW: number; drawH: number; x: number } {
+  if (!(w > 0) || !(h > 0)) return { drawW: cw, drawH: Math.min(cw, maxH), x: M }
   const aspect = h / w
-  let drawW = CONTENT_W, drawH = drawW * aspect
+  let drawW = cw, drawH = drawW * aspect
   if (drawH > maxH) { drawH = maxH; drawW = drawH / aspect }
-  return { drawW, drawH, x: M + (CONTENT_W - drawW) / 2 }
+  return { drawW, drawH, x: M + (cw - drawW) / 2 }
 }
 
 /**
@@ -204,6 +206,14 @@ export function imageSize(dataUrl: string): Promise<{ w: number; h: number }> {
 
 export interface Sheet {
   doc: jsPDF
+  /** The customisation this sheet is painted with (`pdfStyle`). */
+  style: PdfStyle
+  /** Page geometry for the chosen paper, mm — use these, not the A4
+   *  constants, in anything a Letter sheet also prints. */
+  pageW: number; pageH: number; contentW: number; footY: number
+  /** A title page, when the style asks for one; the sheet's first page.
+   *  Footers then skip it and number the pages after it from 1. */
+  coverPage(o: CoverPage): void
   /** Running vertical cursor in mm. Methods read and advance it. */
   y: number
   setF(family: 'sans' | 'mono', style: 'normal' | 'bold', size: number, color: RGB): void
@@ -229,13 +239,20 @@ export interface Sheet {
   solutionSteps(steps: readonly SolutionStep[], indexPrefix?: string): void
   signatures(preparedBy: string): void
   disclaimer(text: string): void
-  /** Footer (and continuation-page header strip) on every page. Call last. */
   /** Footer (and continuation-page header strip) on every page. Call last.
    *  `noStripOn` names pages that carry their own document header — the
-   *  first page of a document bound after another — and get no strip. */
-  /** `stamp` is the design-snapshot line — centred on every footer, so a
-   *  loose page can be traced back to the run that printed it. */
+   *  first page of a document bound after another — and get no strip.
+   *  `stamp` is the design-snapshot line — centred on every footer, so a
+   *  loose page can be traced back to the run that printed it. The style's
+   *  watermark, revision and footer note are painted here too. */
   pageFooters(docLabel: string, sheet: string, today: string, project: string, noStripOn?: ReadonlySet<number>, stamp?: string): void
+}
+
+export interface CoverPage {
+  title: string
+  subtitle?: string
+  /** Label / value rows under the title — project, sheet, dates, parties. */
+  rows: readonly [string, string][]
 }
 
 export interface BrandHeader {
@@ -258,34 +275,145 @@ export interface BrandHeader {
 }
 
 /** A fresh A4 sheet with the embedded font subsets registered. */
-export function createSheet(): Sheet {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+export function createSheet(style: PdfStyle = DEFAULT_PDF_STYLE): Sheet {
+  // Geometry is the SHEET's, from the chosen paper: Letter keeps the 14 mm
+  // margins and gains width, rather than sitting A4's column off-centre.
+  const { w: PW, h: PH } = paperSize(style.paper)
+  const CW = PW - 2 * M, FY = PH - 12
+  const ACCENT: RGB = hexToRgb(style.accent) ?? BRAND
+  const doc = new jsPDF({ unit: 'mm', format: style.paper === 'letter' ? 'letter' : 'a4' })
   doc.addFileToVFS('DVS.ttf', SANS);       doc.addFont('DVS.ttf', 'sans', 'normal')
   doc.addFileToVFS('DVSB.ttf', SANS_BOLD); doc.addFont('DVSB.ttf', 'sans', 'bold')
   doc.addFileToVFS('DVM.ttf', MONO);       doc.addFont('DVM.ttf', 'mono', 'normal')
   doc.addFileToVFS('DVMB.ttf', MONO_BOLD); doc.addFont('DVMB.ttf', 'mono', 'bold')
 
+  let hasCover = false
+  /** Masthead: the firm (logo, name, tagline) when set, else the wordmark.
+   *  Draws at the cursor's baseline and returns the height it took. */
+  const masthead = (scale = 1): number => {
+    let x = M, h = 8 * scale
+    if (style.logo) {
+      try {
+        const ip = doc.getImageProperties(style.logo)
+        const aspect = ip.width / ip.height
+        let lh = 9 * scale, lw = lh * aspect
+        if (lw > 42 * scale) { lw = 42 * scale; lh = lw / aspect }
+        doc.addImage(style.logo, ip.fileType, M, s.y - 6.6 * scale, lw, lh, undefined, 'SLOW')
+        x = M + lw + 3
+        h = Math.max(h, lh + 1.4)
+      } catch { /* an image the writer cannot read is left out, not fatal */ }
+    }
+    if (style.firmName) {
+      s.setF('sans', 'bold', 11.5 * scale, INK)
+      doc.text(style.firmName, x, s.y, { charSpace: 0.3 * scale })
+    } else {
+      // Measure the mark while ITS font is still set, and count the letter-
+      // spacing it is drawn with — see `spacedWidth`. Measuring afterwards read
+      // the 11.5 pt wordmark at 5.4 pt and lapped TOOLKIT over CIVENGG.
+      s.setF('sans', 'bold', 11.5 * scale, INK)
+      const markW = spacedWidth(doc.getTextWidth(BRAND_MARK), BRAND_MARK, 0.9 * scale)
+      doc.text(BRAND_MARK, x, s.y, { charSpace: 0.9 * scale })
+      s.setF('sans', 'bold', 5.4 * scale, SUBTLE)
+      if (BRAND_TAIL) doc.text(BRAND_TAIL, x + markW + 2.4, s.y, { charSpace: 0.7 * scale })
+    }
+    if (style.firmTagline) {
+      s.setF('sans', 'normal', 5.8 * scale, SUBTLE)
+      doc.text(style.firmTagline, x, s.y + 3.4 * scale)
+      h = Math.max(h, 10.5 * scale)
+    }
+    return h
+  }
+
+  /** The watermark: one diagonal word across the middle of the page, faint
+   *  enough to read the sheet through, painted under nothing — it is drawn
+   *  last but at 7 % ink, so it never hides a figure or a number. */
+  const paintWatermark = (text: string) => {
+    s.setF('sans', 'bold', 1, INK)
+    // the largest size whose diagonal fits 80 % of the page's diagonal run
+    const angle = Math.atan2(PH, PW) * 180 / Math.PI * 0.82
+    const run = 0.8 * Math.hypot(PW, PH)
+    const size = Math.min(72, run / Math.max(doc.getTextWidth(text), 1e-6))
+    s.setF('sans', 'bold', size, ACCENT)
+    const w = spacedWidth(doc.getTextWidth(text), text, 2)
+    const a = angle * Math.PI / 180
+    const cx = PW / 2, cy = PH / 2
+    setOpacity(doc, 0.07)
+    doc.text(text, cx - (w / 2) * Math.cos(a), cy + (w / 2) * Math.sin(a), { angle, charSpace: 2 })
+    setOpacity(doc, 1)
+  }
+
   const s: Sheet = {
     doc,
     y: M,
+    style, pageW: PW, pageH: PH, contentW: CW, footY: FY,
+
+    coverPage({ title, subtitle, rows }) {
+      hasCover = true
+      // accent band across the head of the page
+      doc.setFillColor(...ACCENT)
+      doc.rect(0, 0, PW, 4, 'F')
+      s.y = 34
+      s.y += masthead(1.5)
+      s.y += 26
+      s.setF('sans', 'bold', 22, INK)
+      const tl = doc.splitTextToSize(title, CW) as string[]
+      doc.text(tl, M, s.y)
+      s.y += tl.length * 9 + 2
+      if (subtitle) {
+        s.setF('sans', 'normal', 11, MUTED)
+        const sl = doc.splitTextToSize(subtitle, CW) as string[]
+        doc.text(sl, M, s.y)
+        s.y += sl.length * 5 + 4
+      }
+      doc.setDrawColor(...ACCENT); doc.setLineWidth(0.8)
+      doc.line(M, s.y, M + 40, s.y)
+      s.y += 12
+      // the checker and revision come from the style, as in the letterhead
+      const all: [string, string][] = [...rows]
+      if (style.checkedBy) all.push(['Checked by', style.checkedBy])
+      if (style.revision) all.push(['Revision', style.revision])
+      for (const [k, v] of all) {
+        if (!v) continue
+        s.setF('sans', 'bold', 6.4, FAINT)
+        doc.text(k.toUpperCase(), M, s.y, { charSpace: 0.4 })
+        s.setF('sans', 'bold', 10, INK)
+        doc.text(truncateToWidth((t) => doc.getTextWidth(t), v, CW - 46), M + 46, s.y)
+        s.y += 8
+      }
+      s.setF('mono', 'normal', 6, FAINT)
+      doc.text(`${BRAND_NAME} · calculation record`, M, FY + 6.5)
+      doc.addPage()
+      s.y = M
+    },
 
     setF(family, style, size, color) {
       doc.setFont(family, style); doc.setFontSize(size); doc.setTextColor(...color)
     },
 
     ensure(need) {
-      if (s.y + need > FOOT_Y) { doc.addPage(); s.y = M + 6 }
+      if (s.y + need > FY) { doc.addPage(); s.y = M + 6 }
     },
 
     rule(n, title) {
       s.ensure(16)
       s.y += 6
-      s.setF('sans', 'bold', 9.5, INK)
-      // n = 0 is front matter, not "section zero".
-      doc.text(n > 0 ? `${n} · ${title.toUpperCase()}` : title.toUpperCase(), M, s.y, { charSpace: 0.25 })
+      // n = 0 is front matter, not "section zero". The number takes the
+      // accent, the title the ink.
+      const head = title.toUpperCase()
+      if (n > 0) {
+        const num = `${n} · `
+        s.setF('sans', 'bold', 9.5, ACCENT)
+        doc.text(num, M, s.y, { charSpace: 0.25 })
+        const nw = spacedWidth(doc.getTextWidth(num), num, 0.25)
+        s.setF('sans', 'bold', 9.5, INK)
+        doc.text(head, M + nw + 0.25, s.y, { charSpace: 0.25 })
+      } else {
+        s.setF('sans', 'bold', 9.5, INK)
+        doc.text(head, M, s.y, { charSpace: 0.25 })
+      }
       s.y += 1.6
       doc.setDrawColor(...INK); doc.setLineWidth(0.5)
-      doc.line(M, s.y, M + CONTENT_W, s.y)
+      doc.line(M, s.y, M + CW, s.y)
       s.y += 4
     },
 
@@ -301,7 +429,7 @@ export function createSheet(): Sheet {
 
     tableTheme(right = []) {
       return {
-        margin: { left: M, right: M, bottom: PAGE_H - FOOT_Y + 2 },
+        margin: { left: M, right: M, bottom: PH - FY + 2 },
         styles: {
           font: 'sans', fontSize: 7.2, textColor: INK, cellPadding: { top: 1.2, bottom: 1.2, left: 1.4, right: 1.4 },
           lineColor: HAIR_SOFT, lineWidth: { bottom: 0.15 },
@@ -338,20 +466,12 @@ export function createSheet(): Sheet {
     brandHeader({ docLabel, title, sheet, today, ok, governing, badges, verdictLabel, verdictTone }) {
       s.setF('mono', 'normal', 6.4, FAINT)
       doc.text(docLabel, M, s.y)
-      doc.text(`${sheet} · ${today}`, M + CONTENT_W, s.y, { align: 'right' })
+      doc.text(`${sheet} · ${today}`, M + CW, s.y, { align: 'right' })
       s.y += 1.8
       doc.setDrawColor(...HAIR_SOFT); doc.setLineWidth(0.2)
-      doc.line(M, s.y, M + CONTENT_W, s.y)
+      doc.line(M, s.y, M + CW, s.y)
       s.y += 7
-      // Measure the mark while ITS font is still set, and count the letter-
-      // spacing it is drawn with — see `spacedWidth`. Measuring afterwards read
-      // the 11.5 pt wordmark at 5.4 pt and lapped TOOLKIT over CIVENGG.
-      s.setF('sans', 'bold', 11.5, INK)
-      const markW = spacedWidth(doc.getTextWidth(BRAND_MARK), BRAND_MARK, 0.9)
-      doc.text(BRAND_MARK, M, s.y, { charSpace: 0.9 })
-      s.setF('sans', 'bold', 5.4, SUBTLE)
-      if (BRAND_TAIL) doc.text(BRAND_TAIL, M + markW + 2.4, s.y, { charSpace: 0.7 })
-      s.y += 8
+      s.y += masthead()
       // The verdict chip occupies the top-right 52 mm, so the title has to fit
       // in what is left or it runs underneath it. Model Space's title is short
       // enough to have hidden this; 'Combined Footing — Design Calculation' is
@@ -359,7 +479,7 @@ export function createSheet(): Sheet {
       // element name goes small but stays legible.
       let titleExtra: number
       {
-        const avail = CONTENT_W - TITLE_RESERVED_W
+        const avail = CW - TITLE_RESERVED_W
         const { size, lines } = titleLayout((t, pt) => {
           s.setF('sans', 'bold', pt, INK)
           return doc.getTextWidth(t)
@@ -387,7 +507,7 @@ export function createSheet(): Sheet {
         const labelW = (pt: number) => { s.setF('sans', 'bold', pt, fg); return spacedWidth(doc.getTextWidth(label), label, 0.2) }
         const w = Math.min(TITLE_RESERVED_W - 4, Math.max(52, labelW(8.4) + 7))
         const labelPt = fitTitleSize(labelW, w - 7, 8.4, 6, 0.2)
-        const x = M + CONTENT_W - w, cy = s.y - 9
+        const x = M + CW - w, cy = s.y - 9
         doc.setFillColor(...bg)
         doc.setDrawColor(...edge)
         doc.setLineWidth(0.25)
@@ -400,9 +520,9 @@ export function createSheet(): Sheet {
       s.y += 4.5 + titleExtra
       let bx = M
       for (const b of badges) {
-        s.setF('mono', 'normal', 6.2, BRAND)
+        s.setF('mono', 'normal', 6.2, ACCENT)
         const w = doc.getTextWidth(b) + 3.2
-        doc.setFillColor(234, 241, 249); doc.setDrawColor(205, 220, 240); doc.setLineWidth(0.2)
+        doc.setFillColor(...tint(ACCENT, 0.92)); doc.setDrawColor(...tint(ACCENT, 0.8)); doc.setLineWidth(0.2)
         doc.roundedRect(bx, s.y - 2.9, w, 4.2, 0.7, 0.7, 'FD')
         doc.text(b, bx + 1.6, s.y)
         bx += w + 2
@@ -410,15 +530,26 @@ export function createSheet(): Sheet {
       s.y += 6
     },
 
-    letterheadGrid(cells) {
-      const cw = CONTENT_W / 3, ch = 9.5
+    letterheadGrid(given) {
+      // The style's revision and checker belong in every letterhead, so the
+      // kit adds them rather than every report remembering to.
+      const cells = [...given]
+      if (style.checkedBy && !cells.some(([k]) => k === 'CHECKED BY')) cells.push(['CHECKED BY', style.checkedBy, false])
+      if (style.revision && !cells.some(([k]) => k === 'REVISION')) cells.push(['REVISION', style.revision, true])
+      const cw = CW / 3, ch = 9.5
       const rows = Math.ceil(cells.length / 3)
       doc.setDrawColor(...HAIR); doc.setLineWidth(0.25)
-      doc.roundedRect(M, s.y, CONTENT_W, ch * rows, 1.6, 1.6, 'S')
+      doc.roundedRect(M, s.y, CW, ch * rows, 1.6, 1.6, 'S')
+      // The rules are the GRID's, not the cells': a short last row (a style
+      // that adds a checker but no revision) still closes as boxes.
+      doc.setDrawColor(...HAIR_SOFT)
+      for (let r = 0; r < rows; r++) {
+        const cy = s.y + r * ch
+        if (r > 0) doc.line(M, cy, M + CW, cy)
+        for (let c = 1; c < 3; c++) doc.line(M + c * cw, cy, M + c * cw, cy + ch)
+      }
       cells.forEach(([k, v, mono], i) => {
         const cx = M + (i % 3) * cw, cy = s.y + Math.floor(i / 3) * ch
-        if (i % 3 > 0) { doc.setDrawColor(...HAIR_SOFT); doc.line(cx, cy, cx, cy + ch) }
-        if (i >= 3) { doc.setDrawColor(...HAIR_SOFT); doc.line(cx, cy, cx + cw, cy) }
         s.setF('sans', 'bold', 5, FAINT)
         doc.text(k, cx + 2.5, cy + 3.4, { charSpace: 0.4 })
         s.setF(mono ? 'mono' : 'sans', mono ? 'normal' : 'bold', 6.8, INK)
@@ -431,7 +562,7 @@ export function createSheet(): Sheet {
     },
 
     statCards(stats) {
-      const cw = (CONTENT_W - 5) / 3, ch = 10.5
+      const cw = (CW - 5) / 3, ch = 10.5
       stats.forEach((st, i) => {
         if (i % 3 === 0) s.ensure(ch + 2.5)
         const cx = M + (i % 3) * (cw + 2.5)
@@ -457,17 +588,17 @@ export function createSheet(): Sheet {
     },
 
     async figureHeight(dataUrl, maxH = 120) {
-      try { const { w, h } = await imageSize(dataUrl); return fitFigure(w, h, maxH).drawH + 11 } catch { return 0 }
+      try { const { w, h } = await imageSize(dataUrl); return fitFigure(w, h, maxH, CW).drawH + 11 } catch { return 0 }
     },
 
     async figure(dataUrl, caption, maxH = 120) {
       try {
         const { w, h } = await imageSize(dataUrl)
-        const { drawW, drawH, x: imgX } = fitFigure(w, h, maxH)
+        const { drawW, drawH, x: imgX } = fitFigure(w, h, maxH, CW)
         s.ensure(drawH + 10)
         s.y += 2
         doc.setDrawColor(...HAIR); doc.setLineWidth(0.25)
-        doc.roundedRect(M, s.y, CONTENT_W, drawH + 6.5, 1.6, 1.6, 'S')
+        doc.roundedRect(M, s.y, CW, drawH + 6.5, 1.6, 1.6, 'S')
         // The compression argument is NOT optional in practice: jsPDF defaults
         // to 'NONE', which embeds the raster as raw DeviceRGB. A 1446×1410
         // figure is then 1446·1410·3 = 6,116,580 bytes of literal pixel data,
@@ -481,7 +612,7 @@ export function createSheet(): Sheet {
     },
 
     solutionSteps(steps, indexPrefix) {
-      const RIGHT_W = 30, LEFT_W = CONTENT_W - RIGHT_W - 4
+      const RIGHT_W = 30, LEFT_W = CW - RIGHT_W - 4
       steps.forEach((st, si) => {
         s.ensure(12)
         const stepTop = s.y
@@ -540,12 +671,13 @@ export function createSheet(): Sheet {
         }
         s.y += 1
         doc.setDrawColor(...HAIR_SOFT); doc.setLineWidth(0.15)
-        doc.line(M, s.y, M + CONTENT_W, s.y)
+        doc.line(M, s.y, M + CW, s.y)
         s.y += 3
       })
     },
 
     signatures(preparedBy) {
+      if (!style.signatures) return
       // A calc sheet whose approval block spilled onto a fresh page printed
       // two ruled lines four centimetres down an otherwise blank sheet, with
       // 85% of the page empty under them — the beam report's page 4. The block
@@ -560,17 +692,18 @@ export function createSheet(): Sheet {
       // its OWN, taking the beam report from four sheets to five. Measured on
       // four reports — this is the largest reservation that adds no page.
       const need = SIGNATURE_BLOCK_H
-      if (s.y + need > FOOT_Y) {
+      if (s.y + need > FY) {
         doc.addPage()
-        s.y = FOOT_Y - need
+        s.y = FY - need
       }
       s.y += 6
-      const half = (CONTENT_W - 10) / 2
+      const half = (CW - 10) / 2
       doc.setDrawColor(...INK); doc.setLineWidth(0.3)
       doc.line(M, s.y + 10, M + half, s.y + 10)
-      doc.line(M + half + 10, s.y + 10, M + CONTENT_W, s.y + 10)
+      doc.line(M + half + 10, s.y + 10, M + CW, s.y + 10)
       s.setF('sans', 'bold', 7, INK)
       doc.text(preparedBy || ' ', M, s.y + 13.6)
+      if (style.checkedBy) doc.text(style.checkedBy, M + half + 10, s.y + 13.6)
       s.setF('sans', 'normal', 6, SUBTLE)
       doc.text('Prepared by', M, s.y + 17)
       doc.text('Reviewed by · Date', M + half + 10, s.y + 17)
@@ -580,30 +713,39 @@ export function createSheet(): Sheet {
     disclaimer(text) {
       s.ensure(12)
       s.setF('sans', 'normal', 5.8, FAINT)
-      doc.text(doc.splitTextToSize(text, CONTENT_W), M, s.y)
+      doc.text(doc.splitTextToSize(text, CW), M, s.y)
     },
 
     pageFooters(docLabel, sheet, today, project, noStripOn, stamp) {
       const pages = doc.getNumberOfPages()
+      const first = hasCover ? 2 : 1                       // the first CONTENT page
+      const label = style.revision ? `${sheet} · REV ${style.revision}` : sheet
+      const mark = watermarkLabel(style)
       for (let p = 1; p <= pages; p++) {
         doc.setPage(p)
-        if (p > 1 && !noStripOn?.has(p)) {
+        if (mark) paintWatermark(mark)
+        if (p < first) continue                            // the cover carries no footer
+        if (p > first && !noStripOn?.has(p)) {
           s.setF('mono', 'normal', 5.6, FAINT)
           doc.text(docLabel, M, M - 5)
-          doc.text(`${sheet} · ${today}`, M + CONTENT_W, M - 5, { align: 'right' })
+          doc.text(`${label} · ${today}`, M + CW, M - 5, { align: 'right' })
           doc.setDrawColor(...HAIR_SOFT); doc.setLineWidth(0.15)
-          doc.line(M, M - 3.5, M + CONTENT_W, M - 3.5)
+          doc.line(M, M - 3.5, M + CW, M - 3.5)
         }
         doc.setDrawColor(...HAIR_SOFT); doc.setLineWidth(0.15)
-        doc.line(M, FOOT_Y + 3, M + CONTENT_W, FOOT_Y + 3)
+        doc.line(M, FY + 3, M + CW, FY + 3)
         s.setF('mono', 'normal', 5.6, FAINT)
-        doc.text(`${sheet} · ${project || BRAND_NAME}`, M, FOOT_Y + 6.5)
+        doc.text(`${label} · ${project || BRAND_NAME}`, M, FY + 6.5)
         if (stamp) {
           s.setF('mono', 'normal', 5, FAINT)
-          doc.text(stamp, M + CONTENT_W / 2, FOOT_Y + 6.5, { align: 'center' })
+          doc.text(stamp, M + CW / 2, FY + 6.5, { align: 'center' })
           s.setF('mono', 'normal', 5.6, FAINT)
         }
-        doc.text(`page ${p} / ${pages}`, M + CONTENT_W, FOOT_Y + 6.5, { align: 'right' })
+        doc.text(`page ${p - first + 1} / ${pages - first + 1}`, M + CW, FY + 6.5, { align: 'right' })
+        if (style.footerNote) {
+          s.setF('sans', 'normal', 5.4, FAINT)
+          doc.text(truncateToWidth((t) => doc.getTextWidth(t), style.footerNote, CW), M + CW / 2, FY + 9.6, { align: 'center' })
+        }
       }
     },
   }

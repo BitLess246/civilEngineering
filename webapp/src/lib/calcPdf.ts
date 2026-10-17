@@ -22,7 +22,8 @@
 import type { DetailBlock } from './pdfCapture'
 import type { LetterheadState, VerdictStat } from '../components/calc'
 import type { SolutionStep } from './solution'
-import { createSheet, autoTable, MUTED, NOT_CHECKED, RULE_H, M, CONTENT_W, SIGNATURE_BLOCK_H, keepTogether } from './pdfKit'
+import { loadPdfStyle, type PdfStyle } from './pdfStyle'
+import { createSheet, autoTable, MUTED, NOT_CHECKED, RULE_H, M, SIGNATURE_BLOCK_H, keepTogether } from './pdfKit'
 import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
 
 /**
@@ -83,6 +84,8 @@ export interface CalcPdfInput {
    * (FIG 1 is the drawing; a page with no drawing numbers its diagrams from 1).
    */
   figures?: readonly { png: string; title: string }[]
+  /** The sheet's look — omitted, the one saved in this browser. */
+  style?: PdfStyle
   fileName?: string
 }
 
@@ -113,11 +116,18 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
     stats = [], checks = [], resultRows = [], data = [], assumptions = [], references = [], details = [], steps = [], drawing, drawingTitle, figures = [], fileName,
   } = input
 
-  const s = createSheet()
+  const style = input.style ?? loadPdfStyle()
+  const s = createSheet(style)
   const { doc } = s
   const today = new Date().toISOString().slice(0, 10)
   const sheet = lh.sheet || docCode
   const docLabel = brandDocLabel(`${docTitle} — Calculation Report`)
+  if (style.coverPage) {
+    s.coverPage({
+      title: `${docTitle} — Design Calculation`, subtitle: lh.project || undefined,
+      rows: [['Sheet', sheet], ['Element', docTitle], ['Prepared by', lh.preparedBy], ['Date', today], ['Codes', badges.join(' · ')]],
+    })
+  }
 
   s.brandHeader({ docLabel, title: `${docTitle} — Design Calculation`, sheet, today, ok, governing, badges, verdictLabel: input.verdictLabel, verdictTone: input.verdictTone })
   s.letterheadGrid([
@@ -286,9 +296,9 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
   // fresh page, the break comes before the notes instead.
   const notes = buildCalcPdfScopeNotes(checks)
   s.setF('sans', 'normal', 6.6, MUTED)
-  const wrapped = notes.map((note) => doc.splitTextToSize(note, CONTENT_W) as string[])
+  const wrapped = notes.map((note) => doc.splitTextToSize(note, s.contentW) as string[])
   const notesH = RULE_H + 6 + wrapped.reduce((h, l) => h + l.length * 3.2 + 1.1, 0) + 2
-  if (keepTogether(s.y, notesH + SIGNATURE_BLOCK_H)) { doc.addPage(); s.y = M + 6 }
+  if (keepTogether(s.y, notesH + SIGNATURE_BLOCK_H, s.footY)) { doc.addPage(); s.y = M + 6 }
   section('Code Scope & Review Notes')
   s.setF('sans', 'normal', 6.6, MUTED)
   for (const lines of wrapped) {
