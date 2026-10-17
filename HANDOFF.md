@@ -93,6 +93,16 @@ None*, and it has to be done by hand in the repository settings.
   layers and noted. **Nothing is checked against loads** — the page and its PDF
   say so and link to Model Space. PDF: `lib/sheetsPdf.ts`, sharing
   `paintSheetSet` with the model report.
+- **Plan Studio drawings, round 2**: the frame's members carry grid marks
+  (`1C-A1`, `2B-A1-B1`, `RB-…`) instead of generator indices; the set is
+  built with `SheetSetOptions.drafted`, so the foundation and general notes
+  say "as entered, not checked" instead of quoting a bearing pressure or §418.
+  Shared with the model report: elevation callouts say where extras are
+  ("+ 1 EXTRA EACH END"), the mark and three callouts over each beam are
+  placed TOGETHER (`placeClear`) so no leader crosses another label or a
+  column, and a grid line is drawn in parts of at most two bays
+  (`MAX_BAYS_PER_ELEVATION`, "Grid 1 (A–C)") — six bays on one sheet printed
+  everything through everything.
 - **Beam analysis** — support **settlement** δ (#1054; FEM prescribed DOF, three-
   moment and force-method derivations, scaled by each combination's T factor per
   §203.3.3; `validation.ts` `beam-settlement`, ValidationMap FR005) and an
