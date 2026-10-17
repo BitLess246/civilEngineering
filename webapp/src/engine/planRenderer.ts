@@ -297,18 +297,46 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   const shiftTop = 3 * dimTextH + (xs.length > 2 ? tier : 0)
   const shiftLeft = 3 * dimTextH + (zs.length > 2 ? tier : 0)
 
+  // What the plan DRAWS reaches past the grid on a foundation plan: a pad on
+  // an edge grid hangs B/2 beyond it, with its mark above and its T.O.F. tag
+  // below. The dimension tiers and bubbles stand off from that, not from the
+  // grid — set off from the grid, the 6000 mm chain ran through a 1.6 m pad's
+  // WF-2 mark. Label sizes match the pad pass below.
+  let zTop = z0, xLeft = x0, zBot = z1, xRight = x1
+  if (foundation && opts.footings?.length) {
+    const tw = (t: string, size: number) => t.length * 0.63 * size
+    for (const f of opts.footings) {
+      if (f.kind === 'combined') {
+        const a = nm.get(f.nodes[0]), b = nm.get(f.nodes[1])
+        if (!a || !b) continue
+        const half = Math.max(f.By1, f.By2) / 2, reach = Math.max(f.x1, f.Bx - f.x1) + half
+        for (const q of [a, b]) {
+          zTop = Math.min(zTop, q.z - reach); zBot = Math.max(zBot, q.z + reach)
+          xLeft = Math.min(xLeft, q.x - reach); xRight = Math.max(xRight, q.x + reach)
+        }
+        continue
+      }
+      const n = nm.get(f.node); if (!n) continue
+      const half = Math.max(f.B / 2, tw('WF-00', r * 0.46) / 2,
+        opts.foundingElev != null ? tw(tofTag(opts.foundingElev, f.Dc), r * 0.34) / 2 : 0)
+      zTop = Math.min(zTop, n.z - f.B / 2 - r * 0.32 - r * 0.46 * 0.6)
+      zBot = Math.max(zBot, n.z + f.B / 2 + r * 0.34 + r * 0.34 * 0.6)
+      xLeft = Math.min(xLeft, n.x - half); xRight = Math.max(xRight, n.x + half)
+    }
+  }
+
   // ── grid lines (column lines ‖ Y at each x, rows ‖ X at each z) ──
   // top/left ends run out to meet the shifted bubbles
-  for (const x of xs) P.push({ kind: 'line', x1: x, y1: z0 - ext - shiftTop, x2: x, y2: z1 + ext, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
-  for (const z of zs) P.push({ kind: 'line', x1: x0 - ext - shiftLeft, y1: z, x2: x1 + ext, y2: z, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
+  for (const x of xs) P.push({ kind: 'line', x1: x, y1: zTop - ext - shiftTop, x2: x, y2: zBot + ext, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
+  for (const z of zs) P.push({ kind: 'line', x1: xLeft - ext - shiftLeft, y1: z, x2: xRight + ext, y2: z, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
   // bubbles: letters across the top, numbers down the left
   xs.forEach((x, i) => {
-    const cy = z0 - ext - r - shiftTop
+    const cy = zTop - ext - r - shiftTop
     P.push({ kind: 'circle', cx: x, cy, r, stroke: INK, fill: '#fff', width: 0.6 })
     P.push({ kind: 'text', x, y: cy, text: gridLabel(i), size: r * 1.1, anchor: 'middle', color: INK, weight: 700 })
   })
   zs.forEach((z, i) => {
-    const cx = x0 - ext - r - shiftLeft
+    const cx = xLeft - ext - r - shiftLeft
     P.push({ kind: 'circle', cx, cy: z, r, stroke: INK, fill: '#fff', width: 0.6 })
     P.push({ kind: 'text', x: cx, y: z, text: String(i + 1), size: r * 1.1, anchor: 'middle', color: INK, weight: 700 })
   })
@@ -389,8 +417,13 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2
       const vertical = Math.abs(b.z - a.z) > Math.abs(b.x - a.x)
       // horizontal marks sit just BELOW their beam (toward the interior) so the
-      // perimeter row never clashes with the grid-dimension chain above it
-      P.push({ kind: 'text', x: mx + (vertical ? r * 0.45 : 0), y: mz + (vertical ? 0 : r * 0.55), text: markFor(sec), size: r * 0.55, anchor: 'middle', rotate: vertical ? -90 : 0, color: BEAM, weight: 700 })
+      // perimeter row never clashes with the grid-dimension chain above it;
+      // vertical ones beside it, on the bay side — the last grid's to its left.
+      // Clear of the beam's EDGE, not its centreline: offset r·0.45 put the
+      // rotated FB1 on the outline of a 300 mm beam.
+      const size = r * 0.55, off = Math.max(r * 0.55, bw / 2 + size / 2 + r * 0.1)
+      const side = vertical && xs.length > 1 && mx >= xs[xs.length - 1] - 1e-6 ? -1 : 1
+      P.push({ kind: 'text', x: mx + (vertical ? side * off : 0), y: mz + (vertical ? 0 : off), text: markFor(sec), size, anchor: 'middle', rotate: vertical ? -90 : 0, color: BEAM, weight: 700, halo: true })
     }
   }
 
@@ -425,9 +458,10 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
         P.push({ kind: 'rect', x: n.x - s / 2, y: n.z - s / 2, w: s, h: s, stroke: COL, fill: 'none', width: 1.0 })
       }
       // mark centred above the pad, elevation tag below — clear of the stub
-      P.push({ kind: 'text', x: n.x, y: n.z - B / 2 - r * 0.32, text: mk, size: r * 0.46, anchor: 'middle', color: COL, weight: 700 })
+      // haloed: both sit on the grid line through the pad
+      P.push({ kind: 'text', x: n.x, y: n.z - B / 2 - r * 0.32, text: mk, size: r * 0.46, anchor: 'middle', color: COL, weight: 700, halo: true })
       if (opts.foundingElev != null)
-        P.push({ kind: 'text', x: n.x, y: n.z + B / 2 + r * 0.34, text: tofTag(opts.foundingElev, f.Dc), size: r * 0.34, anchor: 'middle', color: PANEL, weight: 500 })
+        P.push({ kind: 'text', x: n.x, y: n.z + B / 2 + r * 0.34, text: tofTag(opts.foundingElev, f.Dc), size: r * 0.34, anchor: 'middle', color: PANEL, weight: 500, halo: true })
     }
 
     // ── combined pads: one polygon spanning two columns ──
@@ -554,13 +588,13 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
 
   // ── chained grid dimensions — placed INSIDE the bubbles (between the bubble
   // ring and the framing), not beyond them ──
-  const dimOffTop = z0 - ext * 0.75 - dimTextH * 1.5
+  const dimOffTop = zTop - ext * 0.75 - dimTextH * 1.5
   for (let i = 0; i < xs.length - 1; i++)
     P.push({ kind: 'dim', x1: xs[i], y1: dimOffTop, x2: xs[i + 1], y2: dimOffTop, text: `${Math.round((xs[i + 1] - xs[i]) * 1000)} mm`, off: 0, size: dimTextH })
   // No `ext` on either grid dimension: the grid LINES already run from the
   // bubbles through the dimension line and into the plan, so they are the
   // extension lines. Adding more would draw the same stroke twice.
-  const dimOffLeft = x0 - ext * 0.75 - dimTextH * 1.5
+  const dimOffLeft = xLeft - ext * 0.75 - dimTextH * 1.5
   for (let i = 0; i < zs.length - 1; i++)
     P.push({ kind: 'dim', x1: dimOffLeft, y1: zs[i], x2: dimOffLeft, y2: zs[i + 1], text: `${Math.round((zs[i + 1] - zs[i]) * 1000)} mm`, off: 0, size: dimTextH })
   // the overall tier, one step further out, on the end grid lines
