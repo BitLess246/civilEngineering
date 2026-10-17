@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cpWindwardRoof, cpLeewardRoof, cpRoofByDistance, roofWindLoads } from './roofWind'
+import { cpWindwardRoof, cpWindwardRoofPos, cpLeewardRoof, cpRoofByDistance, roofWindLoads } from './roofWind'
 import { velocityPressure } from './wind'
 import { addRoofTrusses, roofingLoads, type RoofTrussSpec } from './roofTruss'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
@@ -133,5 +133,58 @@ describe('the reason it matters — a light truss works in reverse under 0.9D + 
     expect(roofingLoads(m).length).toBeGreaterThan(0)
     expect(N(dead, 'rt2.bc2')).toBeGreaterThan(0)
     expect(N([...scale(dead, 0.9), ...w], 'rt2.bc2')).toBeLessThan(0)
+  })
+})
+
+describe('the DOWNWARD branch — a steep roof pushed down on its windward slope', () => {
+  it('the positive windward row of Fig. 207B.4-1', () => {
+    expect(cpWindwardRoofPos(10, 0.25)).toBe(-0.18)
+    expect(cpWindwardRoofPos(20, 0.25)).toBe(0.2)
+    expect(cpWindwardRoofPos(30, 0.5)).toBe(0.2)
+    expect(cpWindwardRoofPos(45, 1.0)).toBe(0.3)
+    expect(cpWindwardRoofPos(17.5, 0.25)).toBeCloseTo(0.1, 12)         // halfway 15 → 20
+  })
+
+  // 30° gable on the same 12 m × 5 m frame: rise = 6·tan30°
+  const rise = 6 * Math.tan(Math.PI / 6)
+  const steep = roofed({ rise })
+  const h = (3.2 + 3.2 + rise) / 2, qh = velocityPressure(h, 50, 'C'), A = 30
+  const r = roofWindLoads(steep, { ...wind, dir: '+X', branch: 'downward' })!
+
+  it('closed form: windward pushed down, internal SUCTION with it', () => {
+    expect(r.theta).toBeCloseTo(30, 9)
+    expect(r.GCpi).toBe(-0.18)
+    const hL = h / 12
+    const pw = qh * 0.85 * cpWindwardRoofPos(30, hL) + qh * 0.18
+    const pl = qh * 0.85 * cpLeewardRoof(30, hL) + qh * 0.18
+    expect(r.windwardCp).toBeCloseTo(cpWindwardRoofPos(30, hL), 12)
+    expect(r.windwardCp).toBeGreaterThan(0)
+    expect(sum(r.loads, 'Fy')).toBeCloseTo(-(pw + pl) * A, 9)
+    expect(sum(r.loads, 'Fx')).toBeCloseTo((pw - pl) * A * Math.tan(Math.PI / 6), 9)
+  })
+
+  it('a shallow roof has no positive windward Cp — the case would govern nothing', () => {
+    const shallow = roofWindLoads(roofed(), { ...wind, dir: '+X', branch: 'downward' })!
+    expect(shallow.windwardCp).toBeLessThanOrEqual(0)
+  })
+
+  it('there is no downward branch for wind along the ridge', () => {
+    expect(roofWindLoads(steep, { ...wind, dir: '+Z', branch: 'downward' })).toBeNull()
+  })
+
+  it('it is the case that loads the windward top chord harder than gravity alone', () => {
+    const m0 = generateGridModel({ baysX: [9], baysZ: [5], storeyH: [3.2], section })
+    const m = addRoofTrusses({ ...m0, loads: [] }, { ...spec, rise: 4.5 * Math.tan(Math.PI / 6), purlinShape: undefined }).model
+    const dead = buildGravityLoads(m, 0, 0).filter((l) => l.cat === 'D')
+    const wd = roofWindLoads(m, { V: 55, exposure: 'C', dir: '+X', branch: 'downward' })!.loads
+    const N = (loads: ModelLoad[], id: string) => {
+      const b = modelToFrame3D({ ...m, loads })
+      const res = solveFrame3D(b.nodes, b.members, b.supports, b.loads)!
+      const mr = res.members.find((x) => x.id === id)!
+      return mr.N[Math.floor(mr.N.length / 2)]
+    }
+    // the windward (left, wind +X) top chord beside the apex
+    expect(N([...dead, ...wd], 'rt2.tc2')).toBeLessThan(N(dead, 'rt2.tc2'))
+    expect(N(dead, 'rt2.tc2')).toBeLessThan(0)
   })
 })

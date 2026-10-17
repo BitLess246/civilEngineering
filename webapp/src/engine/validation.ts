@@ -54,7 +54,7 @@ import { designDrainage } from './drainage'
 import { designSepticTank } from './septicTank'
 import { cylinderWallFixedBase } from './waterTank'
 import { addRoofTrusses, roofingLoads } from './roofTruss'
-import { roofWindLoads, cpWindwardRoof, cpLeewardRoof } from './roofWind'
+import { roofWindLoads, cpWindwardRoof, cpWindwardRoofPos, cpLeewardRoof } from './roofWind'
 import { cyclicStressRatio, crr75 } from './soils/liquefaction'
 import { nGamma, generalBearingCapacity } from './bearingGeneral'
 import { coulombKa, mononobeOkabe } from './coulomb'
@@ -461,6 +461,24 @@ const roofUplift = (() => {
   const qh = velocityPressure(h, 50, 'C'), hL = h / 12
   const pw = qh * 0.85 * cpWindwardRoof(th, hL) - qh * 0.18
   const pl = qh * 0.85 * cpLeewardRoof(th, hL) - qh * 0.18
+  return { manual: -(pw + pl) * 30, software: r.uplift }
+})()
+
+// …and its other branch: the same frame at a 30° pitch, the windward slope
+// pushed DOWN (the figure's positive windward Cp) with internal suction —
+// net vertical −(p_w + p_l)·30, here downward.
+const roofDown = (() => {
+  const sec = { id: 's1', name: 'C1', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const rise = 6 * Math.tan(Math.PI / 6)
+  const m0 = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.2], section: sec })
+  const m = addRoofTrusses({ ...m0, loads: [] }, {
+    spanAlong: 'x', profile: 'gable', web: 'howe', rise, panel: 1.5,
+    chordShape: 'HSS89x89x6.4', webShape: 'HSS64x64x4.8', qD: 0.5, qLr: 0,
+  }).model
+  const r = roofWindLoads(m, { V: 50, exposure: 'C', dir: '+X', branch: 'downward' })!
+  const h = (6.4 + rise) / 2, qh = velocityPressure(h, 50, 'C'), hL = h / 12
+  const pw = qh * 0.85 * cpWindwardRoofPos(30, hL) + qh * 0.18
+  const pl = qh * 0.85 * cpLeewardRoof(30, hL) + qh * 0.18
   return { manual: -(pw + pl) * 30, software: r.uplift }
 })()
 
@@ -1226,6 +1244,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'roof-wind-uplift', category: 'Wind', title: 'Roof wind on trusses — uplift on a 14° gable (NSCP Fig. 207B.4-1)',
     reference: 'NSCP 2015 §207B.4, Figure 207B.4-1 (roof)', formula: 'U = −Σ (qh·G·Cp − qh·GCpi)·A_plan',
     manual: roofUplift.manual, software: roofUplift.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'roof-wind-downward', category: 'Wind', title: 'Roof wind on trusses — downward branch on a 30° gable (NSCP Fig. 207B.4-1)',
+    reference: 'NSCP 2015 §207B.4, Figure 207B.4-1 (roof, positive windward Cp)', formula: 'U = −Σ (qh·G·Cp⁺ + qh·|GCpi|)·A_plan',
+    manual: roofDown.manual, software: roofDown.software, unit: 'kN', tol: 1e-9,
   },
   {
     id: 'roof-truss-roofing', category: 'Steel', title: 'Roof truss roofing — panel-point loads close on q·A (12 × 5 m, uneven panels)',
