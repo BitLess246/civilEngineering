@@ -13,9 +13,10 @@
 import type { LetterheadState } from '../components/calc'
 import { docLabel as brandDocLabel } from './brand'
 import { paintDrawing, paintedSize } from './drawingPdf'
-import { createSheet, autoTable, type Sheet, INK, MUTED, FAINT, M, CONTENT_W, PAGE_W } from './pdfKit'
+import { createSheet, autoTable, type Sheet, INK, MUTED, FAINT, M, PAGE_W } from './pdfKit'
 import type { AnalysisAppendix, AppendixKey, AppendixSection, StatusRow } from './analysisAppendix'
-import { buildModelPdfInto, type ModelPdfInput } from './modelPdf'
+import { buildModelPdfInto, coverFor, type ModelPdfInput } from './modelPdf'
+import { loadPdfStyle, type PdfStyle } from './pdfStyle'
 import { snapshotStamp, shortId, type DesignSnapshot } from '../engine/designSnapshot'
 
 export interface AppendixPdfInput {
@@ -29,6 +30,8 @@ export interface AppendixPdfInput {
    *  carrying an id at all, so this is built once per export and passed to
    *  both rather than derived twice. */
   snapshot?: DesignSnapshot | null
+  /** The document's look — omitted, the one saved in this browser. */
+  style?: PdfStyle
   fileName?: string
 }
 
@@ -86,21 +89,21 @@ function paintSection(sh: Sheet, s: AppendixSection): void {
   if (s.stats?.length) sh.statCards(s.stats)
   for (const n of s.notes ?? []) {
     sh.setF('sans', 'normal', 6.6, MUTED)
-    const lines: string[] = doc.splitTextToSize(n, CONTENT_W)
+    const lines: string[] = doc.splitTextToSize(n, sh.contentW)
     sh.ensure(keepWhole(lines.length) * 3.2 + 1)
     for (const w of lines) { sh.ensure(3.4); doc.text(w, M, sh.y); sh.y += 3.2 }
     sh.y += 2
   }
   for (const f of s.figures ?? []) {
-    const box = { x: M, y: 0, w: CONTENT_W, maxH: f.maxH ?? 95 }
+    const box = { x: M, y: 0, w: sh.contentW, maxH: f.maxH ?? 95 }
     const z = paintedSize(f.drawing, box)
     sh.setF('sans', 'normal', 6, MUTED)
     // A CAPTION IS AS TALL AS IT IS. The cursor advanced a flat 5 mm, so a
     // two-line caption ran into the heading under it — and every figure worth
     // captioning has a two-line caption.
-    const lines: string[] = doc.splitTextToSize(f.caption, CONTENT_W)
+    const lines: string[] = doc.splitTextToSize(f.caption, sh.contentW)
     sh.ensure(z.height + 6 + lines.length * 3)
-    paintDrawing(doc, f.drawing, { ...box, y: sh.y, x: M + (CONTENT_W - z.width) / 2 })
+    paintDrawing(doc, f.drawing, { ...box, y: sh.y, x: M + (sh.contentW - z.width) / 2 })
     sh.y += z.height + 2.5
     // `paintDrawing` leaves the font wherever the drawing's last text
     // primitive set it, so the caption has to claim it back — split at 6 pt
@@ -134,7 +137,7 @@ function paintSection(sh: Sheet, s: AppendixSection): void {
       sh.setF('sans', 'normal', 6.2, FAINT)
       // Kept whole when short: a two-line note split by the page break left
       // "its Case column." alone at the head of the next page.
-      const lines: string[] = doc.splitTextToSize(t.note, CONTENT_W)
+      const lines: string[] = doc.splitTextToSize(t.note, sh.contentW)
       sh.ensure(keepWhole(lines.length) * 3)
       for (const w of lines) { sh.ensure(3.2); doc.text(w, M, sh.y); sh.y += 3 }
     }
@@ -186,7 +189,7 @@ export function paintAnalysisAppendix(sh: Sheet, i: AppendixPdfInput, today: str
   if (i.snapshot) paintSnapshotStrip(sh, i.snapshot)
   sh.rule(0, 'Analysis & design status')
   sh.setF('sans', 'normal', 6.6, MUTED)
-  for (const w of sh.doc.splitTextToSize('Every status below is the engine\'s own result. A check that was not run says so; nothing is marked PASS because its section exists.', CONTENT_W)) { sh.doc.text(w, M, sh.y); sh.y += 3.2 }
+  for (const w of sh.doc.splitTextToSize('Every status below is the engine\'s own result. A check that was not run says so; nothing is marked PASS because its section exists.', sh.contentW)) { sh.doc.text(w, M, sh.y); sh.y += 3.2 }
   sh.y += 2
   paintStatusTable(sh, status)
   for (const s of i.appendix.sections) if (wanted.has(s.key)) paintSection(sh, s)
@@ -194,9 +197,10 @@ export function paintAnalysisAppendix(sh: Sheet, i: AppendixPdfInput, today: str
 
 /** The appendix as its own document, unsaved. */
 export function buildAnalysisAppendixPdf(i: AppendixPdfInput): { doc: Sheet['doc']; today: string } {
-  const sh = createSheet()
+  const sh = createSheet(i.style ?? loadPdfStyle())
   const today = new Date().toISOString().slice(0, 10)
   const sheet = i.lh.sheet || 'S-3D'
+  coverFor(sh, 'Structure — Analysis Appendix', i.lh, i.badges)
   paintAnalysisAppendix(sh, i, today, sheet)
   sh.pageFooters(brandDocLabel('Structure — Analysis Appendix'), sheet, today, i.lh.project,
     undefined, i.snapshot ? snapshotStamp(i.snapshot) : undefined)
@@ -214,7 +218,8 @@ export function generateAnalysisAppendixPdf(i: AppendixPdfInput): void {
  * report; the appendix starts on a fresh page with its own header.
  */
 export async function buildCombinedPdf(report: ModelPdfInput, appendix: AppendixPdfInput): Promise<{ doc: Sheet['doc']; today: string }> {
-  const sh = createSheet()
+  const sh = createSheet(report.style ?? appendix.style ?? loadPdfStyle())
+  coverFor(sh, 'Structure — Design Calculation & Analysis Appendix', report.lh, report.badges)
   const { today, sheet, docLabel, stamp } = await buildModelPdfInto(sh, report)
   sh.doc.addPage()
   sh.y = M

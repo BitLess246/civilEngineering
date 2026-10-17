@@ -24,9 +24,10 @@ import type { StatusRow } from './analysisAppendix'
 import { snapshotRows, snapshotStamp, type DesignSnapshot } from '../engine/designSnapshot'
 import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
 import { paintDrawing, paintedSize } from './drawingPdf'
+import { loadPdfStyle, type PdfStyle } from './pdfStyle'
 import {
   createSheet, autoTable, type Sheet,
-  INK, MUTED, FAINT, BRAND, HAIR, M, CONTENT_W, PAGE_W,
+  INK, MUTED, FAINT, BRAND, HAIR, M,
 } from './pdfKit'
 
 /** The sections of the design report, in print order — what the export
@@ -63,6 +64,8 @@ export interface ModelPdfInput {
    *  ONCE per export and handed to the report AND the appendix, because the
    *  whole point is that the two carry the same id. */
   snapshot?: DesignSnapshot | null
+  /** The document's look — omitted, the one saved in this browser. */
+  style?: PdfStyle
   fileName?: string
 }
 
@@ -78,10 +81,22 @@ export async function generateModelPdf(input: ModelPdfInput): Promise<void> {
  * at the pages it made without a browser to download them into.
  */
 export async function buildModelPdf(input: ModelPdfInput): Promise<{ doc: Sheet['doc']; today: string }> {
-  const sh = createSheet()
+  const sh = createSheet(input.style ?? loadPdfStyle())
+  coverFor(sh, 'Structure — Design Calculation', input.lh, input.badges)
   const { today, sheet, docLabel, stamp } = await buildModelPdfInto(sh, input)
   sh.pageFooters(docLabel, sheet, today, input.lh.project, undefined, stamp)
   return { doc: sh.doc, today }
+}
+
+/** The cover page, when the sheet's style asks for one — the project, its
+ *  parties and codes, before the first sheet. */
+export function coverFor(sh: Sheet, title: string, lh: LetterheadState, badges: readonly string[], sheetFallback = 'S-3D'): void {
+  if (!sh.style.coverPage) return
+  sh.coverPage({
+    title, subtitle: lh.project || undefined,
+    rows: [['Sheet', lh.sheet || sheetFallback], ['Element', 'Structure — 3D Model Space'], ['Prepared by', lh.preparedBy],
+      ['Date', new Date().toISOString().slice(0, 10)], ['Codes', badges.join(' · ')]],
+  })
 }
 
 /**
@@ -177,7 +192,7 @@ export async function buildModelPdfInto(
   rule('Code Scope & Review Notes')
   setF('sans', 'normal', 6.6, MUTED)
   for (const note of report.limitations) {
-    const lines = doc.splitTextToSize(`REVIEW NOTE — ${note}`, CONTENT_W)
+    const lines = doc.splitTextToSize(`REVIEW NOTE — ${note}`, sh.contentW)
     ensure(lines.length * 3.2 + 2)
     for (const line of lines) { doc.text(line, M, sh.y); sh.y += 3.2 }
     sh.y += 1.1
@@ -223,7 +238,7 @@ export async function buildModelPdfInto(
   if (status && want.has('status')) {
     rule('Analysis & Design Status')
     setF('sans', 'normal', 6.6, MUTED)
-    for (const w of doc.splitTextToSize('What was run, and what it found. A check that was not run says so; nothing is marked PASS because its section exists. The full results are in the Analysis Appendix.', CONTENT_W)) { doc.text(w, M, sh.y); sh.y += 3.2 }
+    for (const w of doc.splitTextToSize('What was run, and what it found. A check that was not run says so; nothing is marked PASS because its section exists. The full results are in the Analysis Appendix.', sh.contentW)) { doc.text(w, M, sh.y); sh.y += 3.2 }
     sh.y += 2
     ensure(20)
     autoTable(doc, {
@@ -317,7 +332,7 @@ export async function buildModelPdfInto(
     doc.text(`${n}.${gi + 1}  ${g.title}`, M, sh.y)
     sh.y += 1.6
     doc.setDrawColor(...HAIR); doc.setLineWidth(0.3)
-    doc.line(M, sh.y, M + CONTENT_W, sh.y)
+    doc.line(M, sh.y, M + sh.contentW, sh.y)
     sh.y += 4.5
     g.items.forEach((item) => {
       // THE SCHEDULE'S OWN FIGURES, painted as vectors. The cut through the
@@ -339,14 +354,14 @@ export async function buildModelPdfInto(
       const sheetBoxes = sheets.map((f) => {
         const b = f.drawing.bounds
         const tall = (b.maxY - b.minY) > 1.2 * (b.maxX - b.minX)
-        return { x: M, y: 0, w: CONTENT_W, maxH: tall ? 120 : 75 }
+        return { x: M, y: 0, w: sh.contentW, maxH: tall ? 120 : 75 }
       })
       const sheetSizes = sheets.map((f, k) => paintedSize(f.drawing, sheetBoxes[k]))
       // The header and the sheet under it move to the next page TOGETHER: a
       // header left at the foot of one page with its elevation at the head
       // of the next reads as two items, and leaves a page-third blank.
       const diagGap = 3
-      const diagSlotW = ((cuts.length ? CONTENT_W - boxW - 4 : CONTENT_W) - diagGap * (diagrams.length - 1)) / Math.max(diagrams.length, 1)
+      const diagSlotW = ((cuts.length ? sh.contentW - boxW - 4 : sh.contentW) - diagGap * (diagrams.length - 1)) / Math.max(diagrams.length, 1)
       const diagBox = { x: M, y: 0, w: diagSlotW, maxH: Math.max(boxH, 34) }
       const diagH = diagrams.length ? Math.max(...diagrams.map((f) => paintedSize(f.drawing, diagBox).height)) : 0
       const need = (cuts.length ? boxH + 5 : 20) + sheetSizes.reduce((s, z) => s + z.height + 9, 0) + (diagrams.length ? 16 : 0)
@@ -358,14 +373,14 @@ export async function buildModelPdfInto(
         sh.y += 4.4
         if (item.sub) {
           setF('mono', 'normal', 5.8, FAINT)
-          for (const w of doc.splitTextToSize(item.sub, CONTENT_W)) { doc.text(w, M, sh.y); sh.y += 3 }
+          for (const w of doc.splitTextToSize(item.sub, sh.contentW)) { doc.text(w, M, sh.y); sh.y += 3 }
         }
         const meta = [item.details, item.loc].filter(Boolean).join('  ·  ')
         if (meta) { setF('sans', 'normal', 6.4, MUTED); doc.text(meta, M, sh.y + 0.4); sh.y += 3.3 }
         const rowTop = sh.y + 1
         diagrams.forEach((f, c) => paintDrawing(doc, f.drawing, { ...diagBox, x: M + c * (diagSlotW + diagGap), y: rowTop + 2.5 }))
         if (cuts.length) {
-          const fx = M + CONTENT_W - boxW
+          const fx = M + sh.contentW - boxW
           setF('sans', 'bold', 5, FAINT)
           doc.text('SECTION', fx + 1, rowTop + 1.5)
           doc.setDrawColor(...HAIR); doc.setLineWidth(0.2)
@@ -380,10 +395,10 @@ export async function buildModelPdfInto(
         sh.y = rowTop + 2.5 + Math.max(boxH, diagH) + 2.5
       }
       const headTop = sh.y
-      const leftW = cuts.length ? CONTENT_W - boxW - 6 : CONTENT_W
+      const leftW = cuts.length ? sh.contentW - boxW - 6 : sh.contentW
       if (!diagrams.length) {
       if (cuts.length) {
-        const fx = M + CONTENT_W - boxW
+        const fx = M + sh.contentW - boxW
         setF('sans', 'bold', 5, FAINT)
         doc.text('SECTION', fx + 1, headTop + 1.5)
         doc.setDrawColor(...HAIR); doc.setLineWidth(0.2)
@@ -425,7 +440,7 @@ export async function buildModelPdfInto(
       sheets.forEach((f, k) => {
         const z = sheetSizes[k]
         ensure(z.height + 9)
-        paintDrawing(doc, f.drawing, { ...sheetBoxes[k], y: sh.y, x: M + (CONTENT_W - z.width) / 2 })
+        paintDrawing(doc, f.drawing, { ...sheetBoxes[k], y: sh.y, x: M + (sh.contentW - z.width) / 2 })
         sh.y += z.height + 2
         setF('sans', 'normal', 6, MUTED)
         doc.text(f.caption, M, sh.y)
@@ -456,12 +471,12 @@ export async function buildModelPdfInto(
         sh.y += 3
       }
       k += 1
-      const box = { x: M, y: sh.y, w: CONTENT_W, maxH: 150 }
+      const box = { x: M, y: sh.y, w: sh.contentW, maxH: 150 }
       const size = paintedSize(s.drawing, box)
       // Keep a sheet with its caption rather than orphaning the caption on the
       // next page — the same rule the soils report figures use.
       ensure(size.height + 14)
-      const placed = { ...box, y: sh.y + 3, x: (PAGE_W - size.width) / 2 }
+      const placed = { ...box, y: sh.y + 3, x: (sh.pageW - size.width) / 2 }
       paintDrawing(doc, s.drawing, placed)
       sh.y = placed.y + size.height + 3.5
 
@@ -470,7 +485,7 @@ export async function buildModelPdfInto(
       sh.y += 3.4
       for (const w of s.warnings) {
         setF('sans', 'normal', 6.4, MUTED)
-        for (const line of doc.splitTextToSize(`\u26a0 ${w}`, CONTENT_W)) { doc.text(line, M, sh.y); sh.y += 3 }
+        for (const line of doc.splitTextToSize(`\u26a0 ${w}`, sh.contentW)) { doc.text(line, M, sh.y); sh.y += 3 }
       }
       sh.y += 3
     }

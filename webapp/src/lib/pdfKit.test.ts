@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { fitFigure, fitTitleSize, truncateToWidth, createSheet, CONTENT_W, TITLE_RESERVED_W, M, PAGE_H, FOOT_Y, titleLayout, capsLabel, keepTogether, SIGNATURE_BLOCK_H } from './pdfKit'
+import { DEFAULT_PDF_STYLE, type PdfStyle } from './pdfStyle'
 
 describe('fitFigure', () => {
   it('fills the column width when the image is short enough', () => {
@@ -149,5 +150,114 @@ describe('keepTogether', () => {
   })
   it('never moves a block taller than a page — it breaks wherever it is', () => {
     expect(keepTogether(FOOT_Y - 20, PAGE_H)).toBe(false)
+  })
+})
+
+describe('styled sheets (pdfStyle)', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+  /** Every string drawn, with the page it landed on. */
+  function capture(s: ReturnType<typeof createSheet>) {
+    const drawn: { page: number; text: string; x: number; y: number }[] = []
+    const orig = s.doc.text.bind(s.doc)
+    s.doc.text = ((t: string | string[], x: number, y: number, o?: unknown) => {
+      for (const line of [t].flat()) drawn.push({ page: s.doc.getCurrentPageInfo().pageNumber, text: line, x, y })
+      return orig(t, x, y, o as never)
+    }) as typeof s.doc.text
+    return drawn
+  }
+  const style = (o: Partial<PdfStyle>): PdfStyle => ({ ...DEFAULT_PDF_STYLE, ...o })
+
+  it('Letter paper: the page is 215.9 × 279.4 mm and the column widens, margins kept', () => {
+    const s = createSheet(style({ paper: 'letter' }))
+    expect(s.doc.internal.pageSize.getWidth()).toBeCloseTo(215.9, 1)
+    expect(s.doc.internal.pageSize.getHeight()).toBeCloseTo(279.4, 1)
+    expect(s.contentW).toBeCloseTo(215.9 - 2 * M, 6)
+    expect(s.footY).toBeCloseTo(279.4 - 12, 6)
+    const a4 = createSheet()
+    expect(a4.contentW).toBe(CONTENT_W)
+    expect(a4.footY).toBe(FOOT_Y)
+  })
+
+  it('a Letter sheet breaks pages at ITS foot, not A4\'s', () => {
+    const s = createSheet(style({ paper: 'letter' }))
+    s.y = s.footY - 5
+    s.ensure(10)
+    expect(s.doc.getNumberOfPages()).toBe(2)
+  })
+
+  it('the cover is unnumbered: footers count content pages from 1, and the cover gets none', () => {
+    const s = createSheet(style({ coverPage: true, checkedBy: 'R. Cruz', revision: 'B' }))
+    const drawn = capture(s)
+    s.coverPage({ title: 'Beam B-1 — Design Calculation', rows: [['Sheet', 'S-01'], ['Prepared by', '']] })
+    s.doc.addPage()
+    s.pageFooters('DOC', 'S-01', '2026-10-17', 'Proj')
+    const onCover = drawn.filter((d) => d.page === 1).map((d) => d.text)
+    expect(onCover).toContain('Beam B-1 — Design Calculation')
+    expect(onCover).toContain('R. Cruz')                 // checker appended from the style
+    expect(onCover).toContain('B')                       // and the revision
+    expect(onCover).not.toContain('PREPARED BY')         // an empty row is left out
+    expect(onCover.some((t) => t.startsWith('page '))).toBe(false)
+    const footers = drawn.filter((d) => d.text.startsWith('page ')).map((d) => [d.page, d.text])
+    expect(footers).toEqual([[2, 'page 1 / 2'], [3, 'page 2 / 2']])
+  })
+
+  it('revision, footer note and watermark reach every page', () => {
+    const s = createSheet(style({ revision: 'A', footerNote: 'Confidential — Job 2026-114', watermark: 'DRAFT' }))
+    const drawn = capture(s)
+    s.doc.addPage()
+    s.pageFooters('DOC', 'S-01', '2026-10-17', 'Proj')
+    for (const p of [1, 2]) {
+      const t = drawn.filter((d) => d.page === p).map((d) => d.text)
+      expect(t, `page ${p}`).toContain('S-01 · REV A · Proj')
+      expect(t, `page ${p}`).toContain('Confidential — Job 2026-114')
+      expect(t, `page ${p}`).toContain('DRAFT')
+    }
+  })
+
+  it('the default style paints no watermark, note or revision', () => {
+    const s = createSheet()
+    const drawn = capture(s)
+    s.pageFooters('DOC', 'S-01', '2026-10-17', 'Proj')
+    const t = drawn.map((d) => d.text)
+    expect(t).toContain('S-01 · Proj')
+    expect(t.some((x) => /REV|DRAFT/.test(x))).toBe(false)
+  })
+
+  it('the letterhead grid gains CHECKED BY and REVISION from the style', () => {
+    const s = createSheet(style({ checkedBy: 'R. Cruz', revision: '2' }))
+    const drawn = capture(s)
+    s.letterheadGrid([['PROJECT', 'P', false], ['SHEET', 'S-01', true]])
+    const t = drawn.map((d) => d.text)
+    expect(t).toEqual(expect.arrayContaining(['CHECKED BY', 'R. Cruz', 'REVISION', '2']))
+  })
+
+  it('signatures off prints no approval block; on, the checker is named under Reviewed by', () => {
+    const off = createSheet(style({ signatures: false }))
+    const y0 = off.y
+    off.signatures('A. Reyes')
+    expect(off.y).toBe(y0)
+    const on = createSheet(style({ checkedBy: 'R. Cruz' }))
+    const drawn = capture(on)
+    on.signatures('A. Reyes')
+    expect(drawn.map((d) => d.text)).toEqual(expect.arrayContaining(['A. Reyes', 'R. Cruz']))
+  })
+
+  it('the firm replaces the wordmark in the masthead, beside its logo', () => {
+    const s = createSheet(style({ firmName: 'Acme Structural', firmTagline: 'PRC Lic. 0123456', logo: PNG }))
+    const drawn = capture(s)
+    let images = 0
+    const add = s.doc.addImage.bind(s.doc)
+    s.doc.addImage = ((...a: Parameters<typeof s.doc.addImage>) => { images++; return add(...a) }) as typeof s.doc.addImage
+    s.brandHeader({ docLabel: 'DOC', title: 'Beam', sheet: 'S-01', today: '2026-10-17', ok: true, governing: 'flexure', badges: [] })
+    const firm = drawn.find((d) => d.text === 'Acme Structural')
+    expect(firm).toBeDefined()
+    expect(firm!.x).toBeGreaterThan(M)                   // pushed right of the logo
+    expect(drawn.map((d) => d.text)).toContain('PRC Lic. 0123456')
+    expect(images).toBe(1)
+  })
+
+  it('an unreadable logo is left out, not fatal', () => {
+    const s = createSheet(style({ logo: 'data:image/png;base64,AAAA' }))
+    expect(() => s.brandHeader({ docLabel: 'DOC', title: 'Beam', sheet: 'S-01', today: '2026-10-17', ok: true, governing: '', badges: [] })).not.toThrow()
   })
 })
