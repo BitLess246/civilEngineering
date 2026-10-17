@@ -225,7 +225,7 @@ export function CheckCard({ title, basis, status, value, unit, formula, ratio, r
       )}
       {explain && (
         // A new tab: the calculator keeps its inputs, which live only in memory.
-        <Link to={explain} target="_blank" rel="noopener" data-pdf-skip="" className="mt-2.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand hover:underline">
+        <Link to={explain} target="_blank" rel="noopener" data-pdf-skip="" data-tap="" className="mt-2.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-brand hover:underline">
           Explain this check ↗
         </Link>
       )}
