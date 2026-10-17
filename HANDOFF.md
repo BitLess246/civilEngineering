@@ -594,6 +594,36 @@ is greyed out with what to run.
   carry the governing combination, the design steps and the cage figures, so
   the chain is there without a second rendering of it.
 
+## PDF appearance — firm letterhead and paper (Oct 2026)
+
+Every PDF the app writes is painted by `pdfKit`, and every builder now takes a
+`PdfStyle` (`lib/pdfStyle.ts`): firm name, tagline and logo in place of the
+wordmark, accent colour, A4 or Letter, watermark (DRAFT, PRELIMINARY, FOR
+REVIEW, NOT FOR CONSTRUCTION or custom text), footer note, revision, checker,
+the approval block on/off and an optional cover page.
+
+- **Storage:** stored in this browser only, under `civeng-pdf-style`. It is
+  sanitised field by field, so a bad value only resets that field. A builder
+  given no style uses the saved one, so a calculator page needs no change to
+  pick it up.
+- **Geometry is per sheet:** use `sh.pageW / pageH / contentW / footY`. The
+  `PAGE_W / CONTENT_W / FOOT_Y` constants are A4 only and stay for tests.
+  Letter keeps the 14 mm margins and gains column width.
+- **Cover page:** printed with no footer. Content pages are numbered from 1
+  after it. The cover and the letterhead add CHECKED BY / REVISION from the
+  style themselves.
+- **Watermark:** sized so its whole rotated box (cap height and the fixed
+  2 mm letter-spacing included) stays inside the margins. It is also centred
+  across its line, because the tops of the first letters lean back at that
+  angle.
+- **UI:** `components/PdfSettingsDialog` is reached from the ⚙ beside every
+  `ExportPdfButton` and from "PDF appearance…" in the Model Space export
+  dialog.
+  - It shows a live masthead preview and saves only on Save.
+  - Any image the browser decodes is re-encoded to a PNG of at most 480 px.
+  - It is portalled to `<body>`, because calculator tab strips painted over
+    it in place.
+
 ## Report review — five phases (Sep 2026)
 
 A read of the 134-page combined Design Report + Analysis Appendix produced 15
