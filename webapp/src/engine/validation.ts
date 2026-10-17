@@ -14,6 +14,7 @@ import { requiredArea } from './bearing'
 import { beamFlexure, beamShear, deriveWSection } from './steelDesign'
 import { shapeByName } from './aiscSections'
 import { designTrussJoint } from './hssTrussJoint'
+import { biaxialPoint } from './biaxialColumn'
 import { checkAnchorGroup } from './anchorDesign'
 import { boltZDoubleSteel } from './postBase'
 import { designAxialColumn, momentMagnificationNonsway, pmAtDepth } from './columnDesign'
@@ -475,6 +476,22 @@ const spColumnBalanced = (() => {
   const p = pmAtDepth({ b, h, cover: 0, barDia: 0, tieDia: 0, fc, fy, numBars: 6, beta1: 0.825,
     layers: [{ d: d1, n: 3, As }, { d: dt, n: 3, As }] }, cb)
   return { manual: (0.65 * Pb) / kip, software: (0.65 * p.Pn) / kip }
+})()
+
+// ── 12b⁗″. Exact biaxial engine, uniaxial limit — PCA Notes Ex. 7.8 ─────────
+// StructurePoint's manual biaxial procedure: 24 × 24 in, 4-#11 at 2.0 in,
+// f′c 5 ksi (β1 0.80), fy 60 ksi, Es 29 000 ksi — published Pb = 1049.2 kip.
+// The two-row Whitney block by hand (kip, in) against `biaxialPoint` at α = 0,
+// whose block is a clipped polygon and whose bars are four points.
+const biaxialBalanced = (() => {
+  const inch = 25.4, kip = 4.4482216, ksi = (kip * 1000) / (inch * inch)
+  const cb = (87 / 147) * 22, a = 0.8 * cb, As2 = 2 * 1.56
+  const fs1 = Math.min(60, 87 * (cb - 2) / cb) - 0.85 * 5
+  const Pb = 0.85 * 5 * a * 24 + As2 * fs1 - As2 * 60                       // kip
+  const at = 10 * inch, As = 1.56 * inch * inch
+  const p = biaxialPoint({ b: 24 * inch, h: 24 * inch, fc: 5 * ksi, fy: 60 * ksi, Es: 29_000 * ksi, beta1: 0.8,
+    bars: [[at, at], [-at, at], [at, -at], [-at, -at]].map(([x, y]) => ({ x, y, As })) }, cb * inch, 0)
+  return { manual: Pb, software: p.Pn / kip }
 })()
 
 // ── 12b‴. HSS overlapped KT joint — Packer (2014), EJ 51(3) ─────────────
@@ -1313,6 +1330,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'roof-truss-roofing', category: 'Steel', title: 'Roof truss roofing — panel-point loads close on q·A (12 × 5 m, uneven panels)',
     reference: 'Tributary-area statics', formula: 'Σ q·A_trib = q·L·B',
     manual: roofTrussRoofing.manual, software: roofTrussRoofing.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'biaxial-exact-balanced', category: 'RC', title: 'Exact biaxial engine at α = 0 — balanced load, 24 × 24 in, 4-#11 (published Pb = 1049.2 kip)',
+    reference: 'StructurePoint manual biaxial procedure, after PCA Notes Ex. 7.8; ACI 318-14 §22.2', formula: 'Pb = 0.85f′c·β1·cb·b + As′(fs′ − 0.85f′c) − As·fy',
+    manual: biaxialBalanced.manual, software: biaxialBalanced.software, unit: 'kip', tol: 1e-9,
   },
   {
     id: 'pm-balanced-spcolumn', category: 'RC', title: 'P–M balanced point — 14 × 20 in, 6-#11 about Y (spColumn prints φPb = 282.2 kip)',
