@@ -10,6 +10,7 @@
 // Escape and the backdrop close it without exporting — a dialog you cannot
 // leave is a wall.
 import { useCallback, useEffect, useState } from 'react'
+import { PdfSettingsButton } from './ExportPdfButton'
 import type { AppendixKey } from '../lib/analysisAppendix'
 import { APPENDIX_TITLES, LETTERS } from '../lib/analysisAppendix'
 import type { ReportSectionKey } from '../lib/modelPdf'
@@ -45,13 +46,14 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
   // forces both on — unticking Combined hands the pair back exactly as it
   // was, instead of leaving two boxes ticked that only the binding ticked.
   const [freePicks, setFreePicks] = useState({ report: true, appendix: true })
+  const [appearance, setAppearance] = useState(false)
 
   const close = useCallback(() => { if (!busy) onClose() }, [busy, onClose])
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !appearance) close() }
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('keydown', onKey) }
-  }, [close])
+  }, [close, appearance])
 
   const toggle = <K,>(set: ReadonlySet<K>, k: K): Set<K> => {
     const next = new Set(set)
@@ -128,10 +130,14 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
         </div>
 
         <div className="flex items-center justify-between border-t border-hairline-2 bg-sheet-2/60 px-5 py-3">
-          <button type="button" onClick={close} disabled={busy}
-            className="rounded-md px-3 py-1.5 text-[12px] font-medium text-muted hover:bg-paper disabled:opacity-50">
-            Cancel
-          </button>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={close} disabled={busy}
+              className="rounded-md px-3 py-1.5 text-[12px] font-medium text-muted hover:bg-paper disabled:opacity-50">
+              Cancel
+            </button>
+            <PdfSettingsButton open={appearance} setOpen={setAppearance} label="⚙ PDF appearance…"
+              className="rounded-md px-3 py-1.5 text-[12px] font-medium text-muted hover:bg-paper" />
+          </div>
           <button type="button" disabled={blocked || busy}
             onClick={() => onGenerate({ reportSections: REPORT_KEYS.filter((k) => report.has(k)), appendixSections: APPENDIX_KEYS.filter((k) => appendix.has(k) && available[k]), outputs })}
             className="rounded-md bg-brand px-4 py-1.5 text-[12px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-40">

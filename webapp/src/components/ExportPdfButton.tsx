@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import type { CalcPdfInput, CalcPdfDetail } from '../lib/calcPdf'
 import { svgToPng } from '../lib/svgToPng'
 import { extractBlocks, tableOf, domStyleOf, inlineText } from '../lib/pdfCapture'
@@ -22,7 +22,13 @@ export interface ExportPdfButtonProps extends Omit<CalcPdfInput, 'drawing' | 'fi
   figuresSelector?: string
   label?: string
   className?: string
+  /** Layout classes for the button + settings pair (grid span, margins) —
+   *  `className` styles the export button itself. */
+  containerClassName?: string
 }
+
+// The dialog is only fetched when someone opens it.
+const PdfSettingsDialog = lazy(() => import('./PdfSettingsDialog').then((m) => ({ default: m.PdfSettingsDialog })))
 
 const DEFAULT_SELECTOR = '[data-pdf-drawing] svg'
 const DEFAULT_FIGURES_SELECTOR = '[data-pdf-figure]'
@@ -37,9 +43,10 @@ const DEFAULT_FIGURES_SELECTOR = '[data-pdf-figure]'
  */
 export function ExportPdfButton({
   drawingSelector = DEFAULT_SELECTOR, figuresSelector = DEFAULT_FIGURES_SELECTOR,
-  label = '⎙ Export PDF report', className, ...report
+  label = '⎙ Export PDF report', className, containerClassName = 'ml-1.5', ...report
 }: ExportPdfButtonProps) {
   const [busy, setBusy] = useState(false)
+  const [settings, setSettings] = useState(false)
   const [failed, setFailed] = useState(false)
 
   const run = async () => {
@@ -145,12 +152,29 @@ export function ExportPdfButton({
   }
 
   return (
-    <button
-      type="button" onClick={() => void run()} disabled={busy}
-      className={className ?? 'ml-1.5 inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-hover disabled:opacity-50'}
-      title={failed ? 'The export failed — see the browser console' : 'Download this calculation as a PDF'}
-    >
-      {busy ? '⏳ Building PDF…' : failed ? '⚠ Export failed — retry' : label}
-    </button>
+    <span className={`inline-flex items-stretch gap-1 ${containerClassName}`}>
+      <button
+        type="button" onClick={() => void run()} disabled={busy}
+        className={className ?? 'inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-hover disabled:opacity-50'}
+        title={failed ? 'The export failed — see the browser console' : 'Download this calculation as a PDF'}
+      >
+        {busy ? '⏳ Building PDF…' : failed ? '⚠ Export failed — retry' : label}
+      </button>
+      <PdfSettingsButton open={settings} setOpen={setSettings} />
+    </span>
+  )
+}
+
+/** The gear beside an export button — opens the letterhead / paper /
+ *  watermark settings every PDF export uses. */
+export function PdfSettingsButton({ open, setOpen, className, label = '⚙' }: { open: boolean; setOpen: (v: boolean) => void; className?: string; label?: string }) {
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} aria-label="PDF appearance" title="PDF appearance — letterhead, logo, paper, watermark"
+        className={className ?? 'inline-flex flex-none items-center justify-center rounded-md border border-hairline bg-sheet px-2.5 text-[14px] text-muted hover:bg-sheet-2 hover:text-ink'}>
+        {label}
+      </button>
+      {open && <Suspense fallback={null}><PdfSettingsDialog onClose={() => setOpen(false)} /></Suspense>}
+    </>
   )
 }
