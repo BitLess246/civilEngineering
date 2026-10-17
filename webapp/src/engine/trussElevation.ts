@@ -51,6 +51,8 @@ export interface TrussElevationInput {
   purlinShape?: string
   /** Roofing the truss carries, kPa on plan. */
   roofing?: { qD: number; qLr: number }
+  /** The §K3 joint results at the panel points (absent before a design). */
+  joints?: { node: string; covered: boolean; ok: boolean; util: number }[]
   /** Tributary width of this truss, m (half the spacing either side). */
   spacing?: number
 }
@@ -123,6 +125,18 @@ export function buildTrussElevation(i: TrussElevationInput, opts: TrussElevation
     }
   }
   for (const n of i.nodes) P.push({ kind: 'circle', cx: X(n.u), cy: Y(n.y), r: u * 0.16, fill: SHEET_INK })
+  // §K3 joints: a failing one ringed in the warning ink; one outside the
+  // Table K3.2A limits tagged GP — a gusset plate detail, not a §K3 joint
+  for (const jt of i.joints ?? []) {
+    const n = node.get(jt.node)
+    if (!n) continue
+    if (!jt.covered) {
+      P.push({ kind: 'circle', cx: X(n.u), cy: Y(n.y), r: u * 0.55, stroke: SHEET_NOTE, fill: 'none', width: 0.7 })
+      txt(X(n.u), Y(n.y) + chordW / 2 + u * 1.05, 'GP', u * 0.55, 'middle', SHEET_NOTE, 700)
+    } else if (!jt.ok) P.push({ kind: 'circle', cx: X(n.u), cy: Y(n.y), r: u * 0.55, stroke: SHEET_WARN, fill: 'none', width: 1.4 })
+  }
+  for (const jt of i.joints ?? []) if (jt.covered && !jt.ok)
+    notesOut.push(`joint ${jt.node} fails its AISC 360-16 §K3 check — utilisation ${jt.util.toFixed(2)}`)
 
   // purlins in end view, standing on the top chord at their panel points
   for (const id of i.purlinAt) {
@@ -223,6 +237,16 @@ export function buildTrussElevation(i: TrussElevationInput, opts: TrussElevation
     cx = x0
     cells.forEach((v, k) => { txt(cx, ty, v, tSize, 'start', r.ok ? SHEET_NOTE : SHEET_WARN, k === 0 || k === 6 ? 700 : 500); cx += cols[k].w * u })
   }
+  if (i.joints?.length) {
+    ty += rowH
+    cx = x0
+    const cov = i.joints.filter((jt) => jt.covered)
+    const jOk = cov.every((jt) => jt.ok)
+    const gp = i.joints.length - cov.length
+    ;['JOINTS §K3', gp ? `${gp} GP (gusset plate)` : 'HSS-to-HSS', String(cov.length), '', '',
+      cov.length ? Math.max(...cov.map((jt) => jt.util)).toFixed(2) : '—', cov.length ? (jOk ? 'OK' : 'FAIL') : '']
+      .forEach((v, k) => { txt(cx, ty, v, tSize, 'start', jOk ? SHEET_NOTE : SHEET_WARN, k === 0 || k === 6 ? 700 : 500); cx += cols[k].w * u })
+  }
   if (purlin) {
     ty += rowH
     cx = x0
@@ -237,6 +261,7 @@ export function buildTrussElevation(i: TrussElevationInput, opts: TrussElevation
   const notes = [
     `FORCES = DESIGN ENVELOPE AXIAL, kN: T TENSION, C COMPRESSION (THE S-07 BRACE SCHEDULE'S Tu / Pu). MEMBERS DRAWN TO SCALE ON THEIR CENTRELINES; DIMENSIONS mm, LEVELS m.`,
     `${pitch}CHORDS CONTINUOUS THROUGH THE PANEL POINTS; WEBS PINNED; TRUSS SEATED ON A PIN AT EACH BEARING. MEMBERS DESIGNED AS AXIAL STEEL (AISC 360-16 §D2, §E3).`,
+    ...(i.joints?.length ? ['PANEL-POINT JOINTS CHECKED TO AISC 360-16 §K3 (HSS-TO-HSS) IN EVERY COMBINATION; GP = OUTSIDE TABLE K3.2A (E.G. A DIAGONAL FLATTER THAN 30°) — DETAIL WITH A GUSSET PLATE.'] : []),
     ...(i.roofing ? [`CARRIES ROOFING ${i.roofing.qD.toFixed(2)} kPa DEAD + ${i.roofing.qLr.toFixed(2)} kPa ROOF LIVE ON PLAN${i.spacing ? `, OVER A ${i.spacing.toFixed(2)} m STRIP` : ''}, AT THE TOP-CHORD PANEL POINTS.`] : []),
   ]
   const lvlX0 = x0

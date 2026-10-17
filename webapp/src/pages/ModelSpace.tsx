@@ -6950,6 +6950,43 @@ export default function ModelSpace() {
             </div>
           )}
 
+          {/* Roof-truss joint schedule (AISC 360-16 §K3) */}
+          {(design.trussJoints ?? []).length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm" data-testid="truss-joint-schedule">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-brand">Roof-truss joint schedule — AISC 360-16 §K3 (HSS-to-HSS)<SchedChip items={design.trussJoints ?? []} ok={(j) => j.result.ok} /></h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-muted">
+                    <th className="py-1 pr-2 font-semibold">Joint</th>
+                    <th className="py-1 pr-2 font-semibold">Chord</th>
+                    <th className="py-1 pr-2 font-semibold">Branches</th>
+                    <th className="py-1 pr-2 font-semibold">Layout</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Util</th>
+                    <th className="py-1 pr-2 font-semibold">Governs</th>
+                    <th className="py-1 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(design.trussJoints ?? []).map((j) => {
+                    const r = j.result
+                    return (
+                      <tr key={j.node} className={`sched-row border-t border-hairline-2 ${!r.covered ? 'bg-warn-tint' : r.ok ? '' : 'bg-fail-tint text-fail'}`}>
+                        <td className="py-1 pr-2 font-medium">{j.node} <span className="text-muted">({j.chord})</span></td>
+                        <td className="py-1 pr-2">{r.chordShape}</td>
+                        <td className="py-1 pr-2">{r.branches.map((b) => `${b.id} ${b.kind}`).join(' · ') || '—'}</td>
+                        <td className="py-1 pr-2">{r.gap ? (r.gap.kind === 'gap' ? `gap ${Math.round(r.gap.g)} mm` : `overlap ${Math.round((r.gap.Ov ?? 0) * 100)} %`) + (Math.abs(r.gap.e) > 0.5 ? `, e = ${Math.round(r.gap.e)} mm` : ', e = 0') : '—'}</td>
+                        <td className="py-1 pr-2 text-right">{r.covered ? `${(r.util * 100).toFixed(0)}%` : '—'}</td>
+                        <td className="py-1 pr-2">{r.covered ? r.governs : <span className="text-muted">{r.limitNotes.join('; ')}</span>}</td>
+                        <td className="py-1">{!r.covered ? 'gusset plate' : r.ok ? '✓ OK' : '✗ check'} <span className="text-muted">({j.gov})</span></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-2 text-[11px] text-muted">Every panel point where webs land on a chord, checked on each combination's own forces (K when the branches' punching loads balance within 20 %, else T/Y). Layout as noded where it is a valid gap or a 25–100 % overlap, else the eccentricity that makes one within −0.55H ≤ e ≤ 0.25H. A joint outside Table K3.2A — usually a flat diagonal near the eaves, θ &lt; 30° — is not designed here: detail it with a gusset plate.</p>
+            </div>
+          )}
+
           {/* Steel brace schedule (full width) */}
           {(design.steelBraces ?? []).length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-hairline bg-sheet p-4 shadow-sm">

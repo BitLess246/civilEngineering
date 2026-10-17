@@ -157,6 +157,27 @@ describe('the design treats a truss member as a truss member', () => {
   })
 })
 
+describe('the §K3 joints on the sheet', () => {
+  it('a joint outside Table K3.2A is tagged GP, and the schedule carries a JOINTS row', () => {
+    const b = trussElevationBundles(model, design)[0]
+    expect(b.input.joints?.length).toBeGreaterThan(0)
+    const t = texts(buildTrussElevation(b.input).primitives).map((x) => x.text)
+    const gp = b.input.joints!.filter((j) => !j.covered).length
+    expect(t.filter((x) => x === 'GP').length).toBe(gp)
+    expect(t).toContain('JOINTS §K3')
+    expect(t.join(' ')).toMatch(/AISC 360-16 §K3/)
+  })
+
+  it('a failing joint is ringed in the warning ink and raised as a design note', () => {
+    const b = trussElevationBundles(model, design)[0]
+    const j0 = b.input.joints!.find((j) => j.covered)!
+    const bad = { ...b.input, joints: b.input.joints!.map((j) => (j === j0 ? { ...j, ok: false, util: 1.3 } : j)) }
+    const d = buildTrussElevation(bad)
+    expect(d.designNotes.some((n) => n.includes(`joint ${j0.node} fails`))).toBe(true)
+    expect(d.primitives.some((p) => p.kind === 'circle' && p.stroke === SHEET_WARN)).toBe(true)
+  })
+})
+
 describe('in the sheet set', () => {
   it('one S-14 sheet per truss, after the frame elevations', () => {
     const sheets = buildSheetSet(model, design, soil)

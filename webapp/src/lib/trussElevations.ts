@@ -62,6 +62,8 @@ export function trussElevationBundles(model: StructuralModel, design: StructureD
         purlinShape: purlins[0] ? sec.get(purlins[0].section)?.shape : undefined,
         roofing: model.roofing ? { qD: model.roofing.qD, qLr: model.roofing.qLr } : undefined,
         spacing: span > 0 && area > 0 ? area / span : undefined,
+        ...(design?.trussJoints ? { joints: design.trussJoints.filter((j) => own.has(j.node))
+          .map((j) => ({ node: j.node, covered: j.result.covered, ok: j.result.ok, util: j.result.util })) } : {}),
       },
     })
   }
