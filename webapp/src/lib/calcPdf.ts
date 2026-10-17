@@ -22,7 +22,7 @@
 import type { DetailBlock } from './pdfCapture'
 import type { LetterheadState, VerdictStat } from '../components/calc'
 import type { SolutionStep } from './solution'
-import { createSheet, autoTable, MUTED, NOT_CHECKED, RULE_H } from './pdfKit'
+import { createSheet, autoTable, MUTED, NOT_CHECKED, RULE_H, M, CONTENT_W, SIGNATURE_BLOCK_H, keepTogether } from './pdfKit'
 import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
 
 /**
@@ -278,12 +278,22 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
   // ── Code scope & review notes ──
   // These notes are not optional: they travel with the exported calculation
   // even when a check was not evaluated or the tool uses a non-ACI method.
+  //
+  // Kept WITH the signature block that follows. The block needs 40 mm and
+  // goes to the foot of a fresh page when it does not fit, so a sheet whose
+  // notes ended low printed a second page holding nothing but two signature
+  // lines. When the notes and the block do not fit together here but do on a
+  // fresh page, the break comes before the notes instead.
+  const notes = buildCalcPdfScopeNotes(checks)
+  s.setF('sans', 'normal', 6.6, MUTED)
+  const wrapped = notes.map((note) => doc.splitTextToSize(note, CONTENT_W) as string[])
+  const notesH = RULE_H + 6 + wrapped.reduce((h, l) => h + l.length * 3.2 + 1.1, 0) + 2
+  if (keepTogether(s.y, notesH + SIGNATURE_BLOCK_H)) { doc.addPage(); s.y = M + 6 }
   section('Code Scope & Review Notes')
   s.setF('sans', 'normal', 6.6, MUTED)
-  for (const note of buildCalcPdfScopeNotes(checks)) {
-    const lines = doc.splitTextToSize(note, 182)
+  for (const lines of wrapped) {
     s.ensure(lines.length * 3.2 + 2)
-    for (const line of lines) { doc.text(line, 14, s.y); s.y += 3.2 }
+    for (const line of lines) { doc.text(line, M, s.y); s.y += 3.2 }
     s.y += 1.1
   }
   s.y += 2

@@ -131,6 +131,11 @@ export function texToPlain(tex: string): string {
   s = s.replace(/\\left\s*/g, '').replace(/\\right\s*/g, '').replace(/\\[bB]igg?[lr]?\s*/g, '')
   // symbols (order matters: longest names first in the table)
   for (const [k, v] of SYMBOLS) s = s.split(k).join(v)
+  // TeX drops source spaces and sets binary operators with its own, so
+  // `1.00\times 6.00` came out as "1.00× 6.00" — glued on the left only.
+  // Space × and ÷ symmetrically. The middle dot stays tight: it also writes
+  // units (kN·m), where a space would read as two quantities.
+  s = s.replace(/[ \t]*([×÷])[ \t]*/g, ' $1 ')
   // superscripts: ^{…} then ^c — digits/sign to unicode, else caret notation
   s = replaceCommand(s, '^', 1, ([a]) => {
     const t = a.trim()

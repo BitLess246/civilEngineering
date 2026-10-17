@@ -315,6 +315,16 @@ export function caseLoadDiagram(
   return drawLoads(model, loads, title, o)
 }
 
+/** A label's footprint in page units — centred on (x, y), its width taken at
+ *  0.6 em per character (generous for the sans used), grown by `margin`. */
+export interface LabelBox { x0: number; y0: number; x1: number; y1: number }
+export function labelBox(x: number, y: number, text: string, size: number, margin = 0): LabelBox {
+  const w = text.length * size * 0.6 + 2 * margin, h = size * 1.2 + 2 * margin
+  return { x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2 }
+}
+export const boxesOverlap = (a: LabelBox, b: LabelBox): boolean =>
+  a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1
+
 function drawLoads(
   model: StructuralModel, loads: ModelLoad[], title: string, o: ModelDiagramOpts = {},
 ): Drawing | null {
@@ -348,7 +358,24 @@ function drawLoads(
   const down: [number, number] = [ax1 - ax0, ay1 - ay0]
 
   let udlNoted = false
-  for (const l of loads) {
+  // Labels are placed greedily and a label that would land on one already
+  // placed is dropped: a floor of thirty 3.6 kN/m beams printed thirty
+  // overlapping "3.6 kN/m"s, legible as none of them. The arrows still show
+  // every load, and the caption states the peak line load.
+  const placed: LabelBox[] = []
+  // Painted after EVERY arrow, so no later arrow crosses an earlier label.
+  const labels: PlanPrimitive[] = []
+  const label = (x: number, y: number, text: string, size: number, weight?: number) => {
+    // a margin round each label, so the survivors are spaced, not touching
+    const box = labelBox(x, y, text, size, size * 0.8)
+    if (placed.some((q) => boxesOverlap(q, box))) return
+    placed.push(box)
+    labels.push({ kind: 'text', x, y, text, size, anchor: 'middle', color: LOAD_INK, halo: true, ...(weight ? { weight } : {}) })
+  }
+  // Area loads first: one label per panel, the figure's main fact, so the
+  // line-load labels are the ones that give way to them, not the reverse.
+  const order = (l: ModelLoad) => (l.kind === 'area' ? 0 : l.kind === 'node' || l.kind === 'member-point' ? 1 : 2)
+  for (const l of [...loads].sort((a, b) => order(a) - order(b))) {
     if (l.kind === 'node') {
       const n = byId.get(l.node)
       if (!n) continue
@@ -361,7 +388,7 @@ function drawLoads(
         const [tx, ty] = fit.at(tip)
         const dx = tx - x, dy = ty - y
         P.push(...arrow(x, y, dx, dy, len(val, peakNode), LOAD_INK, 0.45))
-        P.push({ kind: 'text', x: x - dx * 0.9, y: y - dy * 0.9 - 0.8, text: `${f1(Math.abs(val))}`, size: 2, anchor: 'middle', color: LOAD_INK })
+        label(x - dx * 0.9, y - dy * 0.9 - 0.8, `${f1(Math.abs(val))}`, 2)
       }
     } else if (l.kind === 'member-udl') {
       const m = memById.get(l.member)
@@ -376,7 +403,7 @@ function drawLoads(
         P.push(...arrow(x, y, down[0], down[1], arrowLen, LOAD_INK, 0.3))
       }
       const [mx, my] = fit.at({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 })
-      P.push({ kind: 'text', x: mx, y: my - arrowLen - 1.2, text: `${f1(Math.abs(l.w))} kN/m`, size: 1.9, anchor: 'middle', color: LOAD_INK })
+      label(mx, my - arrowLen - 1.2, `${f1(Math.abs(l.w))} kN/m`, 1.9)
       udlNoted = true
     } else if (l.kind === 'member-point') {
       const m = memById.get(l.member)
@@ -385,7 +412,7 @@ function drawLoads(
       const p = { x: a.x + (b.x - a.x) * l.t, y: a.y + (b.y - a.y) * l.t, z: a.z + (b.z - a.z) * l.t }
       const [x, y] = fit.at(p)
       P.push(...arrow(x, y, down[0], down[1], len(l.P, peakNode), LOAD_INK, 0.45))
-      P.push({ kind: 'text', x, y: y - len(l.P, peakNode) - 1.2, text: `${f1(Math.abs(l.P))} kN`, size: 2, anchor: 'middle', color: LOAD_INK })
+      label(x, y - len(l.P, peakNode) - 1.2, `${f1(Math.abs(l.P))} kN`, 2)
     } else if (l.kind === 'area') {
       const pl = plateById.get(l.plate)
       if (!pl) continue
@@ -397,9 +424,10 @@ function drawLoads(
         kind: 'path', stroke: LOAD_INK, width: 0.3, fill: LOAD_INK, opacity: 0.1, closed: true,
         cmds: cs.map((n, k) => { const [px, py] = fit.at(n); return { c: k === 0 ? 'M' as const : 'L' as const, x: px, y: py } }),
       })
-      P.push({ kind: 'text', x, y, text: `${f1(Math.abs(l.q))} kPa`, size: 2.1, anchor: 'middle', color: LOAD_INK, weight: 600 })
+      label(x, y, `${f1(Math.abs(l.q))} kPa`, 2.1, 600)
     }
   }
+  P.push(...labels)
   const kinds = [...new Set(loads.map((l) => l.kind))].join(', ')
   frameChrome(P, fit, `${title} — APPLIED LOADS`,
     `${loads.length} assignment${loads.length === 1 ? '' : 's'} (${kinds})`

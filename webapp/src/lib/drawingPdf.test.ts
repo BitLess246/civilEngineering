@@ -19,6 +19,8 @@ function fakeDoc() {
     setTextColor: rec('setTextColor'), setLineWidth: rec('setLineWidth'),
     setLineDashPattern: rec('setLineDashPattern'),
     setFont: rec('setFont'), setFontSize: rec('setFontSize'),
+    setGState: rec('setGState'), setLineJoin: rec('setLineJoin'),
+    GState: class { p: Record<string, number>; constructor(p: Record<string, number>) { this.p = p } },
   }
   return doc as unknown as jsPDF & { calls: typeof calls }
 }
@@ -271,5 +273,36 @@ describe('the real drawings paint without blowing up', () => {
       for (const y of [y1, y2]) expect(y).toBeGreaterThanOrEqual(box.y - 0.01)
       for (const y of [y1, y2]) expect(y).toBeLessThanOrEqual(box.y + r.height + 0.01)
     }
+  })
+})
+
+describe('opacity and halos reach the paper', () => {
+  it('a faded path is painted inside a graphics state, and the state is restored', () => {
+    const doc = fakeDoc()
+    paintDrawing(doc, { primitives: [
+      { kind: 'path', cmds: [{ c: 'M', x: 0, y: 0 }, { c: 'L', x: 10, y: 0 }, { c: 'L', x: 10, y: 10 }], closed: true, fill: '#b5540f', stroke: '#b5540f', opacity: 0.1 },
+    ], bounds: BOX }, { x: 0, y: 0, w: 100, maxH: 50 })
+    const gs = of(doc, 'setGState').map((c) => (c.args[0] as { p: Record<string, number> }).p)
+    expect(gs).toEqual([{ opacity: 0.1, 'stroke-opacity': 0.1 }, { opacity: 1, 'stroke-opacity': 1 }])
+    // the path itself is drawn between the two
+    const order = doc.calls.map((c) => c.fn)
+    expect(order.indexOf('lines')).toBeGreaterThan(order.indexOf('setGState'))
+    expect(order.lastIndexOf('setGState')).toBeGreaterThan(order.indexOf('lines'))
+  })
+
+  it('an opaque path sets no graphics state at all', () => {
+    const doc = fakeDoc()
+    paintDrawing(doc, { primitives: [{ kind: 'path', cmds: [{ c: 'M', x: 0, y: 0 }, { c: 'L', x: 10, y: 0 }], stroke: '#000' }], bounds: BOX }, { x: 0, y: 0, w: 100, maxH: 50 })
+    expect(of(doc, 'setGState')).toEqual([])
+  })
+
+  it('a halo label strokes the glyphs in white first, then fills them', () => {
+    const doc = fakeDoc()
+    paintDrawing(doc, { primitives: [{ kind: 'text', x: 5, y: 5, text: '3.6 kN/m', size: 2, halo: true }], bounds: BOX }, { x: 0, y: 0, w: 100, maxH: 50 })
+    const texts = of(doc, 'text')
+    expect(texts.length).toBe(2)
+    expect((texts[0].args[3] as { renderingMode?: string }).renderingMode).toBe('stroke')
+    expect((texts[1].args[3] as { renderingMode?: string }).renderingMode).toBeUndefined()
+    expect(of(doc, 'setDrawColor').at(-1)!.args).toEqual([255, 255, 255])
   })
 })

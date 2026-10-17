@@ -1315,7 +1315,7 @@ function qaSection(i: AppendixInput): AppendixSection {
     'Pushover analysis': 'ASCE 41 §7.4.3',
     'Beam design': 'ACI 318-14 §22.2 / §22.5',
     'Column design': 'ACI 318-14 §22.4',
-    'Biaxial column check': 'ACI 318-14 §22.4 (Bresler)',
+    'Biaxial column check': 'ACI 318-14 §22.4 (Bresler), capped by §22.2 exact',
     'Slab design': 'ACI 318-14 §8 (DDM)',
     'Footing design': 'ACI 318-14 §22.5 / §22.6',
     'Shear wall design': 'ACI 318-14 §11',

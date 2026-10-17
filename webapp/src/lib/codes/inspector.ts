@@ -58,7 +58,7 @@ const KIND_LABEL: Record<MemberKind, string> = {
 
 /** The clauses each kind's design checks, for kinds whose sub-checks the row does not itemise. */
 const KIND_CLAUSE: Record<Exclude<MemberKind, 'beam'>, { name: string; clause: string }> = {
-  column: { name: 'Axial + biaxial bending (P–M)', clause: 'NSCP 2015 §422.4, §410.5.1.1 (Bresler)' },
+  column: { name: 'Axial + biaxial bending (P–M)', clause: 'NSCP 2015 §422.4, §410.5.1.1 (Bresler, capped by the §422.2 exact surface)' },
   slab: { name: 'Two-way slab, direct design', clause: 'NSCP 2015 §408.10' },
   steelBeam: { name: 'Flexure and shear', clause: 'AISC 360-16 §F2, §G2.1' },
   steelColumn: { name: 'Compression and combined forces', clause: 'AISC 360-16 §E3, §H1-1' },
