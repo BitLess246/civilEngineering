@@ -65,8 +65,8 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   '/rectilinear-motion', '/projectile-motion', '/curvilinear-motion', '/kinetics', '/work-energy', '/impulse-momentum', '/friction', '/belt-friction',
   // mathematics mini-calculators: statics resultant, triangle solver, spherical triangle
   '/method-of-joints', '/trigonometry', '/spherical-triangle',
-  // drafting: 2D floor plans → 3D
-  '/floor-plan-3d',
+  // drafting: 2D floor plans → 3D, and sheets drawn to the user's numbers
+  '/floor-plan-3d', '/plan-studio',
 ]
 
 /**

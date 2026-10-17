@@ -77,6 +77,27 @@ The deploy job is gone (Sept 2026). Deleting it stops future publishes; it does
 **not** unpublish what is already served. That is *Settings → Pages → Source:
 None*, and it has to be done by hand in the repository settings.
 
+## Drafting category, Plan Studio, beam settlement + load basis — 17 October 2026 (PRs #1053–#1056 and the Plan Studio page)
+
+- **Drafting category** (#1053): a new sidebar/tools group holding **Floor Plan 3D**
+  (`/floor-plan-3d`, formerly Drafting3D; `/drafting3d` redirects, storage keys
+  unchanged) and **Plan Studio**.
+- **Plan Studio** (`/plan-studio`; engine #1055, then the page): the user enters the
+  frame (bays, storeys, slab), member sizes and the steel itself — bar counts,
+  diameters, stirrup/tie spacing, footing size and mat — and picks which sheets to
+  draw (plans, beam elevations, column details, footings, cutting, BBS, notes).
+  `lib/planStudio.ts` designs the generated frame ONCE per geometry (one-entry
+  cache keyed on dimensions) and then `applyStudioRebar` overwrites exactly the
+  design fields `cageBuilder` reads, so every sheet is drawn from the cage with the
+  user's numbers. Bars that won't fit one row (§425.2.1 clear spacing) are drawn in
+  layers and noted. **Nothing is checked against loads** — the page and its PDF
+  say so and link to Model Space. PDF: `lib/sheetsPdf.ts`, sharing
+  `paintSheetSet` with the model report.
+- **Beam analysis** — support **settlement** δ (#1054; FEM prescribed DOF, three-
+  moment and force-method derivations, scaled by each combination's T factor per
+  §203.3.3; `validation.ts` `beam-settlement`, ValidationMap FR005) and an
+  **unfactored load basis** (#1056; `UNFACTORED_COMBO`, every category at 1.0).
+
 ## Checked against published examples — 17 October 2026 (PRs #1040–#1046)
 
 A pass to put a **published** reference behind engines whose evidence was only

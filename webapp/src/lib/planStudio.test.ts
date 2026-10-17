@@ -123,6 +123,17 @@ describe('the sheet set', () => {
     expect(sheetsOf(big.sheets, 'footings').every((s) => /2100×2100/.test(s.title))).toBe(true)
   })
 
+  it('a bar-count edit after a cached frame still reaches the sheet; a geometry edit rebuilds the frame', () => {
+    // the frame is designed once per geometry and reused for steel-only edits
+    buildStudio(DEFAULT_STUDIO)
+    const six = buildStudio({ ...DEFAULT_STUDIO, beam: { ...DEFAULT_STUDIO.beam, top: 5 } })
+    const svgText = (sheets: typeof six.sheets) => sheetsOf(sheets, 'elevations')[0].drawing.primitives
+      .filter((p) => p.kind === 'text').map((p) => (p as { text: string }).text).join(' | ')
+    expect(svgText(six.sheets)).toMatch(/5-⌀20 T/)
+    const wide = buildStudio({ ...DEFAULT_STUDIO, beam: { ...DEFAULT_STUDIO.beam, top: 5 }, baysX: [4, 4, 4] })
+    expect(sheetsOf(wide.sheets, 'plans')[0].drawing.primitives.some((p) => p.kind === 'text' && (p as { text: string }).text === 'D')).toBe(true)
+  })
+
   it('a nonsense input is drawn as the defaults, never thrown', () => {
     const bad = sanitizeStudio({ ...DEFAULT_STUDIO, baysX: [-1, Number.NaN], beam: { ...DEFAULT_STUDIO.beam, top: 0.4, sEnd: -5 } })
     expect(bad.baysX).toEqual(DEFAULT_STUDIO.baysX)

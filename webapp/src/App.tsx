@@ -100,6 +100,7 @@ const MethodOfJoints = lazy(() => import('./pages/MethodOfJoints'))
 const Trigonometry = lazy(() => import('./pages/Trigonometry'))
 const SphericalTriangle = lazy(() => import('./pages/SphericalTriangle'))
 const Drafting3D = lazy(() => import('./pages/Drafting3D'))
+const PlanStudio = lazy(() => import('./pages/PlanStudio'))
 const Documentation = lazy(() => import('./pages/Documentation'))
 const CodeLibrary = lazy(() => import('./pages/CodeLibrary'))
 const Validation = lazy(() => import('./pages/Validation'))
@@ -356,6 +357,7 @@ export default function App() {
         <Route path="/spherical-triangle" element={<SphericalTriangle />} />
         {/* drafting: 2D floor plans → 3D viewport → ModelSpace export */}
         <Route path="/floor-plan-3d" element={<Drafting3D />} />
+        <Route path="/plan-studio" element={<PlanStudio />} />
         {/* the page's old name — kept for bookmarks and shared links */}
         <Route path="/drafting3d" element={<Navigate to="/floor-plan-3d" replace />} />
         {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected

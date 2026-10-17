@@ -134,6 +134,59 @@ function paintSnapshot(sh: Sheet, s: DesignSnapshot): void {
 }
 
 /**
+ * A run of plan sheets on the report's pages, under one numbered section rule:
+ * a group heading over each group and a caption under each sheet. Painted as
+ * VECTORS through the shared `paintDrawing`, not rasterised — a 261 mm
+ * dimension has to stay readable when the sheet is printed. Shared by the
+ * structure report's Drawings section and Plan Studio's PDF.
+ *
+ * A heading is kept with the sheet under it: the section rule and the group
+ * heading move to the next page WITH the first sheet when it does not fit.
+ * Every group heading of the set — PLANS, FRAME ELEVATIONS, … BAR BENDING
+ * SCHEDULES — once sat alone at the foot of a page with its first sheet
+ * starting the next. `nextSection` hands out the rule's number.
+ */
+export function paintSheetSet(sh: Sheet, sheets: readonly PlanSheet[], title: string, nextSection: () => number): void {
+  if (!sheets.length) return
+  const { doc } = sh
+  const fit = (s: PlanSheet) => paintedSize(s.drawing, { x: M, y: 0, w: sh.contentW, maxH: 150 }).height + 14
+  const GROUP_H = 5
+  sh.ensure(16 + 6 + GROUP_H + fit(sheets[0]))
+  const n = nextSection()
+  sh.rule(n, title)
+  let k = 0
+  let lastGroup = ''
+  for (const s of sheets) {
+    if (s.group !== lastGroup) {
+      lastGroup = s.group
+      sh.ensure(GROUP_H + fit(s))
+      sh.y += 2
+      sh.setF('sans', 'bold', 8, INK)
+      doc.text(s.group.toUpperCase(), M, sh.y, { charSpace: 0.2 })
+      sh.y += 3
+    }
+    k += 1
+    const box = { x: M, y: sh.y, w: sh.contentW, maxH: 150 }
+    const size = paintedSize(s.drawing, box)
+    // Keep a sheet with its caption rather than orphaning the caption on the
+    // next page — the same rule the soils report figures use.
+    sh.ensure(size.height + 14)
+    const placed = { ...box, y: sh.y + 3, x: (sh.pageW - size.width) / 2 }
+    paintDrawing(doc, s.drawing, placed)
+    sh.y = placed.y + size.height + 3.5
+
+    sh.setF('sans', 'bold', 7, INK)
+    doc.text(`${n}.${k}  ${s.title}${s.subtitle ? ` · ${s.subtitle}` : ''}`, M, sh.y)
+    sh.y += 3.4
+    for (const w of s.warnings) {
+      sh.setF('sans', 'normal', 6.4, MUTED)
+      for (const line of doc.splitTextToSize(`\u26a0 ${w}`, sh.contentW)) { doc.text(line, M, sh.y); sh.y += 3 }
+    }
+    sh.y += 3
+  }
+}
+
+/**
  * Paint the report into a sheet the caller owns, through its signatures and
  * disclaimer but WITHOUT the page footers — the caller adds those once it
  * has finished with the document, which for a combined PDF is after the
@@ -457,47 +510,7 @@ export async function buildModelPdfInto(
   // Painted as VECTORS through the shared `paintDrawing`, not rasterised: a
   // 261 mm dimension has to stay readable when the sheet is printed, and a
   // screenshot of the tab would not be.
-  if (sheets?.length && want.has('drawings')) {
-    // A heading is kept with the sheet under it: the section rule and the
-    // group heading move to the next page WITH the first sheet when it does
-    // not fit. Every group heading of the set — PLANS, FRAME ELEVATIONS, …
-    // BAR BENDING SCHEDULES — sat alone at the foot of a page with its first
-    // sheet starting the next.
-    const fit = (s: PlanSheet) => paintedSize(s.drawing, { x: M, y: 0, w: sh.contentW, maxH: 150 }).height + 14
-    const GROUP_H = 5
-    ensure(16 + 6 + GROUP_H + fit(sheets[0]))
-    rule('Drawings')
-    let k = 0
-    let lastGroup = ''
-    for (const s of sheets) {
-      if (s.group !== lastGroup) {
-        lastGroup = s.group
-        ensure(GROUP_H + fit(s))
-        sh.y += 2
-        setF('sans', 'bold', 8, INK)
-        doc.text(s.group.toUpperCase(), M, sh.y, { charSpace: 0.2 })
-        sh.y += 3
-      }
-      k += 1
-      const box = { x: M, y: sh.y, w: sh.contentW, maxH: 150 }
-      const size = paintedSize(s.drawing, box)
-      // Keep a sheet with its caption rather than orphaning the caption on the
-      // next page — the same rule the soils report figures use.
-      ensure(size.height + 14)
-      const placed = { ...box, y: sh.y + 3, x: (sh.pageW - size.width) / 2 }
-      paintDrawing(doc, s.drawing, placed)
-      sh.y = placed.y + size.height + 3.5
-
-      setF('sans', 'bold', 7, INK)
-      doc.text(`${n}.${k}  ${s.title}${s.subtitle ? ` · ${s.subtitle}` : ''}`, M, sh.y)
-      sh.y += 3.4
-      for (const w of s.warnings) {
-        setF('sans', 'normal', 6.4, MUTED)
-        for (const line of doc.splitTextToSize(`\u26a0 ${w}`, sh.contentW)) { doc.text(line, M, sh.y); sh.y += 3 }
-      }
-      sh.y += 3
-    }
-  }
+  if (sheets?.length && want.has('drawings')) paintSheetSet(sh, sheets, 'Drawings', () => ++n)
 
   sh.signatures(lh.preparedBy)
   sh.disclaimer(
