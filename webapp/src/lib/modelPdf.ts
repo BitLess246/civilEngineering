@@ -458,13 +458,21 @@ export async function buildModelPdfInto(
   // 261 mm dimension has to stay readable when the sheet is printed, and a
   // screenshot of the tab would not be.
   if (sheets?.length && want.has('drawings')) {
+    // A heading is kept with the sheet under it: the section rule and the
+    // group heading move to the next page WITH the first sheet when it does
+    // not fit. Every group heading of the set — PLANS, FRAME ELEVATIONS, …
+    // BAR BENDING SCHEDULES — sat alone at the foot of a page with its first
+    // sheet starting the next.
+    const fit = (s: PlanSheet) => paintedSize(s.drawing, { x: M, y: 0, w: sh.contentW, maxH: 150 }).height + 14
+    const GROUP_H = 5
+    ensure(16 + 6 + GROUP_H + fit(sheets[0]))
     rule('Drawings')
     let k = 0
     let lastGroup = ''
     for (const s of sheets) {
       if (s.group !== lastGroup) {
         lastGroup = s.group
-        ensure(14)
+        ensure(GROUP_H + fit(s))
         sh.y += 2
         setF('sans', 'bold', 8, INK)
         doc.text(s.group.toUpperCase(), M, sh.y, { charSpace: 0.2 })

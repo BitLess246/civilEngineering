@@ -105,9 +105,18 @@ export function buildExplodedBeamLine(i: FrameElevationInput, o: CuttingSheetOpt
   const tops = placed.filter((p) => p.yMain < mid)
   const bots = placed.filter((p) => p.yMain >= mid)
   const size = u * 0.82
+  // A label is centred on its bar — unless that would hang it past the end of
+  // the line, where a short bar at an end column (a bottom-bar hook at grid A)
+  // printed its mark over the column line and the hook's leg length beside it.
+  // Then it is slid inward until it ends at the line's first or last grid.
+  const labelX = (p: Placed): number => {
+    const w = textWidth(p.label, size), c = (p.u0 + p.u1) / 2
+    const lo = uMin + w / 2, hi = uMax - w / 2
+    return lo > hi ? c : Math.min(hi, Math.max(lo, c))
+  }
   const span = (p: Placed): [number, number] => {
     const w = textWidth(p.label, size)
-    const c = (p.u0 + p.u1) / 2
+    const c = labelX(p)
     return [Math.min(p.u0, c - w / 2) - u, Math.max(p.u1, c + w / 2) + u]
   }
 
@@ -126,7 +135,7 @@ export function buildExplodedBeamLine(i: FrameElevationInput, o: CuttingSheetOpt
         cmds: pts.map(([x, y], j) => ({ c: j === 0 ? 'M' : 'L', x, y }) as const),
       })
       // label above the bar
-      P.push({ kind: 'text', x: (p.u0 + p.u1) / 2, y: yRow - u * 0.9, text: p.label, size, anchor: 'middle', color: SHEET_INK, weight: 600 })
+      P.push({ kind: 'text', x: labelX(p), y: yRow - u * 0.9, text: p.label, size, anchor: 'middle', color: SHEET_INK, weight: 600 })
       // the main leg's length under it
       const mainLen = Math.abs(p.u1 - p.u0)
       P.push({ kind: 'text', x: (p.u0 + p.u1) / 2, y: yRow + u * 1.5, text: `${mm(mainLen)}`, size: size * 0.85, anchor: 'middle', color: SHEET_NOTE })
@@ -211,8 +220,15 @@ export function shapeSketch(
   const segs = s.closed ? n : n - 1
   for (let k = 0; k < segs; k++) {
     const a = s.pts[k], b = s.pts[(k + 1) % n]
-    const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1
-    dirs.push([dx / l, dy / l])
+    const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy)
+    if (l > 1e-9) { dirs.push([dx / l, dy / l]); continue }
+    // A leg with no length in the sketch's plane — an end hook turned out of
+    // it, into the column — still has a length to schedule. It is drawn as a
+    // turn-down square to the leg before (sketches are never to scale), so its
+    // label has a leg to sit beside instead of landing on the bar's end.
+    const [px, py] = dirs[dirs.length - 1] ?? [1, 0]
+    const c1: [number, number] = [py, -px], c2: [number, number] = [-py, px]
+    dirs.push(c1[1] < c2[1] || (c1[1] === c2[1] && c1[0] > c2[0]) ? c1 : c2)
   }
   const pts: [number, number][] = [[0, 0]]
   for (let k = 0; k < segs; k++) {

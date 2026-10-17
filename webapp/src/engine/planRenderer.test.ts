@@ -12,6 +12,19 @@ describe('planRenderer — framing plan geometry', () => {
   const model = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
   const plan = buildPlan(model)!
 
+  it('sets a vertical beam mark clear of the beam edge, on the bay side', () => {
+    // FB1 rotated beside a 400 mm beam sat on its outline at an offset of r·0.45
+    // from the centreline; the last grid's mark now faces into the bay too.
+    const marks = plan.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'text' }> => p.kind === 'text' && /^FB/.test(p.text) && p.rotate === -90)
+    expect(marks.length).toBe(3)
+    for (const m of marks) {
+      const gx = [0, 6, 12].reduce((a, b) => (Math.abs(b - m.x) < Math.abs(a - m.x) ? b : a))
+      expect(Math.abs(m.x - gx) - m.size / 2).toBeGreaterThan(section.b / 2000)
+      if (gx === 12) expect(m.x).toBeLessThan(12)
+      else expect(m.x).toBeGreaterThan(gx)
+    }
+  })
+
   it('derives grid bubbles A/B/C across x and 1/2 down z', () => {
     const t = texts(plan.primitives)
     expect(t).toContain('A'); expect(t).toContain('B'); expect(t).toContain('C')
@@ -203,6 +216,26 @@ describe('planRenderer — foundation plan with designed footings', () => {
     expect(texts(f.primitives)).toContain('T.O.F. EL -1.15 m')
     expect(tofTag(-1.5, 350)).toBe('T.O.F. EL -1.15 m')
     expect(texts(f.primitives).some((s) => s === 'EL -1.50 m')).toBe(false)
+  })
+
+  it('stands the grid dimensions off from the PADS, not just the grid', () => {
+    // A 2.0 m pad on the top row hangs 1 m past grid line 1 with its mark above
+    // it; the chain set off from the grid ran through the mark.
+    const marks = f.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'text' }> => p.kind === 'text' && /^WF-/.test(p.text))
+    const markTop = Math.min(...marks.map((m) => m.y - m.size / 2))
+    const padLeft = Math.min(...f.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'rect' }> => p.kind === 'rect' && !!p.dash).map((p) => p.x))
+    const dims = f.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'dim' }> => p.kind === 'dim')
+    for (const d of dims.filter((d) => d.y1 === d.y2)) expect(d.y1).toBeLessThan(markTop)
+    for (const d of dims.filter((d) => d.x1 === d.x2)) expect(d.x1).toBeLessThan(padLeft)
+  })
+
+  it('haloes the pad marks and T.O.F. tags, which sit on the grid lines', () => {
+    // the labels centred on a pad — not the schedule table's own WF-n cells
+    const padX = new Set(base.map((n) => n.x))
+    const tags = f.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'text' }> =>
+      p.kind === 'text' && padX.has(p.x) && (/^WF-/.test(p.text) || p.text.startsWith('T.O.F.')))
+    expect(tags.length).toBe(base.length * 2)
+    for (const t of tags) expect(t.halo).toBe(true)
   })
 
   it('counts each footing type on the schedule', () => {
