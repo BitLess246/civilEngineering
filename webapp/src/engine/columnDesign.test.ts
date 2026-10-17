@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  designAxialColumn, interaction, capacityAtEccentricity, breslerReciprocal,
-  momentMagnificationNonsway, columnDetailingNotes,
-  type AxialColumnInput,
+  designAxialColumn, interaction, capacityAtEccentricity, breslerReciprocal, barLayers,
+  momentMagnificationNonsway, columnDetailingNotes, pmAtDepth,
+  type AxialColumnInput, type InteractionInput,
 } from './columnDesign'
 
 describe('axial — tied (review Concrete 7, Problem 2)', () => {
@@ -374,6 +374,97 @@ describe('spColumn report — slender nonsway column with δ > 1 (StructurePoint
     expect(y.Mc / kipFt).toBeCloseTo(294.47, 1)
     expect(Math.abs(x.Mc / kipFt / 11.72 - 1)).toBeLessThan(0.012)
     expect(x.Mc).toBeCloseTo(x.delta * x.M2min, 9)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// PUBLISHED — spColumn v10.30's own "Control Points" table, StructurePoint
+// "Slenderness Effects Using spColumn — Examples", Example 1 report §9:
+// 14 × 20 in, 6-#11 (As = 1.56 in² each; two per 20 in face, one mid-side on
+// each 14 in face), clear cover 2.005 in → bar rows at 2.71 / 7.00 / 11.29 in
+// (X) and 2.71 / 17.29 in (Y); f'c = 4.5 ksi, fy = 60 ksi, Es = 29 000 ksi.
+//
+//          c, in   φPn, kip   φMn, kip·ft   φ          (X | Y)
+//   fs = 0      11.29 | 17.29   636.4 | 667.4   131.15 | 222.47   0.65
+//   fs = ½fy     8.40 | 12.86   424.6 | 448.8   163.20 | 303.75   0.65
+//   balanced     6.68 | 10.23   241.1 | 282.2   175.16 | 356.20   0.65
+//   tension ctl  4.20 |  6.43   −17.3 | 198.7   192.02 | 429.02   0.90
+//   pure bending 4.29 |  3.92     0   |   0     191.64 | 321.26   0.8856 | 0.90
+//   max compression 1037.9 = 0.65·Po; allowable 830.3 = 0.80·0.65·Po
+//
+// Two things differ by CODE, not by error, and are carried explicitly:
+//   · β1 — the US row gives 0.825 at 4.5 ksi, the SI row 0.8284 at 31.03 MPa;
+//     with β1 = 0.825 every point lands on the report's printed digits;
+//   · the run is ACI 318-19 (tension control at εty + 0.003 = 0.00507), the
+//     engine 318-14 (0.005) — so the tension-side points are compared on Pn,
+//     Mn at the report's own c, times the report's φ.
+// ─────────────────────────────────────────────────────────────────────────
+describe('spColumn control points — P–M strain compatibility (StructurePoint Example 1 report, published)', () => {
+  const inch = 25.4, kip = 4.4482216, ksi = (kip * 1000) / (inch * inch), kipFt = kip * 0.3048
+  const As = 1.56 * inch * inch, ey = 60 / 29_000
+  const base = { cover: 0, barDia: 0, tieDia: 0, fc: 4.5 * ksi, fy: 60 * ksi, numBars: 6 }
+  const X: InteractionInput = { ...base, b: 20 * inch, h: 14 * inch,
+    layers: [{ d: 2.71 * inch, n: 2, As: 2 * As }, { d: 7 * inch, n: 2, As: 2 * As }, { d: 11.29 * inch, n: 2, As: 2 * As }] }
+  const Y: InteractionInput = { ...base, b: 14 * inch, h: 20 * inch,
+    layers: [{ d: 2.71 * inch, n: 3, As: 3 * As }, { d: 17.29 * inch, n: 3, As: 3 * As }] }
+  const at = (i: InteractionInput, cIn: number, phi: number) => {
+    const p = pmAtDepth(i, cIn * inch)
+    return { P: (phi * p.Pn) / kip, M: (phi * p.Mn) / kipFt, phi: p.phi }
+  }
+  /** neutral-axis depth, in, at which the extreme row's strain is εt */
+  const cFor = (dt: number, et: number) => (0.003 * dt) / (0.003 + et)
+  const pureBending = (i: InteractionInput, dt: number) => {
+    let lo = 0.5, hi = dt
+    for (let k = 0; k < 100; k++) { const m = (lo + hi) / 2; if (pmAtDepth(i, m * inch).Pn > 0) hi = m; else lo = m }
+    return (lo + hi) / 2
+  }
+  const rows: [string, InteractionInput, number, [string, number, number, number, number][]][] = [
+    ['X', X, 11.29, [['fs = 0', 0, 0.65, 636.4, 131.15], ['fs = ½fy', -0.5 * ey, 0.65, 424.6, 163.20],
+      ['balanced', -ey, 0.65, 241.1, 175.16], ['tension control (318-19)', ey + 0.003, 0.90, -17.3, 192.02]]],
+    ['Y', Y, 17.29, [['fs = 0', 0, 0.65, 667.4, 222.47], ['fs = ½fy', -0.5 * ey, 0.65, 448.8, 303.75],
+      ['balanced', -ey, 0.65, 282.2, 356.20], ['tension control (318-19)', ey + 0.003, 0.90, 198.7, 429.02]]],
+  ]
+  for (const [axis, i, dt, pts] of rows) {
+    for (const [name, et, phi, P, M] of pts) {
+      // εt < 0 marks a compression-side point: fs = 0 has εt = 0, ½fy and
+      // balanced put the extreme row at that TENSILE strain — c by its magnitude
+      it(`${axis} — ${name}: φPn = ${P}, φMn = ${M} (β1 = 0.825)`, () => {
+        const c = cFor(dt, Math.abs(et))
+        const r = at({ ...i, beta1: 0.825 }, c, phi)
+        expect(Math.abs(r.P - P)).toBeLessThan(0.15)
+        expect(Math.abs(r.M / M - 1)).toBeLessThan(3e-4)
+      })
+    }
+  }
+
+  it('pure bending: c = 4.29 / 3.92 in, φMn = 191.64 (φ 0.8856 by 318-19) / 321.26 kip·ft', () => {
+    const cx = pureBending({ ...X, beta1: 0.825 }, 11.29), cy = pureBending({ ...Y, beta1: 0.825 }, 17.29)
+    expect(cx).toBeCloseTo(4.29, 2)
+    expect(cy).toBeCloseTo(3.92, 2)
+    expect(Math.abs(at({ ...X, beta1: 0.825 }, cx, 0.8856).M / 191.64 - 1)).toBeLessThan(3e-4)
+    expect(Math.abs(at({ ...Y, beta1: 0.825 }, cy, 0.90).M / 321.26 - 1)).toBeLessThan(3e-4)
+    // the engine's own φ there is 318-14's: εt = 0.003(11.29 − 4.29)/4.29 = 0.00489 → 0.65 + 0.25(εt − εy)/(0.005 − εy)
+    const et = (0.003 * (11.29 - cx)) / cx, eyS = (60 * ksi) / 200_000
+    expect(at(X, cx, 1).phi).toBeCloseTo(0.65 + (0.25 * (et - eyS)) / (0.005 - eyS), 3)
+  })
+
+  it('max compression 0.65·Po = 1037.9 kip; allowable 0.80·0.65·Po = 830.3 kip', () => {
+    const r = interaction(Y)
+    expect((0.65 * r.Po) / kip).toBeCloseTo(1037.9, 0)
+    expect((0.65 * r.PnMax) / kip).toBeCloseTo(830.3, 0)
+  })
+
+  it('with the SI β1 (0.8284) the same points sit within 0.6 % — the code-unit difference, stated', () => {
+    for (const [, i, dt, pts] of rows) for (const [, et, phi, P, M] of pts.slice(0, 3)) {
+      const r = at(i, cFor(dt, Math.abs(et)), phi)
+      expect(Math.abs(r.P / P - 1)).toBeLessThan(0.006)
+      expect(Math.abs(r.M / M - 1)).toBeLessThan(0.006)
+    }
+  })
+
+  it('explicit rows replace the bar count: the X section keeps its mid-depth row', () => {
+    expect(barLayers(X).layers.map((L) => L.d / inch)).toEqual([2.71, 7, 11.29].map((d) => expect.closeTo(d, 9)))
+    expect(interaction(X).dt / inch).toBeCloseTo(11.29, 9)
   })
 })
 

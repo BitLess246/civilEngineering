@@ -267,6 +267,13 @@ export interface InteractionInput {
    *  own layers, so Mn near the balanced point drops vs the 2-face idealised
    *  layout (side bars sit near the neutral axis). */
   layout?: BarLayout
+  /** Explicit reinforcement rows (d from the compression face, As mm²) in
+   *  place of `numBars`/`layout` — any arrangement, e.g. a row of side bars
+   *  on the neutral axis. d′ and dt are then the shallowest and deepest rows. */
+  layers?: BarLayer[]
+  /** β1 in place of Table 22.2.2.4.3's SI row — e.g. the US row's 0.825 at
+   *  4.5 ksi, when reproducing a US-unit result. */
+  beta1?: number
 }
 
 /** One reinforcement row in the bending plane: depth d from the compression
@@ -293,6 +300,10 @@ export interface InteractionResult {
  *  ny per h-face with 2nx + 2ny − 4 = numBars; the (ny−2) intermediate rows
  *  carry 2 bars each at equal spacing between d′ and dt. */
 export function barLayers(i: InteractionInput): { layers: BarLayer[]; nx: number; ny: number } {
+  if (i.layers?.length) {
+    const L = [...i.layers].sort((a, b) => a.d - b.d)
+    return { layers: L, nx: L[0].n, ny: L.length }
+  }
   const dPrime = i.cover + i.tieDia + i.barDia / 2
   const dt = i.h - dPrime
   const Ab = (Math.PI / 4) * i.barDia ** 2
@@ -315,7 +326,7 @@ export function barLayers(i: InteractionInput): { layers: BarLayer[]; nx: number
 }
 
 function pmAt(i: InteractionInput, layers: BarLayer[], dt: number, c: number): PMPoint {
-  const b1 = beta1(i.fc)
+  const b1 = i.beta1 ?? beta1(i.fc)
   const a = Math.min(b1 * c, i.h)
   const Cc = (0.85 * i.fc * a * i.b) / 1000
   let Pn = Cc
@@ -334,12 +345,25 @@ function pmAt(i: InteractionInput, layers: BarLayer[], dt: number, c: number): P
   return { c, Pn, Mn, phi, et }
 }
 
-export function interaction(i: InteractionInput): InteractionResult {
+/** d′ and dt — the extreme rows, from the cover or from explicit rows. */
+function extremeDepths(i: InteractionInput): { dPrime: number; dt: number } {
+  if (i.layers?.length) return { dPrime: Math.min(...i.layers.map((L) => L.d)), dt: Math.max(...i.layers.map((L) => L.d)) }
   const dPrime = i.cover + i.tieDia + i.barDia / 2
-  const dt = i.h - dPrime
-  const Ab = (Math.PI / 4) * i.barDia ** 2
-  const AsFace = (i.numBars / 2) * Ab
+  return { dPrime, dt: i.h - dPrime }
+}
+
+/** The section's strength at neutral-axis depth c, mm (strain compatibility,
+ *  §22.2): Pn kN, Mn kN·m about the section's mid-depth, φ by §21.2.2 — the
+ *  points a control-point table (spColumn's) lists by c. */
+export function pmAtDepth(i: InteractionInput, c: number): PMPoint {
+  const { layers } = barLayers(i)
+  return pmAt(i, layers, extremeDepths(i).dt, c)
+}
+
+export function interaction(i: InteractionInput): InteractionResult {
+  const { dPrime, dt } = extremeDepths(i)
   const { layers, nx, ny } = barLayers(i)
+  const AsFace = i.layers?.length ? layers[layers.length - 1].As : (i.numBars / 2) * (Math.PI / 4) * i.barDia ** 2
   const Ast = layers.reduce((s, L) => s + L.As, 0)
   const Ag = i.b * i.h
   const Po = (0.85 * i.fc * (Ag - Ast) + i.fy * Ast) / 1000
@@ -370,8 +394,7 @@ export function interaction(i: InteractionInput): InteractionResult {
 
 /** Capacity along the demand ray e = Mu/Pu — bisection on c (e decreases with c). */
 export function capacityAtEccentricity(i: InteractionInput, e: number): PMPoint {
-  const dPrime = i.cover + i.tieDia + i.barDia / 2
-  const dt = i.h - dPrime
+  const { dPrime, dt } = extremeDepths(i)
   const { layers } = barLayers(i)
   let lo = dPrime * 0.1, hi = i.h * 20
   for (let k = 0; k < 80; k++) {

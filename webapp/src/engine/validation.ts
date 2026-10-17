@@ -16,7 +16,7 @@ import { shapeByName } from './aiscSections'
 import { designTrussJoint } from './hssTrussJoint'
 import { checkAnchorGroup } from './anchorDesign'
 import { boltZDoubleSteel } from './postBase'
-import { designAxialColumn, momentMagnificationNonsway } from './columnDesign'
+import { designAxialColumn, momentMagnificationNonsway, pmAtDepth } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
 import { felleniusFS, type Slice } from './slopeStability'
 import { consolidationSettlement, timeFactor, effectiveStress, stressUnderRect } from './settlement'
@@ -457,6 +457,24 @@ const spColumnSlender = (() => {
   const r = momentMagnificationNonsway({ Pu: 115 * kip, M1: -279 * kipFt, M2: 279 * kipFt, k: 1, Lu: (270 * inch) / 1000,
     h: 20 * inch, b: 14 * inch, shape: 'tied', r: 'exact', fc: 4.5 * ksi, Ec: Ec * ksi, Es: 29_000 * ksi, betaD: 0, Ise: Ise * inch ** 4 })
   return { manual: 1 / (1 - 115 / (0.75 * Pc)), software: r.delta }
+})()
+
+// ── 12b⁗′. Balanced point — the spColumn control-point table ────────────
+// spColumn Example 1 report §9, Y axis: 14 × 20 in, 3-#11 per face at 2.71 /
+// 17.29 in, f'c 4.5 ksi, fy 60 ksi — φPb = 282.2 kip, φMb = 356.20 kip·ft. The
+// two-row Whitney block written out by hand (β1 = 0.825, the US row; Es =
+// 200 GPa, the engine's) against the engine's strain-compatibility sum.
+const spColumnBalanced = (() => {
+  const inch = 25.4, kip = 4.4482216, ksi = (kip * 1000) / (inch * inch)
+  const b = 14 * inch, h = 20 * inch, d1 = 2.71 * inch, dt = 17.29 * inch, As = 3 * 1.56 * inch * inch
+  const fc = 4.5 * ksi, fy = 60 * ksi
+  const cb = (600 / (600 + fy)) * dt, a = 0.825 * cb
+  const Cc = 0.85 * fc * a * b
+  const fs1 = Math.min(fy, (600 * (cb - d1)) / cb) - 0.85 * fc          // in the block: displaced concrete
+  const Pb = (Cc + As * fs1 - As * fy) / 1000                          // kN
+  const p = pmAtDepth({ b, h, cover: 0, barDia: 0, tieDia: 0, fc, fy, numBars: 6, beta1: 0.825,
+    layers: [{ d: d1, n: 3, As }, { d: dt, n: 3, As }] }, cb)
+  return { manual: (0.65 * Pb) / kip, software: (0.65 * p.Pn) / kip }
 })()
 
 // ── 12b‴. HSS overlapped KT joint — Packer (2014), EJ 51(3) ─────────────
@@ -1295,6 +1313,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'roof-truss-roofing', category: 'Steel', title: 'Roof truss roofing — panel-point loads close on q·A (12 × 5 m, uneven panels)',
     reference: 'Tributary-area statics', formula: 'Σ q·A_trib = q·L·B',
     manual: roofTrussRoofing.manual, software: roofTrussRoofing.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'pm-balanced-spcolumn', category: 'RC', title: 'P–M balanced point — 14 × 20 in, 6-#11 about Y (spColumn prints φPb = 282.2 kip)',
+    reference: 'StructurePoint spColumn report §9 control points; ACI 318-14 §22.2', formula: 'φPb = 0.65[0.85f′c·β1·cb·b + As′(fs′ − 0.85f′c) − As·fy]',
+    manual: spColumnBalanced.manual, software: spColumnBalanced.software, unit: 'kip', tol: 1e-9,
   },
   {
     id: 'slender-column-spcolumn', category: 'RC', title: 'Slender nonsway column — δ about Y (spColumn Example 1, 14 × 20 in)',
