@@ -69,6 +69,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     label: 'Drafting',
     tools: [
       { to: '/floor-plan-3d', name: 'Floor Plan 3D', sub: 'Floor plans → 3D → Model Space' },
+      { to: '/plan-studio', name: 'Plan Studio', sub: 'Plans & details to your numbers' },
     ],
   },
   {

@@ -33,7 +33,7 @@ function RawSvg({ svg, className, ...rest }:
  * `PlanSheet.warnings` is still carried, because the sheet set is also the
  * PDF's, and a caller that wants to collect them still can.
  */
-function Sheet({ sheet, svg, onOpen }: { sheet: PlanSheet; svg: string; onOpen: () => void }): JSX.Element {
+export function Sheet({ sheet, svg, onOpen }: { sheet: PlanSheet; svg: string; onOpen: () => void }): JSX.Element {
   return (
     <div className="space-y-1">
       <div className="rounded-xl border border-hairline bg-sheet">

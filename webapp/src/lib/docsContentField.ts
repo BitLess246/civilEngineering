@@ -1309,5 +1309,34 @@ export const FIELD_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'plan-studio',
+    name: 'Plan Studio',
+    route: '/plan-studio',
+    group: 'Drafting',
+    summary: 'Structural sheets drawn to your own numbers: set the frame (bays, storeys, slab), the member sizes and the steel — beam top and bottom bars and stirrups, column bars and ties, footing size and mat, slab bar spacing — pick a plan type, and the sheets redraw. Plans, frame elevations, column and footing details, bar cutting lists and bending schedules all come from one set of placed bars, so every sheet agrees.',
+    basis: 'The Plans tab\'s own sheet builders, run on a grid frame built from the inputs and a design whose reinforcement is replaced by the entered values. A drafting tool: nothing is checked against loads. §425.2.1 clear spacing is enforced only to split a face that cannot fit one row into layers.',
+    sections: [
+      {
+        id: 'plan-studio-inputs',
+        title: 'Inputs',
+        controls: [
+          { kind: 'field', name: 'Frame', what: 'Bay widths along x and z and storey heights (comma-separated, m); slab thickness, cover, f′c and fy.' },
+          { kind: 'field', name: 'Beams', what: 'Width and depth, main-bar and stirrup diameters, top and bottom bar counts, stirrup spacing at the ends and through the middle.' },
+          { kind: 'field', name: 'Columns', what: 'Width and depth, vertical-bar diameter and count, tie diameter and spacing.' },
+          { kind: 'field', name: 'Footings', what: 'Pad side and thickness, mat-bar diameter, bars each way (spacing follows), founding depth.' },
+          { kind: 'field', name: 'Slabs', what: 'Bar diameter and the bottom and top mat spacing.' },
+        ],
+      },
+      {
+        id: 'plan-studio-sheets',
+        title: 'Sheets',
+        controls: [
+          { kind: 'field', name: 'Plan type', what: 'Foundation & framing plans, frame elevations, column details, footing details, bar cutting lists, bar bending schedules or general notes.' },
+          { kind: 'output', name: 'Sheets', what: 'Each sheet with ↓ SVG and ↓ DXF; click one for the full-screen viewer. "PDF of these sheets" prints the chosen type with your PDF appearance (⚙).' },
+        ],
+      },
+    ],
+  },
 ]
 
