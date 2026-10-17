@@ -184,7 +184,7 @@ export default function SeismicWizard() {
             zone: String(zone), soil, source, distance, occupancy,
             system: STRUCTURAL_SYSTEMS.find((s) => s.id === systemId)!.name, T,
           }, { route: '/seismic-wizard', label: 'Seismic Wizard' })}
-            target="_blank" rel="noopener" data-pdf-skip
+            target="_blank" rel="noopener" data-pdf-skip data-tap
             className="mt-1.5 inline-block text-[11.5px] font-semibold text-brand hover:underline">Explain this calculation ↗</Link>
         </div>
         <p className="mt-2 text-[10px] text-muted">

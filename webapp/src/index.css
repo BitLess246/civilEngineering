@@ -260,3 +260,26 @@ body { counter-reset: calccard; }
 @media (prefers-reduced-motion: reduce) {
   [data-rail-flyout] { animation: none; }
 }
+
+/* ── touch targets: 24 × 24 px at least (WCAG 2.2 SC 2.5.8) ────────────────
+   A phone sweep of every route found standalone controls of 15–22 px — the
+   ✕ that removes a row, the '?' code hint, "⤢ Full size", the "Explain this
+   check" link. Growing them would change how they read inline, so on a coarse
+   pointer only the HIT AREA grows: an invisible ::after, centred on the
+   control, never smaller than it and never under 24 px. In the BASE layer so a
+   component's own `absolute`/`fixed`/`sticky` utility still wins over the
+   `relative` this sets (an absolute button is a containing block too).
+   `[data-tap]` opts in a link that stands alone as a control. */
+@layer base {
+  @media (pointer: coarse) {
+    button, [role="button"], summary, [data-tap] { position: relative; }
+    button::after, [role="button"]::after, summary::after, [data-tap]::after {
+      content: "";
+      position: absolute;
+      top: min(0px, calc((100% - 24px) / 2));
+      bottom: min(0px, calc((100% - 24px) / 2));
+      left: min(0px, calc((100% - 24px) / 2));
+      right: min(0px, calc((100% - 24px) / 2));
+    }
+  }
+}
