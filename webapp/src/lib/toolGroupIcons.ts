@@ -150,6 +150,18 @@ export const GROUP_ICONS: Record<string, GroupIcon> = {
       'M15.6 21.5H21.4',
     ],
   },
+  Drafting: {
+    // A 45° set square with its cut-out and a scale on the base — the tool a
+    // sheet is drawn with, for the group that draws rather than calculates.
+    depicts: '45 degree set square with scale ticks',
+    paths: [
+      'M4 20.5H20.5L4 4Z',
+      'M7.6 16.9H12.9L7.6 11.6Z',
+      'M9.5 20.5V19.1',
+      'M13.5 20.5V19.1',
+      'M17.5 20.5V19.1',
+    ],
+  },
   Surveying: {
     // A leveling tripod: head, three legs — the instrument every field
     // subject in this group starts from.

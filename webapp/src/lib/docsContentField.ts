@@ -1283,9 +1283,9 @@ export const FIELD_TOOLS: DocTool[] = [
   },
   {
     id: 'drafting3d',
-    name: 'Drafting3D',
-    route: '/drafting3d',
-    group: 'Mathematics',
+    name: 'Floor Plan 3D',
+    route: '/floor-plan-3d',
+    group: 'Drafting',
     summary: '2D floor plan drafting with real-time 3D viewport. Draw walls, beams, columns, and slabs on a grid; see them instantly in 3D; export to ModelSpace for structural analysis.',
     basis: 'Grid-based 2D drafting with snap-to-grid; real-time 3D sync via react-three-fiber; exports to StructuralModel (nodes, members, plates, sections) for ModelSpace analysis.',
     sections: [

@@ -68,7 +68,7 @@ describe('the routes PUBLIC_ROUTES promises', () => {
     const known = new Set([
       '/', '/signin', '/signup', '/forgot-password', '/reset-password',
       '/terms', '/privacy', '/refunds', '/contact', '/profile',
-      '/steel', '/geotech', '/hydrostatics', '/dynamics', '/surveying', '/geometric-design', '/eng-economy',
+      '/steel', '/geotech', '/hydrostatics', '/dynamics', '/surveying', '/geometric-design', '/eng-economy', '/drafting3d',
       '/codes/:id',   // one Code Library provision; the library itself is in the catalogue
     ])
     for (const r of PUBLIC_ROUTES) {

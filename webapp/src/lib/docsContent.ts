@@ -39,6 +39,8 @@ export const DOC_ROUTE_ALIASES: Record<string, string> = {
   '/geometric-design': 'sight-distance',
   // the combined Engineering Economy page split into four
   '/eng-economy': 'interest-factors',
+  // Drafting3D, renamed Floor Plan 3D when the Drafting category arrived
+  '/drafting3d': 'drafting3d',
   '/signup': 'account', '/forgot-password': 'account', '/reset-password': 'account',
   '/profile': 'account',
   // the four public policy pages share one docs entry
