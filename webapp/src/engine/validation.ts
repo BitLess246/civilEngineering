@@ -13,6 +13,7 @@ import { velocityPressure, windKz } from './wind'
 import { requiredArea } from './bearing'
 import { beamFlexure, beamShear, deriveWSection } from './steelDesign'
 import { shapeByName } from './aiscSections'
+import { designTrussJoint } from './hssTrussJoint'
 import { checkAnchorGroup } from './anchorDesign'
 import { boltZDoubleSteel } from './postBase'
 import { designAxialColumn } from './columnDesign'
@@ -440,6 +441,30 @@ const roofTrussRoofing = (() => {
   })
   const software = roofingLoads(r.model).reduce((t, l) => t + (l.kind === 'node' ? -(l.Fy ?? 0) : 0), 0)
   return { manual: 0.5 * 12 * 5, software }
+})()
+
+// ── 12b‴. HSS overlapped KT joint — Packer (2014), EJ 51(3) ─────────────
+// The paper's worked example: HSS10×10×3/8 chord (A1085, t = full nominal),
+// HSS5×5×5/16 diagonals at 60° lapping 50 %, an HSS4×4×1/4 vertical lapping
+// onto both, Fy = 50 ksi. Its Eq. 2 — the vertical with BOTH transverse faces
+// on branches — evaluated exactly in the paper's own units against the
+// engine's SI solve of the whole joint. (The paper prints 166 kips; the
+// other two branches, rounded to three figures, are in hssTrussJoint.test.ts.)
+const ktPacker = (() => {
+  const inch = 25.4, in2 = 645.16, kip = 4.4482216, ksi = (kip * 1000) / in2
+  const tube = (b: number, tt: number, A: number) => ({ B: b * inch, H: b * inch, t: tt * inch, A: A * in2 })
+  const Fy = 50 * ksi, Fu = 65 * ksi
+  const r = designTrussJoint({
+    node: 'KT', chordShape: '', chord: tube(10, 0.375, 14.1), Fy, Fu, chordN: [0, 0], e: -2.5 * inch,
+    branches: [
+      { id: '1', shape: '', section: tube(5, 0.313, 5.61), theta: 60, lean: -1, P: -120 * kip, Fy, Fu },
+      { id: '2', shape: '', section: tube(5, 0.313, 5.61), theta: 60, lean: 1, P: 189 * kip, Fy, Fu },
+      { id: '3', shape: '', section: tube(4, 0.25, 3.6), theta: 90, lean: 0, P: -60 * kip, Fy, Fu },
+    ],
+  })!
+  const beov = Math.min(4, (10 / (5 / 0.313)) * ((50 * 0.313) / (50 * 0.25)) * 4)          // in
+  const Pn3 = 50 * 0.25 * (2 * 4 - 4 * 0.25 + 2 * beov)                                // kips
+  return { manual: Pn3 * kip, software: r.branches.find((b) => b.id === '3')!.checks[0].capacity / 0.95 }
 })()
 
 // ── 12b″. Roof wind on trusses — uplift by Figure 207B.4-1 ─────────────
@@ -1254,6 +1279,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'roof-truss-roofing', category: 'Steel', title: 'Roof truss roofing — panel-point loads close on q·A (12 × 5 m, uneven panels)',
     reference: 'Tributary-area statics', formula: 'Σ q·A_trib = q·L·B',
     manual: roofTrussRoofing.manual, software: roofTrussRoofing.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'hss-kt-packer-2014', category: 'Steel', title: 'HSS overlapped KT joint — vertical lapping both diagonals (Packer 2014 worked example)',
+    reference: 'Packer (2014) AISC Eng. J. 51(3) design example; AISC 360-16 §K3 Table K3.2', formula: 'Pn3 = Fyb·tb·(2Hb − 4tb + 2·beov) = 166 kips',
+    manual: ktPacker.manual, software: ktPacker.software, unit: 'kN', tol: 1e-9,
   },
   {
     id: 'arc-length-collapse', category: 'Analysis', title: 'Arc-length peak load — cantilever mechanism',
