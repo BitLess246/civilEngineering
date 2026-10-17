@@ -328,17 +328,27 @@ export function createSheet(style: PdfStyle = DEFAULT_PDF_STYLE): Sheet {
    *  enough to read the sheet through, painted under nothing — it is drawn
    *  last but at 7 % ink, so it never hides a figure or a number. */
   const paintWatermark = (text: string) => {
+    // The word sits on a line through the page centre, centred ALONG it and
+    // ACROSS it, at the largest size whose rotated box — run × cap height,
+    // letter-spacing included — fits inside the margins. Fitting the run to
+    // the diagonal alone let the tops of the first letters, which lean back
+    // from the baseline at this angle, run off the left edge.
+    const a = Math.atan2(PH, PW) * 0.82
+    const cos = Math.cos(a), sin = Math.sin(a)
+    const SP = 2                                          // letter-spacing, mm (fixed — it does not scale)
+    const space = SP * Math.max(text.length - 1, 0)
+    const CAP = 0.73 * 25.4 / 72                          // cap height per pt, mm
     s.setF('sans', 'bold', 1, INK)
-    // the largest size whose diagonal fits 80 % of the page's diagonal run
-    const angle = Math.atan2(PH, PW) * 180 / Math.PI * 0.82
-    const run = 0.8 * Math.hypot(PW, PH)
-    const size = Math.min(72, run / Math.max(doc.getTextWidth(text), 1e-6))
+    const w1 = Math.max(doc.getTextWidth(text), 1e-6)     // glyph run per pt, mm
+    const boxW = PW - 2 * M, boxH = PH - 2 * M
+    const size = Math.max(8, Math.min(72,
+      (boxW - space * cos) / (w1 * cos + CAP * sin),
+      (boxH - space * sin) / (w1 * sin + CAP * cos)))
     s.setF('sans', 'bold', size, ACCENT)
-    const w = spacedWidth(doc.getTextWidth(text), text, 2)
-    const a = angle * Math.PI / 180
-    const cx = PW / 2, cy = PH / 2
+    const w = spacedWidth(doc.getTextWidth(text), text, SP), h = CAP * size
     setOpacity(doc, 0.07)
-    doc.text(text, cx - (w / 2) * Math.cos(a), cy + (w / 2) * Math.sin(a), { angle, charSpace: 2 })
+    doc.text(text, PW / 2 - (w / 2) * cos + (h / 2) * sin, PH / 2 + (w / 2) * sin + (h / 2) * cos,
+      { angle: a * 180 / Math.PI, charSpace: SP })
     setOpacity(doc, 1)
   }
 

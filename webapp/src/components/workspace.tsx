@@ -118,7 +118,7 @@ export function ReportGroup({ lh, onChange, onPrint, title, badges, report }: {
         className="rounded-md border border-field-line bg-field px-2.5 py-1.5 text-[13px] text-ink placeholder:text-faint focus-visible:border-brand" />
     </label>
   )
-  const btn = 'col-span-2 inline-flex items-center justify-center gap-2 rounded-md bg-brand px-3.5 py-2 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-50'
+  const btn = 'inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-brand px-3.5 py-2 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-50'
   return (
     <div data-ai-ignore>
       <InputGroup title="Project & report">
@@ -130,8 +130,8 @@ export function ReportGroup({ lh, onChange, onPrint, title, badges, report }: {
           <span className="py-1.5 font-mono text-[12.5px] text-ink">{new Date().toISOString().slice(0, 10)}</span>
         </div>
         {report
-          ? <ExportPdfButton {...report} docTitle={title} badges={badges} lh={lh} className={btn} />
-          : <button type="button" onClick={onPrint} className={btn}>⎙ Export report</button>}
+          ? <ExportPdfButton {...report} docTitle={title} badges={badges} lh={lh} className={btn} containerClassName="col-span-2 flex" />
+          : <button type="button" onClick={onPrint} className={`col-span-2 ${btn}`}>⎙ Export report</button>}
       </InputGroup>
     </div>
   )

@@ -293,6 +293,11 @@ describe('colour is never written as a literal in a class', () => {
     // own fill in every theme, which is exactly what NOT following the theme
     // buys. Its verdict colours (critical vs not) are roles, not literals.
     'CriticalPathDiagram.tsx',
+    // The PDF appearance preview is a picture of the PRINTED page: white paper,
+    // the PDF's own ink (#0f1b2a), subtle (#7a7568) and faint (#a39d8d) — the
+    // `pdfKit` INK / SUBTLE / FAINT values. A sheet of paper does not invert
+    // on Blueprint, and a preview that did would show a page nobody can print.
+    'PdfSettingsDialog.tsx',
   ]
 
   // THE WHOLE FILE, for the same reason the status rule reads the whole file.

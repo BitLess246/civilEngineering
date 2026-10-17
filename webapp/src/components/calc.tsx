@@ -278,7 +278,8 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
         action={<ExportPdfButton
           docTitle={docTitle} docCode={docCode} badges={badges} ok={ok} governing={governing} lh={lh}
           stats={stats} checks={checks} data={data} steps={steps} drawingTitle={drawingTitle}
-          className="inline-flex flex-none items-center gap-2 rounded-md bg-brand px-3.5 py-1.5 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-md bg-brand px-3.5 py-1.5 text-[12.5px] font-semibold text-on-solid hover:bg-brand-hover disabled:opacity-50"
+          containerClassName="flex-none"
         />} />
     </div>
     <div className="print-only">
@@ -450,7 +451,8 @@ export function ReportBar({ title, lh, onChange }: {
         governing="No page-specific structured result summary was supplied. Review captured data; this is not a verified design verdict."
         assumptions={['This legacy page has not supplied a complete structured report payload. Captured inputs, tables, diagrams, and rendered text may not include hidden calculation assumptions or internal defaults; manual review is required.']}
         lh={lh}
-        className="ml-auto inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover"
+        className="inline-flex items-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-semibold text-on-solid hover:bg-brand-hover"
+        containerClassName="ml-auto"
       />
     </div>
   )

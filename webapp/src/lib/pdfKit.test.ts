@@ -214,6 +214,40 @@ describe('styled sheets (pdfStyle)', () => {
     }
   })
 
+  it('a watermark\'s rotated box — glyph tops included — stays inside the margins', () => {
+    // "ISSUED FOR PERMIT" on Letter put its baseline start 4.5 mm in from the
+    // edge, and the tops of its first letters, leaning back at ~43°, off it.
+    for (const paper of ['a4', 'letter'] as const) {
+      for (const t of ['draft', 'issued for permit', 'issued for permit and construction']) {
+        const s = createSheet(style({ paper, watermark: 'custom', watermarkText: t }))
+        const drawn = capture(s)
+        let angle = 0, size = 0
+        const orig = s.doc.text.bind(s.doc)
+        s.doc.text = ((tx: string, x: number, y: number, o?: { angle?: number }) => {
+          if (o?.angle) { angle = o.angle; size = s.doc.getFontSize() }
+          return orig(tx, x, y, o as never)
+        }) as typeof s.doc.text
+        s.pageFooters('DOC', 'S-01', '2026-10-17', 'Proj')
+        const mark = drawn.find((d) => d.text === t.toUpperCase())!
+        s.doc.setFont('sans', 'bold'); s.doc.setFontSize(size)        // measure in the watermark's own font
+        const a = (angle * Math.PI) / 180, w = s.doc.getTextWidth(mark.text) + 2 * (mark.text.length - 1)
+        const h = 0.73 * size * 25.4 / 72
+        const d = [Math.cos(a), -Math.sin(a)], u = [-Math.sin(a), -Math.cos(a)]   // along, and toward the glyph tops
+        const corners = [[0, 0], [w, 0], [0, h], [w, h]].map(([p, q]) => [mark.x + p * d[0] + q * u[0], mark.y + p * d[1] + q * u[1]])
+        for (const [x, y] of corners) {
+          expect(x, `${paper} ${t}`).toBeGreaterThanOrEqual(M - 1e-6)
+          expect(x, `${paper} ${t}`).toBeLessThanOrEqual(s.pageW - M + 1e-6)
+          expect(y, `${paper} ${t}`).toBeGreaterThanOrEqual(M - 1e-6)
+          expect(y, `${paper} ${t}`).toBeLessThanOrEqual(s.pageH - M + 1e-6)
+        }
+        // and centred on the page
+        const mx = corners.reduce((t2, c) => t2 + c[0], 0) / 4, my = corners.reduce((t2, c) => t2 + c[1], 0) / 4
+        expect(mx).toBeCloseTo(s.pageW / 2, 6)
+        expect(my).toBeCloseTo(s.pageH / 2, 6)
+      }
+    }
+  })
+
   it('the default style paints no watermark, note or revision', () => {
     const s = createSheet()
     const drawn = capture(s)
