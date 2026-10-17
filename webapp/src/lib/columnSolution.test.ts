@@ -3,6 +3,8 @@ import { columnRowSolution } from './modelSpaceSolutions'
 import { designStructure, type ColumnScheduleRow } from '../engine/pipeline'
 import { generateGridModel, buildGravityLoads } from '../engine/modelBuilder'
 import type { RectSection } from '../engine/model'
+import { slendernessSolution } from './columnSolution'
+import { momentMagnificationNonsway } from '../engine/columnDesign'
 
 // ─────────────────────────────────────────────────────────────────────────
 // THE SCHEDULE AND ITS OWN WORKED SOLUTION MUST AGREE.
@@ -100,5 +102,21 @@ describe('the column worked solution ends on the number its row prints', () => {
     // …and the biaxial step comes after it, because it is the answer.
     expect(titles.findIndex((t) => /Biaxial check/.test(t)))
       .toBeGreaterThan(titles.findIndex((t) => /Capacity along the strong-axis demand ray/.test(t)))
+  })
+})
+
+describe('slendernessSolution — the Cm step says which rule it used', () => {
+  const text = (steps: ReturnType<typeof slendernessSolution>) => JSON.stringify(steps)
+  it('M2,min governing → Cm = 1.0 by §6.6.4.5.4, and Mc magnifies the larger moment', () => {
+    const i = { Pu: 800, M1: 0, M2: 0, k: 1, Lu: 6, h: 350, b: 350, fc: 28 }
+    const s = text(slendernessSolution(i, momentMagnificationNonsway(i)))
+    expect(s).toContain('Cm = 1.0 (§6.6.4.5.4)')
+    expect(s).toContain('max(M_2, M_{2,min})')
+  })
+  it('end moments governing → the ratio form, and the exact r named when asked for', () => {
+    const i = { Pu: 500, M1: -50, M2: 120, k: 1, Lu: 6, h: 350, b: 350, fc: 28, r: 'exact' as const }
+    const s = text(slendernessSolution(i, momentMagnificationNonsway(i)))
+    expect(s).toContain('C_m = 0.6 - 0.4')
+    expect(s).toContain('h/√12')
   })
 })

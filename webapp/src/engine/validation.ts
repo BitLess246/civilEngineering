@@ -16,7 +16,7 @@ import { shapeByName } from './aiscSections'
 import { designTrussJoint } from './hssTrussJoint'
 import { checkAnchorGroup } from './anchorDesign'
 import { boltZDoubleSteel } from './postBase'
-import { designAxialColumn } from './columnDesign'
+import { designAxialColumn, momentMagnificationNonsway } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
 import { felleniusFS, type Slice } from './slopeStability'
 import { consolidationSettlement, timeFactor, effectiveStress, stressUnderRect } from './settlement'
@@ -441,6 +441,22 @@ const roofTrussRoofing = (() => {
   })
   const software = roofingLoads(r.model).reduce((t, l) => t + (l.kind === 'node' ? -(l.Fy ?? 0) : 0), 0)
   return { manual: 0.5 * 12 * 5, software }
+})()
+
+// ── 12b⁗. Slender nonsway column — spColumn's own report ─────────────────
+// StructurePoint "Slenderness Effects Using spColumn — Examples", Example 1:
+// 14 × 20 in, 6-#11, f'c = 4.5 ksi, lu = 22.5 ft, k = 1, βdns = 0, Pu = 115
+// kip, single curvature about Y. The report prints δ = 1.055 (Pc = 2919.31
+// kip); here §6.6.4.4.4(b) and §6.6.4.5.2 are evaluated exactly in kip·in
+// against the engine's SI solve. (Its X axis, M2,min governing, is in
+// columnDesign.test.ts, with the SI 15 mm noted.)
+const spColumnSlender = (() => {
+  const inch = 25.4, kip = 4.4482216, ksi = (kip * 1000) / (inch * inch), kipFt = kip * 0.3048
+  const Ec = 57 * Math.sqrt(4500), Ig = (14 * 20 ** 3) / 12, Ise = 6 * 1.56 * (10 - 2.005 - 1.41 / 2) ** 2
+  const Pc = (Math.PI ** 2 * (0.2 * Ec * Ig + 29_000 * Ise)) / 270 ** 2           // kip
+  const r = momentMagnificationNonsway({ Pu: 115 * kip, M1: -279 * kipFt, M2: 279 * kipFt, k: 1, Lu: (270 * inch) / 1000,
+    h: 20 * inch, b: 14 * inch, shape: 'tied', r: 'exact', fc: 4.5 * ksi, Ec: Ec * ksi, Es: 29_000 * ksi, betaD: 0, Ise: Ise * inch ** 4 })
+  return { manual: 1 / (1 - 115 / (0.75 * Pc)), software: r.delta }
 })()
 
 // ── 12b‴. HSS overlapped KT joint — Packer (2014), EJ 51(3) ─────────────
@@ -1279,6 +1295,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'roof-truss-roofing', category: 'Steel', title: 'Roof truss roofing — panel-point loads close on q·A (12 × 5 m, uneven panels)',
     reference: 'Tributary-area statics', formula: 'Σ q·A_trib = q·L·B',
     manual: roofTrussRoofing.manual, software: roofTrussRoofing.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'slender-column-spcolumn', category: 'RC', title: 'Slender nonsway column — δ about Y (spColumn Example 1, 14 × 20 in)',
+    reference: 'StructurePoint spColumn report (δ = 1.055); ACI 318-14 §6.6.4.4.4(b), §6.6.4.5.2', formula: 'δ = Cm/(1 − Pu/0.75Pc), Pc = π²(0.2EcIg + EsIse)/(klu)²',
+    manual: spColumnSlender.manual, software: spColumnSlender.software, unit: '—', tol: 1e-9,
   },
   {
     id: 'hss-kt-packer-2014', category: 'Steel', title: 'HSS overlapped KT joint — vertical lapping both diagonals (Packer 2014 worked example)',

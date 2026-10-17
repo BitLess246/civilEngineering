@@ -12,7 +12,7 @@
 //    Balanced condition cb = 600dt/(600+fy). φ from ε_t (0.65/0.75 → 0.90).
 //  · Slender (braced/nonsway): neglect when kLu/r ≤ 34 + 12(M1/M2) ≤ 40
 //    (M1/M2 negative in single curvature — sheet convention);
-//    Cm = 0.6 − 0.4(M1/M2); Pc = π²EI/(kLu)²; δ = Cm/(1 − Pu/0.75Pc) ≥ 1;
+//    Cm = 0.6 − 0.4(M1/M2), 1.0 where M2,min governs; Pc = π²EI/(kLu)²; δ = Cm/(1 − Pu/0.75Pc) ≥ 1;
 //    Mc = δ·max(M2, M2,min = Pu(15 + 0.03h)).
 //  · Bresler reciprocal for biaxial: 1/Pn = 1/Pnx + 1/Pny − 1/Po.
 // Units: mm, MPa, kN, kN·m.
@@ -400,7 +400,15 @@ export interface SlendernessInput {
   /** Flexural rigidity EI, kN·m². Omit to use 0.4EcIg/(1+βd). */
   EI?: number
   fc?: number; b?: number      // needed when EI is derived
-  betaD?: number               // default 0.6
+  betaD?: number               // default 0.6 (βdns, §6.6.4.4.4)
+  /** Moment of inertia of the reinforcement about the section's centroidal
+   *  axis, mm⁴. Given, EI = (0.2·Ec·Ig + Es·Ise)/(1 + βdns) — §6.6.4.4.4(b),
+   *  the form that reflects the bars actually provided (spColumn's). */
+  Ise?: number
+  /** Ec, MPa — default 4700√f'c (§19.2.2.1(b)); Es, MPa — default 200 000. */
+  Ec?: number; Es?: number
+  /** r by §6.2.5.1: 'approx' 0.3h / 0.25D (default) or 'exact' √(Ig/Ag). */
+  r?: 'approx' | 'exact'
 }
 
 export interface SlendernessResult {
@@ -420,20 +428,28 @@ export interface SlendernessResult {
 }
 
 export function momentMagnificationNonsway(i: SlendernessInput): SlendernessResult {
-  const r = (i.shape === 'spiral' ? 0.25 : 0.30) * i.h
+  // §6.2.5.1: (b) 0.3h rectangular / 0.25D circular, or (a) √(Ig/Ag) —
+  // h/√12 for a rectangle; for a circle (a) and (b) coincide
+  const r = (i.shape === 'spiral' ? 0.25 : i.r === 'exact' ? 1 / Math.sqrt(12) : 0.30) * i.h
   const kLuOverR = (i.k * i.Lu * 1000) / r
   // Sheet convention (RC-06): M1/M2 is NEGATIVE for single curvature.
   // limit = 34 + 12(M1/M2) ≤ 40;  Cm = 0.6 − 0.4(M1/M2).
   const ratio = i.M2 !== 0 ? i.M1 / i.M2 : 0
   const lim = Math.min(34 + 12 * ratio, 40)
   const slender = kLuOverR > lim
-  const Cm = 0.6 - 0.4 * ratio
+  // §6.6.4.5.4: where M2,min governs, Cm = 1.0 (the alternative — Cm from
+  // the end-moment ratio — is undefined when the ends carry no moment, and
+  // spColumn takes 1.0 throughout)
+  const M2min = (i.Pu * (15 + 0.03 * i.h)) / 1000
+  const Cm = Math.abs(i.M2) < M2min ? 1 : 0.6 - 0.4 * ratio
 
   let EI = i.EI ?? 0
   if (!EI) {
-    const Ec = 4700 * Math.sqrt(i.fc ?? 28) * 1000          // kPa
+    const Ec = (i.Ec ?? 4700 * Math.sqrt(i.fc ?? 28)) * 1000   // kPa
     const Ig = ((i.b ?? i.h) * Math.pow(i.h, 3)) / 12 * 1e-12  // m⁴
-    EI = (0.4 * Ec * Ig) / (1 + (i.betaD ?? 0.6))
+    EI = i.Ise
+      ? (0.2 * Ec * Ig + (i.Es ?? 200_000) * 1000 * i.Ise * 1e-12) / (1 + (i.betaD ?? 0.6))
+      : (0.4 * Ec * Ig) / (1 + (i.betaD ?? 0.6))
   }
   const Pc = (Math.PI ** 2 * EI) / Math.pow(i.k * i.Lu, 2)
   // ACI 318-14 §6.6.4.5.2: δ = Cm/(1 − Pu/0.75Pc) ≥ 1.0 is only defined for
@@ -441,7 +457,6 @@ export function momentMagnificationNonsway(i: SlendernessInput): SlendernessResu
   // surface stable=false (δ, Mc = ∞) instead of silently clamping δ to 1.
   const stable = i.Pu < 0.75 * Pc
   const delta = stable ? Math.max(1, Cm / (1 - i.Pu / (0.75 * Pc))) : Infinity
-  const M2min = (i.Pu * (15 + 0.03 * i.h)) / 1000
   const Mc = stable ? delta * Math.max(Math.abs(i.M2), M2min) : Infinity
   return { r, kLuOverR, limit: lim, slender, Cm, EI, Pc, delta, stable, M2min, Mc }
 }
