@@ -121,3 +121,33 @@ describe('slopeStability — critical circle search', () => {
     }
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// PUBLISHED BENCHMARK — ACADS problem 1(a) (Giam & Donald 1989), the referee
+// set the profession checks slope programs against, as restated with results
+// in Rocscience's RS2/Slide2 Slope Stability Verification, problem #01:
+//   homogeneous slope, ground (20,25)–(30,25)–(50,35)–(70,35), 10 m high at
+//   2H:1V; c′ = 3.0 kPa, φ′ = 19.6°, γ = 20 kN/m³, no pore pressure.
+// Published: referee FS = 1.00 (Giam); Bishop, Slide2 = 0.987; mean of 18
+//   Bishop solutions = 0.993; critical surface a circle through the toe.
+// ─────────────────────────────────────────────────────────────────────────
+describe('ACADS 1(a) — published referee slope, critical circle (Bishop)', () => {
+  const ground = [{ x: 20, y: 25 }, { x: 30, y: 25 }, { x: 50, y: 35 }, { x: 70, y: 35 }]
+  const soil = { c: 3, phiDeg: 19.6, gamma: 20 }
+
+  it('a refined search lands on Slide2’s 0.987, inside the referee’s 1.00, through the toe', () => {
+    const r = searchCriticalCircle(ground, soil, { n: 50, xc: { min: 26, max: 34, step: 0.5 }, yc: { min: 48, max: 57, step: 0.5 }, R: { min: 24, max: 31, step: 0.25 } })!
+    expect(Math.abs(r.FS - 0.987)).toBeLessThan(0.005)
+    expect(r.FS).toBeLessThan(1.0)
+    expect(Math.abs(r.FS / 0.993 - 1)).toBeLessThan(0.01)          // the 18-program Bishop mean
+    const c = r.critical.circle
+    expect(c.yc - c.R).toBeGreaterThan(24.9)                          // no deeper than the toe
+    // Fellenius below Bishop, as it must be on a circle (it drops interslice forces)
+    expect(r.critical.fellenius.FS).toBeLessThan(r.FS)
+  })
+
+  it('the default auto-bracketed grid gets within 1.5 % of the referee without any hint', () => {
+    const r = searchCriticalCircle(ground, soil)!
+    expect(Math.abs(r.FS - 1.0)).toBeLessThan(0.015)
+  })
+})
