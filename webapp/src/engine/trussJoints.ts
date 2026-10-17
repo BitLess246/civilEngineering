@@ -66,10 +66,12 @@ export function designTrussJoints(model: StructuralModel, runs: readonly { name:
       const N = (mid: string) => run.result.members.find((x) => x.id === mid)?.N[0] ?? 0
       const branches: JointBranch[] = webs.map(({ m }) => {
         const d = dirOf(m)
-        const cos = Math.abs(d[0] * cDir[0] + d[1] * cDir[1] + d[2] * cDir[2])
+        const run = d[0] * cDir[0] + d[1] * cDir[1] + d[2] * cDir[2]
+        const cos = Math.abs(run)
         const s = sec.get(m.section)
         return {
           id: m.id, shape: s?.shape ?? '', theta: (Math.acos(Math.min(1, cos)) * 180) / Math.PI,
+          lean: cos < Math.sin((1 * Math.PI) / 180) ? 0 : (Math.sign(run) as -1 | 1),
           P: N(m.id), Fy: s?.steelFy ?? 248, Fu: s?.steelFu ?? 400,
         }
       })
