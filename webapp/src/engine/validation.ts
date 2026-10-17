@@ -9,6 +9,7 @@
 // Units are given per case; geometry mm, forces kN, stress MPa unless noted.
 // ─────────────────────────────────────────────────────────────────────────
 import { concreteBeamMn } from './scwb'
+import { solveFEM } from './beamAnalysis'
 import { velocityPressure, windKz } from './wind'
 import { requiredArea } from './bearing'
 import { beamFlexure, beamShear, deriveWSection } from './steelDesign'
@@ -319,6 +320,19 @@ const beamDeflIntegration = (() => {
   })
   const EI = concreteE(fc) * ((b * h ** 3) / 12) * 1e-9      // kN·m²
   return { manual: ((5 * w * L ** 4) / (384 * EI)) * 1000, software: r.deltaD }
+})()
+
+// ── 13b′. Support settlement — the settled support's own moment ─────────────
+// Two equal spans, no load, the middle support sinks δ: the three-moment
+// equation's settlement term alone gives M_B = 3EIδ/L² (sagging — the support
+// now pulls the beam down). The FEM imposes δ as a prescribed displacement and
+// recovers M from its reactions by statics.
+const beamSettlement = (() => {
+  const L = 6, E = 25000, I = 3.125e9, delta = 12             // m, MPa, mm⁴, mm
+  const EI = E * I * 1e-9                                      // kN·m²
+  const r = solveFEM([{ type: 'pin', x: 0 }, { type: 'roller', x: L, settlement: delta }, { type: 'roller', x: 2 * L }], [], 2 * L, E, I)!
+  const k = r.xs.findIndex((x) => Math.abs(x - L) < 1e-9)
+  return { manual: (3 * EI * (delta / 1000)) / L ** 2, software: r.M[k] }
 })()
 
 // ── 13c. Arc-length path following — peak λ IS the collapse load ────────────
@@ -1278,6 +1292,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'beam-defl-integration', category: 'RC', title: 'Service deflection by moment-diagram integration',
     reference: 'NSCP 424.2 / ACI 318-14 §24.2', formula: 'δ = ∬(M/EcIe) dx  ≡  5wℓ⁴/384EcIg (uncracked SS span)',
     manual: beamDeflIntegration.manual, software: beamDeflIntegration.software, unit: 'mm', tol: 1e-4,
+  },
+  {
+    id: 'beam-settlement', category: 'Analysis', title: 'Two-span beam, middle support settles',
+    reference: 'Hibbeler, Structural Analysis §12.4', formula: 'M_B = 3EIδ/L²  (three-moment settlement term, no load)',
+    manual: beamSettlement.manual, software: beamSettlement.software, unit: 'kN·m', tol: 1e-6,
   },
   {
     id: 'broms-sand-short', category: 'Geotech', title: 'Broms short free-head pile in sand',

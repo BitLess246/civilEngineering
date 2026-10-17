@@ -5,8 +5,10 @@
 //   2. reactions — statics when determinate; the three-moment equation for a
 //      continuous beam on pins/rollers with one EI per span (overhangs give
 //      known end moments); otherwise the force method (Hibbeler ch. 10):
-//      release the redundants, compatibility Δᵢ₀ + Σfᵢⱼ·Xⱼ = 0 with
-//      Δ = ∫M·m/EI dx by virtual work, a spring adding 1/k to fᵢᵢ;
+//      release the redundants, compatibility Δᵢ₀ + Σfᵢⱼ·Xⱼ = Δᵢ with
+//      Δ = ∫M·m/EI dx by virtual work, a spring adding 1/k to fᵢᵢ, and Δᵢ the
+//      support's settlement relative to the primary's rigid movement (zero
+//      without settlement);
 //   3. shear and moment equations per segment, V = 0 for the peak moment;
 //   4. deflection by double integration, EI·y″ = M, carried segment to
 //      segment so only θ and y at x = 0 remain — fixed from two support
@@ -20,7 +22,7 @@
 // Units: m, kN, kN·m; E in MPa, I in mm⁴, EI in kN·m².
 // ─────────────────────────────────────────────────────────────────────────
 
-import { type Support, type BeamLoad, type BeamSegment, eiAt, loadResultant, clipDist, spanLoads, overhangMoment } from './beamAnalysis'
+import { type Support, type BeamLoad, type BeamSegment, eiAt, loadResultant, clipDist, spanLoads, overhangMoment, settleOf } from './beamAnalysis'
 import { solveLinear } from './fem'
 import type { SolutionLine, SolutionStep } from '../lib/solution'
 
@@ -158,9 +160,14 @@ export function deriveBeam(
   segments: readonly BeamSegment[] | undefined, comboName: string,
   /** The FEM reactions, used only by the 'stiffness' fallback. */
   femReactions?: readonly { x: number; Rv: number; Rm: number }[],
+  /** The combination's factor on support settlement (its T factor). */
+  settleFactor = 1,
 ): BeamDerivation {
   const steps: SolutionStep[] = []
   const EIat = (x: number) => eiAt(x, E, I, segments ? [...segments] : undefined)
+  /** Support i's imposed displacement, m, upward + (a spring's BASE). */
+  const u = (i: number) => settleOf(supports[i], settleFactor)
+  const settles = supports.some((_, i) => Math.abs(u(i)) > 1e-12)
 
   // supports by position, lettered A, B, C … left to right
   const order = supports.map((s, i) => ({ s, i })).sort((p, q) => p.s.x - q.s.x)
@@ -269,6 +276,10 @@ export function deriveBeam(
     })
     const { M: M0, W: W0 } = overhangMoment(loads, xs[0], 'left')
     const { M: Mn, W: Wn } = overhangMoment(loads, xs[n], 'right')
+    // settlement h, m DOWNWARD, of the support at each position — the
+    // equation's support-movement term, ×EI₁ like everything else in it
+    const h = order.map(({ i }) => -u(i))
+    const settleTerm = (k: number) => 6 * EIs[0] * ((h[k + 1] - h[k]) / Ls[k] + (h[k + 1] - h[k + 2]) / Ls[k + 1])
     const Mk = new Array(n + 1).fill(0)
     Mk[0] = M0; Mk[n] = Mn
     const size = n - 1
@@ -278,7 +289,7 @@ export function deriveBeam(
       Am[k][k] = 2 * (Lp[k] + Lp[k + 1])
       if (k > 0) Am[k][k - 1] = Lp[k]
       if (k < size - 1) Am[k][k + 1] = Lp[k + 1]
-      bv[k] = -(ss[k].left * EIs[0] / EIs[k] + ss[k + 1].right * EIs[0] / EIs[k + 1])
+      bv[k] = -(ss[k].left * EIs[0] / EIs[k] + ss[k + 1].right * EIs[0] / EIs[k + 1]) + settleTerm(k)
       if (k === 0) bv[k] -= M0 * Lp[0]
       if (k === size - 1) bv[k] -= Mn * Lp[n - 1]
     }
@@ -292,13 +303,20 @@ export function deriveBeam(
         : `\\begin{aligned}&M_{i-1}L'_i + 2M_i(L'_i + L'_{i+1}) \\\\ &\\quad + M_{i+1}L'_{i+1} \\\\ &\\quad = -\\dfrac{6A_i\\bar a_i}{L_i}\\dfrac{EI_1}{EI_i} \\\\ &\\quad - \\dfrac{6A_{i+1}\\bar a'_{i+1}}{L_{i+1}}\\dfrac{EI_1}{EI_{i+1}} \\\\ &L'_i = L_i\\,EI_1/EI_i\\end{aligned}` },
       ...Ls.map((l, k): SolutionLine => ({ item: `Span ${ltr(k)}${ltr(k + 1)}: L = ${n2(l)} m${sameEI ? '' : `, EI = ${EIs[k].toFixed(0)} kN·m², L′ = ${n2(Lp[k])} m`}; 6Aā/L = ${n2(ss[k].left)}, 6Aā′/L = ${n2(ss[k].right)} kN·m²` })),
     )
+    if (settles) {
+      rLines.push(
+        { text: `Support settlement adds the support-movement term to the right-hand side, h downward + (m):` },
+        { tex: `+\\,6EI_1\\left[\\dfrac{h_i - h_{i-1}}{L_i} + \\dfrac{h_i - h_{i+1}}{L_{i+1}}\\right]` },
+        { text: order.map((_, k) => `h_${ltr(k)} = ${(h[k] * 1000).toFixed(1)} mm`).join(', ') + (settleFactor !== 1 ? ` (settlement × ${settleFactor} in this combination)` : '') + '.' },
+      )
+    }
     if (Math.abs(M0) > 1e-9 || Math.abs(Mn) > 1e-9 || W0 || Wn) {
       rLines.push({ text: `Overhangs fix the end moments by statics: M_${ltr(0)} = ${n2(M0)} kN·m, M_${ltr(n)} = ${n2(Mn)} kN·m.` })
     } else rLines.push({ text: `The outer supports are simple ends: M_${ltr(0)} = M_${ltr(n)} = 0.` })
     for (let k = 0; k < size; k++) {
       const mL = k === 0 ? `(${n2(M0)})` : `M_${ltr(k)}`
       const mR = k + 2 === n ? `(${n2(Mn)})` : `M_${ltr(k + 2)}`
-      const rhs = -(ss[k].left * EIs[0] / EIs[k] + ss[k + 1].right * EIs[0] / EIs[k + 1])
+      const rhs = -(ss[k].left * EIs[0] / EIs[k] + ss[k + 1].right * EIs[0] / EIs[k + 1]) + settleTerm(k)
       rLines.push({ tex: `\\begin{aligned}&\\text{at } ${ltr(k + 1)}:\\ ${mL}(${n2(Lp[k])}) + 2M_${ltr(k + 1)}(${n2(Lp[k] + Lp[k + 1])}) \\\\ &\\quad + ${mR}(${n2(Lp[k + 1])}) = ${n2(rhs)}\\end{aligned}` })
     }
     Mk.slice(1, -1).forEach((m, k) => rLines.push({ tex: `M_${ltr(k + 1)} = ${n2(m)}\\ \\text{kN·m}` }))
@@ -374,7 +392,17 @@ export function deriveBeam(
       const F = Array.from({ length: nR }, (_, a) => Array.from({ length: nR }, (_, b) => integrate((x) => m[a](x) * m[b](x) * scale(x), pts)))
       reds.forEach((r, a) => { if (r.k) F[a][a] += EI1 / r.k })
       const D0 = reds.map((_, a) => integrate((x) => M0(x) * m[a](x) * scale(x), pts))
-      const Xs = solveLinear(F, D0.map((v) => -v))
+      // what each released support must DO, ×EI₁: its own settlement less the
+      // primary's rigid movement there — the primary rides on its own
+      // supports, which may have settled too
+      const rigidAt = (x: number): number => {
+        if (p.kind === 'cant') return u(p.i)
+        const xa = supports[p.ia].x, xb = supports[p.ib].x
+        return u(p.ia) + ((u(p.ib) - u(p.ia)) * (x - xa)) / (xb - xa)
+      }
+      const rigidCw = p.kind === 'cant' ? 0 : -(u(p.ib) - u(p.ia)) / (supports[p.ib].x - supports[p.ia].x)
+      const Dreq = reds.map((rd) => EI1 * (rd.kind === 'V' ? u(rd.i) - rigidAt(supports[rd.i].x) : -rigidCw))
+      const Xs = solveLinear(F, D0.map((v, a) => Dreq[a] - v))
       if (!Xs) fallback('The compatibility equations are singular for this support layout.')
       else {
         method = 'force'
@@ -384,13 +412,21 @@ export function deriveBeam(
           : `a simple beam on ${nm(p.ia)} and ${nm(p.ib)}`
         rLines.push(
           { text: `Force method. Primary structure: ${primText}. Redundants: ${reds.map((r) => r.label).join(', ')} (upward / clockwise +).` },
-          { text: 'Compatibility — the released supports do not move (a spring moves by −R/k, which brings 1/k onto the diagonal):' },
-          { tex: `\\Delta_{i0} + \\sum_j f_{ij}X_j = 0` },
+          ...(settles
+            ? [
+                { text: 'Compatibility — each released support moves by its settlement, less the primary structure\'s rigid movement on its own settled supports (a spring also moves by −R/k, which brings 1/k onto the diagonal):' },
+                { tex: `\\Delta_{i0} + \\sum_j f_{ij}X_j = \\Delta_i` },
+                { text: reds.map((rd, a) => `Δ for ${rd.label} = ${rd.kind === 'V' ? `${((Dreq[a] / EI1) * 1000).toFixed(2)} mm` : `${((Dreq[a] / EI1) * 1000).toFixed(3)} mrad`}`).join('; ') + ' (×EI₁ below).' },
+              ] as SolutionLine[]
+            : [
+                { text: 'Compatibility — the released supports do not move (a spring moves by −R/k, which brings 1/k onto the diagonal):' },
+                { tex: `\\Delta_{i0} + \\sum_j f_{ij}X_j = 0` },
+              ] as SolutionLine[]),
           { tex: `\\Delta_{i0} = \\int \\frac{M_0\\,m_i}{EI}\\,dx` },
         { tex: `f_{ij} = \\int \\frac{m_i\\,m_j}{EI}\\,dx${reds.some((r) => r.k) ? ' + \\frac{\\delta_{ij}}{k_i}' : ''}` },
           { text: `M₀ is the moment of the primary structure under the loads; mᵢ under a unit value of redundant i. The integrals (by virtual work, evaluated piecewise) are multiplied through by EI₁ = ${EI1.toFixed(0)} kN·m²${segments && segments.length > 1 ? ', each stretch weighted by EI₁/EI' : ''}:` },
           { text: reds.map((r, a) => `X${a + 1} = ${r.label}`).join(', ') + ':' },
-          ...reds.map((_, a): SolutionLine => ({ tex: wrapEq(cf(-D0[a]), reds.map((__, b) => signed(`${cf(F[a][b])}X_{${b + 1}}`, b === 0)), 2) })),
+          ...reds.map((_, a): SolutionLine => ({ tex: wrapEq(cf(Dreq[a] - D0[a]), reds.map((__, b) => signed(`${cf(F[a][b])}X_{${b + 1}}`, b === 0)), 2) })),
           ...reds.map((r, a): SolutionLine => ({ tex: `${r.label} = ${n2(X[a])}\\ \\text{${r.kind === 'M' ? 'kN·m' : 'kN'}}` })),
         )
         // final reactions: primary under loads + Σ X·(primary under unit redundant), plus the redundants
@@ -481,12 +517,20 @@ export function deriveBeam(
     ck.push(ck[k] + dk[k] * len + phi2(g, len) / g.EI)
   })
   const kOf = (x: number) => keys.findIndex((q) => Math.abs(q - x) < EPS)
-  const target = (i: number) => (supports[i].type === 'spring' ? -react[i].Rv / Math.max(supports[i].k ?? 1000, 1e-3) : 0)
+  // where each support holds the beam: its settlement, and a spring's own
+  // compression on top
+  const target = (i: number) => u(i) + (supports[i].type === 'spring' ? -react[i].Rv / Math.max(supports[i].k ?? 1000, 1e-3) : 0)
   // two conditions: a fixed end gives y and θ; otherwise the first two vertical supports give y
   type Cond = { kind: 'y' | 'θ'; i: number }
   const fixedI = order.find(({ s }) => s.type === 'fixed')?.i
   const firstTwo = order.filter(({ s }, q) => q === 0 || Math.abs(s.x - order[0].s.x) > EPS).slice(0, 2).map(({ i }) => i)
   const conds: Cond[] = fixedI !== undefined ? [{ kind: 'y', i: fixedI }, { kind: 'θ', i: fixedI }] : firstTwo.map((i) => ({ kind: 'y' as const, i }))
+  // why a support's y is not zero: its settlement −δ, a spring's −R/k, or both
+  const why = (i: number, lab: string) => {
+    const sett = Math.abs(u(i)) > 1e-12, spring = supports[i].type === 'spring'
+    if (spring) return sett ? `\\ (= -\\delta_${lab} - R_${lab}/k)` : `\\ (= -R_${lab}/k)`
+    return sett ? `\\ (= -\\delta_${lab},\\ \\text{settlement})` : ''
+  }
   const rows = conds.map((c) => {
     const kk = kOf(supports[c.i].x)
     return c.kind === 'y'
@@ -510,7 +554,7 @@ export function deriveBeam(
     ...rows.map((r): SolutionLine => {
       const lab = nm(r.c.i), x = keys[r.kk]
       return r.c.kind === 'y'
-        ? { tex: `y_${lab} = y_0 + ${n2(x)}\\,\\theta_0 ${signed(cf(mm(ck[r.kk])), false)} = ${cf(mm(target(r.c.i)))}${supports[r.c.i].type === 'spring' ? `\\ (= -R_${lab}/k)` : ''}` }
+        ? { tex: `y_${lab} = y_0 + ${n2(x)}\\,\\theta_0 ${signed(cf(mm(ck[r.kk])), false)} = ${cf(mm(target(r.c.i)))}${why(r.c.i, lab)}` }
         : { tex: `\\theta_${lab} = \\theta_0 ${signed(cf(mm(dk[r.kk])), false)} = 0` }
     }),
     { tex: two(`\\theta_0 = ${cf(mm(th0))}\\ \\text{mrad}`, `y_0 = ${cf(mm(y0))}\\ \\text{mm}`) },

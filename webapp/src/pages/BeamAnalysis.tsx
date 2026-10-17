@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  analyzeBeam, spansToSegments, loadsOffBeam, type Support, type SupportType, type BeamLoad, type LoadCategory,
+  analyzeBeam, spansToSegments, loadsOffBeam, anySettlement, type Support, type SupportType, type BeamLoad, type LoadCategory,
 } from '../engine/beamAnalysis'
 import { deriveBeam } from '../engine/beamDerivation'
 import { detectCriticalSections } from '../engine/beamSections'
@@ -54,6 +54,8 @@ function ItemShell({ title, onRemove, children, wideLast }: {
     </div>
   )
 }
+
+const supText = (s0: Support) => `${s0.type} @ ${f2(s0.x)} m${s0.settlement ? ` (δ ${f1(s0.settlement)} mm)` : ''}`
 
 export default function BeamAnalysis() {
   // Handoff from the Load Path page (?handoff=loads): span + edge line loads
@@ -115,7 +117,9 @@ export default function BeamAnalysis() {
   }
 
   const stable = supports.length >= 2 || supports.some((s) => s.type === 'fixed')
-  const valid = spans.every((s) => s.L > 0 && s.E > 0 && s.I > 0) && stable && loads.length > 0
+  // a settlement alone strains an indeterminate beam, so it is something to analyse
+  const settles = anySettlement(supports)
+  const valid = spans.every((s) => s.L > 0 && s.E > 0 && s.I > 0) && stable && (loads.length > 0 || settles)
 
   const res = useMemo(() => {
     if (!valid) return null
@@ -130,9 +134,11 @@ export default function BeamAnalysis() {
 
   // Deflection per span against that span's own L/360 (ACI Table 24.2.2) — a
   // short stiff span and a long one share no single limit.
+  // Measured from the settled supports' line: L/360 limits how far the member
+  // bends, not how far its supports sank.
   const spanDefl = r ? segments.map((g, k) => {
     let d = 0
-    r.xs.forEach((x, i) => { if (x >= g.x0 - 1e-9 && x <= g.x1 + 1e-9) d = Math.max(d, Math.abs(r.D[i])) })
+    r.xs.forEach((x, i) => { if (x >= g.x0 - 1e-9 && x <= g.x1 + 1e-9) d = Math.max(d, Math.abs(r.D[i] - r.Dsettle[i])) })
     const allow = ((g.x1 - g.x0) * 1000) / 360
     return { k, d, allow, ratio: d / allow }
   }) : []
@@ -145,7 +151,7 @@ export default function BeamAnalysis() {
   // the hand derivation of the combination on screen — reactions, V, M and
   // the elastic curve worked the way they are on paper
   const derivation = useMemo(() => (shown?.result
-    ? deriveBeam(supports, shown.factored, segments[segments.length - 1].x1, spans[0].E, spans[0].I, segments, shown.combo.name, shown.result.reactions)
+    ? deriveBeam(supports, shown.factored, segments[segments.length - 1].x1, spans[0].E, spans[0].I, segments, shown.combo.name, shown.result.reactions, shown.settleFactor)
     : null), [shown, supports, segments, spans])
   const report = res && r && shown ? {
     docCode: 'BA-01',
@@ -160,7 +166,8 @@ export default function BeamAnalysis() {
     data: [
       ['Total length', `${f2(L)} m`],
       ...spans.map((s, k) => [multi ? `Span ${k + 1}` : 'Span', `L ${f2(s.L)} m · E ${s.E} MPa · I ${s.I.toExponential(3)} mm⁴`] as [string, string]),
-      ['Supports', supports.map((s0) => `${s0.type} @ ${f2(s0.x)}`).join(', ')],
+      ['Supports', supports.map(supText).join(', ')],
+      ...(settles ? [['Settlement', 'imposed downward support movement, self-straining like T (NSCP §203.3.3): × the combination\'s T factor — 1.2 with 1.2D/1.4D, 0 in 0.9D; L/360 measured from the settled supports\' line'] as [string, string]] : []),
       ...loads.map((ld) => [`${ld.type.toUpperCase()} (${ld.cat})`,
         ld.type === 'point' ? `${f2(ld.P)} kN @ ${f2(ld.x)} m`
           : ld.type === 'udl' ? `${f2(ld.w)} kN/m, ${f2(ld.x1)}–${f2(ld.x2)} m`
@@ -233,6 +240,8 @@ export default function BeamAnalysis() {
                   {s.type === 'spring' && (
                     <Num label="k" unit="kN/m" value={s.k ?? 5000} onChange={(v) => setSup(s.id, { k: v })} />
                   )}
+                  {/* downward movement of the support (a spring's base), mm */}
+                  <Num label="Settlement δ" unit="mm" value={s.settlement ?? 0} onChange={(v) => setSup(s.id, { settlement: v })} />
                 </ItemShell>
               ))}
             </div>
@@ -308,10 +317,10 @@ export default function BeamAnalysis() {
             Auto-detect critical sections → design
           </button>
         </div>
-      </> : <p className="text-sm text-fail">{stable ? 'Add at least one load.' : 'Unstable — add at least two supports, or one fixed.'}</p>}
+      </> : <p className="text-sm text-fail">{stable ? 'Add at least one load or a support settlement.' : 'Unstable — add at least two supports, or one fixed.'}</p>}
       summary={[
         { label: multi ? 'Spans' : 'Beam', value: spans.map((s) => `${f2(s.L)} m (E ${s.E}, I ${s.I.toExponential(2)})`).join(' + ') },
-        { label: 'Supports', value: supports.map((s0) => `${s0.type} @ ${f2(s0.x)} m`).join(', ') || '—' },
+        { label: 'Supports', value: supports.map(supText).join(', ') || '—' },
         { label: 'Loads', value: `${loads.length} (${[...new Set(loads.map((ld) => ld.cat))].join(', ')})` },
       ]}
       drawing={{ title: 'Model', node: <div data-pdf-drawing><BeamElevation L={L} supports={supports} loads={loads} spans={spans} /></div> }}

@@ -8,11 +8,51 @@
 // A beam can be cut into SEGMENTS (spans) that each carry their own E and I —
 // every element takes the EI of the segment it lies in, and the three-moment
 // check divides each span's terms by its EI (generalized Clapeyron).
+// SUPPORT SETTLEMENT is a prescribed downward movement of a support (mm): a
+// pin, roller or fixed support's vertical DOF is held at −δ instead of 0, and
+// a spring's BASE moves by δ (its force is k × the change in length). A
+// self-straining effect, so it is factored like T (NSCP §203.3.3).
 // Units: m, kN, kN·m; E in MPa; I in mm⁴; deflection returned in mm.
 // ─────────────────────────────────────────────────────────────────────────
 
 export type SupportType = 'pin' | 'roller' | 'fixed' | 'spring'
-export interface Support { type: SupportType; x: number; k?: number /* kN/m, spring */ }
+export interface Support {
+  type: SupportType; x: number
+  /** Spring stiffness, kN/m. */
+  k?: number
+  /** Settlement — downward movement of the support (a spring's base), mm.
+   *  Imposed, not caused by the loads: it strains a statically indeterminate
+   *  beam and only moves a determinate one. */
+  settlement?: number
+}
+
+/** A support's settlement as a vertical displacement, m, upward + — with the
+ *  combination's factor on it. */
+export const settleOf = (s: Support, factor = 1): number => -((s.settlement ?? 0) * factor) / 1000
+/** True when any support settles. */
+export const anySettlement = (supports: readonly Support[]): boolean =>
+  supports.some((s) => Math.abs(s.settlement ?? 0) > 1e-12)
+
+/**
+ * The rigid-body line the settled supports put the beam on, m, upward + —
+ * piecewise linear between the supports' imposed displacements and carried
+ * straight on past the end supports. A serviceability deflection is measured
+ * from it: L/360 limits how far the member bends, not how far its supports
+ * sank.
+ */
+export function settlementProfile(supports: readonly Support[], x: number, factor = 1): number {
+  const pts = supports
+    .filter((s) => s.type !== 'spring' || Math.abs(s.settlement ?? 0) > 0)
+    .map((s) => ({ x: s.x, d: settleOf(s, factor) }))
+    .sort((a, b) => a.x - b.x)
+  if (pts.length === 0) return 0
+  if (pts.length === 1) return pts[0].d
+  const at = (a: { x: number; d: number }, b: { x: number; d: number }) =>
+    Math.abs(b.x - a.x) < 1e-12 ? a.d : a.d + ((b.d - a.d) * (x - a.x)) / (b.x - a.x)
+  if (x <= pts[0].x) return at(pts[0], pts[1])
+  for (let i = 0; i < pts.length - 1; i++) if (x <= pts[i + 1].x) return at(pts[i], pts[i + 1])
+  return at(pts[pts.length - 2], pts[pts.length - 1])
+}
 
 export type LoadCategory = 'D' | 'L' | 'Lr' | 'S' | 'R' | 'W' | 'E' | 'T'
 /** Applied couples `M` are counter-clockwise + (kN·m). */
@@ -40,6 +80,9 @@ export function spansToSegments(spans: readonly { L: number; E: number; I: numbe
 export interface Reaction { type: SupportType; x: number; Rv: number; Rm: number; k?: number }
 export interface FemResult {
   xs: number[]; V: number[]; M: number[]; D: number[]   // D in mm
+  /** The settled supports' rigid-body line at each x, mm (all zero without
+   *  settlement) — D − Dsettle is the member's own deflection. */
+  Dsettle: number[]
   reactions: Reaction[]
   Vmax: number; Mmax: number; Dmax: number
 }
@@ -155,6 +198,8 @@ function gauss5Vec(f: (x: number) => number[], a: number, b: number): number[] {
 export function solveFEM(
   supports: Support[], loads: BeamLoad[], L: number, E_MPa: number, I_mm4: number,
   segments?: readonly BeamSegment[],
+  /** The combination's factor on support settlement (its T factor). */
+  settleFactor = 1,
 ): FemResult | null {
   // Node set: ends, supports, load anchors, section changes, then N_INT
   // subdivisions between anchors — so no element straddles a change of EI.
@@ -218,23 +263,35 @@ export function solveFEM(
   }
 
   // Boundary conditions (springs add stiffness; pins/rollers fix v; fixed also θ).
+  // A settled support's v is PRESCRIBED rather than zero; a settled spring's
+  // base moves, which is the spring force k·δ applied at its node.
   const constrained = new Set<number>()
+  const d = new Array(ndof).fill(0)
   for (const s of supports) {
     const i = nm.get(roundX(clamp(s.x, 0, L)))
     if (i === undefined) continue
-    if (s.type === 'spring') K[2 * i][2 * i] += Math.max(s.k ?? 1000, 1e-3)
-    else {
+    if (s.type === 'spring') {
+      const k = Math.max(s.k ?? 1000, 1e-3)
+      K[2 * i][2 * i] += k
+      F[2 * i] += k * settleOf(s, settleFactor)
+    } else {
       constrained.add(2 * i)
+      d[2 * i] = settleOf(s, settleFactor)
       if (s.type === 'fixed') constrained.add(2 * i + 1)
     }
   }
   const free: number[] = []
   for (let dof = 0; dof < ndof; dof++) if (!constrained.has(dof)) free.push(dof)
 
-  const d = new Array(ndof).fill(0)
   if (free.length > 0) {
+    // Kff·df = Ff − Kfc·dc — the prescribed displacements move to the right
     const Kff = free.map((i) => free.map((j) => K[i][j]))
-    const dFree = solveLinear(Kff, free.map((i) => F[i]))
+    const rhs = free.map((i) => {
+      let v = F[i]
+      for (const j of constrained) v -= K[i][j] * d[j]
+      return v
+    })
+    const dFree = solveLinear(Kff, rhs)
     if (dFree === null) return null
     free.forEach((dof, idx) => (d[dof] = dFree[idx]))
   }
@@ -248,8 +305,8 @@ export function solveFEM(
     const sx = roundX(clamp(s.x, 0, L))
     const i = nm.get(sx)
     if (i === undefined) continue
-    // R upward +: the spring pushes back against the (upward +) displacement d — R = −k·d
-    if (s.type === 'spring') react.push({ ...s, x: sx, Rv: -Math.max(s.k ?? 1000, 1e-3) * d[2 * i], Rm: 0 })
+    // R upward +: the spring pushes back against its compression — R = −k·(d − d_base)
+    if (s.type === 'spring') react.push({ ...s, x: sx, Rv: -Math.max(s.k ?? 1000, 1e-3) * (d[2 * i] - settleOf(s, settleFactor)), Rm: 0 })
     else react.push({ ...s, x: sx, Rv: Rfull[2 * i], Rm: s.type === 'fixed' ? -Rfull[2 * i + 1] : 0 })
   }
 
@@ -348,9 +405,11 @@ export function solveFEM(
     return 0
   }
   const D = xs.map((x) => interpDelta(x) * 1000)
+  const settled = anySettlement(supports) && settleFactor !== 0
+  const Dsettle = xs.map((x) => (settled ? settlementProfile(supports, x, settleFactor) * 1000 : 0))
 
   return {
-    xs, V, M, D, reactions: react,
+    xs, V, M, D, Dsettle, reactions: react,
     Vmax: Math.max(...V.map(Math.abs)),
     Mmax: Math.max(...M.map(Math.abs)),
     Dmax: Math.max(...D.map(Math.abs)),
@@ -460,10 +519,16 @@ export interface ThreeMomentResult { supportMoments: number[]; reactions: number
  * `ei` per span is optional; equal values cancel back to the classic form.
  * `endMoments` are the known moments at the two outer supports — non-zero
  * when an overhang carries load (M = −ΣW·arm of the overhang, statics).
+ *
+ * `settle` — each support's settlement h, m, DOWNWARD + (n + 1 values) — adds
+ * the support-movement term (Hibbeler §12.4; Timoshenko & Young):
+ *   … = −6(A·x̄/L)ᵢ/EIᵢ − 6(A·x̄′/L)ᵢ₊₁/EIᵢ₊₁ + 6[(hᵢ − hᵢ₋₁)/Lᵢ + (hᵢ − hᵢ₊₁)/Lᵢ₊₁]
+ * A support sinking relative to its neighbours relieves its own hogging.
  */
 export function threeMoment(
   spans: number[], loadsPerSpan: BeamLoad[][], ei?: readonly number[],
   endMoments: readonly [number, number] = [0, 0],
+  settle?: readonly number[],
 ): ThreeMomentResult | null {
   const ei_ = (i: number) => (ei ? ei[i] : 1)
   const n = spans.length
@@ -491,6 +556,10 @@ export function threeMoment(
     if (k > 0) A[k][k - 1] = spans[k] / ei_(k)
     if (k < size - 1) A[k][k + 1] = spans[k + 1] / ei_(k + 1)
     b[k] = -(sixL[k] / ei_(k) + sixR[k + 1] / ei_(k + 1))
+    if (settle) {
+      const h = (i: number) => settle[i] ?? 0
+      b[k] += 6 * ((h(k + 1) - h(k)) / spans[k] + (h(k + 1) - h(k + 2)) / spans[k + 1])
+    }
   }
   // known end moments (overhangs) move to the right-hand side
   b[0] -= (M0 * spans[0]) / ei_(0)
@@ -510,7 +579,11 @@ export function threeMoment(
 }
 
 // ── Orchestrator: run every NSCP combination, pick the governing one ─────
-export interface ComboRun { combo: Combo; result: FemResult | null; factored: BeamLoad[]; skipped: boolean }
+export interface ComboRun {
+  combo: Combo; result: FemResult | null; factored: BeamLoad[]; skipped: boolean
+  /** The combination's factor on support settlement — its T factor. */
+  settleFactor: number
+}
 export interface TmtCheck { positions: number[]; supportMoments: number[]; reactions: number[] }
 export interface BeamAnalysisResult {
   perCombo: ComboRun[]
@@ -549,11 +622,16 @@ export function analyzeBeam(
   const loads = clipToBeam(allLoads, L)
   const perCombo: ComboRun[] = []
   let govIdx = -1, govM = -1
+  // Settlement is self-straining, like T (NSCP §203.3.3): it rides at each
+  // combination's T factor — 1.2 with the factored dead load, absent from the
+  // 0.9D combinations so it is never credited against uplift.
+  const settles = anySettlement(supports)
   for (const combo of NSCP_COMBOS) {
     const factored = applyCombo(loads, combo.f)
-    if (factored.length === 0) { perCombo.push({ combo, result: null, factored, skipped: true }); continue }
-    const r = solveFEM(supports, factored, L, E, I, segments)
-    perCombo.push({ combo, result: r, factored, skipped: false })
+    const settleFactor = settles ? (combo.f.T ?? 0) : 0
+    if (factored.length === 0 && settleFactor === 0) { perCombo.push({ combo, result: null, factored, skipped: true, settleFactor }); continue }
+    const r = solveFEM(supports, factored, L, E, I, segments, settleFactor)
+    perCombo.push({ combo, result: r, factored, skipped: false, settleFactor })
     if (r && r.Mmax > govM) { govM = r.Mmax; govIdx = perCombo.length - 1 }
   }
   if (govIdx < 0) return null
@@ -589,7 +667,17 @@ export function analyzeBeam(
       return inside ? null : here
     }
     const eis = spans.map((_, i) => eiOf(distinct[i], distinct[i + 1]))
-    const res = !coupleAtSupport && eis.every((v) => v !== null) ? threeMoment(spans, loadsPer, eis as number[], [M0, Mn]) : null
+    // the supports' settlements, m downward, at this combination's factor —
+    // each EI-divided term is put back in kN·m² by the span's own EI
+    const sf = gov.settleFactor
+    const hAt = (x: number) => {
+      const s = supports.find((q) => (q.type === 'pin' || q.type === 'roller') && Math.abs(clamp(q.x, 0, L) - x) < 1e-6)
+      return s ? -settleOf(s, sf) : 0
+    }
+    const settle = sf !== 0 ? distinct.map(hAt) : undefined
+    const res = !coupleAtSupport && eis.every((v) => v !== null)
+      ? threeMoment(spans, loadsPer, eis as number[], [M0, Mn], settle)
+      : null
     if (res) {
       // overhang loads hang straight off the outer supports
       res.reactions[0] += W0

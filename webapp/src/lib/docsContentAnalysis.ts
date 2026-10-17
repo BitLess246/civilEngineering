@@ -57,6 +57,7 @@ export const ANALYSIS_TOOLS: DocTool[] = [
           { kind: 'field', name: 'Modulus E', unit: 'MPa', what: 'Elastic modulus, used for deflection.' },
           { kind: 'field', name: 'Inertia I', unit: 'mm⁴', what: 'Second moment of area of the section; with E it sets the deflection.' },
           { kind: 'field', name: 'k', what: 'Support spring stiffness where an elastic support is used.' },
+          { kind: 'field', name: 'Settlement δ', unit: 'mm', what: 'Downward movement of a support (of a spring\'s base), imposed rather than caused by the loads. It strains an indeterminate beam and only moves a determinate one; factored like the self-straining load T (NSCP §203.3.3) — × 1.2 with the factored dead load, absent from 0.9D. The L/360 check measures deflection from the settled supports\' line.' },
         ],
       },
       {
