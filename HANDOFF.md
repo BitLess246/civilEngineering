@@ -77,6 +77,40 @@ The deploy job is gone (Sept 2026). Deleting it stops future publishes; it does
 **not** unpublish what is already served. That is *Settings → Pages → Source:
 None*, and it has to be done by hand in the repository settings.
 
+## Checked against published examples — 17 October 2026 (PRs #1040–#1046)
+
+A pass to put a **published** reference behind engines whose evidence was only
+our own hand calc. Every result below is pinned in a test, in units converted
+exactly from the source, with the source's own rounding stated.
+
+| Engine | Published reference | Ours vs published |
+|---|---|---|
+| HSS overlapped KT joint (`hssTrussJoint`) | Packer (2014), AISC Eng. J. 51(3) worked example | Pn 165.88 / 221.05 vs 166 / 221 kips |
+| Slender column (`momentMagnificationNonsway`) | two StructurePoint / spColumn reports | δ 1.199 / 1.055, Pc 924.39 / 2919.31 kip, exact |
+| P–M control points (`interaction`) | spColumn report §9 table | every point to the printed digit (β1 = 0.825) |
+| Exact biaxial (`biaxialColumn`, new) | PCA Notes Ex. 7.8 via StructurePoint | Pn 1846, Mnx 608, Mny 245.4 |
+| Slope stability (`searchCriticalCircle`) | ACADS 1(a) referee (Rocscience restatement) | Bishop 0.985 vs Slide2 0.987, referee 1.00 |
+
+**Two real defects were found by doing this, both unconservative, both fixed:**
+- **Cm in the non-sway magnifier (#1041).** With M2,min governing and no end
+  moments, Cm stayed 0.6 where ACI §6.6.4.5.4 requires 1.0, so Mc came out 17 %
+  low.
+- **Bresler below the balanced load (#1043, #1044).** It overestimated biaxial
+  capacity by 1.3–7.2 % (20 of 100 columns on a test building).
+  `pmCapacityBiaxial` is now capped by the exact strain-compatibility surface
+  along the demand ray, as method `exact`.
+
+**Status:** ValidationMap C003, C004 and F3D003 are ✅, and X003 (spColumn) is ✅.
+
+**Still open, and why:**
+- **X001 ETABS (B006, F3D002, M003, RS002):** needs a licence.
+- **FR004 continuous beam:** the X002 deck's beam ends agree with STAAD only
+  within 9 % / 18 % (shell load-sharing, pinned in `interop/staad.test.ts`).
+  Closing it needs a STAAD run of a knife-edge continuous beam.
+- **HSS T / Y / gapped K:** the published problems (AISC DG24 Ch. 8, Design
+  Examples Ch. K) sit behind aisc.org's bot challenge from the cloud container;
+  fetch them from a browser and add them to `hssTrussJoint.test.ts`.
+
 ## Inclined columns, skewed slabs, Excel export (Oct 2026, PRs #959–#963)
 
 - **#959 — an inclined column keeps its section orientation.** Past 2.56° off plumb a column fell to the beam local-axis default, so one leaning toward Z was analysed with its section turned 90° (a 300×600 cantilever 4× too soft about X). `defaultAxisRotation(dir, explicit, role)`: a column keeps its depth on global X projected off its axis; every caller passes the role. The 3D view orients members by the solver frame (`lib/memberFrame`).
@@ -2967,8 +3001,9 @@ not the symptoms.
 - ~~**Bolted Connection exists twice**~~ — resolved in #564/#565, see below.
 - Steel Design's 3D card is unnumbered, so the card counter skips a number between
   the inputs and the worked solution.
-- The `docs/ValidationMap.md` X001–X004 external cross-checks (ETABS/STAAD/PCA/Excel)
-  still need licences.
+- The `docs/ValidationMap.md` external cross-checks: X002 STAAD and X003 spColumn
+  are done. X001 ETABS still needs a licence, and X004 Excel sheets are an
+  authoring task. See the 17 October 2026 section.
 
 ---
 
