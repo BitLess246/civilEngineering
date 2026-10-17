@@ -229,7 +229,7 @@ function fakeDoc() {
     calls,
     line: rec('line'), rect: rec('rect'), circle: rec('circle'), text: rec('text'), lines: rec('lines'),
     setDrawColor: rec('setDrawColor'), setFillColor: rec('setFillColor'), setTextColor: rec('setTextColor'),
-    setLineWidth: rec('setLineWidth'), setLineDashPattern: rec('setLineDashPattern'),
+    setLineWidth: rec('setLineWidth'), setLineDashPattern: rec('setLineDashPattern'), setLineJoin: rec('setLineJoin'),
     setFont: rec('setFont'), setFontSize: rec('setFontSize'),
   }
   return doc as unknown as jsPDF & { calls: typeof calls }
