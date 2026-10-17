@@ -208,6 +208,8 @@ export function biaxialColumnSolution(
     lines.push(txt('The strong-axis moment is negligible: the column bends about its WEAK axis alone, so the section is turned on its side and checked there. Checking it against the deep section instead would measure every lever arm from the wrong dimension.'))
   } else if (method === 'bresler') {
     lines.push(txt("Compression-controlled (Pu ≥ 0.1 f′c Ag), so Bresler's reciprocal load combines the two uniaxial capacities."))
+  } else if (method === 'exact') {
+    lines.push(txt(`${detail?.approxMethod === 'load-contour' ? 'The linear load contour' : "Bresler's reciprocal load"} would allow φPn = ${sn1(detail?.approxPhiPn ?? 0)} kN here, but the section's EXACT strength along the demand's own load ray is lower — the approximation overestimates it (Bresler does below the balanced load). Strain compatibility about the inclined neutral axis (ACI 318-14 §22.2), on this cage, governs.`))
   } else {
     lines.push(txt('Tension-controlled (Pu < 0.1 f′c Ag), where the reciprocal form becomes unconservative. A linear moment contour (α = 1) governs instead — the conservative member of the PCA load-contour family.'))
   }
@@ -220,6 +222,9 @@ export function biaxialColumnSolution(
   if (method === 'bresler' && px && py && detail?.Po) {
     lines.push(eq(String.raw`P_{nx} = ${sn1(px.Pn)}\ \text{kN},\qquad P_{ny} = ${sn1(py.Pn)}\ \text{kN},\qquad P_o = ${sn1(detail.Po)}\ \text{kN}`))
     lines.push(eq(String.raw`\dfrac{1}{P_n} = \dfrac{1}{P_{nx}} + \dfrac{1}{P_{ny}} - \dfrac{1}{P_o}`))
+  } else if (method === 'exact' && detail?.exact) {
+    const x = detail.exact
+    lines.push(eq(String.raw`c = ${sn0(x.c)}\ \text{mm at}\ \alpha = ${sn1(x.alpha)}^\circ:\quad P_n = ${sn1(x.Pn)}\ \text{kN},\ M_{nx} = ${sn1(x.Mnx)},\ M_{ny} = ${sn1(x.Mny)}\ \text{kN·m},\ \varepsilon_t = ${sn4(x.et)},\ \phi = ${sn3(x.phi)}`))
   } else if (method === 'load-contour' && px && py) {
     lines.push(eq(String.raw`\phi M_{nx} = ${sn1(px.phi * px.Mn)}\ \text{kN·m},\qquad \phi M_{ny} = ${sn1(py.phi * py.Mn)}\ \text{kN·m}`))
     lines.push(eq(String.raw`\dfrac{M_{ux}}{\phi M_{nx}} + \dfrac{M_{uy}}{\phi M_{ny}} = ${sn2(util)}`))
@@ -230,12 +235,13 @@ export function biaxialColumnSolution(
   const MethodName: Record<BiaxialMethod, string> = {
     'bresler': "Bresler reciprocal load",
     'load-contour': 'linear load contour',
+    'exact': 'exact strain compatibility (inclined neutral axis)',
     'uniaxial-x': 'uniaxial, strong axis',
     'uniaxial-y': 'uniaxial, weak axis',
   }
   return [{
     title: `Biaxial check — ${MethodName[method]}`,
-    clause: 'ACI 318-14 §22.4 · PCA load contour',
+    clause: method === 'exact' ? 'ACI 318-14 §22.2 (strain compatibility)' : 'ACI 318-14 §22.4 · PCA load contour',
     lines,
     note: ok
       ? 'This is the utilisation the column schedule reports.'

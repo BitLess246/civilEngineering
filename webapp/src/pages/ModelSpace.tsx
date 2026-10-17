@@ -160,6 +160,7 @@ import { ComplianceInspector } from '../components/codes/ComplianceInspector'
 const BIAXIAL_LABEL: Record<BiaxialMethod, string> = {
   'bresler': 'Bresler reciprocal load (compression-controlled)',
   'load-contour': 'linear load contour (tension-controlled)',
+  'exact': 'exact strain compatibility — the approximation overestimated this one',
   'uniaxial-x': 'uniaxial — strong axis; Muy negligible',
   'uniaxial-y': 'uniaxial — weak axis; Mux negligible',
 }
